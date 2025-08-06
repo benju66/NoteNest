@@ -1,0 +1,3 @@
+Meeting notes:
+- Discuss UI design
+- Review plugin system

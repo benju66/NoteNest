@@ -1,0 +1,35 @@
+{
+  "categories": [
+    {
+      "id": "personal",
+      "name": "Personal",
+      "path": "C:\\NoteNest\\Sample\\Personal",
+      "pinned": false,
+      "tags": ["journal"],
+      "notes": [
+        {
+          "title": "goals.txt",
+          "filePath": "C:\\NoteNest\\Sample\\Personal\\goals.txt",
+          "lastModified": "2025-08-06T08:15:00"
+        }
+      ]
+    },
+    {
+      "id": "work",
+      "name": "Work Notes",
+      "path": "C:\\NoteNest\\Sample\\Work",
+      "pinned": true,
+      "tags": ["work"],
+      "notes": [
+        {
+          "title": "meeting.txt",
+          "filePath": "C:\\NoteNest\\Sample\\Work\\meeting.txt",
+          "lastModified": "2025-08-06T09:00:00"
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "showTagPanel": false
+  }
+}

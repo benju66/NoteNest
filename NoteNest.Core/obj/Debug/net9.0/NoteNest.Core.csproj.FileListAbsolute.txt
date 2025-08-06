@@ -1,0 +1,11 @@
+C:\NoteNest\NoteNest.Core\bin\Debug\net9.0\NoteNest.Core.deps.json
+C:\NoteNest\NoteNest.Core\bin\Debug\net9.0\NoteNest.Core.dll
+C:\NoteNest\NoteNest.Core\bin\Debug\net9.0\NoteNest.Core.pdb
+C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.AssemblyInfoInputs.cache
+C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.AssemblyInfo.cs
+C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.csproj.CoreCompileInputs.cache
+C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.dll
+C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\refint\NoteNest.Core.dll
+C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.pdb
+C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\ref\NoteNest.Core.dll

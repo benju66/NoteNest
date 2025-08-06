@@ -1,0 +1,7 @@
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.csproj.AssemblyReference.cache
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\NoteNestPanel.g.cs
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\MainWindow.g.cs
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\App.g.cs
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\GeneratedInternalTypeHelper.g.cs
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI_MarkupCompile.cache
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI_MarkupCompile.lref

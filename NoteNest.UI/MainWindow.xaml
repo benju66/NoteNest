@@ -1,0 +1,9 @@
+﻿<Window x:Class="NoteNest.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:NoteNest.UI.Controls"
+        Title="NoteNest" Height="500" Width="900">
+    <Grid>
+        <controls:NoteNestPanel />
+    </Grid>
+</Window>
