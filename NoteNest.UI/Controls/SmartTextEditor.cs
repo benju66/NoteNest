@@ -145,7 +145,6 @@ namespace NoteNest.UI.Controls
 
         private void HandleTabKey(KeyEventArgs e)
         {
-            // Check if we have a selection spanning multiple lines
             if (SelectionLength > 0)
             {
                 e.Handled = true;
@@ -168,6 +167,9 @@ namespace NoteNest.UI.Controls
             var currentLine = GetCurrentLine();
             var lineStart = GetCurrentLineStart();
             
+            // Store the original caret position
+            var originalCaret = CaretIndex;
+            
             var bulletMatch = Regex.Match(currentLine, @"^(\s*)([-*+•])\s+(.*)$");
             var numberMatch = Regex.Match(currentLine, @"^(\s*)(\d+)[.)]\s+(.*)$");
             var taskMatch = Regex.Match(currentLine, @"^(\s*)([-*+•])\s+\[([ xX])\]\s+(.*)$");
@@ -175,7 +177,6 @@ namespace NoteNest.UI.Controls
             if (bulletMatch.Success || numberMatch.Success || taskMatch.Success)
             {
                 e.Handled = true;
-                _isProcessingKey = true;
                 
                 if (Keyboard.Modifiers == ModifierKeys.Shift)
                 {
@@ -186,7 +187,8 @@ namespace NoteNest.UI.Controls
                     IndentLine(lineStart, currentLine);
                 }
                 
-                _isProcessingKey = false;
+                // Ensure cursor remains visible and positioned appropriately
+                this.Focus();
             }
         }
 
@@ -371,29 +373,131 @@ namespace NoteNest.UI.Controls
 
         private void IndentLine(int lineStart, string currentLine)
         {
+            _isProcessingKey = true;
+            
             var indent = "\t";
-            Text = Text.Insert(lineStart, indent);
-            CaretIndex = Math.Min(CaretIndex + indent.Length, Text.Length);
+            var caretOffset = CaretIndex - lineStart; // Remember position within line
+            
+            // Check if this is a numbered list item that should become a bullet when indented
+            var numberMatch = Regex.Match(currentLine, @"^(\s*)(\d+)[.)]\s+(.*)$");
+            if (numberMatch.Success)
+            {
+                var existingIndent = numberMatch.Groups[1].Value;
+                var content = numberMatch.Groups[3].Value;
+                
+                // Convert to bullet list when indenting
+                var newLine = $"{existingIndent}\t• {content}";
+                
+                // Replace the entire line
+                var lineEnd = Text.IndexOf('\n', lineStart);
+                if (lineEnd == -1) lineEnd = Text.Length;
+                
+                Text = Text.Remove(lineStart, lineEnd - lineStart);
+                Text = Text.Insert(lineStart, newLine);
+                
+                // Position cursor after the bullet and space
+                CaretIndex = lineStart + existingIndent.Length + indent.Length + 2; // +2 for "• "
+            }
+            else
+            {
+                // For bullets or regular text, just add indent
+                Text = Text.Insert(lineStart, indent);
+                
+                // Restore cursor position (accounting for added tab)
+                CaretIndex = lineStart + caretOffset + indent.Length;
+            }
+            
+            _isProcessingKey = false;
         }
 
         private void OutdentLine(int lineStart, string currentLine)
         {
-            if (currentLine.StartsWith("\t"))
+            _isProcessingKey = true;
+            
+            var caretOffset = CaretIndex - lineStart; // Remember position within line
+            var removedChars = 0;
+            
+            // Check if this is an indented bullet that should become a number when outdented
+            var bulletMatch = Regex.Match(currentLine, @"^(\t+)([-*+•])\s+(.*)$");
+            if (bulletMatch.Success && bulletMatch.Groups[1].Value.Length == 1)
+            {
+                // This is a single-tab indented bullet, convert back to number
+                var content = bulletMatch.Groups[3].Value;
+                
+                // Find the appropriate number by looking at surrounding numbered items
+                var nextNumber = FindNextNumberForOutdent(lineStart);
+                
+                // Convert back to numbered list
+                var newLine = $"{nextNumber}. {content}";
+                
+                // Replace the entire line
+                var lineEnd = Text.IndexOf('\n', lineStart);
+                if (lineEnd == -1) lineEnd = Text.Length;
+                
+                Text = Text.Remove(lineStart, lineEnd - lineStart);
+                Text = Text.Insert(lineStart, newLine);
+                
+                // Position cursor appropriately
+                CaretIndex = lineStart + newLine.Length;
+                
+                // Trigger renumbering
+                RenumberEntireList();
+            }
+            else if (currentLine.StartsWith("\t"))
             {
                 Text = Text.Remove(lineStart, 1);
-                CaretIndex = Math.Max(CaretIndex - 1, lineStart);
+                removedChars = 1;
+                CaretIndex = Math.Max(lineStart, caretOffset > 0 ? lineStart + caretOffset - removedChars : lineStart);
             }
             else if (currentLine.StartsWith("    "))
             {
                 Text = Text.Remove(lineStart, 4);
-                CaretIndex = Math.Max(CaretIndex - 4, lineStart);
+                removedChars = 4;
+                CaretIndex = Math.Max(lineStart, caretOffset > 0 ? lineStart + caretOffset - removedChars : lineStart);
             }
             else if (currentLine.StartsWith(" "))
             {
                 var spacesToRemove = Math.Min(4, currentLine.TakeWhile(c => c == ' ').Count());
                 Text = Text.Remove(lineStart, spacesToRemove);
-                CaretIndex = Math.Max(CaretIndex - spacesToRemove, lineStart);
+                removedChars = spacesToRemove;
+                CaretIndex = Math.Max(lineStart, caretOffset > 0 ? lineStart + caretOffset - removedChars : lineStart);
             }
+            else
+            {
+                // No indentation to remove
+                CaretIndex = lineStart + caretOffset;
+            }
+            
+            _isProcessingKey = false;
+        }
+
+        private int FindNextNumberForOutdent(int lineStart)
+        {
+            var lines = Text.Split('\n');
+            var currentLineIndex = Text.Substring(0, lineStart).Count(c => c == '\n');
+            
+            // Look backwards for the last non-indented numbered item
+            for (int i = currentLineIndex - 1; i >= 0; i--)
+            {
+                var match = Regex.Match(lines[i], @"^(\d+)[.)]\s+");
+                if (match.Success)
+                {
+                    return int.Parse(match.Groups[1].Value) + 1;
+                }
+            }
+            
+            // Look forwards for the next non-indented numbered item
+            for (int i = currentLineIndex + 1; i < lines.Length; i++)
+            {
+                var match = Regex.Match(lines[i], @"^(\d+)[.)]\s+");
+                if (match.Success)
+                {
+                    return int.Parse(match.Groups[1].Value);
+                }
+            }
+            
+            // Default to 1 if no context found
+            return 1;
         }
 
         #endregion
