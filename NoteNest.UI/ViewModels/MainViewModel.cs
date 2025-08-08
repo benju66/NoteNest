@@ -49,6 +49,20 @@ namespace NoteNest.UI.ViewModels
             set => SetProperty(ref _selectedCategory, value);
         }
 
+        private NoteTreeItem _selectedNote;
+        public NoteTreeItem SelectedNote
+        {
+            get => _selectedNote;
+            set 
+            { 
+                SetProperty(ref _selectedNote, value);
+                if (value != null)
+                {
+                    StatusMessage = $"Selected: {value.Title}";
+                }
+            }
+        }
+
         public string SearchText
         {
             get => _searchText;
@@ -210,15 +224,38 @@ namespace NoteNest.UI.ViewModels
 
         private async Task CreateNewNoteAsync()
         {
-            if (SelectedCategory == null) return;
+            if (SelectedCategory == null)
+            {
+                MessageBox.Show(
+                    "Please select a category first to create a new note.", 
+                    "No Category Selected", 
+                    MessageBoxButton.OK, 
+                    MessageBoxImage.Information);
+                return;
+            }
 
-            var title = "New Note " + DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
-            var note = await _noteService.CreateNoteAsync(SelectedCategory.Model, title, string.Empty);
-            
-            var noteItem = new NoteTreeItem(note);
-            SelectedCategory.Notes.Add(noteItem);
-            
-            await OpenNoteAsync(noteItem);
+            try
+            {
+                var title = "New Note " + DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
+                var note = await _noteService.CreateNoteAsync(SelectedCategory.Model, title, string.Empty);
+                
+                var noteItem = new NoteTreeItem(note);
+                SelectedCategory.Notes.Add(noteItem);
+                
+                // Expand category to show new note
+                SelectedCategory.IsExpanded = true;
+                
+                // Select and open the new note
+                SelectedNote = noteItem;
+                await OpenNoteAsync(noteItem);
+                
+                StatusMessage = $"Created: {title}";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error creating note: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async Task OpenNoteAsync(NoteTreeItem noteItem)

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("NoteNest.Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4550092073dc76a4a184e79ebe2ebed8827d6665")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+982e7d670540cbe034c2670e849314ff0ccce22e")]
 [assembly: System.Reflection.AssemblyProductAttribute("NoteNest.Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("NoteNest.Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
