@@ -42,12 +42,22 @@ namespace NoteNest.Core.Services
 
         public async Task<IEnumerable<string>> GetFilesAsync(string directory, string searchPattern = "*.*")
         {
-            return await Task.Run(() => Directory.GetFiles(directory, searchPattern));
+            return await Task.Run(() => 
+            {
+                if (!Directory.Exists(directory))
+                    return new string[0];
+                return Directory.GetFiles(directory, searchPattern);
+            });
         }
 
         public async Task<IEnumerable<string>> GetDirectoriesAsync(string directory)
         {
-            return await Task.Run(() => Directory.GetDirectories(directory));
+            return await Task.Run(() => 
+            {
+                if (!Directory.Exists(directory))
+                    return new string[0];
+                return Directory.GetDirectories(directory);
+            });
         }
 
         public async Task CreateDirectoryAsync(string path)

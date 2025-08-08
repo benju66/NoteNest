@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:NoteNest.UI.Controls"
-        Title="NoteNest" Height="500" Width="900">
+        Title="NoteNest" Height="600" Width="900"
+        WindowStartupLocation="CenterScreen">
     <Grid>
         <controls:NoteNestPanel />
     </Grid>
