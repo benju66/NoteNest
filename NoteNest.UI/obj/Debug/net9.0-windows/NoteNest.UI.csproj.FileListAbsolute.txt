@@ -3,10 +3,14 @@ C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.deps.json
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.runtimeconfig.json
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.pdb
+C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Microsoft.Xaml.Behaviors.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.Core.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.Core.pdb
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.csproj.AssemblyReference.cache
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Dialogs\InputDialog.baml
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\App.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\NoteNestPanel.g.cs
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Dialogs\InputDialog.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\MainWindow.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\App.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\GeneratedInternalTypeHelper.g.cs
@@ -26,7 +30,3 @@ C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\refint\NoteNest.UI.dll
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.pdb
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.genruntimeconfig.cache
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\ref\NoteNest.UI.dll
-C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Microsoft.Xaml.Behaviors.dll
-C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\App.baml
-C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Dialogs\InputDialog.baml
-C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Dialogs\InputDialog.g.cs
