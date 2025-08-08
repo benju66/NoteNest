@@ -43,5 +43,10 @@ namespace NoteNest.UI.ViewModels
             _content = note.Content;
             _isDirty = false;
         }
+
+        public new void OnPropertyChanged(string propertyName)
+        {
+            base.OnPropertyChanged(propertyName);
+        }
     }
 }

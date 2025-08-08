@@ -28,3 +28,5 @@ C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.genruntimeconfig.ca
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\ref\NoteNest.UI.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Microsoft.Xaml.Behaviors.dll
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\App.baml
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Dialogs\InputDialog.baml
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Dialogs\InputDialog.g.cs

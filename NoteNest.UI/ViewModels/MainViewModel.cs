@@ -368,15 +368,24 @@ namespace NoteNest.UI.ViewModels
 
         private async Task CreateNewCategoryAsync()
         {
-            var name = Microsoft.VisualBasic.Interaction.InputBox(
-                "Enter category name:", 
-                "New Category", 
+            var dialog = new Dialogs.InputDialog(
+                "New Category",
+                "Enter category name:",
                 "");
-
-            if (string.IsNullOrWhiteSpace(name)) return;
+            
+            dialog.ValidationFunction = (text) =>
+            {
+                if (Categories.Any(c => c.Name.Equals(text, StringComparison.OrdinalIgnoreCase)))
+                    return "A category with this name already exists.";
+                return null;
+            };
+            
+            if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.ResponseText)) 
+                return;
 
             try
             {
+                var name = dialog.ResponseText;
                 var settings = _configService.Settings;
                 var safeName = string.Join("_", name.Split(System.IO.Path.GetInvalidFileNameChars()));
                 
@@ -495,6 +504,132 @@ namespace NoteNest.UI.ViewModels
                 {
                     StatusMessage = $"Auto-saved {dirtyTabs.Count} note(s)";
                 }
+            }
+        }
+
+        public async Task RenameCategoryAsync(CategoryTreeItem categoryItem, string newName)
+        {
+            if (categoryItem == null || string.IsNullOrWhiteSpace(newName)) return;
+
+            try
+            {
+                var oldName = categoryItem.Model.Name;
+                categoryItem.Model.Name = newName;
+                
+                // Save updated categories
+                var allCategories = Categories.Select(c => c.Model).ToList();
+                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
+                
+                StatusMessage = $"Renamed category from '{oldName}' to '{newName}'";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error renaming category: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        public async Task ToggleCategoryPinAsync(CategoryTreeItem categoryItem)
+        {
+            if (categoryItem == null) return;
+
+            try
+            {
+                categoryItem.Model.Pinned = !categoryItem.Model.Pinned;
+                
+                // Save updated categories
+                var allCategories = Categories.Select(c => c.Model).ToList();
+                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
+                
+                // Re-sort categories
+                await LoadCategoriesAsync();
+                
+                StatusMessage = categoryItem.Model.Pinned ? 
+                    $"Pinned '{categoryItem.Name}'" : $"Unpinned '{categoryItem.Name}'";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error toggling pin: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        public async Task RenameNoteAsync(NoteTreeItem noteItem, string newName)
+        {
+            if (noteItem == null || string.IsNullOrWhiteSpace(newName)) return;
+
+            try
+            {
+                var oldPath = noteItem.Model.FilePath;
+                var directory = System.IO.Path.GetDirectoryName(oldPath);
+                var newFileName = newName + ".txt";
+                var newPath = System.IO.Path.Combine(directory, newFileName);
+                
+                // Check if file already exists
+                if (System.IO.File.Exists(newPath) && newPath != oldPath)
+                {
+                    MessageBox.Show("A note with this name already exists.", "Name Conflict", 
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                
+                // Rename the physical file
+                if (System.IO.File.Exists(oldPath))
+                {
+                    System.IO.File.Move(oldPath, newPath);
+                }
+                
+                // Update the model
+                noteItem.Model.Title = newName;
+                noteItem.Model.FilePath = newPath;
+                
+                // Update open tab if exists
+                var openTab = OpenTabs.FirstOrDefault(t => t.Note.FilePath == oldPath);
+                if (openTab != null)
+                {
+                    openTab.Note.Title = newName;
+                    openTab.Note.FilePath = newPath;
+                    openTab.OnPropertyChanged(nameof(openTab.Title));
+                }
+                
+                StatusMessage = $"Renamed note to '{newName}'";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error renaming note: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        public async Task DeleteNoteAsync(NoteTreeItem noteItem)
+        {
+            if (noteItem == null) return;
+
+            try
+            {
+                // Close tab if open
+                var openTab = OpenTabs.FirstOrDefault(t => t.Note.FilePath == noteItem.Model.FilePath);
+                if (openTab != null)
+                {
+                    OpenTabs.Remove(openTab);
+                }
+                
+                // Delete the physical file
+                await _noteService.DeleteNoteAsync(noteItem.Model);
+                
+                // Remove from tree
+                var category = Categories.FirstOrDefault(c => c.Notes.Contains(noteItem));
+                if (category != null)
+                {
+                    category.Notes.Remove(noteItem);
+                }
+                
+                StatusMessage = $"Deleted '{noteItem.Title}'";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error deleting note: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
