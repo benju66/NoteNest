@@ -16,6 +16,7 @@ namespace NoteNest.UI.ViewModels
         private readonly NoteService _noteService;
         private readonly ConfigurationService _configService;
         private readonly FileWatcherService _fileWatcher;
+        private System.Windows.Threading.DispatcherTimer _autoSaveTimer;
         
         private ObservableCollection<CategoryTreeItem> _categories;
         private ObservableCollection<NoteTabItem> _openTabs;
@@ -121,6 +122,7 @@ namespace NoteNest.UI.ViewModels
 
             // Initialize
             _ = InitializeAsync();
+            InitializeAutoSave();
         }
 
         private async Task InitializeAsync()
@@ -154,6 +156,18 @@ namespace NoteNest.UI.ViewModels
                 Categories.Clear();
 
                 var settings = _configService.Settings;
+                
+                // Ensure base directories exist
+                var fileSystem = new DefaultFileSystemProvider();
+                if (!await fileSystem.ExistsAsync(settings.DefaultNotePath))
+                {
+                    await fileSystem.CreateDirectoryAsync(settings.DefaultNotePath);
+                }
+                if (!await fileSystem.ExistsAsync(settings.MetadataPath))
+                {
+                    await fileSystem.CreateDirectoryAsync(settings.MetadataPath);
+                }
+
                 var categories = await _noteService.LoadCategoriesAsync(settings.MetadataPath);
 
                 // Create sample categories if none exist
@@ -163,35 +177,39 @@ namespace NoteNest.UI.ViewModels
                     {
                         new CategoryModel
                         {
+                            Id = "personal",
                             Name = "Personal",
                             Path = System.IO.Path.Combine(settings.DefaultNotePath, "Personal"),
-                            Pinned = false
+                            Pinned = false,
+                            Tags = new List<string> { "personal" }
                         },
                         new CategoryModel
                         {
+                            Id = "work", 
                             Name = "Work",
                             Path = System.IO.Path.Combine(settings.DefaultNotePath, "Work"),
-                            Pinned = true
+                            Pinned = true,
+                            Tags = new List<string> { "work", "important" }
                         }
                     };
                     
-                    // Ensure category directories exist
-                    var fileSystem = new DefaultFileSystemProvider();
-                    foreach (var category in categories)
+                    // Create the physical directories
+                    foreach (var cat in categories)
                     {
-                        if (!await fileSystem.ExistsAsync(category.Path))
+                        if (!await fileSystem.ExistsAsync(cat.Path))
                         {
-                            await fileSystem.CreateDirectoryAsync(category.Path);
+                            await fileSystem.CreateDirectoryAsync(cat.Path);
                         }
                     }
                     
+                    // Save the categories to metadata
                     await _noteService.SaveCategoriesAsync(settings.MetadataPath, categories);
                 }
 
+                // Load categories and their notes
                 foreach (var category in categories.OrderByDescending(c => c.Pinned).ThenBy(c => c.Name))
                 {
-                    // Ensure category directory exists before loading notes
-                    var fileSystem = new DefaultFileSystemProvider();
+                    // Ensure category directory exists
                     if (!await fileSystem.ExistsAsync(category.Path))
                     {
                         await fileSystem.CreateDirectoryAsync(category.Path);
@@ -199,11 +217,18 @@ namespace NoteNest.UI.ViewModels
                     
                     var categoryItem = new CategoryTreeItem(category);
                     
-                    // Load notes for this category
-                    var notes = await _noteService.GetNotesInCategoryAsync(category);
-                    foreach (var note in notes)
+                    // Load existing notes for this category
+                    try
                     {
-                        categoryItem.Notes.Add(new NoteTreeItem(note));
+                        var notes = await _noteService.GetNotesInCategoryAsync(category);
+                        foreach (var note in notes)
+                        {
+                            categoryItem.Notes.Add(new NoteTreeItem(note));
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error loading notes for {category.Name}: {ex.Message}");
                     }
 
                     Categories.Add(categoryItem);
@@ -211,10 +236,13 @@ namespace NoteNest.UI.ViewModels
                     // Start watching this category folder
                     _fileWatcher.StartWatching(category.Path);
                 }
+                
+                StatusMessage = $"Loaded {Categories.Count} categories";
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Error loading categories: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusMessage = "Error loading categories";
             }
             finally
             {
@@ -286,11 +314,24 @@ namespace NoteNest.UI.ViewModels
 
         private async Task SaveCurrentNoteAsync()
         {
-            if (SelectedTab == null || !SelectedTab.IsDirty) return;
+            if (SelectedTab == null) return;
 
-            await _noteService.SaveNoteAsync(SelectedTab.Note);
-            SelectedTab.IsDirty = false;
-            StatusMessage = $"Saved: {SelectedTab.Note.Title}";
+            try
+            {
+                await _noteService.SaveNoteAsync(SelectedTab.Note);
+                SelectedTab.IsDirty = false;
+                StatusMessage = $"Saved: {SelectedTab.Note.Title}";
+                
+                // Update recent files
+                _configService.AddRecentFile(SelectedTab.Note.FilePath);
+                await _configService.SaveSettingsAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error saving note: {ex.Message}", "Save Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusMessage = "Error saving note";
+            }
         }
 
         private async Task SaveAllNotesAsync()
@@ -327,7 +368,6 @@ namespace NoteNest.UI.ViewModels
 
         private async Task CreateNewCategoryAsync()
         {
-            // Simple input for now - replace with proper dialog later
             var name = Microsoft.VisualBasic.Interaction.InputBox(
                 "Enter category name:", 
                 "New Category", 
@@ -335,29 +375,41 @@ namespace NoteNest.UI.ViewModels
 
             if (string.IsNullOrWhiteSpace(name)) return;
 
-            var settings = _configService.Settings;
-            var category = new CategoryModel
+            try
             {
-                Name = name,
-                Path = System.IO.Path.Combine(settings.DefaultNotePath, name.Replace(" ", "_"))
-            };
+                var settings = _configService.Settings;
+                var safeName = string.Join("_", name.Split(System.IO.Path.GetInvalidFileNameChars()));
+                
+                var category = new CategoryModel
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Name = name,
+                    Path = System.IO.Path.Combine(settings.DefaultNotePath, safeName),
+                    Tags = new List<string>()
+                };
 
-            // Ensure category directory exists
-            var fileSystem = new DefaultFileSystemProvider();
-            if (!await fileSystem.ExistsAsync(category.Path))
-            {
-                await fileSystem.CreateDirectoryAsync(category.Path);
+                // Create the physical directory
+                var fileSystem = new DefaultFileSystemProvider();
+                if (!await fileSystem.ExistsAsync(category.Path))
+                {
+                    await fileSystem.CreateDirectoryAsync(category.Path);
+                }
+
+                var categoryItem = new CategoryTreeItem(category);
+                Categories.Add(categoryItem);
+
+                // Save updated categories to metadata
+                var allCategories = Categories.Select(c => c.Model).ToList();
+                await _noteService.SaveCategoriesAsync(settings.MetadataPath, allCategories);
+
+                _fileWatcher.StartWatching(category.Path);
+                StatusMessage = $"Created category: {name}";
             }
-
-            var categoryItem = new CategoryTreeItem(category);
-            Categories.Add(categoryItem);
-
-            // Save updated categories
-            var allCategories = Categories.Select(c => c.Model).ToList();
-            await _noteService.SaveCategoriesAsync(settings.MetadataPath, allCategories);
-
-            _fileWatcher.StartWatching(category.Path);
-            StatusMessage = $"Created category: {name}";
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error creating category: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async Task DeleteCategoryAsync()
@@ -411,6 +463,44 @@ namespace NoteNest.UI.ViewModels
                     category.IsVisible = hasVisibleNotes || category.Name.ToLower().Contains(searchLower);
                 }
             }
+        }
+
+        private void InitializeAutoSave()
+        {
+            _autoSaveTimer = new System.Windows.Threading.DispatcherTimer();
+            _autoSaveTimer.Interval = TimeSpan.FromSeconds(30); // Auto-save every 30 seconds
+            _autoSaveTimer.Tick += async (s, e) => await AutoSaveAsync();
+            _autoSaveTimer.Start();
+        }
+
+        private async Task AutoSaveAsync()
+        {
+            var dirtyTabs = OpenTabs.Where(t => t.IsDirty).ToList();
+            if (dirtyTabs.Any())
+            {
+                foreach (var tab in dirtyTabs)
+                {
+                    try
+                    {
+                        await _noteService.SaveNoteAsync(tab.Note);
+                        tab.IsDirty = false;
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Auto-save error: {ex.Message}");
+                    }
+                }
+                
+                if (dirtyTabs.Count > 0)
+                {
+                    StatusMessage = $"Auto-saved {dirtyTabs.Count} note(s)";
+                }
+            }
+        }
+
+        public ConfigurationService GetConfigService()
+        {
+            return _configService;
         }
     }
 }

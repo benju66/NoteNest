@@ -3,8 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:NoteNest.UI.Controls"
         Title="NoteNest" Height="600" Width="900"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Closing="Window_Closing">
     <Grid>
-        <controls:NoteNestPanel />
+        <controls:NoteNestPanel x:Name="MainPanel" />
     </Grid>
 </Window>
