@@ -23,6 +23,9 @@ namespace NoteNest.UI.ViewModels
         private NoteTabItem _selectedTab;
         private CategoryTreeItem _selectedCategory;
         private string _searchText;
+        private bool _isSearchActive;
+        private List<NoteTreeItem> _searchResults = new List<NoteTreeItem>();
+        private int _searchIndex = -1;
         private bool _isLoading;
         private string _statusMessage;
 
@@ -72,8 +75,15 @@ namespace NoteNest.UI.ViewModels
                 if (SetProperty(ref _searchText, value))
                 {
                     FilterNotes();
+                    IsSearchActive = !string.IsNullOrWhiteSpace(_searchText);
                 }
             }
+        }
+
+        public bool IsSearchActive
+        {
+            get => _isSearchActive;
+            set => SetProperty(ref _isSearchActive, value);
         }
 
         public bool IsLoading
@@ -98,6 +108,10 @@ namespace NoteNest.UI.ViewModels
         public ICommand DeleteCategoryCommand { get; }
         public ICommand RefreshCommand { get; }
         public ICommand ExitCommand { get; }
+        public ICommand SearchNavigateDownCommand { get; }
+        public ICommand SearchNavigateUpCommand { get; }
+        public ICommand SearchOpenCommand { get; }
+        public ICommand ClearSearchCommand { get; }
 
         public MainViewModel()
         {
@@ -119,6 +133,10 @@ namespace NoteNest.UI.ViewModels
             DeleteCategoryCommand = new RelayCommand(async _ => await DeleteCategoryAsync(), _ => SelectedCategory != null);
             RefreshCommand = new RelayCommand(async _ => await LoadCategoriesAsync());
             ExitCommand = new RelayCommand(_ => Application.Current.Shutdown());
+            SearchNavigateDownCommand = new RelayCommand(_ => NavigateSearch(+1), _ => _searchResults.Count > 0);
+            SearchNavigateUpCommand = new RelayCommand(_ => NavigateSearch(-1), _ => _searchResults.Count > 0);
+            SearchOpenCommand = new RelayCommand(async _ => await OpenFromSearchAsync(), _ => _searchResults.Count > 0);
+            ClearSearchCommand = new RelayCommand(_ => { SearchText = string.Empty; IsSearchActive = false; });
 
             // Initialize
             _ = InitializeAsync();
@@ -457,20 +475,64 @@ namespace NoteNest.UI.ViewModels
                         note.IsVisible = true;
                     }
                 }
+                _searchResults.Clear();
+                _searchIndex = -1;
             }
             else
             {
                 var searchLower = SearchText.ToLower();
+                _searchResults = new List<NoteTreeItem>();
                 foreach (var category in Categories)
                 {
                     var hasVisibleNotes = false;
                     foreach (var note in category.Notes)
                     {
                         note.IsVisible = note.Model.Title.ToLower().Contains(searchLower);
-                        if (note.IsVisible) hasVisibleNotes = true;
+                        if (note.IsVisible)
+                        {
+                            hasVisibleNotes = true;
+                            _searchResults.Add(note);
+                        }
                     }
                     category.IsVisible = hasVisibleNotes || category.Name.ToLower().Contains(searchLower);
                 }
+                _searchIndex = -1;
+            }
+        }
+
+        private void NavigateSearch(int delta)
+        {
+            if (_searchResults.Count == 0) return;
+            _searchIndex = (_searchIndex + delta + _searchResults.Count) % _searchResults.Count;
+            var target = _searchResults[_searchIndex];
+            var parent = Categories.FirstOrDefault(c => c.Notes.Contains(target));
+            if (parent != null)
+            {
+                parent.IsExpanded = true;
+                SelectedCategory = parent;
+                SelectedNote = target;
+            }
+        }
+
+        private async Task OpenFromSearchAsync()
+        {
+            if (_searchResults.Count == 0) return;
+            if (_searchIndex < 0)
+            {
+                // If nothing selected yet, select first
+                _searchIndex = 0;
+                var target = _searchResults[_searchIndex];
+                var parent = Categories.FirstOrDefault(c => c.Notes.Contains(target));
+                if (parent != null)
+                {
+                    parent.IsExpanded = true;
+                    SelectedCategory = parent;
+                    SelectedNote = target;
+                }
+            }
+            if (SelectedNote != null)
+            {
+                await OpenNoteAsync(SelectedNote);
             }
         }
 
