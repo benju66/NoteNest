@@ -63,18 +63,19 @@ namespace NoteNest.UI.Controls
                 _isProcessingKey = true;
                 
                 var indent = bulletMatch.Groups[1].Value;
-                var bullet = bulletMatch.Groups[2].Value;
+                var bullet = bulletMatch.Groups[2].Value;  // Preserve original bullet
                 var content = bulletMatch.Groups[3].Value;
                 
                 if (string.IsNullOrWhiteSpace(content))
                 {
+                    // Empty bullet - remove it
                     Text = Text.Remove(lineStart, currentLine.Length);
                     CaretIndex = lineStart;
                 }
                 else
                 {
-                    // Use bullet character for continuation
-                    var newBullet = $"\n{indent}• ";
+                    // Continue with SAME bullet character
+                    var newBullet = $"\n{indent}{bullet} ";
                     Text = Text.Insert(caretIndex, newBullet);
                     CaretIndex = caretIndex + newBullet.Length;
                 }
@@ -83,7 +84,7 @@ namespace NoteNest.UI.Controls
                 return;
             }
             
-            // Check for numbered list patterns (both . and ) styles)
+            // Check for numbered list patterns
             var numberMatch = Regex.Match(currentLine, @"^(\s*)(\d+)([.)])\s+(.*)$");
             if (numberMatch.Success)
             {
@@ -92,22 +93,21 @@ namespace NoteNest.UI.Controls
                 
                 var indent = numberMatch.Groups[1].Value;
                 var number = int.Parse(numberMatch.Groups[2].Value);
-                var delimiter = numberMatch.Groups[3].Value;
                 var content = numberMatch.Groups[4].Value;
                 
                 if (string.IsNullOrWhiteSpace(content))
                 {
+                    // Empty numbered item - remove it
                     Text = Text.Remove(lineStart, currentLine.Length);
                     CaretIndex = lineStart;
                 }
                 else
                 {
+                    // Continue numbered list (do not renumber here to avoid double-increment)
                     var nextNumber = number + 1;
-                    // Always use . for new items, but preserve existing style
                     var newItem = $"\n{indent}{nextNumber}. ";
                     Text = Text.Insert(caretIndex, newItem);
                     CaretIndex = caretIndex + newItem.Length;
-                    RenumberList(caretIndex, indent, nextNumber + 1);
                 }
                 
                 _isProcessingKey = false;
@@ -122,7 +122,7 @@ namespace NoteNest.UI.Controls
                 _isProcessingKey = true;
                 
                 var indent = taskMatch.Groups[1].Value;
-                var bullet = taskMatch.Groups[2].Value;
+                var bullet = taskMatch.Groups[2].Value;  // Preserve original bullet
                 var content = taskMatch.Groups[4].Value;
                 
                 if (string.IsNullOrWhiteSpace(content))
@@ -132,7 +132,8 @@ namespace NoteNest.UI.Controls
                 }
                 else
                 {
-                    var newTask = $"\n{indent}- [ ] ";
+                    // Use same bullet character for task continuation
+                    var newTask = $"\n{indent}{bullet} [ ] ";
                     Text = Text.Insert(caretIndex, newTask);
                     CaretIndex = caretIndex + newTask.Length;
                 }
