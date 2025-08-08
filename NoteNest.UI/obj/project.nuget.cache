@@ -1,8 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "iBQyxLLUOsI=",
+  "dgSpecHash": "c5J24armgoI=",
   "success": true,
   "projectFilePath": "C:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "C:\\Users\\Burness\\.nuget\\packages\\system.text.json\\9.0.0\\system.text.json.9.0.0.nupkg.sha512"
+  ],
   "logs": []
 }

@@ -5,6 +5,7 @@ C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.GeneratedMSBuildEditorC
 C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.AssemblyInfoInputs.cache
 C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.AssemblyInfo.cs
 C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.csproj.CoreCompileInputs.cache
+C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.sourcelink.json
 C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.dll
 C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\refint\NoteNest.Core.dll
 C:\NoteNest\NoteNest.Core\obj\Debug\net9.0\NoteNest.Core.pdb

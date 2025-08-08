@@ -95,6 +95,7 @@ C:\NoteNest\NoteNest.Tests\obj\Debug\net9.0\NoteNest.Tests.GeneratedMSBuildEdito
 C:\NoteNest\NoteNest.Tests\obj\Debug\net9.0\NoteNest.Tests.AssemblyInfoInputs.cache
 C:\NoteNest\NoteNest.Tests\obj\Debug\net9.0\NoteNest.Tests.AssemblyInfo.cs
 C:\NoteNest\NoteNest.Tests\obj\Debug\net9.0\NoteNest.Tests.csproj.CoreCompileInputs.cache
+C:\NoteNest\NoteNest.Tests\obj\Debug\net9.0\NoteNest.Tests.sourcelink.json
 C:\NoteNest\NoteNest.Tests\obj\Debug\net9.0\NoteNest.71A79849.Up2Date
 C:\NoteNest\NoteNest.Tests\obj\Debug\net9.0\NoteNest.Tests.dll
 C:\NoteNest\NoteNest.Tests\obj\Debug\net9.0\refint\NoteNest.Tests.dll

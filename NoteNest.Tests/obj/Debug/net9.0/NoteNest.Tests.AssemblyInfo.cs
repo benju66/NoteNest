@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("NoteNest.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+31335ccf292cb368fb087489b8014a05597ccb3c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+aa2964e61167d82f00c689b5662243bcc6681011")]
 [assembly: System.Reflection.AssemblyProductAttribute("NoteNest.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("NoteNest.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
