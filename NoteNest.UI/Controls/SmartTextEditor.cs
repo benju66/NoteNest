@@ -414,17 +414,17 @@ namespace NoteNest.UI.Controls
         {
             _isProcessingKey = true;
             
-            var caretOffset = CaretIndex - lineStart; // Remember position within line
+            var caretOffset = CaretIndex - lineStart;
             var removedChars = 0;
             
             // Check if this is an indented bullet that should become a number when outdented
             var bulletMatch = Regex.Match(currentLine, @"^(\t+)([-*+•])\s+(.*)$");
             if (bulletMatch.Success && bulletMatch.Groups[1].Value.Length == 1)
             {
-                // This is a single-tab indented bullet, convert back to number
+                // Single-tab indented bullet, convert back to number
                 var content = bulletMatch.Groups[3].Value;
                 
-                // Find the appropriate number by looking at surrounding numbered items
+                // Find the appropriate number
                 var nextNumber = FindNextNumberForOutdent(lineStart);
                 
                 // Convert back to numbered list
@@ -437,30 +437,35 @@ namespace NoteNest.UI.Controls
                 Text = Text.Remove(lineStart, lineEnd - lineStart);
                 Text = Text.Insert(lineStart, newLine);
                 
-                // Position cursor appropriately
+                // Position cursor after the number and content
                 CaretIndex = lineStart + newLine.Length;
                 
-                // Trigger renumbering
+                // IMPORTANT: Renumber the entire list to fix any subsequent numbers
+                _isProcessingKey = false; // Temporarily allow processing for renumber
                 RenumberEntireList();
+                _isProcessingKey = true;
+                
+                // Restore cursor position after renumbering
+                CaretIndex = Math.Min(CaretIndex, Text.Length);
             }
             else if (currentLine.StartsWith("\t"))
             {
                 Text = Text.Remove(lineStart, 1);
                 removedChars = 1;
-                CaretIndex = Math.Max(lineStart, caretOffset > 0 ? lineStart + caretOffset - removedChars : lineStart);
+                CaretIndex = Math.Max(lineStart, lineStart + caretOffset - removedChars);
             }
             else if (currentLine.StartsWith("    "))
             {
                 Text = Text.Remove(lineStart, 4);
                 removedChars = 4;
-                CaretIndex = Math.Max(lineStart, caretOffset > 0 ? lineStart + caretOffset - removedChars : lineStart);
+                CaretIndex = Math.Max(lineStart, lineStart + caretOffset - removedChars);
             }
             else if (currentLine.StartsWith(" "))
             {
                 var spacesToRemove = Math.Min(4, currentLine.TakeWhile(c => c == ' ').Count());
                 Text = Text.Remove(lineStart, spacesToRemove);
                 removedChars = spacesToRemove;
-                CaretIndex = Math.Max(lineStart, caretOffset > 0 ? lineStart + caretOffset - removedChars : lineStart);
+                CaretIndex = Math.Max(lineStart, lineStart + caretOffset - removedChars);
             }
             else
             {
@@ -479,24 +484,23 @@ namespace NoteNest.UI.Controls
             // Look backwards for the last non-indented numbered item
             for (int i = currentLineIndex - 1; i >= 0; i--)
             {
+                // Skip indented lines (bullets or indented numbers)
+                if (lines[i].StartsWith("\t") || lines[i].StartsWith(" "))
+                    continue;
+                
                 var match = Regex.Match(lines[i], @"^(\d+)[.)]\s+");
                 if (match.Success)
                 {
+                    // Found a previous number at the same level, so we should be next
                     return int.Parse(match.Groups[1].Value) + 1;
                 }
+                
+                // If we hit a non-list line at root level, stop looking
+                if (!string.IsNullOrWhiteSpace(lines[i]) && !lines[i].StartsWith("\t"))
+                    break;
             }
             
-            // Look forwards for the next non-indented numbered item
-            for (int i = currentLineIndex + 1; i < lines.Length; i++)
-            {
-                var match = Regex.Match(lines[i], @"^(\d+)[.)]\s+");
-                if (match.Success)
-                {
-                    return int.Parse(match.Groups[1].Value);
-                }
-            }
-            
-            // Default to 1 if no context found
+            // If no previous number found, we're starting a new list
             return 1;
         }
 
@@ -725,6 +729,7 @@ namespace NoteNest.UI.Controls
             var lines = Text.Split('\n');
             var numbersByIndent = new Dictionary<string, int>();
             var modified = false;
+            var savedCaret = CaretIndex;
             
             for (int i = 0; i < lines.Length; i++)
             {
@@ -733,12 +738,27 @@ namespace NoteNest.UI.Controls
                 {
                     var indent = match.Groups[1].Value;
                     
-                    var keysToRemove = numbersByIndent.Keys.Where(k => k.Length > indent.Length).ToList();
-                    foreach (var key in keysToRemove)
+                    // If this is at root level (no indent), reset any nested counters
+                    if (string.IsNullOrEmpty(indent))
                     {
-                        numbersByIndent.Remove(key);
+                        // Clear any indented number counters
+                        var keysToRemoveRoot = numbersByIndent.Keys.Where(k => k.Length > 0).ToList();
+                        foreach (var key in keysToRemoveRoot)
+                        {
+                            numbersByIndent.Remove(key);
+                        }
+                    }
+                    else
+                    {
+                        // For indented items, clear deeper indents
+                        var keysToRemove = numbersByIndent.Keys.Where(k => k.Length > indent.Length).ToList();
+                        foreach (var key in keysToRemove)
+                        {
+                            numbersByIndent.Remove(key);
+                        }
                     }
                     
+                    // Initialize or get counter for this indent level
                     if (!numbersByIndent.ContainsKey(indent))
                     {
                         numbersByIndent[indent] = 1;
@@ -757,25 +777,21 @@ namespace NoteNest.UI.Controls
                     
                     numbersByIndent[indent] = expectedNumber + 1;
                 }
-                else
+                else if (!lines[i].StartsWith("\t") && !lines[i].StartsWith(" "))
                 {
-                    numbersByIndent.Clear();
+                    // Non-indented, non-numbered line - reset root level counter
+                    if (numbersByIndent.ContainsKey(""))
+                    {
+                        numbersByIndent.Remove("");
+                    }
                 }
+                // Don't reset counters for indented bullets - they don't break the numbering
             }
             
             if (modified)
             {
-                var savedCaret = CaretIndex;
-                var savedSelStart = SelectionStart;
-                var savedSelLength = SelectionLength;
                 Text = string.Join("\n", lines);
                 CaretIndex = Math.Min(savedCaret, Text.Length);
-                try
-                {
-                    SelectionStart = savedSelStart;
-                    SelectionLength = savedSelLength;
-                }
-                catch { }
             }
         }
         
