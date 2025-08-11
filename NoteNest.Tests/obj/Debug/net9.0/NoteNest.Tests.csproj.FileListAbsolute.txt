@@ -23,6 +23,9 @@ C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\Microsoft.VisualStudio.TestPlatform.
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\Newtonsoft.Json.dll
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\nunit.framework.dll
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\nunit.framework.legacy.dll
+C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\Serilog.dll
+C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\Serilog.Sinks.Debug.dll
+C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\Serilog.Sinks.File.dll
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\cs\Microsoft.TestPlatform.CoreUtilities.resources.dll
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\cs\Microsoft.VisualStudio.TestPlatform.ObjectModel.resources.dll
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\de\Microsoft.TestPlatform.CoreUtilities.resources.dll

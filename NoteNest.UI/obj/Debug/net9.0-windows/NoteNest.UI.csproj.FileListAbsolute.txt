@@ -4,6 +4,9 @@ C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.runtimeconfig.json
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.pdb
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Microsoft.Xaml.Behaviors.dll
+C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Serilog.dll
+C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Serilog.Sinks.Debug.dll
+C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Serilog.Sinks.File.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.Core.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.Core.pdb
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.csproj.AssemblyReference.cache
