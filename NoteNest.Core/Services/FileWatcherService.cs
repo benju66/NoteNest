@@ -19,7 +19,7 @@ namespace NoteNest.Core.Services
             _watchers = new Dictionary<string, FileSystemWatcher>();
         }
 
-        public void StartWatching(string path, string filter = "*.txt")
+        public void StartWatching(string path, string filter = "*.txt", bool includeSubdirectories = false)
         {
             if (_watchers.ContainsKey(path))
                 return;
@@ -30,6 +30,7 @@ namespace NoteNest.Core.Services
                 NotifyFilter = NotifyFilters.LastWrite | 
                                NotifyFilters.FileName | 
                                NotifyFilters.DirectoryName,
+                IncludeSubdirectories = includeSubdirectories,
                 EnableRaisingEvents = true
             };
 

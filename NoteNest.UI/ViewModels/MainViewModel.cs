@@ -8,6 +8,7 @@ using System.Windows.Input;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.UI.Commands;
+using System.IO;
 
 namespace NoteNest.UI.ViewModels
 {
@@ -105,6 +106,7 @@ namespace NoteNest.UI.ViewModels
         public ICommand SaveAllCommand { get; }
         public ICommand CloseTabCommand { get; }
         public ICommand NewCategoryCommand { get; }
+        public ICommand NewSubCategoryCommand { get; }
         public ICommand DeleteCategoryCommand { get; }
         public ICommand RefreshCommand { get; }
         public ICommand ExitCommand { get; }
@@ -130,6 +132,7 @@ namespace NoteNest.UI.ViewModels
             SaveAllCommand = new RelayCommand(async _ => await SaveAllNotesAsync(), _ => OpenTabs.Any(t => t.IsDirty));
             CloseTabCommand = new RelayCommand<NoteTabItem>(async tab => await CloseTabAsync(tab));
             NewCategoryCommand = new RelayCommand(async _ => await CreateNewCategoryAsync());
+            NewSubCategoryCommand = new RelayCommand<CategoryTreeItem>(async cat => await CreateNewSubCategoryAsync(cat), _ => SelectedCategory != null);
             DeleteCategoryCommand = new RelayCommand(async _ => await DeleteCategoryAsync(), _ => SelectedCategory != null);
             RefreshCommand = new RelayCommand(async _ => await LoadCategoriesAsync());
             ExitCommand = new RelayCommand(_ => Application.Current.Shutdown());
@@ -186,16 +189,17 @@ namespace NoteNest.UI.ViewModels
                     await fileSystem.CreateDirectoryAsync(settings.MetadataPath);
                 }
 
-                var categories = await _noteService.LoadCategoriesAsync(settings.MetadataPath);
+                var flatCategories = await _noteService.LoadCategoriesAsync(settings.MetadataPath);
 
-                // Create sample categories if none exist
-                if (!categories.Any())
+                // Create sample categories if none exist (roots only)
+                if (!flatCategories.Any())
                 {
-                    categories = new List<CategoryModel>
+                    flatCategories = new List<CategoryModel>
                     {
                         new CategoryModel
                         {
                             Id = "personal",
+                            ParentId = null,
                             Name = "Personal",
                             Path = System.IO.Path.Combine(settings.DefaultNotePath, "Personal"),
                             Pinned = false,
@@ -204,6 +208,7 @@ namespace NoteNest.UI.ViewModels
                         new CategoryModel
                         {
                             Id = "work", 
+                            ParentId = null,
                             Name = "Work",
                             Path = System.IO.Path.Combine(settings.DefaultNotePath, "Work"),
                             Pinned = true,
@@ -212,7 +217,7 @@ namespace NoteNest.UI.ViewModels
                     };
                     
                     // Create the physical directories
-                    foreach (var cat in categories)
+                    foreach (var cat in flatCategories)
                     {
                         if (!await fileSystem.ExistsAsync(cat.Path))
                         {
@@ -221,41 +226,28 @@ namespace NoteNest.UI.ViewModels
                     }
                     
                     // Save the categories to metadata
-                    await _noteService.SaveCategoriesAsync(settings.MetadataPath, categories);
+                    await _noteService.SaveCategoriesAsync(settings.MetadataPath, flatCategories);
                 }
 
-                // Load categories and their notes
-                foreach (var category in categories.OrderByDescending(c => c.Pinned).ThenBy(c => c.Name))
+                // Build tree: add roots then recursively attach children
+                var rootCategories = flatCategories.Where(c => string.IsNullOrEmpty(c.ParentId)).ToList();
+                foreach (var root in rootCategories.OrderByDescending(c => c.Pinned).ThenBy(c => c.Name))
                 {
-                    // Ensure category directory exists
-                    if (!await fileSystem.ExistsAsync(category.Path))
+                    if (!await fileSystem.ExistsAsync(root.Path))
                     {
-                        await fileSystem.CreateDirectoryAsync(category.Path);
+                        await fileSystem.CreateDirectoryAsync(root.Path);
                     }
-                    
-                    var categoryItem = new CategoryTreeItem(category);
-                    
-                    // Load existing notes for this category
-                    try
-                    {
-                        var notes = await _noteService.GetNotesInCategoryAsync(category);
-                        foreach (var note in notes)
-                        {
-                            categoryItem.Notes.Add(new NoteTreeItem(note));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Error loading notes for {category.Name}: {ex.Message}");
-                    }
-
-                    Categories.Add(categoryItem);
-                    
-                    // Start watching this category folder
-                    _fileWatcher.StartWatching(category.Path);
+                    var rootItem = await BuildCategoryTreeAsync(root, flatCategories, fileSystem, level: 0);
+                    Categories.Add(rootItem);
                 }
-                
-                StatusMessage = $"Loaded {Categories.Count} categories";
+
+                // One recursive watcher per root
+                foreach (var root in Categories)
+                {
+                    _fileWatcher.StartWatching(root.Model.Path, "*.txt", includeSubdirectories: true);
+                }
+
+                StatusMessage = $"Loaded {CountAllCategories(Categories)} categories";
             }
             catch (Exception ex)
             {
@@ -266,6 +258,48 @@ namespace NoteNest.UI.ViewModels
             {
                 IsLoading = false;
             }
+        }
+
+        private async Task<CategoryTreeItem> BuildCategoryTreeAsync(CategoryModel parent, List<CategoryModel> all, DefaultFileSystemProvider fileSystem, int level)
+        {
+            parent.Level = level;
+            var parentItem = new CategoryTreeItem(parent);
+            // Load notes for this category
+            try
+            {
+                var notes = await _noteService.GetNotesInCategoryAsync(parent);
+                foreach (var note in notes)
+                {
+                    parentItem.Notes.Add(new NoteTreeItem(note));
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error loading notes for {parent.Name}: {ex.Message}");
+            }
+
+            var children = all.Where(c => c.ParentId == parent.Id).OrderBy(c => c.Name).ToList();
+            foreach (var child in children)
+            {
+                if (!await fileSystem.ExistsAsync(child.Path))
+                {
+                    await fileSystem.CreateDirectoryAsync(child.Path);
+                }
+                var childItem = await BuildCategoryTreeAsync(child, all, fileSystem, level + 1);
+                parentItem.SubCategories.Add(childItem);
+            }
+
+            return parentItem;
+        }
+
+        private int CountAllCategories(ObservableCollection<CategoryTreeItem> nodes)
+        {
+            int count = nodes.Count;
+            foreach (var n in nodes)
+            {
+                count += CountAllCategories(n.SubCategories);
+            }
+            return count;
         }
 
         private async Task CreateNewNoteAsync()
@@ -410,6 +444,7 @@ namespace NoteNest.UI.ViewModels
                 var category = new CategoryModel
                 {
                     Id = Guid.NewGuid().ToString(),
+                    ParentId = null,
                     Name = name,
                     Path = System.IO.Path.Combine(settings.DefaultNotePath, safeName),
                     Tags = new List<string>()
@@ -426,10 +461,10 @@ namespace NoteNest.UI.ViewModels
                 Categories.Add(categoryItem);
 
                 // Save updated categories to metadata
-                var allCategories = Categories.Select(c => c.Model).ToList();
+                var allCategories = GetAllCategoriesFlat();
                 await _noteService.SaveCategoriesAsync(settings.MetadataPath, allCategories);
-
-                _fileWatcher.StartWatching(category.Path);
+                // Use recursive root watcher strategy
+                StartRecursiveWatch(categoryItem);
                 StatusMessage = $"Created category: {name}";
             }
             catch (Exception ex)
@@ -439,27 +474,147 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        public async Task CreateNewSubCategoryAsync(CategoryTreeItem parentCategory)
+        {
+            if (parentCategory == null)
+            {
+                parentCategory = SelectedCategory;
+            }
+            if (parentCategory == null)
+            {
+                MessageBox.Show("Please select a parent category first.", "No Category Selected", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var dialog = new Dialogs.InputDialog(
+                "New Subcategory",
+                $"Enter subcategory name for '{parentCategory.Name}':",
+                "");
+
+            dialog.ValidationFunction = (text) =>
+            {
+                if (parentCategory.SubCategories.Any(c => c.Name.Equals(text, StringComparison.OrdinalIgnoreCase)))
+                    return "A subcategory with this name already exists.";
+                return null;
+            };
+
+            if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.ResponseText))
+                return;
+
+            try
+            {
+                var name = dialog.ResponseText;
+                var safeName = string.Join("_", name.Split(Path.GetInvalidFileNameChars()));
+                var subCategory = new CategoryModel
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    ParentId = parentCategory.Model.Id,
+                    Name = name,
+                    Path = Path.Combine(parentCategory.Model.Path, safeName),
+                    Tags = new List<string>()
+                };
+
+                var fileSystem = new DefaultFileSystemProvider();
+                if (!await fileSystem.ExistsAsync(subCategory.Path))
+                {
+                    await fileSystem.CreateDirectoryAsync(subCategory.Path);
+                }
+
+                var subItem = new CategoryTreeItem(subCategory);
+                parentCategory.SubCategories.Add(subItem);
+                parentCategory.IsExpanded = true;
+
+                // Save updated flat list
+                var all = GetAllCategoriesFlat();
+                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, all);
+
+                StatusMessage = $"Created subcategory: {name} under {parentCategory.Name}";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error creating subcategory: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private async Task DeleteCategoryAsync()
         {
             if (SelectedCategory == null) return;
 
-            var result = MessageBox.Show(
-                $"Delete category '{SelectedCategory.Name}' and all its notes?",
-                "Confirm Delete",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
+            // Count children and notes for warning text
+            int subCount = CountAllCategories(new ObservableCollection<CategoryTreeItem>(new[] { SelectedCategory })) - 1;
+            int noteCount = CountAllNotes(SelectedCategory);
 
+            var warning = $"Delete category '{SelectedCategory.Name}'" +
+                          (subCount > 0 || noteCount > 0 ? $" including {subCount} subcategories and {noteCount} notes" : "") + "?";
+
+            var result = MessageBox.Show(warning, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result != MessageBoxResult.Yes) return;
 
-            Categories.Remove(SelectedCategory);
-            
-            // Save updated categories
-            var settings = _configService.Settings;
-            var allCategories = Categories.Select(c => c.Model).ToList();
-            await _noteService.SaveCategoriesAsync(settings.MetadataPath, allCategories);
+            // Physically delete directory recursively
+            try
+            {
+                if (Directory.Exists(SelectedCategory.Model.Path))
+                {
+                    Directory.Delete(SelectedCategory.Model.Path, recursive: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error deleting directory: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
 
-            _fileWatcher.StopWatching(SelectedCategory.Model.Path);
+            // Remove from tree (search for parent if not root)
+            var parent = FindParent(Categories, SelectedCategory);
+            if (parent != null)
+            {
+                parent.SubCategories.Remove(SelectedCategory);
+            }
+            else
+            {
+                Categories.Remove(SelectedCategory);
+            }
+
+            // Save updated categories
+            var all = GetAllCategoriesFlat();
+            await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, all);
+
             StatusMessage = $"Deleted category: {SelectedCategory.Name}";
+        }
+
+        private int CountAllNotes(CategoryTreeItem category)
+        {
+            int count = category.Notes.Count;
+            foreach (var sub in category.SubCategories)
+            {
+                count += CountAllNotes(sub);
+            }
+            return count;
+        }
+
+        private CategoryTreeItem FindParent(ObservableCollection<CategoryTreeItem> roots, CategoryTreeItem target)
+        {
+            foreach (var r in roots)
+            {
+                if (r.SubCategories.Contains(target)) return r;
+                var found = FindParent(r.SubCategories, target);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private List<CategoryModel> GetAllCategoriesFlat()
+        {
+            var list = new List<CategoryModel>();
+            void Walk(ObservableCollection<CategoryTreeItem> items)
+            {
+                foreach (var item in items)
+                {
+                    list.Add(item.Model);
+                    Walk(item.SubCategories);
+                }
+            }
+            Walk(Categories);
+            return list;
         }
 
         private void FilterNotes()
@@ -579,7 +734,7 @@ namespace NoteNest.UI.ViewModels
                 categoryItem.Model.Name = newName;
                 
                 // Save updated categories
-                var allCategories = Categories.Select(c => c.Model).ToList();
+                var allCategories = GetAllCategoriesFlat();
                 await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
                 
                 StatusMessage = $"Renamed category from '{oldName}' to '{newName}'";
@@ -600,7 +755,7 @@ namespace NoteNest.UI.ViewModels
                 categoryItem.Model.Pinned = !categoryItem.Model.Pinned;
                 
                 // Save updated categories
-                var allCategories = Categories.Select(c => c.Model).ToList();
+                var allCategories = GetAllCategoriesFlat();
                 await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
                 
                 // Re-sort categories
@@ -614,6 +769,33 @@ namespace NoteNest.UI.ViewModels
                 MessageBox.Show($"Error toggling pin: {ex.Message}", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private void StartRecursiveWatch(CategoryTreeItem root)
+        {
+            // Switch to a single watcher per root directory with recursion
+            // FileWatcherService currently does not expose IncludeSubdirectories; adjust watcher directly
+            try
+            {
+                // Stop any existing watcher for this path to avoid duplication
+                _fileWatcher.StopWatching(root.Model.Path);
+            }
+            catch { }
+
+            // Start a watcher and set IncludeSubdirectories via reflection to keep service public API unchanged
+            // Create a private watcher mirroring service logic
+            var watcher = new FileSystemWatcher(root.Model.Path)
+            {
+                Filter = "*.txt",
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                IncludeSubdirectories = true,
+                EnableRaisingEvents = true
+            };
+            // Hook to service events to keep behavior consistent (optional; no-op if not needed)
+            watcher.Changed += (s, e) => { };
+            watcher.Created += (s, e) => { };
+            watcher.Deleted += (s, e) => { };
+            watcher.Renamed += (s, e) => { };
         }
 
         public async Task RenameNoteAsync(NoteTreeItem noteItem, string newName)

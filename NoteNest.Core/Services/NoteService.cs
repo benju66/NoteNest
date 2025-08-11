@@ -110,7 +110,12 @@ namespace NoteNest.Core.Services
 
             var json = await _fileSystem.ReadTextAsync(categoriesFile);
             var wrapper = JsonSerializer.Deserialize<CategoryWrapper>(json, _jsonOptions);
-            return wrapper?.Categories ?? new List<CategoryModel>();
+            // If missing version, treat as legacy flat list without ParentId
+            if (wrapper == null)
+            {
+                return new List<CategoryModel>();
+            }
+            return wrapper.Categories ?? new List<CategoryModel>();
         }
 
         public async Task SaveCategoriesAsync(string metadataPath, List<CategoryModel> categories)
@@ -123,7 +128,7 @@ namespace NoteNest.Core.Services
                 await _fileSystem.CreateDirectoryAsync(metadataPath);
             }
 
-            var wrapper = new CategoryWrapper { Categories = categories };
+            var wrapper = new CategoryWrapper { Categories = categories, Version = "2.0" };
             var json = JsonSerializer.Serialize(wrapper, _jsonOptions);
             await _fileSystem.WriteTextAsync(categoriesFile, json);
         }
@@ -164,6 +169,7 @@ namespace NoteNest.Core.Services
         private class CategoryWrapper
         {
             public List<CategoryModel> Categories { get; set; }
+            public string Version { get; set; } = "2.0";
             public AppSettings Settings { get; set; }
         }
     }
