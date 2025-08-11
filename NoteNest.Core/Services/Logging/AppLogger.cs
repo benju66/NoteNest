@@ -8,93 +8,236 @@ namespace NoteNest.Core.Services.Logging
     public class AppLogger : IAppLogger, IDisposable
     {
         private readonly Logger _logger;
-        private static AppLogger _instance;
-        private static readonly object _lock = new object();
+        private static readonly Lazy<AppLogger> _instance = 
+            new Lazy<AppLogger>(() => new AppLogger(), isThreadSafe: true);
+        private bool _disposed;
+        private bool _initialized;
 
-        // Singleton instance for global access
-        public static AppLogger Instance
-        {
-            get
-            {
-                if (_instance == null)
-                {
-                    lock (_lock)
-                    {
-                        if (_instance == null)
-                        {
-                            _instance = new AppLogger();
-                        }
-                    }
-                }
-                return _instance;
-            }
-        }
+        // Thread-safe singleton instance
+        public static AppLogger Instance => _instance.Value;
 
         private AppLogger()
         {
-            // Ensure log directory exists
-            var logPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "NoteNest",
-                "Logs");
-            
-            Directory.CreateDirectory(logPath);
-            
-            var logFile = Path.Combine(logPath, "notenest-.log");
+            try
+            {
+                // Try multiple locations for log files
+                string logPath = GetLogPath();
+                
+                var logFile = Path.Combine(logPath, "notenest-.log");
 
-            _logger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
-                .WriteTo.File(
-                    logFile,
-                    rollingInterval: RollingInterval.Day,
-                    retainedFileCountLimit: 7,  // Keep 7 days of logs
-                    outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-                .WriteTo.Debug()  // Also output to debug console in development
-                .CreateLogger();
+                var logConfig = new LoggerConfiguration()
+                    .MinimumLevel.Debug()
+                    .WriteTo.Debug(); // Always write to debug output
 
-            Info("NoteNest application started");
-            Info($"Log files location: {logPath}");
+                // Try to add file logging
+                try
+                {
+                    logConfig = logConfig.WriteTo.File(
+                        logFile,
+                        rollingInterval: RollingInterval.Day,
+                        retainedFileCountLimit: 7,
+                        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}");
+                    
+                    _logger = logConfig.CreateLogger();
+                    _initialized = true;
+                    
+                    Info("NoteNest application started");
+                    Info($"Log files location: {logPath}");
+                }
+                catch (Exception fileEx)
+                {
+                    // If file logging fails, just use debug output
+                    _logger = logConfig.CreateLogger();
+                    _initialized = true;
+                    
+                    Warning($"Could not initialize file logging: {fileEx.Message}");
+                    Info("NoteNest application started (debug output only)");
+                }
+            }
+            catch (Exception ex)
+            {
+                // If everything fails, create a minimal logger
+                _logger = new LoggerConfiguration()
+                    .MinimumLevel.Debug()
+                    .WriteTo.Debug()
+                    .CreateLogger();
+                
+                _initialized = false;
+                Error($"Failed to properly initialize logger: {ex.Message}");
+            }
+        }
+
+        private string GetLogPath()
+        {
+            // Try LocalApplicationData first
+            try
+            {
+                var logPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "NoteNest",
+                    "Logs");
+                
+                Directory.CreateDirectory(logPath);
+                
+                // Test if we can write to this directory
+                var testFile = Path.Combine(logPath, ".test");
+                File.WriteAllText(testFile, "test");
+                File.Delete(testFile);
+                
+                return logPath;
+            }
+            catch
+            {
+                // LocalApplicationData failed
+            }
+
+            // Try user profile
+            try
+            {
+                var logPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".notenest",
+                    "logs");
+                
+                Directory.CreateDirectory(logPath);
+                
+                // Test if we can write to this directory
+                var testFile = Path.Combine(logPath, ".test");
+                File.WriteAllText(testFile, "test");
+                File.Delete(testFile);
+                
+                return logPath;
+            }
+            catch
+            {
+                // User profile failed
+            }
+
+            // Try desktop as last resort
+            try
+            {
+                var logPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                    "NoteNest_Logs");
+                
+                Directory.CreateDirectory(logPath);
+                return logPath;
+            }
+            catch
+            {
+                // Even desktop failed, use current directory
+                return Directory.GetCurrentDirectory();
+            }
         }
 
         public void Debug(string message, params object[] args)
         {
-            _logger.Debug(message, args);
+            if (_disposed || _logger == null) return;
+            try
+            {
+                _logger.Debug(message, args);
+            }
+            catch
+            {
+                // Ignore logging errors
+            }
         }
 
         public void Info(string message, params object[] args)
         {
-            _logger.Information(message, args);
+            if (_disposed || _logger == null) return;
+            try
+            {
+                _logger.Information(message, args);
+            }
+            catch
+            {
+                // Ignore logging errors
+            }
         }
 
         public void Warning(string message, params object[] args)
         {
-            _logger.Warning(message, args);
+            if (_disposed || _logger == null) return;
+            try
+            {
+                _logger.Warning(message, args);
+            }
+            catch
+            {
+                // Ignore logging errors
+            }
         }
 
         public void Error(string message, params object[] args)
         {
-            _logger.Error(message, args);
+            if (_disposed || _logger == null) return;
+            try
+            {
+                _logger.Error(message, args);
+            }
+            catch
+            {
+                // Ignore logging errors
+            }
         }
 
         public void Error(Exception ex, string message, params object[] args)
         {
-            _logger.Error(ex, message, args);
+            if (_disposed || _logger == null) return;
+            try
+            {
+                _logger.Error(ex, message, args);
+            }
+            catch
+            {
+                // Ignore logging errors
+            }
         }
 
         public void Fatal(string message, params object[] args)
         {
-            _logger.Fatal(message, args);
+            if (_disposed || _logger == null) return;
+            try
+            {
+                _logger.Fatal(message, args);
+            }
+            catch
+            {
+                // Ignore logging errors
+            }
         }
 
         public void Fatal(Exception ex, string message, params object[] args)
         {
-            _logger.Fatal(ex, message, args);
+            if (_disposed || _logger == null) return;
+            try
+            {
+                _logger.Fatal(ex, message, args);
+            }
+            catch
+            {
+                // Ignore logging errors
+            }
         }
 
         public void Dispose()
         {
-            Info("NoteNest application shutting down");
-            _logger?.Dispose();
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    Info("NoteNest application shutting down");
+                    _logger?.Dispose();
+                }
+                _disposed = true;
+            }
         }
     }
 }

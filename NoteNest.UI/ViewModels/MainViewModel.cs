@@ -230,11 +230,10 @@ namespace NoteNest.UI.ViewModels
 
                 var flatCategories = await _noteService.LoadCategoriesAsync(settings.MetadataPath);
 
-                // Create sample categories if none exist
+                // LoadCategoriesAsync now handles default creation internally
                 if (!flatCategories.Any())
                 {
-                    _logger.Info("No categories found, creating defaults");
-                    flatCategories = await CreateDefaultCategories(settings);
+                    _logger.Info("No categories loaded - defaults should have been created");
                 }
 
                 // Stop all existing watchers before setting up new ones
@@ -264,43 +263,6 @@ namespace NoteNest.UI.ViewModels
             {
                 IsLoading = false;
             }
-        }
-
-        private async Task<List<CategoryModel>> CreateDefaultCategories(AppSettings settings)
-        {
-            var categories = new List<CategoryModel>
-            {
-                new CategoryModel
-                {
-                    Id = "personal",
-                    ParentId = null,
-                    Name = "Personal",
-                    Path = Path.Combine(settings.DefaultNotePath, "Personal"),
-                    Pinned = false,
-                    Tags = new List<string> { "personal" }
-                },
-                new CategoryModel
-                {
-                    Id = "work",
-                    ParentId = null,
-                    Name = "Work",
-                    Path = Path.Combine(settings.DefaultNotePath, "Work"),
-                    Pinned = true,
-                    Tags = new List<string> { "work", "important" }
-                }
-            };
-
-            var fileSystem = new DefaultFileSystemProvider();
-            foreach (var cat in categories)
-            {
-                if (!await fileSystem.ExistsAsync(cat.Path))
-                {
-                    await fileSystem.CreateDirectoryAsync(cat.Path);
-                }
-            }
-
-            await _noteService.SaveCategoriesAsync(settings.MetadataPath, categories);
-            return categories;
         }
 
         private async Task<CategoryTreeItem> BuildCategoryTreeAsync(CategoryModel parent, List<CategoryModel> all, int level)
@@ -478,7 +440,6 @@ namespace NoteNest.UI.ViewModels
                     return;
 
                 var name = dialog.ResponseText;
-                var settings = _configService.Settings;
                 var safeName = PathService.SanitizeName(name);
                 
                 var category = new CategoryModel
@@ -486,7 +447,7 @@ namespace NoteNest.UI.ViewModels
                     Id = Guid.NewGuid().ToString(),
                     ParentId = null,
                     Name = name,
-                    Path = Path.Combine(settings.DefaultNotePath, safeName),
+                    Path = Path.Combine(PathService.ProjectsPath, safeName), // Absolute path for runtime
                     Tags = new List<string>()
                 };
 
@@ -496,6 +457,11 @@ namespace NoteNest.UI.ViewModels
                     await fileSystem.CreateDirectoryAsync(category.Path);
                 }
 
+                // Add to current flat list and save
+                var allCategories = GetAllCategoriesFlat();
+                allCategories.Add(category);
+                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
+                
                 await LoadCategoriesAsync(); // Reload to include new category
                 StatusMessage = $"Created category: {name}";
                 _logger.Info($"Created category: {name}");
@@ -539,7 +505,7 @@ namespace NoteNest.UI.ViewModels
                     Id = Guid.NewGuid().ToString(),
                     ParentId = parentCategory.Model.Id,
                     Name = name,
-                    Path = Path.Combine(parentCategory.Model.Path, safeName),
+                    Path = Path.Combine(parentCategory.Model.Path, safeName), // Absolute path for runtime
                     Tags = new List<string>()
                 };
 
@@ -549,6 +515,11 @@ namespace NoteNest.UI.ViewModels
                     await fileSystem.CreateDirectoryAsync(subCategory.Path);
                 }
 
+                // Add to flat list and save
+                var allCategories = GetAllCategoriesFlat();
+                allCategories.Add(subCategory);
+                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
+                
                 await LoadCategoriesAsync(); // Reload to include new subcategory
                 StatusMessage = $"Created subcategory: {name} under {parentCategory.Name}";
                 _logger.Info($"Created subcategory: {name} under {parentCategory.Name}");
@@ -571,6 +542,7 @@ namespace NoteNest.UI.ViewModels
                 if (result != MessageBoxResult.Yes) return;
 
                 var categoryName = SelectedCategory.Name;
+                var categoryId = SelectedCategory.Model.Id;
                 
                 // Delete physical directory
                 if (Directory.Exists(SelectedCategory.Model.Path))
@@ -578,10 +550,37 @@ namespace NoteNest.UI.ViewModels
                     Directory.Delete(SelectedCategory.Model.Path, recursive: true);
                 }
 
+                // Remove from categories list and save
+                var allCategories = GetAllCategoriesFlat();
+                RemoveCategoryAndChildren(allCategories, categoryId);
+                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
+
                 await LoadCategoriesAsync(); // Reload after deletion
                 StatusMessage = $"Deleted category: {categoryName}";
                 _logger.Info($"Deleted category: {categoryName}");
             }, "Delete Category");
+        }
+
+        private void RemoveCategoryAndChildren(List<CategoryModel> allCategories, string categoryId)
+        {
+            // Find all children recursively
+            var toRemove = new List<string> { categoryId };
+            var queue = new Queue<string>();
+            queue.Enqueue(categoryId);
+
+            while (queue.Count > 0)
+            {
+                var currentId = queue.Dequeue();
+                var children = allCategories.Where(c => c.ParentId == currentId).Select(c => c.Id).ToList();
+                foreach (var childId in children)
+                {
+                    toRemove.Add(childId);
+                    queue.Enqueue(childId);
+                }
+            }
+
+            // Remove all found categories
+            allCategories.RemoveAll(c => toRemove.Contains(c.Id));
         }
 
         #endregion

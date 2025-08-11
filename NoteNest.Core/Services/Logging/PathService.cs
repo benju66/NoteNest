@@ -20,17 +20,32 @@ namespace NoteNest.Core.Services
             {
                 if (string.IsNullOrEmpty(_rootPath))
                 {
-                    _rootPath = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                        "NoteNest");
+                    try
+                    {
+                        _rootPath = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                            "NoteNest");
+                    }
+                    catch
+                    {
+                        // Fallback to current directory if Documents folder fails
+                        _rootPath = Path.Combine(Directory.GetCurrentDirectory(), "NoteNest");
+                    }
                 }
                 return _rootPath;
             }
             set
             {
                 _rootPath = value;
-                // Ensure the directory exists when set
-                Directory.CreateDirectory(_rootPath);
+                // Try to ensure the directory exists when set
+                try
+                {
+                    Directory.CreateDirectory(_rootPath);
+                }
+                catch
+                {
+                    // Ignore creation errors here - will be handled elsewhere
+                }
             }
         }
 
@@ -56,11 +71,33 @@ namespace NoteNest.Core.Services
         {
             get
             {
-                var path = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "NoteNest");
-                Directory.CreateDirectory(path);
-                return path;
+                try
+                {
+                    var path = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "NoteNest");
+                    Directory.CreateDirectory(path);
+                    return path;
+                }
+                catch
+                {
+                    // Fallback to user profile if LocalAppData fails
+                    try
+                    {
+                        var path = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                            ".notenest");
+                        Directory.CreateDirectory(path);
+                        return path;
+                    }
+                    catch
+                    {
+                        // Last resort - use current directory
+                        var path = Path.Combine(Directory.GetCurrentDirectory(), ".notenest");
+                        Directory.CreateDirectory(path);
+                        return path;
+                    }
+                }
             }
         }
 
@@ -79,11 +116,35 @@ namespace NoteNest.Core.Services
         /// </summary>
         public static void EnsureDirectoriesExist()
         {
-            Directory.CreateDirectory(RootPath);
-            Directory.CreateDirectory(MetadataPath);
-            Directory.CreateDirectory(ProjectsPath);
-            Directory.CreateDirectory(TemplatesPath);
-            Directory.CreateDirectory(AppDataPath);
+            var errors = new System.Collections.Generic.List<string>();
+
+            // Try to create each directory and collect errors
+            TryCreateDirectory(RootPath, "Root", errors);
+            TryCreateDirectory(MetadataPath, "Metadata", errors);
+            TryCreateDirectory(ProjectsPath, "Projects", errors);
+            TryCreateDirectory(TemplatesPath, "Templates", errors);
+            TryCreateDirectory(AppDataPath, "AppData", errors);
+
+            if (errors.Count > 0)
+            {
+                var errorMessage = "Failed to create the following directories:\n" + string.Join("\n", errors);
+                throw new InvalidOperationException(errorMessage);
+            }
+        }
+
+        private static void TryCreateDirectory(string path, string name, System.Collections.Generic.List<string> errors)
+        {
+            try
+            {
+                if (!Directory.Exists(path))
+                {
+                    Directory.CreateDirectory(path);
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"- {name} ({path}): {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -94,15 +155,22 @@ namespace NoteNest.Core.Services
             if (string.IsNullOrEmpty(absolutePath))
                 return absolutePath;
 
-            if (absolutePath.StartsWith(RootPath, StringComparison.OrdinalIgnoreCase))
+            try
             {
-                var relativePath = absolutePath.Substring(RootPath.Length);
-                if (relativePath.StartsWith(Path.DirectorySeparatorChar.ToString()))
-                    relativePath = relativePath.Substring(1);
-                return relativePath;
+                if (absolutePath.StartsWith(RootPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    var relativePath = absolutePath.Substring(RootPath.Length);
+                    if (relativePath.StartsWith(Path.DirectorySeparatorChar.ToString()))
+                        relativePath = relativePath.Substring(1);
+                    return relativePath;
+                }
+            }
+            catch
+            {
+                // If any error, return the original path
             }
 
-            // If not under root path, return as-is
+            // If not under root path or error occurred, return as-is
             return absolutePath;
         }
 
@@ -114,11 +182,19 @@ namespace NoteNest.Core.Services
             if (string.IsNullOrEmpty(relativePath))
                 return relativePath;
 
-            // If already absolute, return as-is
-            if (Path.IsPathRooted(relativePath))
-                return relativePath;
+            try
+            {
+                // If already absolute, return as-is
+                if (Path.IsPathRooted(relativePath))
+                    return relativePath;
 
-            return Path.Combine(RootPath, relativePath);
+                return Path.Combine(RootPath, relativePath);
+            }
+            catch
+            {
+                // If any error, return the original path
+                return relativePath;
+            }
         }
 
         /// <summary>
@@ -129,24 +205,32 @@ namespace NoteNest.Core.Services
             if (string.IsNullOrWhiteSpace(name))
                 return "Untitled";
 
-            var invalidChars = Path.GetInvalidFileNameChars();
-            var sanitized = string.Join("_", name.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
-            
-            // Additional safety for Windows reserved names
-            string[] reservedNames = { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", 
-                                       "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", 
-                                       "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" };
-            
-            foreach (var reserved in reservedNames)
+            try
             {
-                if (sanitized.Equals(reserved, StringComparison.OrdinalIgnoreCase))
+                var invalidChars = Path.GetInvalidFileNameChars();
+                var sanitized = string.Join("_", name.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries));
+                
+                // Additional safety for Windows reserved names
+                string[] reservedNames = { "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", 
+                                           "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", 
+                                           "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9" };
+                
+                foreach (var reserved in reservedNames)
                 {
-                    sanitized = "_" + sanitized;
-                    break;
+                    if (sanitized.Equals(reserved, StringComparison.OrdinalIgnoreCase))
+                    {
+                        sanitized = "_" + sanitized;
+                        break;
+                    }
                 }
-            }
 
-            return sanitized.Trim();
+                return sanitized.Trim();
+            }
+            catch
+            {
+                // If sanitization fails, return a safe default
+                return "Untitled";
+            }
         }
     }
 }
