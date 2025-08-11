@@ -18,6 +18,10 @@ namespace NoteNest.UI.Controls
             AcceptsReturn = true;
             AcceptsTab = true;
             FontFamily = new System.Windows.Media.FontFamily("Consolas");
+            // Enable wrapping by default
+            TextWrapping = System.Windows.TextWrapping.Wrap;
+            HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled;
+            VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto;
             PreviewKeyDown += OnPreviewKeyDown;
         }
 
