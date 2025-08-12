@@ -871,6 +871,26 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        private async Task SafeExecuteAsync(Action operation, string operationName)
+        {
+            try
+            {
+                _logger.Debug($"Starting operation: {operationName}");
+                await Task.Run(operation);
+                _logger.Debug($"Completed operation: {operationName}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed operation: {operationName}");
+                MessageBox.Show(
+                    $"Operation failed: {operationName}\n\nError: {ex.Message}",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                StatusMessage = $"Error: {operationName}";
+            }
+        }
+
         private int CountAllCategories(ObservableCollection<CategoryTreeItem> nodes)
         {
             int count = nodes.Count;
@@ -961,7 +981,7 @@ namespace NoteNest.UI.ViewModels
         {
             if (noteItem == null || string.IsNullOrWhiteSpace(newName)) return;
 
-            await SafeExecuteAsync(async () =>
+            await SafeExecuteAsync(() =>
             {
                 var oldPath = noteItem.Model.FilePath;
                 var directory = Path.GetDirectoryName(oldPath);

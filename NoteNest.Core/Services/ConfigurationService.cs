@@ -11,12 +11,12 @@ namespace NoteNest.Core.Services
     {
         private readonly IFileSystemProvider _fileSystem;
         private readonly string _settingsPath;
-        private AppSettings _settings;
+        private AppSettings _settings = new();
         private readonly JsonSerializerOptions _jsonOptions;
 
         public AppSettings Settings => _settings;
 
-        public ConfigurationService(IFileSystemProvider fileSystem = null)
+        public ConfigurationService(IFileSystemProvider? fileSystem = null)
         {
             _fileSystem = fileSystem ?? new DefaultFileSystemProvider();
             
@@ -38,7 +38,7 @@ namespace NoteNest.Core.Services
                 try
                 {
                     var json = await _fileSystem.ReadTextAsync(_settingsPath);
-                    _settings = JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions);
+                    _settings = JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions) ?? new AppSettings();
                 }
                 catch (Exception ex)
                 {
@@ -57,7 +57,7 @@ namespace NoteNest.Core.Services
 
         public async Task SaveSettingsAsync()
         {
-            var directory = Path.GetDirectoryName(_settingsPath);
+            var directory = Path.GetDirectoryName(_settingsPath) ?? string.Empty;
             if (!await _fileSystem.ExistsAsync(directory))
             {
                 await _fileSystem.CreateDirectoryAsync(directory);

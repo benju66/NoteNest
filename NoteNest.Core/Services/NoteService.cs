@@ -17,7 +17,7 @@ namespace NoteNest.Core.Services
         private readonly IAppLogger _logger;
         private readonly JsonSerializerOptions _jsonOptions;
 
-        public NoteService(IFileSystemProvider fileSystem, ConfigurationService configService, IAppLogger logger = null)
+        public NoteService(IFileSystemProvider fileSystem, ConfigurationService configService, IAppLogger? logger = null)
         {
             _fileSystem = fileSystem ?? new DefaultFileSystemProvider();
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
@@ -111,7 +111,7 @@ namespace NoteNest.Core.Services
             try
             {
                 // Ensure directory exists
-                var directory = Path.GetDirectoryName(note.FilePath);
+                var directory = Path.GetDirectoryName(note.FilePath) ?? string.Empty;
                 if (!await _fileSystem.ExistsAsync(directory))
                 {
                     await _fileSystem.CreateDirectoryAsync(directory);
@@ -206,7 +206,7 @@ namespace NoteNest.Core.Services
                 var categoriesFile = PathService.CategoriesPath;
                 
                 // Ensure directory exists
-                var dir = Path.GetDirectoryName(categoriesFile);
+                var dir = Path.GetDirectoryName(categoriesFile) ?? string.Empty;
                 if (!await _fileSystem.ExistsAsync(dir))
                 {
                     await _fileSystem.CreateDirectoryAsync(dir);
@@ -398,9 +398,9 @@ namespace NoteNest.Core.Services
 
         private class CategoryWrapper
         {
-            public List<CategoryModel> Categories { get; set; }
+            public List<CategoryModel> Categories { get; set; } = new();
             public string Version { get; set; } = "2.0";
-            public AppSettings Settings { get; set; }
+            public AppSettings? Settings { get; set; }
         }
 
         public enum ExportFormat

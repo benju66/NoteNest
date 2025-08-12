@@ -11,7 +11,7 @@ namespace NoteNest.Core.Services.Logging
         private static readonly Lazy<AppLogger> _instance = 
             new Lazy<AppLogger>(() => new AppLogger(), isThreadSafe: true);
         private bool _disposed;
-        private bool _initialized;
+
 
         // Thread-safe singleton instance
         public static AppLogger Instance => _instance.Value;
@@ -39,7 +39,7 @@ namespace NoteNest.Core.Services.Logging
                         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}");
                     
                     _logger = logConfig.CreateLogger();
-                    _initialized = true;
+
                     
                     Info("NoteNest application started");
                     Info($"Log files location: {logPath}");
@@ -48,7 +48,7 @@ namespace NoteNest.Core.Services.Logging
                 {
                     // If file logging fails, just use debug output
                     _logger = logConfig.CreateLogger();
-                    _initialized = true;
+
                     
                     Warning($"Could not initialize file logging: {fileEx.Message}");
                     Info("NoteNest application started (debug output only)");
@@ -62,7 +62,7 @@ namespace NoteNest.Core.Services.Logging
                     .WriteTo.Debug()
                     .CreateLogger();
                 
-                _initialized = false;
+
                 Error($"Failed to properly initialize logger: {ex.Message}");
             }
         }

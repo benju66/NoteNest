@@ -8,7 +8,7 @@ namespace NoteNest.Core.Services
     /// </summary>
     public static class PathService
     {
-        private static string _rootPath;
+        private static string _rootPath = string.Empty;
         
         /// <summary>
         /// Gets the root path for NoteNest data

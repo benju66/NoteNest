@@ -5,18 +5,17 @@ namespace NoteNest.Core.Models
 {
     public class NoteMetadata
     {
-        public string Id { get; set; }
-        public string Title { get; set; }
-        public string FilePath { get; set; }
+        public string Id { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
         public DateTime LastModified { get; set; }
-        public string CategoryId { get; set; }
-        public List<string> Tags { get; set; }
+        public string CategoryId { get; set; } = string.Empty;
+        public List<string> Tags { get; set; } = new();
         public long FileSize { get; set; }
-        public string FileHash { get; set; }
+        public string FileHash { get; set; } = string.Empty;
 
         public NoteMetadata()
         {
-            Tags = new List<string>();
             Id = Guid.NewGuid().ToString();
         }
     }

@@ -11,12 +11,12 @@ namespace NoteNest.Core.Services
         private readonly IAppLogger _logger;
         private bool _disposed;
 
-        public event EventHandler<FileChangedEventArgs> FileChanged;
-        public event EventHandler<FileChangedEventArgs> FileCreated;
-        public event EventHandler<FileChangedEventArgs> FileDeleted;
-        public event EventHandler<FileRenamedEventArgs> FileRenamed;
+        public event EventHandler<FileChangedEventArgs>? FileChanged;
+        public event EventHandler<FileChangedEventArgs>? FileCreated;
+        public event EventHandler<FileChangedEventArgs>? FileDeleted;
+        public event EventHandler<FileRenamedEventArgs>? FileRenamed;
 
-        public FileWatcherService(IAppLogger logger = null)
+        public FileWatcherService(IAppLogger? logger = null)
         {
             _watchers = new Dictionary<string, FileSystemWatcher>();
             _logger = logger ?? AppLogger.Instance;
