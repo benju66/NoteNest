@@ -15,12 +15,14 @@ C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\App.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\NoteNestPanel.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Dialogs\InputDialog.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\MainWindow.g.cs
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Windows\SettingsWindow.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\App.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\GeneratedInternalTypeHelper.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI_MarkupCompile.cache
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI_MarkupCompile.lref
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\NoteNestPanel.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\MainWindow.baml
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Windows\SettingsWindow.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.g.resources
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.GeneratedMSBuildEditorConfig.editorconfig
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.AssemblyInfoInputs.cache

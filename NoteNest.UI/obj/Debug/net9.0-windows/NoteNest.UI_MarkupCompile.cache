@@ -10,11 +10,11 @@ none
 false
 TRACE;DEBUG;NET;NET9_0;NETCOREAPP
 C:\NoteNest\NoteNest.UI\App.xaml
-3-231267990
+4179228831
 
-181167713109
+23824116407
 205-398973743
-Controls\NoteNestPanel.xaml;Dialogs\InputDialog.xaml;MainWindow.xaml;
+Controls\NoteNestPanel.xaml;Dialogs\InputDialog.xaml;MainWindow.xaml;Windows\SettingsWindow.xaml;
 
 False
 
