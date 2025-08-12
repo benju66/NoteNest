@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -22,6 +23,8 @@ namespace NoteNest.UI.ViewModels
         private readonly IAppLogger _logger;
         private DispatcherTimer _autoSaveTimer;
         private bool _disposed;
+        private readonly CancellationTokenSource _cancellationTokenSource;
+        private Task _initializationTask;
         
         private ObservableCollection<CategoryTreeItem> _categories;
         private ObservableCollection<NoteTabItem> _openTabs;
@@ -131,6 +134,8 @@ namespace NoteNest.UI.ViewModels
             _logger = AppLogger.Instance;
             _logger.Info("Initializing MainViewModel");
 
+            _cancellationTokenSource = new CancellationTokenSource();
+
             try
             {
                 // Initialize services
@@ -146,8 +151,8 @@ namespace NoteNest.UI.ViewModels
                 // Initialize commands
                 InitializeCommands();
 
-                // Load initial data and initialize auto-save after settings are loaded
-                _ = InitializeAsync();
+                // Properly track the initialization task
+                _initializationTask = InitializeAsync(_cancellationTokenSource.Token);
             }
             catch (Exception ex)
             {
@@ -196,7 +201,7 @@ namespace NoteNest.UI.ViewModels
             ClearSearchCommand = new RelayCommand(_ => { SearchText = string.Empty; IsSearchActive = false; });
         }
 
-        private async Task InitializeAsync()
+        private async Task InitializeAsync(CancellationToken cancellationToken = default)
         {
             try
             {
@@ -204,25 +209,36 @@ namespace NoteNest.UI.ViewModels
                 StatusMessage = "Loading...";
 
                 var settings = await _configService.LoadSettingsAsync();
+                cancellationToken.ThrowIfCancellationRequested();
                 
                 // Use PathService for proper paths
                 settings.DefaultNotePath = PathService.ProjectsPath;
                 settings.MetadataPath = PathService.MetadataPath;
                 
                 await _configService.EnsureDefaultDirectoriesAsync();
+                cancellationToken.ThrowIfCancellationRequested();
 
                 // Initialize auto-save after settings are loaded
                 InitializeAutoSave();
 
                 await LoadCategoriesAsync();
+                cancellationToken.ThrowIfCancellationRequested();
 
                 StatusMessage = "Ready";
                 _logger.Info("Application initialized successfully");
             }
+            catch (OperationCanceledException)
+            {
+                _logger.Info("Initialization cancelled");
+                StatusMessage = "Initialization cancelled";
+            }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error during initialization");
-                MessageBox.Show($"Error initializing: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    MessageBox.Show($"Error initializing: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
                 StatusMessage = "Initialization error";
             }
             finally
@@ -394,22 +410,58 @@ namespace NoteNest.UI.ViewModels
 
         private async Task SaveAllNotesAsync()
         {
-            await SafeExecuteAsync(async () =>
+            await SaveAllNotesAsync(_cancellationTokenSource?.Token ?? CancellationToken.None);
+        }
+
+        private async Task SaveAllNotesAsync(CancellationToken cancellationToken)
+        {
+            try
             {
-                var savedCount = 0;
-                foreach (var tab in OpenTabs.Where(t => t.IsDirty))
+                if (_disposed || cancellationToken.IsCancellationRequested)
                 {
-                    await _noteService.SaveNoteAsync(tab.Note);
-                    tab.IsDirty = false;
-                    savedCount++;
+                    _logger?.Info("SaveAllNotesAsync cancelled - disposed or cancellation requested");
+                    return;
+                }
+
+                var dirtyTabs = OpenTabs?.Where(t => t.IsDirty).ToList() ?? new List<NoteTabItem>();
+                var savedCount = 0;
+                
+                foreach (var tab in dirtyTabs)
+                {
+                    if (cancellationToken.IsCancellationRequested || _disposed)
+                        break;
+                        
+                    try
+                    {
+                        await _noteService.SaveNoteAsync(tab.Note);
+                        tab.IsDirty = false;
+                        savedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Warning($"Failed to save note {tab.Note.Title}: {ex.Message}");
+                        // Continue with other notes
+                    }
                 }
                 
-                if (savedCount > 0)
+                if (savedCount > 0 && !_disposed)
                 {
                     StatusMessage = $"Saved {savedCount} notes";
-                    _logger.Info($"Saved {savedCount} notes");
+                    _logger?.Info($"Saved {savedCount} notes");
                 }
-            }, "Save All Notes");
+            }
+            catch (OperationCanceledException)
+            {
+                _logger?.Info("SaveAllNotesAsync was cancelled");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Error in SaveAllNotesAsync");
+                if (!_disposed)
+                {
+                    StatusMessage = "Error saving notes";
+                }
+            }
         }
 
         private async Task CloseTabAsync(NoteTabItem tab)
@@ -744,12 +796,36 @@ namespace NoteNest.UI.ViewModels
 
             _autoSaveTimer = new DispatcherTimer();
             _autoSaveTimer.Interval = TimeSpan.FromSeconds(_configService.Settings.AutoSaveInterval);
-            _autoSaveTimer.Tick += async (s, e) => await AutoSaveAsync();
+            // Fix: Use synchronous event handler to avoid async void
+            _autoSaveTimer.Tick += AutoSaveTimer_Tick;
             
             if (_configService.Settings.AutoSave)
             {
                 _autoSaveTimer.Start();
             }
+        }
+
+        private void AutoSaveTimer_Tick(object sender, EventArgs e)
+        {
+            // Execute auto-save on background thread to avoid blocking UI
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (!_cancellationTokenSource.Token.IsCancellationRequested)
+                    {
+                        await AutoSaveAsync();
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected during shutdown
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Auto-save timer error");
+                }
+            }, _cancellationTokenSource.Token);
         }
 
         private async Task AutoSaveAsync()
@@ -973,48 +1049,77 @@ namespace NoteNest.UI.ViewModels
             {
                 if (disposing)
                 {
-                    _logger.Info("Disposing MainViewModel");
+                    _logger?.Info("Disposing MainViewModel - starting shutdown");
                     
                     try
                     {
-                        // Stop and dispose auto-save timer
-                        if (_autoSaveTimer != null)
-                        {
-                            _autoSaveTimer.Stop();
-                            _autoSaveTimer.Tick -= async (s, e) => await AutoSaveAsync();
-                            _autoSaveTimer = null;
-                        }
+                        // Step 1: Cancel all background operations immediately
+                        _cancellationTokenSource?.Cancel();
                         
-                        // Stop file watcher first to prevent any new events during shutdown
-                        if (_fileWatcher != null)
-                        {
-                            _fileWatcher.StopAllWatchers();
-                            _fileWatcher.Dispose();
-                        }
-                        
-                        // Save any unsaved changes synchronously to avoid deadlocks
+                        // Step 2: Stop auto-save timer immediately
                         try
                         {
-                            if (OpenTabs?.Any(t => t.IsDirty) == true)
+                            if (_autoSaveTimer != null)
                             {
-                                SaveAllNotesAsync().GetAwaiter().GetResult();
+                                _autoSaveTimer.Stop();
+                                _autoSaveTimer.Tick -= AutoSaveTimer_Tick;
+                                _autoSaveTimer = null;
                             }
-                            _configService?.SaveSettingsAsync().GetAwaiter().GetResult();
                         }
-                        catch (Exception saveEx)
+                        catch (Exception ex)
                         {
-                            _logger.Error(saveEx, "Error saving during disposal - continuing shutdown");
+                            _logger?.Warning($"Error stopping auto-save timer: {ex.Message}");
                         }
                         
-                        // Clear collections to help with cleanup
-                        Categories?.Clear();
-                        OpenTabs?.Clear();
+                        // Step 3: Stop file watcher immediately
+                        try
+                        {
+                            if (_fileWatcher != null)
+                            {
+                                _fileWatcher.StopAllWatchers();
+                                _fileWatcher.Dispose();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.Warning($"Error disposing file watcher: {ex.Message}");
+                        }
                         
-                        _logger.Info("MainViewModel disposed successfully");
+                        // Step 4: Clear collections to prevent further access
+                        try
+                        {
+                            Categories?.Clear();
+                            OpenTabs?.Clear();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.Warning($"Error clearing collections: {ex.Message}");
+                        }
+                        
+                        // Step 5: Dispose cancellation token source
+                        try
+                        {
+                            _cancellationTokenSource?.Dispose();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.Warning($"Error disposing cancellation token: {ex.Message}");
+                        }
+                        
+                        _logger?.Info("MainViewModel disposed successfully");
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, "Error during MainViewModel disposal - forcing shutdown");
+                        // Final safety net - log but don't throw
+                        try
+                        {
+                            _logger?.Error(ex, "Error during MainViewModel disposal");
+                        }
+                        catch
+                        {
+                            // If even logging fails, write to debug output
+                            System.Diagnostics.Debug.WriteLine($"Fatal error during MainViewModel disposal: {ex.Message}");
+                        }
                     }
                 }
                 _disposed = true;

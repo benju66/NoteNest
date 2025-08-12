@@ -162,7 +162,11 @@ namespace NoteNest.Core.Services
         private void OnWatcherError(object sender, ErrorEventArgs e)
         {
             var ex = e.GetException();
-            _logger.Error(ex, "FileSystemWatcher error occurred");
+            _logger?.Error(ex, "FileSystemWatcher error occurred");
+            
+            // Don't attempt restart if we're disposing
+            if (_disposed)
+                return;
             
             // Attempt to restart the watcher
             if (sender is FileSystemWatcher watcher)
@@ -171,11 +175,28 @@ namespace NoteNest.Core.Services
                 var filter = watcher.Filter;
                 var includeSub = watcher.IncludeSubdirectories;
                 
-                _logger.Info($"Attempting to restart watcher for: {path}");
+                _logger?.Info($"Attempting to restart watcher for: {path}");
                 
-                StopWatching(path);
-                System.Threading.Thread.Sleep(1000); // Brief pause
-                StartWatching(path, filter, includeSub);
+                // Use async delay instead of blocking thread sleep
+                _ = System.Threading.Tasks.Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (!_disposed)
+                        {
+                            StopWatching(path);
+                            await System.Threading.Tasks.Task.Delay(1000); // Brief pause
+                            if (!_disposed)
+                            {
+                                StartWatching(path, filter, includeSub);
+                            }
+                        }
+                    }
+                    catch (Exception restartEx)
+                    {
+                        _logger?.Warning($"Failed to restart watcher for {path}: {restartEx.Message}");
+                    }
+                });
             }
         }
 
@@ -191,9 +212,55 @@ namespace NoteNest.Core.Services
             {
                 if (disposing)
                 {
-                    _logger.Info("Disposing FileWatcherService");
-                    StopAllWatchers();
-                    _watchers.Clear();
+                    _logger?.Info("Disposing FileWatcherService");
+                    try
+                    {
+                        // Use timeout to prevent hanging during shutdown
+                        var timeoutTask = System.Threading.Tasks.Task.Delay(3000);
+                        var disposeTask = System.Threading.Tasks.Task.Run(() => {
+                            StopAllWatchers();
+                            _watchers.Clear();
+                        });
+                        
+                        var completedTask = System.Threading.Tasks.Task.WaitAny(disposeTask, timeoutTask);
+                        if (completedTask == 1) // timeout occurred
+                        {
+                            _logger?.Warning("FileWatcherService disposal timed out - forcing cleanup");
+                            // Force clear watchers without proper disposal
+                            try
+                            {
+                                foreach (var kvp in _watchers.ToList())
+                                {
+                                    try
+                                    {
+                                        kvp.Value?.Dispose();
+                                    }
+                                    catch
+                                    {
+                                        // Ignore disposal errors during forced cleanup
+                                    }
+                                }
+                                _watchers.Clear();
+                            }
+                            catch
+                            {
+                                // Final safety net
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Warning($"Error during FileWatcherService disposal: {ex.Message}");
+                        // Try to clear watchers anyway
+                        try
+                        {
+                            _watchers.Clear();
+                        }
+                        catch
+                        {
+                            // Ignore final cleanup errors
+                        }
+                    }
                 }
                 _disposed = true;
             }

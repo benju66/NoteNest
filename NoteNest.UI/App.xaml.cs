@@ -107,25 +107,35 @@ namespace NoteNest.UI
 
             try
             {
-                // Dispose of main window resources
+                // Quick cleanup - don't wait for complex operations
                 if (MainWindow != null)
                 {
-                    var mainPanel = MainWindow.FindName("MainPanel") as Controls.NoteNestPanel;
-                    var viewModel = mainPanel?.DataContext as ViewModels.MainViewModel;
-                    if (viewModel != null)
+                    try
                     {
-                        _logger?.Info("Disposing MainViewModel from App.OnExit");
-                        viewModel.Dispose();
+                        var mainPanel = MainWindow.FindName("MainPanel") as Controls.NoteNestPanel;
+                        var viewModel = mainPanel?.DataContext as ViewModels.MainViewModel;
+                        if (viewModel != null)
+                        {
+                            _logger?.Info("Disposing MainViewModel from App.OnExit");
+                            // Dispose synchronously but don't wait for long operations
+                            viewModel.Dispose();
+                        }
+                        else
+                        {
+                            _logger?.Warning("Could not find MainViewModel to dispose");
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        _logger?.Warning("Could not find MainViewModel to dispose");
+                        _logger?.Warning($"Error disposing MainViewModel: {ex.Message}");
+                        // Continue shutdown anyway
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger?.Error(ex, "Error during shutdown - forcing exit");
+                _logger?.Error(ex, "Error during shutdown cleanup");
+                // Continue shutdown anyway
             }
             finally
             {
@@ -138,18 +148,22 @@ namespace NoteNest.UI
                 {
                     // Ignore logger disposal errors during shutdown
                 }
-                
-                // Force environment exit if needed
-                if (e.ApplicationExitCode == 0)
-                {
-                    System.Threading.Tasks.Task.Delay(1000).ContinueWith(_ => 
-                    {
-                        System.Environment.Exit(0);
-                    });
-                }
             }
 
             base.OnExit(e);
+            
+            // If normal shutdown doesn't work within reasonable time, force exit
+            _ = System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ => 
+            {
+                try
+                {
+                    System.Environment.Exit(e.ApplicationExitCode);
+                }
+                catch
+                {
+                    // Final safety net
+                }
+            });
         }
 
         private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
