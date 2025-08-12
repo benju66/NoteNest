@@ -146,10 +146,7 @@ namespace NoteNest.UI.ViewModels
                 // Initialize commands
                 InitializeCommands();
 
-                // Initialize auto-save
-                InitializeAutoSave();
-
-                // Load initial data
+                // Load initial data and initialize auto-save after settings are loaded
                 _ = InitializeAsync();
             }
             catch (Exception ex)
@@ -195,6 +192,10 @@ namespace NoteNest.UI.ViewModels
                 settings.MetadataPath = PathService.MetadataPath;
                 
                 await _configService.EnsureDefaultDirectoriesAsync();
+
+                // Initialize auto-save after settings are loaded
+                InitializeAutoSave();
+
                 await LoadCategoriesAsync();
 
                 StatusMessage = "Ready";
@@ -716,6 +717,13 @@ namespace NoteNest.UI.ViewModels
 
         private void InitializeAutoSave()
         {
+            // Ensure settings are loaded before initializing auto-save
+            if (_configService?.Settings == null)
+            {
+                _logger.Warning("Settings not available for auto-save initialization");
+                return;
+            }
+
             _autoSaveTimer = new DispatcherTimer();
             _autoSaveTimer.Interval = TimeSpan.FromSeconds(_configService.Settings.AutoSaveInterval);
             _autoSaveTimer.Tick += async (s, e) => await AutoSaveAsync();
