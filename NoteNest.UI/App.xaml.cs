@@ -19,6 +19,9 @@ namespace NoteNest.UI
 
             try
             {
+                // Set shutdown mode to ensure clean exit when main window closes
+                ShutdownMode = ShutdownMode.OnMainWindowClose;
+                
                 // Initialize logging first
                 _logger = AppLogger.Instance;
                 _logger.Info("Application starting up");
@@ -107,18 +110,43 @@ namespace NoteNest.UI
                 // Dispose of main window resources
                 if (MainWindow != null)
                 {
-                    var viewModel = MainWindow.DataContext as ViewModels.MainViewModel;
-                    viewModel?.Dispose();
+                    var mainPanel = MainWindow.FindName("MainPanel") as Controls.NoteNestPanel;
+                    var viewModel = mainPanel?.DataContext as ViewModels.MainViewModel;
+                    if (viewModel != null)
+                    {
+                        _logger?.Info("Disposing MainViewModel from App.OnExit");
+                        viewModel.Dispose();
+                    }
+                    else
+                    {
+                        _logger?.Warning("Could not find MainViewModel to dispose");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                _logger?.Error(ex, "Error during shutdown");
+                _logger?.Error(ex, "Error during shutdown - forcing exit");
             }
             finally
             {
                 // Dispose logger last
-                (_logger as IDisposable)?.Dispose();
+                try
+                {
+                    (_logger as IDisposable)?.Dispose();
+                }
+                catch
+                {
+                    // Ignore logger disposal errors during shutdown
+                }
+                
+                // Force environment exit if needed
+                if (e.ApplicationExitCode == 0)
+                {
+                    System.Threading.Tasks.Task.Delay(1000).ContinueWith(_ => 
+                    {
+                        System.Environment.Exit(0);
+                    });
+                }
             }
 
             base.OnExit(e);

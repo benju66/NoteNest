@@ -38,7 +38,7 @@ namespace NoteNest.UI.ViewModels
         public SettingsViewModel(ConfigurationService configService)
         {
             _configService = configService;
-            _settings = configService.Settings;
+            _settings = configService.Settings ?? new AppSettings();
 
             BrowseDefaultPathCommand = new RelayCommand(_ => BrowseDefaultPath());
             BrowseMetadataPathCommand = new RelayCommand(_ => BrowseMetadataPath());
@@ -47,7 +47,10 @@ namespace NoteNest.UI.ViewModels
         private void BrowseDefaultPath()
         {
             var dialog = new OpenFolderDialog();
-            dialog.InitialDirectory = Settings.DefaultNotePath;
+            if (!string.IsNullOrEmpty(Settings.DefaultNotePath) && System.IO.Directory.Exists(Settings.DefaultNotePath))
+            {
+                dialog.InitialDirectory = Settings.DefaultNotePath;
+            }
             if (dialog.ShowDialog() == true)
             {
                 Settings.DefaultNotePath = dialog.FolderName;
@@ -58,7 +61,10 @@ namespace NoteNest.UI.ViewModels
         private void BrowseMetadataPath()
         {
             var dialog = new OpenFolderDialog();
-            dialog.InitialDirectory = Settings.MetadataPath;
+            if (!string.IsNullOrEmpty(Settings.MetadataPath) && System.IO.Directory.Exists(Settings.MetadataPath))
+            {
+                dialog.InitialDirectory = Settings.MetadataPath;
+            }
             if (dialog.ShowDialog() == true)
             {
                 Settings.MetadataPath = dialog.FolderName;

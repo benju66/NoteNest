@@ -171,7 +171,25 @@ namespace NoteNest.UI.ViewModels
             NewSubCategoryCommand = new RelayCommand<CategoryTreeItem>(async cat => await CreateNewSubCategoryAsync(cat), _ => SelectedCategory != null);
             DeleteCategoryCommand = new RelayCommand(async _ => await DeleteCategoryAsync(), _ => SelectedCategory != null);
             RefreshCommand = new RelayCommand(async _ => await LoadCategoriesAsync());
-            ExitCommand = new RelayCommand(_ => Application.Current.Shutdown());
+            ExitCommand = new RelayCommand(_ => 
+            {
+                try
+                {
+                    _logger.Info("ExitCommand triggered - initiating shutdown");
+                    // Save any pending changes before exit
+                    if (OpenTabs?.Any(t => t.IsDirty) == true)
+                    {
+                        SaveAllNotesAsync().GetAwaiter().GetResult();
+                    }
+                    Application.Current.Shutdown();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Error during exit command");
+                    // Force shutdown even if there's an error
+                    System.Environment.Exit(0);
+                }
+            });
             SearchNavigateDownCommand = new RelayCommand(_ => NavigateSearch(+1), _ => _searchResults.Count > 0);
             SearchNavigateUpCommand = new RelayCommand(_ => NavigateSearch(-1), _ => _searchResults.Count > 0);
             SearchOpenCommand = new RelayCommand(async _ => await OpenFromSearchAsync(), _ => _searchResults.Count > 0);
@@ -959,24 +977,44 @@ namespace NoteNest.UI.ViewModels
                     
                     try
                     {
-                        // Stop auto-save timer
-                        _autoSaveTimer?.Stop();
-                        
-                        // Save any unsaved changes
-                        Task.Run(async () =>
+                        // Stop and dispose auto-save timer
+                        if (_autoSaveTimer != null)
                         {
-                            await SaveAllNotesAsync();
-                            await _configService.SaveSettingsAsync();
-                        }).Wait(TimeSpan.FromSeconds(5));
+                            _autoSaveTimer.Stop();
+                            _autoSaveTimer.Tick -= async (s, e) => await AutoSaveAsync();
+                            _autoSaveTimer = null;
+                        }
                         
-                        // Dispose file watcher
-                        _fileWatcher?.Dispose();
+                        // Stop file watcher first to prevent any new events during shutdown
+                        if (_fileWatcher != null)
+                        {
+                            _fileWatcher.StopAllWatchers();
+                            _fileWatcher.Dispose();
+                        }
+                        
+                        // Save any unsaved changes synchronously to avoid deadlocks
+                        try
+                        {
+                            if (OpenTabs?.Any(t => t.IsDirty) == true)
+                            {
+                                SaveAllNotesAsync().GetAwaiter().GetResult();
+                            }
+                            _configService?.SaveSettingsAsync().GetAwaiter().GetResult();
+                        }
+                        catch (Exception saveEx)
+                        {
+                            _logger.Error(saveEx, "Error saving during disposal - continuing shutdown");
+                        }
+                        
+                        // Clear collections to help with cleanup
+                        Categories?.Clear();
+                        OpenTabs?.Clear();
                         
                         _logger.Info("MainViewModel disposed successfully");
                     }
                     catch (Exception ex)
                     {
-                        _logger.Error(ex, "Error during MainViewModel disposal");
+                        _logger.Error(ex, "Error during MainViewModel disposal - forcing shutdown");
                     }
                 }
                 _disposed = true;

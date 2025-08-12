@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using NoteNest.UI.ViewModels;
@@ -12,7 +13,7 @@ namespace NoteNest.UI
             InitializeComponent();
         }
 
-        private async void Window_Closing(object sender, CancelEventArgs e)
+        private void Window_Closing(object sender, CancelEventArgs e)
         {
             var viewModel = MainPanel.DataContext as MainViewModel;
             if (viewModel == null) return;
@@ -35,24 +36,42 @@ namespace NoteNest.UI
 
                 if (result == MessageBoxResult.Yes)
                 {
-                    foreach (var tab in dirtyTabs)
+                    try
                     {
-                        viewModel.SaveNoteCommand.Execute(null);
+                        // Save synchronously to avoid async issues during shutdown
+                        foreach (var tab in dirtyTabs)
+                        {
+                            viewModel.SaveNoteCommand.Execute(null);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Log error but don't prevent shutdown
+                        System.Diagnostics.Debug.WriteLine($"Error saving during shutdown: {ex.Message}");
                     }
                 }
             }
 
-            // Save window settings
-            var settings = viewModel.GetConfigService().Settings;
-            if (settings != null)
+            // Save window settings synchronously
+            try
             {
-                settings.WindowSettings.Width = this.ActualWidth;
-                settings.WindowSettings.Height = this.ActualHeight;
-                settings.WindowSettings.Left = this.Left;
-                settings.WindowSettings.Top = this.Top;
-                settings.WindowSettings.IsMaximized = this.WindowState == WindowState.Maximized;
-                
-                await viewModel.GetConfigService().SaveSettingsAsync();
+                var settings = viewModel.GetConfigService().Settings;
+                if (settings != null)
+                {
+                    settings.WindowSettings.Width = this.ActualWidth;
+                    settings.WindowSettings.Height = this.ActualHeight;
+                    settings.WindowSettings.Left = this.Left;
+                    settings.WindowSettings.Top = this.Top;
+                    settings.WindowSettings.IsMaximized = this.WindowState == WindowState.Maximized;
+                    
+                    // Save synchronously to avoid async issues during shutdown
+                    viewModel.GetConfigService().SaveSettingsAsync().GetAwaiter().GetResult();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't prevent shutdown
+                System.Diagnostics.Debug.WriteLine($"Error saving settings during shutdown: {ex.Message}");
             }
         }
     }
