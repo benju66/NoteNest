@@ -481,38 +481,8 @@ namespace NoteNest.UI.Controls
             var caretOffset = CaretIndex - lineStart;
             var removedChars = 0;
             
-            // Check if this is an indented bullet that should become a number when outdented
-            var bulletMatch = Regex.Match(currentLine, @"^(\t+)([-*+•])\s+(.*)$");
-            if (bulletMatch.Success && bulletMatch.Groups[1].Value.Length == 1)
-            {
-                // Single-tab indented bullet, convert back to number
-                var content = bulletMatch.Groups[3].Value;
-                
-                // Find the appropriate number
-                var nextNumber = FindNextNumberForOutdent(lineStart);
-                
-                // Convert back to numbered list
-                var newLine = $"{nextNumber}. {content}";
-                
-                // Replace the entire line
-                var lineEnd = Text.IndexOf('\n', lineStart);
-                if (lineEnd == -1) lineEnd = Text.Length;
-                
-                Text = Text.Remove(lineStart, lineEnd - lineStart);
-                Text = Text.Insert(lineStart, newLine);
-                
-                // Position cursor after the number and content
-                CaretIndex = lineStart + newLine.Length;
-                
-                // IMPORTANT: Renumber the entire list to fix any subsequent numbers
-                _isProcessingKey = false; // Temporarily allow processing for renumber
-                RenumberEntireList();
-                _isProcessingKey = true;
-                
-                // Restore cursor position after renumbering
-                CaretIndex = Math.Min(CaretIndex, Text.Length);
-            }
-            else if (currentLine.StartsWith("\t"))
+            // Just remove one indentation level; keep bullets as bullets
+            if (currentLine.StartsWith("\t"))
             {
                 Text = Text.Remove(lineStart, 1);
                 removedChars = 1;
@@ -537,6 +507,11 @@ namespace NoteNest.UI.Controls
                 CaretIndex = lineStart + caretOffset;
             }
             
+            // If numbering exists nearby, renumber to keep sequence correct
+            _isProcessingKey = false;
+            RenumberEntireList();
+            _isProcessingKey = true;
+
             _isProcessingKey = false;
         }
 
