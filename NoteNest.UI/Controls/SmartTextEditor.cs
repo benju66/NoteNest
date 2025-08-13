@@ -260,97 +260,124 @@ namespace NoteNest.UI.Controls
         {
             _isProcessingKey = true;
             var lines = GetSelectedOrCurrentLines();
-            
-            foreach (var lineInfo in lines)
+
+            var savedCaret = CaretIndex;
+            var savedSelStart = SelectionStart;
+            var savedSelLength = SelectionLength;
+            var firstVisible = GetFirstVisibleLineIndex();
+
+            foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
                 var line = lineInfo.Text;
                 var start = lineInfo.StartIndex;
-                
-                // Remove existing list markers
+
                 var cleanLine = RemoveListMarkers(line);
-                
-                // Add bullet
                 var newLine = "• " + cleanLine.TrimStart();
                 ReplaceLineAt(start, line.Length, newLine);
             }
-            
+
             _isProcessingKey = false;
-            RenumberEntireList(); // In case we converted numbered items
+            RenumberEntireList();
+
+            // Restore caret/selection/scroll
+            SelectionStart = Math.Min(savedSelStart, Text.Length);
+            SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
+            CaretIndex = Math.Min(savedCaret, Text.Length);
+            if (firstVisible >= 0 && firstVisible < LineCount) ScrollToLine(firstVisible);
         }
 
         public void ConvertSelectionToNumbers()
         {
             _isProcessingKey = true;
             var lines = GetSelectedOrCurrentLines();
+
+            var savedCaret = CaretIndex;
+            var savedSelStart = SelectionStart;
+            var savedSelLength = SelectionLength;
+            var firstVisible = GetFirstVisibleLineIndex();
+
             int number = 1;
-            
-            foreach (var lineInfo in lines)
+            foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
                 var line = lineInfo.Text;
                 var start = lineInfo.StartIndex;
-                
-                // Get current indent
+
                 var indent = Regex.Match(line, @"^(\s*)").Groups[1].Value;
-                
-                // Remove existing list markers
                 var cleanLine = RemoveListMarkers(line);
-                
-                // Add number
                 var newLine = $"{indent}{number}. {cleanLine.TrimStart()}";
                 ReplaceLineAt(start, line.Length, newLine);
                 number++;
             }
-            
+
             _isProcessingKey = false;
             RenumberEntireList();
+
+            SelectionStart = Math.Min(savedSelStart, Text.Length);
+            SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
+            CaretIndex = Math.Min(savedCaret, Text.Length);
+            if (firstVisible >= 0 && firstVisible < LineCount) ScrollToLine(firstVisible);
         }
 
         public void ConvertSelectionToTasks()
         {
             _isProcessingKey = true;
             var lines = GetSelectedOrCurrentLines();
-            
-            foreach (var lineInfo in lines)
+
+            var savedCaret = CaretIndex;
+            var savedSelStart = SelectionStart;
+            var savedSelLength = SelectionLength;
+            var firstVisible = GetFirstVisibleLineIndex();
+
+            foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
                 var line = lineInfo.Text;
                 var start = lineInfo.StartIndex;
-                
-                // Check if already a task
+
                 var taskMatch = Regex.Match(line, @"^(\s*)([-*+•])\s+\[([ xX])\]\s+(.*)$");
                 if (taskMatch.Success) continue;
-                
-                // Get current indent
+
                 var indent = Regex.Match(line, @"^(\s*)").Groups[1].Value;
-                
-                // Remove existing list markers
                 var cleanLine = RemoveListMarkers(line);
-                
-                // Add task checkbox
                 var newLine = $"{indent}- [ ] {cleanLine.TrimStart()}";
                 ReplaceLineAt(start, line.Length, newLine);
             }
-            
+
             _isProcessingKey = false;
+
+            SelectionStart = Math.Min(savedSelStart, Text.Length);
+            SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
+            CaretIndex = Math.Min(savedCaret, Text.Length);
+            if (firstVisible >= 0 && firstVisible < LineCount) ScrollToLine(firstVisible);
         }
 
         public void RemoveListFormatting()
         {
             _isProcessingKey = true;
             var lines = GetSelectedOrCurrentLines();
-            
-            foreach (var lineInfo in lines)
+
+            var savedCaret = CaretIndex;
+            var savedSelStart = SelectionStart;
+            var savedSelLength = SelectionLength;
+            var firstVisible = GetFirstVisibleLineIndex();
+
+            foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
                 var line = lineInfo.Text;
                 var start = lineInfo.StartIndex;
-                
+
                 var cleanLine = RemoveListMarkers(line);
                 if (cleanLine != line)
                 {
                     ReplaceLineAt(start, line.Length, cleanLine.TrimStart());
                 }
             }
-            
+
             _isProcessingKey = false;
+
+            SelectionStart = Math.Min(savedSelStart, Text.Length);
+            SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
+            CaretIndex = Math.Min(savedCaret, Text.Length);
+            if (firstVisible >= 0 && firstVisible < LineCount) ScrollToLine(firstVisible);
         }
 
         private string RemoveListMarkers(string line)
@@ -561,6 +588,9 @@ namespace NoteNest.UI.Controls
 				// Check if already a bullet list
 				if (!Regex.IsMatch(currentLine, @"^(\s*)([-*+•])\s+"))
 				{
+					// Store the relative position in the line
+					var relativePosition = CaretIndex - lineStart;
+					
 					// If current line is empty, just add bullet
 					if (string.IsNullOrWhiteSpace(currentLine))
 					{
@@ -571,7 +601,8 @@ namespace NoteNest.UI.Controls
 					{
 						// Add bullet at beginning of line
 						Text = Text.Insert(lineStart, "• ");
-						CaretIndex = lineStart + 2;
+						// Position cursor after the bullet, maintaining relative position
+						CaretIndex = lineStart + 2 + relativePosition;
 					}
 				}
 			}
@@ -598,6 +629,9 @@ namespace NoteNest.UI.Controls
 					// Find the appropriate number
 					var nextNumber = FindNextNumberForCurrentPosition();
 					
+					// Store the relative position in the line
+					var relativePosition = CaretIndex - lineStart;
+					
 					// If current line is empty, just add number
 					if (string.IsNullOrWhiteSpace(currentLine))
 					{
@@ -607,8 +641,10 @@ namespace NoteNest.UI.Controls
 					else
 					{
 						// Add number at beginning of line
-						Text = Text.Insert(lineStart, $"{nextNumber}. ");
-						CaretIndex = lineStart + nextNumber.ToString().Length + 2;
+						var numberPrefix = $"{nextNumber}. ";
+						Text = Text.Insert(lineStart, numberPrefix);
+						// Position cursor after the number, maintaining relative position
+						CaretIndex = lineStart + numberPrefix.Length + relativePosition;
 					}
 					
 					// Renumber if needed
