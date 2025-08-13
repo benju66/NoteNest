@@ -547,45 +547,105 @@ namespace NoteNest.UI.Controls
 
         public void InsertBulletList()
         {
-            if (SelectionLength > 0)
-            {
-                ConvertSelectionToBullets();
-            }
-            else
-            {
-                _isProcessingKey = true;
-                var lineStart = GetCurrentLineStart();
-                var currentLine = GetCurrentLine();
-                
-                if (!Regex.IsMatch(currentLine, @"^(\s*)([-*+•])\s+"))
-                {
-                    Text = Text.Insert(lineStart, "• ");
-                    CaretIndex = lineStart + 2;
-                }
-                _isProcessingKey = false;
-            }
+			_isProcessingKey = true;
+			
+			if (SelectionLength > 0)
+			{
+				ConvertSelectionToBullets();
+			}
+			else
+			{
+				var lineStart = GetCurrentLineStart();
+				var currentLine = GetCurrentLine();
+				
+				// Check if already a bullet list
+				if (!Regex.IsMatch(currentLine, @"^(\s*)([-*+•])\s+"))
+				{
+					// If current line is empty, just add bullet
+					if (string.IsNullOrWhiteSpace(currentLine))
+					{
+						Text = Text.Insert(CaretIndex, "• ");
+						CaretIndex = CaretIndex + 2;
+					}
+					else
+					{
+						// Add bullet at beginning of line
+						Text = Text.Insert(lineStart, "• ");
+						CaretIndex = lineStart + 2;
+					}
+				}
+			}
+			
+			_isProcessingKey = false;
         }
 
         public void InsertNumberedList()
         {
-            if (SelectionLength > 0)
-            {
-                ConvertSelectionToNumbers();
-            }
-            else
-            {
-                _isProcessingKey = true;
-                var lineStart = GetCurrentLineStart();
-                var currentLine = GetCurrentLine();
-                
-                if (!Regex.IsMatch(currentLine, @"^(\s*)(\d+)[.)]\s+"))
-                {
-                    Text = Text.Insert(lineStart, "1. ");
-                    CaretIndex = lineStart + 3;
-                }
-                _isProcessingKey = false;
-            }
+			_isProcessingKey = true;
+			
+			if (SelectionLength > 0)
+			{
+				ConvertSelectionToNumbers();
+			}
+			else
+			{
+				var lineStart = GetCurrentLineStart();
+				var currentLine = GetCurrentLine();
+				
+				// Check if already a numbered list
+				if (!Regex.IsMatch(currentLine, @"^(\s*)(\d+)[.)]\s+"))
+				{
+					// Find the appropriate number
+					var nextNumber = FindNextNumberForCurrentPosition();
+					
+					// If current line is empty, just add number
+					if (string.IsNullOrWhiteSpace(currentLine))
+					{
+						Text = Text.Insert(CaretIndex, $"{nextNumber}. ");
+						CaretIndex = CaretIndex + nextNumber.ToString().Length + 2;
+					}
+					else
+					{
+						// Add number at beginning of line
+						Text = Text.Insert(lineStart, $"{nextNumber}. ");
+						CaretIndex = lineStart + nextNumber.ToString().Length + 2;
+					}
+					
+					// Renumber if needed
+					RenumberEntireList();
+				}
+			}
+			
+			_isProcessingKey = false;
         }
+
+		// Add helper to find next number for current position
+		private int FindNextNumberForCurrentPosition()
+		{
+			var lines = Text.Split('\n');
+			var currentLineIndex = Text.Substring(0, Math.Min(CaretIndex, Text.Length))
+									  .Count(c => c == '\n');
+			
+			// Look backwards for the last numbered item
+			for (int i = currentLineIndex - 1; i >= 0; i--)
+			{
+				var match = Regex.Match(lines[i], @"^(\d+)[.)]\s+");
+				if (match.Success)
+				{
+					return int.Parse(match.Groups[1].Value) + 1;
+				}
+				
+				// If we hit a non-list line, start at 1
+				if (!string.IsNullOrWhiteSpace(lines[i]) && 
+					!lines[i].StartsWith("\t") && 
+					!Regex.IsMatch(lines[i], @"^(\s*)([-*+•])\s+"))
+				{
+					break;
+				}
+			}
+			
+			return 1; // Default to 1 if no previous number found
+		}
 
         public void InsertTaskList()
         {
