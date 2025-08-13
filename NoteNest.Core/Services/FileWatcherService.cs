@@ -10,6 +10,8 @@ namespace NoteNest.Core.Services
         private readonly Dictionary<string, FileSystemWatcher> _watchers;
         private readonly IAppLogger _logger;
         private bool _disposed;
+        private readonly Dictionary<string, DateTime> _lastEventTimes = new();
+        private readonly TimeSpan _debounceInterval = TimeSpan.FromMilliseconds(500);
 
         public event EventHandler<FileChangedEventArgs>? FileChanged;
         public event EventHandler<FileChangedEventArgs>? FileCreated;
@@ -111,6 +113,19 @@ namespace NoteNest.Core.Services
         {
             try
             {
+                // Debounce rapid successive events for the same path
+                lock (_lastEventTimes)
+                {
+                    if (_lastEventTimes.TryGetValue(e.FullPath, out var lastTime))
+                    {
+                        if (DateTime.Now - lastTime < _debounceInterval)
+                        {
+                            return;
+                        }
+                    }
+                    _lastEventTimes[e.FullPath] = DateTime.Now;
+                }
+
                 _logger.Debug($"File changed: {e.FullPath}");
                 FileChanged?.Invoke(this, new FileChangedEventArgs(e.FullPath, e.ChangeType));
             }
