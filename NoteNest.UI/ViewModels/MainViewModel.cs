@@ -21,6 +21,8 @@ namespace NoteNest.UI.ViewModels
         private readonly ConfigurationService _configService;
         private readonly FileWatcherService _fileWatcher;
         private readonly IAppLogger _logger;
+        private readonly SearchIndexService _searchIndex;
+        private readonly ContentCache _contentCache;
         private DispatcherTimer _autoSaveTimer;
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -36,7 +38,7 @@ namespace NoteNest.UI.ViewModels
         private string _searchText;
         private bool _isSearchActive;
         private List<NoteTreeItem> _searchResults = new List<NoteTreeItem>();
-        private int _searchIndex = -1;
+        private int _searchSelectionIndex = -1;
         private bool _isLoading;
         private string _statusMessage;
         private List<string> _recentSearches = new List<string>();
@@ -146,6 +148,10 @@ namespace NoteNest.UI.ViewModels
                 _configService = new ConfigurationService(fileSystem);
                 _noteService = new NoteService(fileSystem, _configService, _logger);
                 _fileWatcher = new FileWatcherService(_logger);
+                
+                // Initialize new services
+                _searchIndex = new SearchIndexService();
+                _contentCache = new ContentCache(50); // 50MB cache
 
                 // Initialize collections
                 Categories = new ObservableCollection<CategoryTreeItem>();
@@ -344,21 +350,8 @@ namespace NoteNest.UI.ViewModels
         private async Task<CategoryTreeItem> BuildCategoryTreeAsync(CategoryModel parent, List<CategoryModel> all, int level)
         {
             parent.Level = level;
-            var parentItem = new CategoryTreeItem(parent);
-            
-            // Load notes for this category
-            try
-            {
-                var notes = await _noteService.GetNotesInCategoryAsync(parent);
-                foreach (var note in notes)
-                {
-                    parentItem.Notes.Add(new NoteTreeItem(note));
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Error loading notes for {parent.Name}: {ex.Message}");
-            }
+            // Pass the NoteService to enable lazy loading handled within CategoryTreeItem
+            var parentItem = new CategoryTreeItem(parent, _noteService);
 
             // Build subcategories
             var children = all.Where(c => c.ParentId == parent.Id).OrderBy(c => c.Name).ToList();
@@ -420,11 +413,16 @@ namespace NoteNest.UI.ViewModels
 						return;
 					}
 
-					// Load note content if not loaded
+					// Use content cache for faster loading
 					if (string.IsNullOrEmpty(noteItem.Model.Content))
 					{
-						var loadedNote = await _noteService.LoadNoteAsync(noteItem.Model.FilePath);
-						noteItem.Model.Content = loadedNote.Content;
+						noteItem.Model.Content = await _contentCache.GetContentAsync(
+							noteItem.Model.FilePath,
+							async (path) => 
+							{
+								var note = await _noteService.LoadNoteAsync(path);
+								return note.Content;
+							});
 					}
 
 					var tab = new NoteTabItem(noteItem.Model);
@@ -715,7 +713,7 @@ namespace NoteNest.UI.ViewModels
                 // Show all
                 SetAllVisible(true);
                 _searchResults.Clear();
-                _searchIndex = -1;
+                _searchSelectionIndex = -1;
             }
             else
             {
@@ -727,7 +725,7 @@ namespace NoteNest.UI.ViewModels
                     FilterCategory(category, searchLower);
                 }
                 
-                _searchIndex = -1;
+                _searchSelectionIndex = -1;
             }
         }
 
@@ -782,8 +780,8 @@ namespace NoteNest.UI.ViewModels
         {
             if (_searchResults.Count == 0) return;
             
-            _searchIndex = (_searchIndex + delta + _searchResults.Count) % _searchResults.Count;
-            var target = _searchResults[_searchIndex];
+            _searchSelectionIndex = (_searchSelectionIndex + delta + _searchResults.Count) % _searchResults.Count;
+            var target = _searchResults[_searchSelectionIndex];
             
             // Find parent category
             CategoryTreeItem parent = null;
@@ -828,9 +826,9 @@ namespace NoteNest.UI.ViewModels
         {
             if (_searchResults.Count == 0) return;
             
-            if (_searchIndex < 0 && _searchResults.Count > 0)
+            if (_searchSelectionIndex < 0 && _searchResults.Count > 0)
             {
-                _searchIndex = 0;
+                _searchSelectionIndex = 0;
                 NavigateSearch(0);
             }
             
@@ -838,6 +836,79 @@ namespace NoteNest.UI.ViewModels
             {
                 await OpenNoteAsync(SelectedNote);
             }
+        }
+
+        // Add new search method using the index
+        public async Task<List<NoteTreeItem>> SearchNotesAsync(string query)
+        {
+            if (_searchIndex.NeedsReindex)
+            {
+                await Task.Run(() =>
+                {
+                    var allCategories = GetAllCategoriesFlat();
+                    var allNotes = new List<NoteModel>();
+                    
+                    foreach (var category in Categories)
+                    {
+                        CollectAllNotes(category, allNotes);
+                    }
+                    
+                    _searchIndex.BuildIndex(allCategories, allNotes);
+                });
+            }
+
+            var results = _searchIndex.Search(query);
+            
+            var noteItems = new List<NoteTreeItem>();
+            foreach (var result in results.Where(r => !string.IsNullOrEmpty(r.NoteId)))
+            {
+                var noteItem = FindNoteById(result.NoteId);
+                if (noteItem != null)
+                {
+                    noteItems.Add(noteItem);
+                }
+            }
+            
+            return noteItems;
+        }
+
+        // Helper method to collect all notes
+        private void CollectAllNotes(CategoryTreeItem category, List<NoteModel> allNotes)
+        {
+            foreach (var note in category.Notes)
+            {
+                allNotes.Add(note.Model);
+            }
+            
+            foreach (var subCategory in category.SubCategories)
+            {
+                CollectAllNotes(subCategory, allNotes);
+            }
+        }
+
+        // Helper to find note by ID
+        private NoteTreeItem FindNoteById(string noteId)
+        {
+            foreach (var category in Categories)
+            {
+                var found = FindNoteInCategory(category, noteId);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private NoteTreeItem FindNoteInCategory(CategoryTreeItem category, string noteId)
+        {
+            var note = category.Notes.FirstOrDefault(n => n.Model.Id == noteId);
+            if (note != null) return note;
+            
+            foreach (var subCategory in category.SubCategories)
+            {
+                var found = FindNoteInCategory(subCategory, noteId);
+                if (found != null) return found;
+            }
+            
+            return null;
         }
 
         #endregion
@@ -1274,6 +1345,16 @@ namespace NoteNest.UI.ViewModels
                         catch (Exception ex)
                         {
                             _logger?.Warning($"Error disposing cancellation token: {ex.Message}");
+                        }
+                        
+                        // Dispose new services
+                        try
+                        {
+                            _contentCache?.Dispose();
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.Warning($"Error disposing content cache: {ex.Message}");
                         }
                         
                         _logger?.Info("MainViewModel disposed successfully");

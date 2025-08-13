@@ -3,18 +3,23 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using NoteNest.Core.Models;
+using NoteNest.Core.Services;
 
 namespace NoteNest.UI.ViewModels
 {
     public class CategoryTreeItem : ViewModelBase, IDisposable
     {
         private readonly CategoryModel _model;
+        private readonly NoteService _noteService;
         private ObservableCollection<CategoryTreeItem> _subCategories;
         private ObservableCollection<NoteTreeItem> _notes;
         private ObservableCollection<object> _children;
         private bool _isExpanded;
         private bool _isVisible = true;
+        private bool _isLoaded = false;
+        private bool _isLoading = false;
 
         public CategoryModel Model => _model;
 
@@ -29,6 +34,7 @@ namespace NoteNest.UI.ViewModels
             get => _subCategories;
             set { SetProperty(ref _subCategories, value); UpdateChildren(); }
         }
+        
         public ObservableCollection<NoteTreeItem> Notes
         {
             get => _notes;
@@ -44,7 +50,16 @@ namespace NoteNest.UI.ViewModels
         public bool IsExpanded
         {
             get => _isExpanded;
-            set => SetProperty(ref _isExpanded, value);
+            set
+            {
+                if (SetProperty(ref _isExpanded, value))
+                {
+                    if (value && !_isLoaded && !_isLoading && _noteService != null)
+                    {
+                        _ = LoadChildrenAsync();
+                    }
+                }
+            }
         }
 
         public bool IsVisible
@@ -53,17 +68,62 @@ namespace NoteNest.UI.ViewModels
             set => SetProperty(ref _isVisible, value);
         }
 
-        public CategoryTreeItem(CategoryModel model)
+        public bool IsLoading
+        {
+            get => _isLoading;
+            set => SetProperty(ref _isLoading, value);
+        }
+
+        public CategoryTreeItem(CategoryModel model, NoteService noteService = null)
         {
             _model = model;
+            _noteService = noteService;
             _subCategories = new ObservableCollection<CategoryTreeItem>();
             _notes = new ObservableCollection<NoteTreeItem>();
             _children = new ObservableCollection<object>();
             _isExpanded = Level < 2;
-            // Keep Children in sync when items change within collections
+            
             _subCategories.CollectionChanged += OnChildrenCollectionChanged;
             _notes.CollectionChanged += OnChildrenCollectionChanged;
-            UpdateChildren();
+            
+            // Only load immediate children if expanded by default
+            if (_isExpanded && _noteService != null)
+            {
+                _ = LoadChildrenAsync();
+            }
+            else
+            {
+                // Update children for structure
+                UpdateChildren();
+            }
+        }
+
+        private async Task LoadChildrenAsync()
+        {
+            if (_isLoaded || _isLoading || _noteService == null) return;
+
+            try
+            {
+                IsLoading = true;
+
+                // Load notes for this category
+                var notes = await _noteService.GetNotesInCategoryAsync(_model);
+                foreach (var note in notes)
+                {
+                    Notes.Add(new NoteTreeItem(note));
+                }
+
+                _isLoaded = true;
+            }
+            catch (Exception ex)
+            {
+                // Log error
+                System.Diagnostics.Debug.WriteLine($"Error loading children for {Name}: {ex.Message}");
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
 
         private void UpdateChildren()
@@ -90,14 +150,13 @@ namespace NoteNest.UI.ViewModels
             UpdateChildren();
         }
 
-        // Level is set during tree building via the model
-		public void Dispose()
-		{
-			if (_subCategories != null)
-				_subCategories.CollectionChanged -= OnChildrenCollectionChanged;
-			if (_notes != null)
-				_notes.CollectionChanged -= OnChildrenCollectionChanged;
-		}
+        public void Dispose()
+        {
+            if (_subCategories != null)
+                _subCategories.CollectionChanged -= OnChildrenCollectionChanged;
+            if (_notes != null)
+                _notes.CollectionChanged -= OnChildrenCollectionChanged;
+        }
     }
 
     public class NoteTreeItem : ViewModelBase, IDisposable
