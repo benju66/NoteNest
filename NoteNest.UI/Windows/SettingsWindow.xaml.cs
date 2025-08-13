@@ -45,11 +45,18 @@ namespace NoteNest.UI.Windows
             }
         }
 
-        private void OK_Click(object sender, RoutedEventArgs e)
+        private async void OK_Click(object sender, RoutedEventArgs e)
         {
-            _viewModel.SaveSettings();
-            DialogResult = true;
-            Close();
+            try
+            {
+                await _viewModel.SaveSettings();
+                DialogResult = true;
+                Close();
+            }
+            catch (Exception)
+            {
+                // Optionally show an error; keep window open if save failed
+            }
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)

@@ -1,5 +1,6 @@
 using System;
 using System.Windows.Input;
+using System.Threading.Tasks;
 using Microsoft.Win32;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
@@ -72,9 +73,17 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        public async void SaveSettings()
+        public async Task SaveSettings()
         {
-            await _configService.UpdateSettingsAsync(_settings);
+            try
+            {
+                await _configService.UpdateSettingsAsync(_settings);
+            }
+            catch (Exception ex)
+            {
+                // Handle error appropriately (log, notify UI, etc.)
+                throw;
+            }
         }
     }
 }
