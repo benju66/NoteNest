@@ -30,10 +30,16 @@
                 <TextBlock Text="NoteNest" VerticalAlignment="Center" FontWeight="SemiBold"/>
             </StackPanel>
             
-            <!-- Menu Bar -->
-            <Menu Grid.Column="1" VerticalAlignment="Center" Background="Transparent">
-                <MenuItem Header="_File">
-                    <MenuItem Header="_New Note" InputGestureText="Ctrl+N">
+			<!-- Menu Bar -->
+			<Menu Grid.Column="1" VerticalAlignment="Center" Background="Transparent">
+				<Menu.Resources>
+					<Style TargetType="MenuItem">
+						<Setter Property="Padding" Value="8,4"/>
+						<Setter Property="Height" Value="32"/>
+					</Style>
+				</Menu.Resources>
+				<MenuItem Header="_File" Padding="8,6">
+					<MenuItem Header="_New Note" InputGestureText="Ctrl+N" Click="NewNoteMenuItem_Click">
                         <MenuItem.Icon>
                             <ui:SymbolIcon Symbol="Add"/>
                         </MenuItem.Icon>

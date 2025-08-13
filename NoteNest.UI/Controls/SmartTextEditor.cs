@@ -12,6 +12,29 @@ namespace NoteNest.UI.Controls
     public class SmartTextEditor : TextBox
     {
         private bool _isProcessingKey = false;
+        public static readonly System.Windows.DependencyProperty IsModifiedProperty = System.Windows.DependencyProperty.Register(
+            name: "IsModified",
+            propertyType: typeof(bool),
+            ownerType: typeof(SmartTextEditor),
+            typeMetadata: new System.Windows.FrameworkPropertyMetadata(false, System.Windows.FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+        public static readonly System.Windows.DependencyProperty FilePathProperty = System.Windows.DependencyProperty.Register(
+            name: "FilePath",
+            propertyType: typeof(string),
+            ownerType: typeof(SmartTextEditor),
+            typeMetadata: new System.Windows.FrameworkPropertyMetadata(string.Empty, System.Windows.FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+        public bool IsModified
+        {
+            get => (bool)GetValue(IsModifiedProperty);
+            set => SetValue(IsModifiedProperty, value);
+        }
+
+        public string FilePath
+        {
+            get => (string)GetValue(FilePathProperty);
+            set => SetValue(FilePathProperty, value);
+        }
         
         public SmartTextEditor()
         {
@@ -23,6 +46,16 @@ namespace NoteNest.UI.Controls
             HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled;
             VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto;
             PreviewKeyDown += OnPreviewKeyDown;
+        }
+
+        protected override void OnTextChanged(TextChangedEventArgs e)
+        {
+            base.OnTextChanged(e);
+            // Mark as modified when text changes
+            if (!_isProcessingKey)
+            {
+                IsModified = true;
+            }
         }
 
         #region Core Key Handling

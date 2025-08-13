@@ -4,6 +4,7 @@ using System.Data;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using System.Threading.Tasks;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using ModernWpf;
@@ -39,26 +40,10 @@ namespace NoteNest.UI
                     // Continue with default theme
                 }
 
-                // Ensure a MainWindow is created and shown in case StartupUri didn't materialize due to an error
-                if (Current.MainWindow == null)
-                {
-                    try
-                    {
-                        var mainWindow = new MainWindow();
-                        Current.MainWindow = mainWindow;
-                        mainWindow.Show();
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.Fatal(ex, "Failed to create MainWindow");
-                        ShowDetailedError("Failed to create MainWindow", ex);
-                        Shutdown(1);
-                    }
-                }
-
                 // Set up global exception handlers
                 AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
                 DispatcherUnhandledException += OnDispatcherUnhandledException;
+                TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
                 // Ensure all required directories exist
                 try
@@ -239,6 +224,20 @@ namespace NoteNest.UI
 
             // Prevent application crash
             e.Handled = true;
+        }
+
+        private void OnUnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
+        {
+            if (_logger != null)
+            {
+                _logger.Error(e.Exception, "Unobserved task exception");
+            }
+            else
+            {
+                ShowDetailedError("Unobserved task exception (no logger available)", e.Exception);
+            }
+
+            e.SetObserved();
         }
     }
 }

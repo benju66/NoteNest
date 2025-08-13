@@ -19,6 +19,11 @@ namespace NoteNest.UI
             UpdateThemeMenuChecks();
         }
 
+        private void NewNoteMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            MainPanel?.ViewModel?.NewNoteCommand.Execute(null);
+        }
+
         private void SaveMenuItem_Click(object sender, RoutedEventArgs e)
         {
             MainPanel?.ViewModel?.SaveNoteCommand.Execute(null);
