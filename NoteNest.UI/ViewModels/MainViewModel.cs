@@ -1084,6 +1084,48 @@ namespace NoteNest.UI.ViewModels
             return _configService;
         }
 
+        public async Task<bool> MoveNoteToCategory(NoteTreeItem noteItem, CategoryTreeItem targetCategory)
+        {
+            if (noteItem == null || targetCategory == null) return false;
+            try
+            {
+                var success = await _noteService.MoveNoteAsync(noteItem.Model, targetCategory.Model);
+                if (success)
+                {
+                    // Remove from old category tree
+                    CategoryTreeItem oldCategory = null;
+                    foreach (var cat in Categories)
+                    {
+                        oldCategory = FindCategoryContainingNote(cat, noteItem);
+                        if (oldCategory != null) break;
+                    }
+                    if (oldCategory != null)
+                    {
+                        oldCategory.Notes.Remove(noteItem);
+                    }
+
+                    // Add to new category tree (reuse same NoteTreeItem instance)
+                    targetCategory.Notes.Add(noteItem);
+
+                    // If open in tabs, update selected tab paths/titles
+                    var openTab = OpenTabs.FirstOrDefault(t => ReferenceEquals(t.Note, noteItem.Model));
+                    if (openTab != null)
+                    {
+                        openTab.OnPropertyChanged(nameof(openTab.Title));
+                    }
+
+                    StatusMessage = $"Moved '{noteItem.Title}' to '{targetCategory.Name}'";
+                }
+                return success;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to move note");
+                StatusMessage = "Failed to move note";
+                return false;
+            }
+        }
+
         #endregion
 
         #region IDisposable
