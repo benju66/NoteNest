@@ -68,16 +68,21 @@ namespace NoteNest.UI.ViewModels
 
         private void UpdateChildren()
         {
-            var combined = new ObservableCollection<object>();
-            foreach (var cat in SubCategories ?? new ObservableCollection<CategoryTreeItem>())
+            if (_children == null)
+                _children = new ObservableCollection<object>();
+            else
+                _children.Clear();
+
+            foreach (var cat in SubCategories ?? Enumerable.Empty<CategoryTreeItem>())
             {
-                combined.Add(cat);
+                _children.Add(cat);
             }
-            foreach (var note in Notes ?? new ObservableCollection<NoteTreeItem>())
+            foreach (var note in Notes ?? Enumerable.Empty<NoteTreeItem>())
             {
-                combined.Add(note);
+                _children.Add(note);
             }
-            Children = combined;
+
+            OnPropertyChanged(nameof(Children));
         }
 
         private void OnChildrenCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
