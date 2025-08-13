@@ -15,7 +15,7 @@ namespace NoteNest.UI.Services
 
     public static class ThemeService
     {
-        private static ConfigurationService? _configurationService;
+        private static ConfigurationService _configurationService;
 
         public static void Initialize()
         {
@@ -35,8 +35,8 @@ namespace NoteNest.UI.Services
 
         public static AppTheme GetSavedTheme()
         {
-            string? themeString = _configurationService?.Settings?.Theme;
-            if (Enum.TryParse<AppTheme>(themeString, ignoreCase: true, out var theme))
+            var themeString = _configurationService != null ? _configurationService.Settings?.Theme : null;
+            if (!string.IsNullOrWhiteSpace(themeString) && Enum.TryParse<AppTheme>(themeString, true, out var theme))
             {
                 return theme;
             }

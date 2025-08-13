@@ -31,12 +31,15 @@ namespace NoteNest.UI
 
         private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            var configService = MainPanel?.ViewModel?.GetConfigService();
+            // Create a new ConfigurationService instance for the settings window
+            var fileSystem = new NoteNest.Core.Services.DefaultFileSystemProvider();
+            var configService = new NoteNest.Core.Services.ConfigurationService(fileSystem);
+            
             var win = new SettingsWindow(configService);
             win.Owner = this;
             if (win.ShowDialog() == true)
             {
-                // Settings saved - trigger any necessary reloads
+                // Settings saved - trigger reload if needed
             }
         }
 
