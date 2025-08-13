@@ -204,11 +204,28 @@ namespace NoteNest.UI.ViewModels
                 try
                 {
                     _logger.Info("ExitCommand triggered - initiating shutdown");
-                    // Save any pending changes before exit
+                    
+                    // Fire-and-forget save with timeout to avoid blocking UI thread
                     if (OpenTabs?.Any(t => t.IsDirty) == true)
                     {
-                        SaveAllNotesAsync().GetAwaiter().GetResult();
+                        var saveTask = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                                await SaveAllNotesAsync(cts.Token);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                _logger.Info("Exit save cancelled or timed out");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Warning("Exit save failed: {0}", ex.Message);
+                            }
+                        });
                     }
+                    
                     Application.Current.Shutdown();
                 }
                 catch (Exception ex)
