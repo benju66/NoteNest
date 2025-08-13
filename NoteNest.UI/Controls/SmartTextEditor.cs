@@ -481,7 +481,37 @@ namespace NoteNest.UI.Controls
             var caretOffset = CaretIndex - lineStart;
             var removedChars = 0;
             
-            // Just remove one indentation level; keep bullets as bullets
+            // If a single-tab indented bullet is being outdented to root and the preceding
+            // sibling at that level is a numbered item, convert back to a number. Otherwise,
+            // simply remove one level of indentation and keep it a bullet.
+            var bulletIndentMatch = Regex.Match(currentLine, @"^(\t+)([-*+•])\s+(.*)$");
+            if (bulletIndentMatch.Success)
+            {
+                var existingTabs = bulletIndentMatch.Groups[1].Value.Length;
+                var content = bulletIndentMatch.Groups[3].Value;
+
+                if (existingTabs == 1)
+                {
+                    if (TryFindNextNumberForOutdentAtLevel(lineStart, targetIndentTabs: 0, out var nextNumber))
+                    {
+                        var newLine = $"{nextNumber}. {content}";
+                        var lineEndIdx = Text.IndexOf('\n', lineStart);
+                        if (lineEndIdx == -1) lineEndIdx = Text.Length;
+                        Text = Text.Remove(lineStart, lineEndIdx - lineStart);
+                        Text = Text.Insert(lineStart, newLine);
+
+                        CaretIndex = lineStart + Math.Min(caretOffset, newLine.Length);
+
+                        _isProcessingKey = false;
+                        RenumberEntireList();
+                        _isProcessingKey = true;
+                        _isProcessingKey = false;
+                        return;
+                    }
+                }
+            }
+
+            // Default behavior: remove one indentation level without changing bullet/number style
             if (currentLine.StartsWith("\t"))
             {
                 Text = Text.Remove(lineStart, 1);
@@ -507,12 +537,49 @@ namespace NoteNest.UI.Controls
                 CaretIndex = lineStart + caretOffset;
             }
             
-            // If numbering exists nearby, renumber to keep sequence correct
             _isProcessingKey = false;
-            RenumberEntireList();
-            _isProcessingKey = true;
+        }
 
-            _isProcessingKey = false;
+        private bool TryFindNextNumberForOutdentAtLevel(int lineStart, int targetIndentTabs, out int nextNumber)
+        {
+            nextNumber = 1;
+            var lines = Text.Split('\n');
+            var currentLineIndex = Text.Substring(0, lineStart).Count(c => c == '\n');
+
+            for (int i = currentLineIndex - 1; i >= 0; i--)
+            {
+                var line = lines[i];
+
+                // Count leading tabs only; mixed spaces are ignored for conversion
+                int tabs = 0;
+                while (tabs < line.Length && line[tabs] == '\t') tabs++;
+
+                if (tabs > targetIndentTabs)
+                {
+                    // Deeper indent, skip up the tree
+                    continue;
+                }
+
+                if (tabs < targetIndentTabs)
+                {
+                    // We reached a shallower level; no numbered context at desired level
+                    return false;
+                }
+
+                // Same level as target
+                var numberMatch = Regex.Match(line, @"^(\t*)(\d+)[.)]\s+");
+                if (numberMatch.Success && numberMatch.Groups[1].Value.Length == targetIndentTabs)
+                {
+                    nextNumber = int.Parse(numberMatch.Groups[2].Value) + 1;
+                    return true;
+                }
+
+                // Encountered a non-numbered line at the same level → stop, don't convert
+                return false;
+            }
+
+            // No previous line at the same level → do not convert
+            return false;
         }
 
         private int FindNextNumberForOutdent(int lineStart)
