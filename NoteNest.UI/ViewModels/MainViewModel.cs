@@ -26,6 +26,7 @@ namespace NoteNest.UI.ViewModels
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Task _initializationTask;
 		private bool _isOpeningNote = false;
+		private readonly Dictionary<string, string> _normalizedPathCache = new Dictionary<string, string>();
         
         private ObservableCollection<CategoryTreeItem> _categories;
         private ObservableCollection<NoteTabItem> _openTabs;
@@ -1108,19 +1109,27 @@ namespace NoteNest.UI.ViewModels
             }, "Delete Note");
         }
 
-        private static string NormalizePath(string path)
+        private string NormalizePath(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+
+            if (_normalizedPathCache.TryGetValue(path, out var cached))
+                return cached;
+
             try
             {
                 var absolute = System.IO.Path.IsPathRooted(path) ? path : PathService.ToAbsolutePath(path);
                 var full = System.IO.Path.GetFullPath(absolute);
-                return full.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
-                           .ToLowerInvariant();
+                var normalized = full.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
+                                     .ToLowerInvariant();
+                _normalizedPathCache[path] = normalized;
+                return normalized;
             }
             catch
             {
-                return path.Trim().ToLowerInvariant();
+                var fallback = path.Trim().ToLowerInvariant();
+                _normalizedPathCache[path] = fallback;
+                return fallback;
             }
         }
 
