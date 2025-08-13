@@ -390,7 +390,8 @@ namespace NoteNest.UI.ViewModels
             await SafeExecuteAsync(async () =>
             {
                 // Check if already open
-                var existingTab = OpenTabs.FirstOrDefault(t => t.Note.FilePath == noteItem.Model.FilePath);
+                var targetPath = NormalizePath(noteItem.Model.FilePath);
+                var existingTab = OpenTabs.FirstOrDefault(t => NormalizePath(t.Note.FilePath) == targetPath);
                 if (existingTab != null)
                 {
                     SelectedTab = existingTab;
@@ -1034,7 +1035,8 @@ namespace NoteNest.UI.ViewModels
                 noteItem.Model.Title = newName;
                 noteItem.Model.FilePath = newPath;
                 
-                var openTab = OpenTabs.FirstOrDefault(t => t.Note.FilePath == oldPath);
+                var oldNorm = NormalizePath(oldPath);
+                var openTab = OpenTabs.FirstOrDefault(t => NormalizePath(t.Note.FilePath) == oldNorm);
                 if (openTab != null)
                 {
                     openTab.Note.Title = newName;
@@ -1053,7 +1055,8 @@ namespace NoteNest.UI.ViewModels
 
             await SafeExecuteAsync(async () =>
             {
-                var openTab = OpenTabs.FirstOrDefault(t => t.Note.FilePath == noteItem.Model.FilePath);
+                var targetPath = NormalizePath(noteItem.Model.FilePath);
+                var openTab = OpenTabs.FirstOrDefault(t => NormalizePath(t.Note.FilePath) == targetPath);
                 if (openTab != null)
                 {
                     OpenTabs.Remove(openTab);
@@ -1077,6 +1080,22 @@ namespace NoteNest.UI.ViewModels
                 StatusMessage = $"Deleted '{noteItem.Title}'";
                 _logger.Info($"Deleted note: {noteItem.Model.FilePath}");
             }, "Delete Note");
+        }
+
+        private static string NormalizePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+            try
+            {
+                var absolute = System.IO.Path.IsPathRooted(path) ? path : PathService.ToAbsolutePath(path);
+                var full = System.IO.Path.GetFullPath(absolute);
+                return full.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
+                           .ToLowerInvariant();
+            }
+            catch
+            {
+                return path.Trim().ToLowerInvariant();
+            }
         }
 
         public ConfigurationService GetConfigService()
