@@ -1,11 +1,13 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using NoteNest.Core.Models;
 
 namespace NoteNest.UI.ViewModels
 {
-    public class CategoryTreeItem : ViewModelBase
+    public class CategoryTreeItem : ViewModelBase, IDisposable
     {
         private readonly CategoryModel _model;
         private ObservableCollection<CategoryTreeItem> _subCategories;
@@ -84,11 +86,19 @@ namespace NoteNest.UI.ViewModels
         }
 
         // Level is set during tree building via the model
+		public void Dispose()
+		{
+			if (_subCategories != null)
+				_subCategories.CollectionChanged -= OnChildrenCollectionChanged;
+			if (_notes != null)
+				_notes.CollectionChanged -= OnChildrenCollectionChanged;
+		}
     }
 
-    public class NoteTreeItem : ViewModelBase
+    public class NoteTreeItem : ViewModelBase, IDisposable
     {
         private readonly NoteModel _model;
+        private readonly PropertyChangedEventHandler _modelPropertyChangedHandler;
         private bool _isVisible = true;
         private bool _isSelected;
 
@@ -112,19 +122,29 @@ namespace NoteNest.UI.ViewModels
         public NoteTreeItem(NoteModel model)
         {
             _model = model;
-            if (_model is System.ComponentModel.INotifyPropertyChanged inpc)
+            _modelPropertyChangedHandler = (s, e) =>
             {
-                inpc.PropertyChanged += (s, e) =>
+                if (e.PropertyName == nameof(NoteModel.Title))
                 {
-                    if (e.PropertyName == nameof(NoteModel.Title))
-                    {
-                        OnPropertyChanged(nameof(Title));
-                    }
-                    else if (e.PropertyName == nameof(NoteModel.FilePath))
-                    {
-                        OnPropertyChanged(nameof(FilePath));
-                    }
-                };
+                    OnPropertyChanged(nameof(Title));
+                }
+                else if (e.PropertyName == nameof(NoteModel.FilePath))
+                {
+                    OnPropertyChanged(nameof(FilePath));
+                }
+            };
+
+            if (_model is INotifyPropertyChanged inpc)
+            {
+                inpc.PropertyChanged += _modelPropertyChangedHandler;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_model is INotifyPropertyChanged inpc)
+            {
+                inpc.PropertyChanged -= _modelPropertyChangedHandler;
             }
         }
     }

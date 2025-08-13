@@ -25,6 +25,7 @@ namespace NoteNest.UI.ViewModels
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Task _initializationTask;
+		private bool _isOpeningNote = false;
         
         private ObservableCollection<CategoryTreeItem> _categories;
         private ObservableCollection<NoteTabItem> _openTabs;
@@ -383,35 +384,43 @@ namespace NoteNest.UI.ViewModels
             }, "Create New Note");
         }
 
-        private async Task OpenNoteAsync(NoteTreeItem noteItem)
+		private async Task OpenNoteAsync(NoteTreeItem noteItem)
         {
-            if (noteItem == null) return;
+			if (noteItem == null || _isOpeningNote) return;
 
-            await SafeExecuteAsync(async () =>
-            {
-                // Check if already open
-                var targetPath = NormalizePath(noteItem.Model.FilePath);
-                var existingTab = OpenTabs.FirstOrDefault(t => NormalizePath(t.Note.FilePath) == targetPath);
-                if (existingTab != null)
-                {
-                    SelectedTab = existingTab;
-                    return;
-                }
+			_isOpeningNote = true;
+			try
+			{
+				await SafeExecuteAsync(async () =>
+				{
+					// Check if already open
+					var targetPath = NormalizePath(noteItem.Model.FilePath);
+					var existingTab = OpenTabs.FirstOrDefault(t => NormalizePath(t.Note.FilePath) == targetPath);
+					if (existingTab != null)
+					{
+						SelectedTab = existingTab;
+						return;
+					}
 
-                // Load note content if not loaded
-                if (string.IsNullOrEmpty(noteItem.Model.Content))
-                {
-                    var loadedNote = await _noteService.LoadNoteAsync(noteItem.Model.FilePath);
-                    noteItem.Model.Content = loadedNote.Content;
-                }
+					// Load note content if not loaded
+					if (string.IsNullOrEmpty(noteItem.Model.Content))
+					{
+						var loadedNote = await _noteService.LoadNoteAsync(noteItem.Model.FilePath);
+						noteItem.Model.Content = loadedNote.Content;
+					}
 
-                var tab = new NoteTabItem(noteItem.Model);
-                OpenTabs.Add(tab);
-                SelectedTab = tab;
+					var tab = new NoteTabItem(noteItem.Model);
+					OpenTabs.Add(tab);
+					SelectedTab = tab;
 
-                StatusMessage = $"Opened: {noteItem.Model.Title}";
-                _logger.Debug($"Opened note: {noteItem.Model.FilePath}");
-            }, "Open Note");
+					StatusMessage = $"Opened: {noteItem.Model.Title}";
+					_logger.Debug($"Opened note: {noteItem.Model.FilePath}");
+				}, "Open Note");
+			}
+			finally
+			{
+				_isOpeningNote = false;
+			}
         }
 
         private async Task SaveCurrentNoteAsync()
