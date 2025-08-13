@@ -1202,8 +1202,18 @@ namespace NoteNest.UI.ViewModels
                     {
                         // Step 1: Cancel all background operations immediately
                         _cancellationTokenSource?.Cancel();
+
+                        // Step 2: Wait briefly for initialization to complete
+                        try
+                        {
+                            _initializationTask?.Wait(TimeSpan.FromSeconds(2));
+                        }
+                        catch
+                        {
+                            // Ignore timeout or aggregate exceptions during shutdown
+                        }
                         
-                        // Step 2: Stop auto-save timer immediately
+                        // Step 3: Stop auto-save timer immediately
                         try
                         {
                             if (_autoSaveTimer != null)
@@ -1218,7 +1228,7 @@ namespace NoteNest.UI.ViewModels
                             _logger?.Warning($"Error stopping auto-save timer: {ex.Message}");
                         }
                         
-                        // Step 3: Stop file watcher immediately
+                        // Step 4: Stop file watcher immediately
                         try
                         {
                             if (_fileWatcher != null)
@@ -1232,7 +1242,20 @@ namespace NoteNest.UI.ViewModels
                             _logger?.Warning($"Error disposing file watcher: {ex.Message}");
                         }
                         
-                        // Step 4: Clear collections to prevent further access
+                        // Step 5: Dispose items in collections that implement IDisposable
+                        try
+                        {
+                            foreach (var category in Categories ?? Enumerable.Empty<CategoryTreeItem>())
+                            {
+                                (category as IDisposable)?.Dispose();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.Warning($"Error disposing category items: {ex.Message}");
+                        }
+                        
+                        // Step 6: Clear collections to prevent further access
                         try
                         {
                             Categories?.Clear();
@@ -1243,7 +1266,7 @@ namespace NoteNest.UI.ViewModels
                             _logger?.Warning($"Error clearing collections: {ex.Message}");
                         }
                         
-                        // Step 5: Dispose cancellation token source
+                        // Step 7: Dispose cancellation token source
                         try
                         {
                             _cancellationTokenSource?.Dispose();
