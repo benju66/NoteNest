@@ -1,125 +1,14 @@
 ﻿<Application x:Class="NoteNest.UI.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <!-- Global styles and resources -->
         <ResourceDictionary>
-            <Color x:Key="ModernBackgroundColor">#FAFAFA</Color>
-            <Color x:Key="ModernHoverColor">#F0F0F0</Color>
-            <Color x:Key="ModernBorderColor">#E0E0E0</Color>
-            <Color x:Key="ModernIconColor">#404040</Color>
-            <Color x:Key="ModernIssueRed">#E74C3C</Color>
-
-            <SolidColorBrush x:Key="ModernBackgroundBrush" Color="{StaticResource ModernBackgroundColor}"/>
-            <SolidColorBrush x:Key="ModernHoverBrush" Color="{StaticResource ModernHoverColor}"/>
-            <SolidColorBrush x:Key="ModernBorderBrush" Color="{StaticResource ModernBorderColor}"/>
-            <SolidColorBrush x:Key="ModernIconBrush" Color="{StaticResource ModernIconColor}"/>
-            <SolidColorBrush x:Key="ModernIssueBrush" Color="{StaticResource ModernIssueRed}"/>
-
-            <!-- Modern icon border styles -->
-            <Style x:Key="ModernIconBorderStyle" TargetType="Border">
-                <Setter Property="Background">
-                    <Setter.Value>
-                        <SolidColorBrush Color="Transparent"/>
-                    </Setter.Value>
-                </Setter>
-                <Setter Property="CornerRadius" Value="6"/>
-                <Style.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True">
-                        <Trigger.EnterActions>
-                            <BeginStoryboard>
-                                <Storyboard>
-                                    <ColorAnimation Storyboard.TargetProperty="Background.(SolidColorBrush.Color)" To="{StaticResource ModernHoverColor}" Duration="0:0:0.15"/>
-                                </Storyboard>
-                            </BeginStoryboard>
-                        </Trigger.EnterActions>
-                        <Trigger.ExitActions>
-                            <BeginStoryboard>
-                                <Storyboard>
-                                    <ColorAnimation Storyboard.TargetProperty="Background.(SolidColorBrush.Color)" To="Transparent" Duration="0:0:0.15"/>
-                                </Storyboard>
-                            </BeginStoryboard>
-                        </Trigger.ExitActions>
-                    </Trigger>
-                </Style.Triggers>
-            </Style>
-
-            <Style x:Key="ModernIconBorderStyleDanger" TargetType="Border">
-                <Setter Property="Background">
-                    <Setter.Value>
-                        <SolidColorBrush Color="Transparent"/>
-                    </Setter.Value>
-                </Setter>
-                <Setter Property="CornerRadius" Value="6"/>
-                <Style.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True">
-                        <Trigger.EnterActions>
-                            <BeginStoryboard>
-                                <Storyboard>
-                                    <ColorAnimation Storyboard.TargetProperty="Background.(SolidColorBrush.Color)" To="#FFF5F5" Duration="0:0:0.15"/>
-                                </Storyboard>
-                            </BeginStoryboard>
-                        </Trigger.EnterActions>
-                        <Trigger.ExitActions>
-                            <BeginStoryboard>
-                                <Storyboard>
-                                    <ColorAnimation Storyboard.TargetProperty="Background.(SolidColorBrush.Color)" To="Transparent" Duration="0:0:0.15"/>
-                                </Storyboard>
-                            </BeginStoryboard>
-                        </Trigger.ExitActions>
-                    </Trigger>
-                </Style.Triggers>
-            </Style>
-
-            <!-- Modern search box style -->
-            <Style x:Key="ModernSearchBox" TargetType="TextBox">
-                <Setter Property="Height" Value="28"/>
-                <Setter Property="Padding" Value="8,0,8,0"/>
-                <Setter Property="VerticalContentAlignment" Value="Center"/>
-                <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="BorderBrush" Value="{StaticResource ModernBorderBrush}"/>
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="TextBox">
-                            <Border Background="White"
-                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    CornerRadius="14">
-                                <Grid>
-                                    <TextBlock x:Name="placeholder"
-                                               Text="{TemplateBinding Tag}"
-                                               Foreground="#999999"
-                                               Margin="8,0,0,0"
-                                               VerticalAlignment="Center"
-                                               Visibility="Collapsed"/>
-                                    <ScrollViewer x:Name="PART_ContentHost" Margin="8,0,8,0" VerticalAlignment="Center"/>
-                                </Grid>
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="Text" Value="">
-                                    <Setter TargetName="placeholder" Property="Visibility" Value="Visible"/>
-                                </Trigger>
-                                <Trigger Property="IsFocused" Value="True">
-                                    <Setter Property="BorderBrush" Value="#007ACC"/>
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-
-            <!-- Existing global styles -->
-            <Style TargetType="TextBox">
-                <Setter Property="Padding" Value="2"/>
-            </Style>
-            <Style TargetType="Button">
-                <Setter Property="Padding" Value="5,2"/>
-                <Setter Property="Margin" Value="2"/>
-            </Style>
-            <Style TargetType="TreeViewItem">
-                <Setter Property="Padding" Value="2"/>
-            </Style>
+            <ResourceDictionary.MergedDictionaries>
+                <ui:ThemeResources />
+                <ui:XamlControlsResources />
+            </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

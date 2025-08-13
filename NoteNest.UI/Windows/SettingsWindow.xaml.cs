@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using ModernWpf.Controls;
 using NoteNest.UI.ViewModels;
 
 namespace NoteNest.UI.Windows
@@ -13,31 +14,34 @@ namespace NoteNest.UI.Windows
             InitializeComponent();
             _viewModel = new SettingsViewModel(configService);
             DataContext = _viewModel;
-
-            CategoryList.SelectionChanged += CategoryList_SelectionChanged;
         }
 
-        private void CategoryList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        private void NavigationView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
         {
-            GeneralSettings.Visibility = Visibility.Collapsed;
-            EditorSettings.Visibility = Visibility.Collapsed;
-            AppearanceSettings.Visibility = Visibility.Collapsed;
-            FilesSettings.Visibility = Visibility.Collapsed;
-
-            switch (CategoryList.SelectedIndex)
+            if (args.SelectedItem is NavigationViewItem item)
             {
-                case 0:
-                    GeneralSettings.Visibility = Visibility.Visible;
-                    break;
-                case 1:
-                    EditorSettings.Visibility = Visibility.Visible;
-                    break;
-                case 2:
-                    AppearanceSettings.Visibility = Visibility.Visible;
-                    break;
-                case 3:
-                    FilesSettings.Visibility = Visibility.Visible;
-                    break;
+                // Hide all pages
+                GeneralSettings.Visibility = Visibility.Collapsed;
+                AppearanceSettings.Visibility = Visibility.Collapsed;
+                EditorSettings.Visibility = Visibility.Collapsed;
+                FilesSettings.Visibility = Visibility.Collapsed;
+
+                // Show selected page
+                switch (item.Tag?.ToString())
+                {
+                    case "General":
+                        GeneralSettings.Visibility = Visibility.Visible;
+                        break;
+                    case "Appearance":
+                        AppearanceSettings.Visibility = Visibility.Visible;
+                        break;
+                    case "Editor":
+                        EditorSettings.Visibility = Visibility.Visible;
+                        break;
+                    case "Files":
+                        FilesSettings.Visibility = Visibility.Visible;
+                        break;
+                }
             }
         }
 
@@ -45,11 +49,13 @@ namespace NoteNest.UI.Windows
         {
             _viewModel.SaveSettings();
             DialogResult = true;
+            Close();
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
             DialogResult = false;
+            Close();
         }
     }
 }

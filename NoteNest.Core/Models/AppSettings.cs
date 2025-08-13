@@ -14,6 +14,13 @@ namespace NoteNest.Core.Models
         public string FontFamily { get; set; }
         public bool ShowLineNumbers { get; set; }
         public bool ShowStatusBar { get; set; }
+        public bool HighlightCurrentLine { get; set; }
+        public int TabSize { get; set; }
+        public bool InsertSpaces { get; set; }
+        public bool CreateBackup { get; set; }
+        public int MaxBackups { get; set; }
+        public bool ShowWelcomeScreen { get; set; }
+        public bool CheckForUpdates { get; set; }
         public List<string> RecentFiles { get; set; }
         public WindowSettings WindowSettings { get; set; }
 
@@ -26,11 +33,18 @@ namespace NoteNest.Core.Models
             AutoSave = true;
             AutoSaveInterval = 30;
             WordWrap = true;
-            Theme = "Light";
-            FontSize = 12;
+            Theme = "System";
+            FontSize = 14;
             FontFamily = "Consolas";
             ShowLineNumbers = false;
             ShowStatusBar = true;
+            HighlightCurrentLine = true;
+            TabSize = 4;
+            InsertSpaces = true;
+            CreateBackup = true;
+            MaxBackups = 5;
+            ShowWelcomeScreen = true;
+            CheckForUpdates = true;
             RecentFiles = new List<string>();
             WindowSettings = new WindowSettings();
         }

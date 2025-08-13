@@ -5,6 +5,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using NoteNest.UI.ViewModels;
 using System.Collections.Generic;
+using ModernWpf.Controls;
+using NoteNest.UI.Services;
+using NoteNest.UI.Windows;
 
 namespace NoteNest.UI
 {
@@ -13,6 +16,97 @@ namespace NoteNest.UI
         public MainWindow()
         {
             InitializeComponent();
+            UpdateThemeMenuChecks();
+        }
+
+        private void SaveMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            MainPanel?.ViewModel?.SaveNoteCommand.Execute(null);
+        }
+
+        private void SaveAllMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            MainPanel?.ViewModel?.SaveAllCommand.Execute(null);
+        }
+
+        private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            var configService = MainPanel?.ViewModel?.GetConfigService();
+            var win = new SettingsWindow(configService);
+            win.Owner = this;
+            if (win.ShowDialog() == true)
+            {
+                // Settings saved - trigger any necessary reloads
+            }
+        }
+
+        private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+
+        private void FindMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            // Hook up to panel method if present
+            // Placeholder per guide; to be implemented in Phase 9
+        }
+
+        private void ReplaceMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            // Hook up to panel method if present
+            // Placeholder per guide; to be implemented in Phase 9
+        }
+
+        private void LightTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ThemeService.SetTheme(AppTheme.Light);
+            UpdateThemeMenuChecks();
+        }
+
+        private void DarkTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ThemeService.SetTheme(AppTheme.Dark);
+            UpdateThemeMenuChecks();
+        }
+
+        private void SystemTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ThemeService.SetTheme(AppTheme.System);
+            UpdateThemeMenuChecks();
+        }
+
+        private void UpdateThemeMenuChecks()
+        {
+            var currentTheme = ThemeService.GetSavedTheme();
+            LightThemeMenuItem.IsChecked = currentTheme == AppTheme.Light;
+            DarkThemeMenuItem.IsChecked = currentTheme == AppTheme.Dark;
+            SystemThemeMenuItem.IsChecked = currentTheme == AppTheme.System;
+        }
+
+        private async void DocumentationMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new ModernWpf.Controls.ContentDialog
+            {
+                Title = "Documentation",
+                Content = "Visit https://github.com/yourusername/NoteNest for documentation.",
+                PrimaryButtonText = "OK",
+                DefaultButton = ContentDialogButton.Primary,
+                Owner = this
+            };
+            await dialog.ShowAsync();
+        }
+
+        private async void AboutMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new ModernWpf.Controls.ContentDialog
+            {
+                Title = "About NoteNest",
+                Content = "NoteNest v1.0.0\nA modern note-taking application\n\n© 2024 Your Name",
+                PrimaryButtonText = "OK",
+                DefaultButton = ContentDialogButton.Primary,
+                Owner = this
+            };
+            await dialog.ShowAsync();
         }
 
         private void Window_Closing(object sender, CancelEventArgs e)

@@ -37,6 +37,7 @@ namespace NoteNest.UI.ViewModels
         private int _searchIndex = -1;
         private bool _isLoading;
         private string _statusMessage;
+        private List<string> _recentSearches = new List<string>();
 
         #region Properties
 
@@ -163,6 +164,27 @@ namespace NoteNest.UI.ViewModels
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
+        }
+
+        public List<string> GetSearchSuggestions(string query)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return new List<string>();
+
+            var titlesFromTree = Categories?
+                .SelectMany(c => GetAllNotesRecursive(c))
+                .Select(n => n.Title) ?? Enumerable.Empty<string>();
+
+            var titlesFromOpen = OpenTabs?.Select(t => t.Title) ?? Enumerable.Empty<string>();
+
+            var all = titlesFromTree
+                .Concat(titlesFromOpen)
+                .Concat(_recentSearches)
+                .Where(t => t?.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(10)
+                .ToList();
+
+            return all;
         }
 
         private void InitializeCommands()
@@ -763,6 +785,15 @@ namespace NoteNest.UI.ViewModels
             }
             
             return null;
+        }
+
+        private IEnumerable<NoteTreeItem> GetAllNotesRecursive(CategoryTreeItem category)
+        {
+            foreach (var n in category.Notes) yield return n;
+            foreach (var sub in category.SubCategories)
+            {
+                foreach (var n in GetAllNotesRecursive(sub)) yield return n;
+            }
         }
 
         private async Task OpenFromSearchAsync()

@@ -1,20 +1,20 @@
 ﻿NoteNest.UI
-1.0.0.0
+
 
 winexe
 C#
 .cs
-c:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\
 NoteNest.UI
 none
 false
-TRACE;DEBUG;NET;NET9_0;NETCOREAPP;WINDOWS;WINDOWS7_0;NET5_0_OR_GREATER;NET6_0_OR_GREATER;NET7_0_OR_GREATER;NET8_0_OR_GREATER;NET9_0_OR_GREATER;NETCOREAPP3_0_OR_GREATER;NETCOREAPP3_1_OR_GREATER;WINDOWS7_0_OR_GREATER
-c:\NoteNest\NoteNest.UI\App.xaml
+TRACE;DEBUG;NET;NET9_0;NETCOREAPP
+C:\NoteNest\NoteNest.UI\App.xaml
 4179228831
 
-251867786892
-2051229171305
+28-357835852
+207-249900660
 Controls\NoteNestPanel.xaml;Dialogs\InputDialog.xaml;MainWindow.xaml;Windows\SettingsWindow.xaml;
 
-True
+False
 

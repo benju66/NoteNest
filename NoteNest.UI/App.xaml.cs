@@ -6,6 +6,8 @@ using System.Windows;
 using System.Windows.Threading;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using ModernWpf;
+using NoteNest.UI.Services;
 
 namespace NoteNest.UI
 {
@@ -25,6 +27,34 @@ namespace NoteNest.UI
                 // Initialize logging first
                 _logger = AppLogger.Instance;
                 _logger.Info("Application starting up");
+
+                // Initialize ModernWPF theme from settings
+                try
+                {
+                    ThemeService.Initialize();
+                }
+                catch (Exception themeEx)
+                {
+                    _logger?.Warning($"Theme initialization failed: {themeEx.Message}");
+                    // Continue with default theme
+                }
+
+                // Ensure a MainWindow is created and shown in case StartupUri didn't materialize due to an error
+                if (Current.MainWindow == null)
+                {
+                    try
+                    {
+                        var mainWindow = new MainWindow();
+                        Current.MainWindow = mainWindow;
+                        mainWindow.Show();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Fatal(ex, "Failed to create MainWindow");
+                        ShowDetailedError("Failed to create MainWindow", ex);
+                        Shutdown(1);
+                    }
+                }
 
                 // Set up global exception handlers
                 AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
