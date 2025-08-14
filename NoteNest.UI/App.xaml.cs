@@ -45,19 +45,19 @@ namespace NoteNest.UI
                 DispatcherUnhandledException += OnDispatcherUnhandledException;
                 TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
-                // Ensure all required directories exist
-                try
-                {
-                    PathService.EnsureDirectoriesExist();
-                    _logger.Info($"Data directory: {PathService.RootPath}");
-                    _logger.Info($"Settings directory: {PathService.AppDataPath}");
-                }
-                catch (Exception ex)
-                {
-                    _logger?.Fatal(ex, "Failed to create required directories");
-                    ShowDetailedError("Failed to create required directories", ex);
-                    Shutdown(1);
-                }
+                // Ensure directories early (optional). Can be deferred until after settings load.
+                // try
+                // {
+                //     PathService.EnsureDirectoriesExist();
+                //     _logger.Info($"Data directory: {PathService.RootPath}");
+                //     _logger.Info($"Settings directory: {PathService.AppDataPath}");
+                // }
+                // catch (Exception ex)
+                // {
+                //     _logger?.Fatal(ex, "Failed to create required directories");
+                //     ShowDetailedError("Failed to create required directories", ex);
+                //     Shutdown(1);
+                // }
             }
             catch (Exception ex)
             {

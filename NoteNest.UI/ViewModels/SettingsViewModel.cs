@@ -151,8 +151,8 @@ namespace NoteNest.UI.ViewModels
         {
             get
             {
-                var storageService = new StorageLocationService();
-                return storageService.ResolveNotesPath(Settings.StorageMode, Settings.CustomNotesPath);
+                // Return the actual saved path, not a recalculated one
+                return Settings.DefaultNotePath;
             }
         }
 
@@ -177,14 +177,7 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                var storageService = new StorageLocationService();
-                var resolvedPath = storageService.ResolveNotesPath(
-                    Settings.StorageMode, 
-                    Settings.CustomNotesPath);
-                
-                Settings.DefaultNotePath = resolvedPath;
-                Settings.MetadataPath = Path.Combine(resolvedPath, ".metadata");
-                
+                // Just persist current settings as-is without recalculating paths
                 await _configService.UpdateSettingsAsync(_settings);
             }
             catch (Exception ex)
@@ -198,8 +191,10 @@ namespace NoteNest.UI.ViewModels
             OnPropertyChanged(nameof(UseLocalStorage));
             OnPropertyChanged(nameof(UseOneDrive));
             OnPropertyChanged(nameof(UseCustomPath));
+            OnPropertyChanged(nameof(CustomPath));
             OnPropertyChanged(nameof(CurrentStoragePath));
             OnPropertyChanged(nameof(StorageModeDescription));
+            OnPropertyChanged(nameof(Settings));
         }
     }
 }
