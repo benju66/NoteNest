@@ -118,14 +118,37 @@ namespace NoteNest.UI.Windows
                 
                 if (migrationWindow.ShowDialog() == true && migrationWindow.MigrationSuccessful)
                 {
+                    // Update paths
                     _viewModel.Settings.DefaultNotePath = newPath;
                     _viewModel.Settings.MetadataPath = System.IO.Path.Combine(newPath, ".metadata");
+
+                    // Update storage mode based on destination
+                    var oneDrivePath = storageService.GetOneDrivePath();
+                    if (!string.IsNullOrEmpty(oneDrivePath) &&
+                        newPath.StartsWith(oneDrivePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _viewModel.Settings.StorageMode = Core.Models.StorageMode.OneDrive;
+                    }
+                    else if (newPath.EndsWith("Documents\\NoteNest", StringComparison.OrdinalIgnoreCase) ||
+                             newPath.EndsWith("Documents/NoteNest", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _viewModel.Settings.StorageMode = Core.Models.StorageMode.Local;
+                    }
+                    else
+                    {
+                        _viewModel.Settings.StorageMode = Core.Models.StorageMode.Custom;
+                        _viewModel.Settings.CustomNotesPath = newPath;
+                    }
+
+                    // Save everything
                     await _viewModel.CommitSettings();
-                    
                     _viewModel.RefreshStorageProperties();
-                    
+
                     MessageBox.Show(
-                        "Migration completed and saved. You may need to restart NoteNest.");
+                        "Migration completed successfully!\n\nPlease restart NoteNest for the changes to take full effect.",
+                        "Migration Complete",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
                 }
             }
             catch (Exception ex)

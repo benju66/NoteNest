@@ -36,15 +36,22 @@ namespace NoteNest.UI
 
         private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            // Create a new ConfigurationService instance for the settings window
-            var fileSystem = new NoteNest.Core.Services.DefaultFileSystemProvider();
-            var configService = new NoteNest.Core.Services.ConfigurationService(fileSystem);
+            var viewModel = MainPanel?.ViewModel;
+            var configService = viewModel?.GetConfigService();
+            
+            if (configService == null)
+            {
+                // Fallback only if MainViewModel isn't available
+                var fileSystem = new NoteNest.Core.Services.DefaultFileSystemProvider();
+                configService = new NoteNest.Core.Services.ConfigurationService(fileSystem);
+            }
             
             var win = new SettingsWindow(configService);
             win.Owner = this;
             if (win.ShowDialog() == true)
             {
-                // Settings saved - trigger reload if needed
+                // Settings saved - user will restart if migration occurred
+                // No need to reload categories here
             }
         }
 

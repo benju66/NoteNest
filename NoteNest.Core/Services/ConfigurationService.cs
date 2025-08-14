@@ -46,9 +46,8 @@ namespace NoteNest.Core.Services
                     {
                         _settings = loadedSettings;
 
-                        // Only resolve paths if they're empty or don't exist
-                        if (string.IsNullOrEmpty(_settings.DefaultNotePath) ||
-                            !Directory.Exists(_settings.DefaultNotePath))
+                        // Only resolve paths if they're empty; do NOT overwrite if directory is missing
+                        if (string.IsNullOrEmpty(_settings.DefaultNotePath))
                         {
                             var storageService = new StorageLocationService();
                             _settings.DefaultNotePath = storageService.ResolveNotesPath(

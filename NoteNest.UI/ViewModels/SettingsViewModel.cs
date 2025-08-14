@@ -177,8 +177,16 @@ namespace NoteNest.UI.ViewModels
 
         public async Task CommitSettings()
         {
+            // Save to disk and update the service's internal reference
             await _configService.UpdateSettingsAsync(_settings);
+
+            // Update both the original reference and the service's Settings
             CopySettings(_originalSettings, _settings);
+            CopySettings(_configService.Settings, _settings);
+
+            // Update PathService immediately
+            NoteNest.Core.Services.PathService.RootPath = _settings.DefaultNotePath;
+
             OnPropertyChanged(nameof(CurrentStoragePath));
         }
 
