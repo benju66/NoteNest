@@ -1,0 +1,108 @@
+<Window x:Class="NoteNest.UI.Windows.MigrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        Title="Move Notes" 
+        Height="450" 
+        Width="650"
+        MinHeight="450"
+        MinWidth="650"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="CanResize">
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Title -->
+        <TextBlock Grid.Row="0" 
+                   Text="Move Notes to New Location" 
+                   Style="{StaticResource TitleTextBlockStyle}" 
+                   Margin="0,0,0,16"/>
+        
+        <!-- Paths Display -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,16">
+            <TextBlock Text="From:" FontWeight="SemiBold"/>
+            <TextBlock x:Name="SourcePath" 
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                       Margin="0,2,0,8"/>
+            
+            <TextBlock Text="To:" FontWeight="SemiBold"/>
+            <TextBlock x:Name="DestinationPath" 
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                       Margin="0,2,0,0"/>
+        </StackPanel>
+        
+        <!-- Status -->
+        <TextBlock Grid.Row="2" 
+                   x:Name="StatusText" 
+                   Text="Ready to migrate"
+                   Margin="0,0,0,8"/>
+        
+        <!-- Progress Bar -->
+        <ui:ProgressBar Grid.Row="3" 
+                        x:Name="ProgressBar" 
+                        Height="4"
+                        Minimum="0"
+                        Maximum="100"
+                        Value="0"
+                        Margin="0,0,0,16"/>
+        
+        <!-- Log Messages -->
+        <Border Grid.Row="4" 
+                BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="1"
+                Margin="0,0,0,16">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ListBox x:Name="LogList" 
+                         BorderThickness="0"
+                         Background="Transparent">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" 
+                                       TextWrapping="Wrap"
+                                       FontSize="12"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </ScrollViewer>
+        </Border>
+        
+        <!-- Buttons -->
+        <StackPanel Grid.Row="5" 
+                    Orientation="Horizontal" 
+                    HorizontalAlignment="Right">
+            <Button x:Name="StartButton" 
+                    Content="Start Migration" 
+                    Width="140" 
+                    Height="32"
+                    Margin="0,0,8,0"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Click="Start_Click"/>
+            <Button x:Name="CleanupButton" 
+                    Content="Clean up old location" 
+                    Width="170"
+                    Height="32"
+                    Margin="0,0,8,0"
+                    IsEnabled="False"
+                    Click="Cleanup_Click"/>
+            <Button x:Name="CancelButton" 
+                    Content="Cancel" 
+                    Width="80"
+                    Height="32"
+                    Click="Cancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
+
+

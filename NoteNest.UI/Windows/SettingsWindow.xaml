@@ -39,6 +39,11 @@
                         <ui:SymbolIcon Symbol="Save"/>
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Features" Tag="Features">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="ViewAll"/>
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
             </ui:NavigationView.MenuItems>
             
             <ScrollViewer Padding="20">
@@ -184,6 +189,23 @@
                         <TextBlock Text="Storage Location" Style="{StaticResource TitleTextBlockStyle}" 
                                    Margin="0,0,0,16"/>
                         
+                        <!-- Current Location Display -->
+                        <Border Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+                                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="12,8"
+                                Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="Current storage location:" 
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,4"/>
+                                <TextBlock Text="{Binding CurrentStoragePath}" 
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        
                         <TextBlock Text="Choose where to store your notes:" 
                                    Style="{StaticResource BaseTextBlockStyle}" 
                                    Margin="0,0,0,8"/>
@@ -229,6 +251,60 @@
                                 Margin="0,8"
                                 HorizontalAlignment="Left"
                                 Click="MigrateNotes_Click"/>
+                        
+                        <TextBlock Text="Note: After changing storage location, a restart is required." 
+                                   FontStyle="Italic"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                   Margin="0,8,0,0"/>
+                    </StackPanel>
+
+                    <!-- Features Settings Page -->
+                    <StackPanel x:Name="FeaturesSettings" Visibility="Collapsed">
+                        <TextBlock Text="Features" Style="{StaticResource TitleTextBlockStyle}" 
+                                   Margin="0,0,0,16"/>
+                        
+                        <TextBlock Text="Default file format" Style="{StaticResource BaseTextBlockStyle}" 
+                                   Margin="0,0,0,4"/>
+                        <ComboBox SelectedValue="{Binding Settings.DefaultNoteFormat}" 
+                                  Margin="0,0,0,16">
+                            <ComboBoxItem Content="Plain Text (.txt)" Tag=".txt"/>
+                            <ComboBoxItem Content="Markdown (.md)" Tag=".md"/>
+                        </ComboBox>
+                        
+                        <ui:ToggleSwitch Header="Enable Task Management" 
+                                         IsOn="{Binding Settings.EnableTaskPanel}"
+                                         Margin="0,8"/>
+                        
+                        <ui:ToggleSwitch Header="Sync markdown checkboxes with tasks" 
+                                         IsOn="{Binding Settings.ParseMarkdownCheckboxes}"
+                                         IsEnabled="{Binding Settings.EnableTaskPanel}"
+                                         Margin="20,8,0,8"/>
+                        
+                        <TextBlock Text="Keyboard Shortcuts" Style="{StaticResource SubtitleTextBlockStyle}" 
+                                   Margin="0,16,0,8"/>
+                        
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Quick Note:" 
+                                       VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" 
+                                     Text="{Binding Settings.QuickNoteHotkey}"
+                                     Margin="0,4"/>
+                            
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Quick Task:" 
+                                       VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" 
+                                     Text="{Binding Settings.QuickTaskHotkey}"
+                                     Margin="0,4"/>
+                        </Grid>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

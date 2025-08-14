@@ -147,17 +147,59 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        public string CurrentStoragePath
+        {
+            get
+            {
+                var storageService = new StorageLocationService();
+                return storageService.ResolveNotesPath(Settings.StorageMode, Settings.CustomNotesPath);
+            }
+        }
+
+        public string StorageModeDescription
+        {
+            get
+            {
+                switch (Settings.StorageMode)
+                {
+                    case StorageMode.OneDrive:
+                        return "OneDrive - Synced across devices";
+                    case StorageMode.Custom:
+                        return $"Custom - {Settings.CustomNotesPath}";
+                    case StorageMode.Local:
+                    default:
+                        return "Local - Documents/NoteNest folder";
+                }
+            }
+        }
+
         public async Task SaveSettings()
         {
             try
             {
+                var storageService = new StorageLocationService();
+                var resolvedPath = storageService.ResolveNotesPath(
+                    Settings.StorageMode, 
+                    Settings.CustomNotesPath);
+                
+                Settings.DefaultNotePath = resolvedPath;
+                Settings.MetadataPath = Path.Combine(resolvedPath, ".metadata");
+                
                 await _configService.UpdateSettingsAsync(_settings);
             }
             catch (Exception ex)
             {
-                // Handle error appropriately (log, notify UI, etc.)
                 throw;
             }
+        }
+
+        public void RefreshStorageProperties()
+        {
+            OnPropertyChanged(nameof(UseLocalStorage));
+            OnPropertyChanged(nameof(UseOneDrive));
+            OnPropertyChanged(nameof(UseCustomPath));
+            OnPropertyChanged(nameof(CurrentStoragePath));
+            OnPropertyChanged(nameof(StorageModeDescription));
         }
     }
 }

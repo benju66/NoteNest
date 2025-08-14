@@ -258,10 +258,6 @@ namespace NoteNest.UI.ViewModels
                 var settings = await _configService.LoadSettingsAsync();
                 cancellationToken.ThrowIfCancellationRequested();
                 
-                // Use PathService for proper paths
-                settings.DefaultNotePath = PathService.ProjectsPath;
-                settings.MetadataPath = PathService.MetadataPath;
-                
                 await _configService.EnsureDefaultDirectoriesAsync();
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -302,10 +298,6 @@ namespace NoteNest.UI.ViewModels
                 Categories.Clear();
 
                 var settings = _configService.Settings;
-                
-                // Use PathService for consistent paths
-                settings.DefaultNotePath = PathService.ProjectsPath;
-                settings.MetadataPath = PathService.MetadataPath;
                 
                 // Ensure directories exist
                 PathService.EnsureDirectoriesExist();

@@ -42,27 +42,46 @@ namespace NoteNest.Core.Models
 
         public AppSettings()
         {
-            DefaultNotePath = System.IO.Path.Combine(
-                System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
-                "NoteNest");
-            MetadataPath = System.IO.Path.Combine(DefaultNotePath, ".metadata");
-            AutoSave = true;
-            AutoSaveInterval = 30;
-            WordWrap = true;
-            Theme = "System";
-            FontSize = 14;
-            FontFamily = "Consolas";
-            ShowLineNumbers = false;
-            ShowStatusBar = true;
-            HighlightCurrentLine = true;
-            TabSize = 4;
-            InsertSpaces = true;
-            CreateBackup = true;
-            MaxBackups = 5;
-            ShowWelcomeScreen = true;
-            CheckForUpdates = true;
-            RecentFiles = new List<string>();
-            WindowSettings = new WindowSettings();
+            // Only set defaults if not already set (for new installations)
+            if (string.IsNullOrEmpty(DefaultNotePath))
+            {
+                DefaultNotePath = System.IO.Path.Combine(
+                    System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
+                    "NoteNest");
+            }
+            
+            if (string.IsNullOrEmpty(MetadataPath))
+            {
+                MetadataPath = System.IO.Path.Combine(DefaultNotePath, ".metadata");
+            }
+            
+            // Initialize other defaults only if not set
+            AutoSave = AutoSave == default ? true : AutoSave;
+            AutoSaveInterval = AutoSaveInterval == 0 ? 30 : AutoSaveInterval;
+            WordWrap = WordWrap == default ? true : WordWrap;
+            Theme = Theme ?? "System";
+            FontSize = FontSize == 0 ? 14 : FontSize;
+            FontFamily = FontFamily ?? "Consolas";
+            ShowLineNumbers = ShowLineNumbers;
+            ShowStatusBar = ShowStatusBar == default ? true : ShowStatusBar;
+            HighlightCurrentLine = HighlightCurrentLine == default ? true : HighlightCurrentLine;
+            TabSize = TabSize == 0 ? 4 : TabSize;
+            InsertSpaces = InsertSpaces == default ? true : InsertSpaces;
+            CreateBackup = CreateBackup == default ? true : CreateBackup;
+            MaxBackups = MaxBackups == 0 ? 5 : MaxBackups;
+            ShowWelcomeScreen = ShowWelcomeScreen == default ? true : ShowWelcomeScreen;
+            CheckForUpdates = CheckForUpdates == default ? true : CheckForUpdates;
+            RecentFiles = RecentFiles ?? new List<string>();
+            WindowSettings = WindowSettings ?? new WindowSettings();
+            
+            // New settings defaults
+            StorageMode = StorageMode == default ? StorageMode.Local : StorageMode;
+            DefaultNoteFormat = DefaultNoteFormat ?? ".txt";
+            EnableTaskPanel = EnableTaskPanel == default ? true : EnableTaskPanel;
+            ParseMarkdownCheckboxes = ParseMarkdownCheckboxes == default ? true : ParseMarkdownCheckboxes;
+            QuickNoteHotkey = QuickNoteHotkey ?? "Win+N";
+            QuickTaskHotkey = QuickTaskHotkey ?? "Win+T";
+            AutoDetectOneDrive = AutoDetectOneDrive == default ? true : AutoDetectOneDrive;
         }
     }
 

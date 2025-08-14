@@ -38,17 +38,49 @@ namespace NoteNest.Core.Services
                 try
                 {
                     var json = await _fileSystem.ReadTextAsync(_settingsPath);
-                    _settings = JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions) ?? new AppSettings();
+                    
+                    // Deserialize without invoking constructor defaults
+                    var loadedSettings = JsonSerializer.Deserialize<AppSettings>(json, _jsonOptions);
+                    
+                    if (loadedSettings != null)
+                    {
+                        _settings = loadedSettings;
+                        
+                        // Ensure paths are resolved based on storage mode
+                        var storageService = new StorageLocationService();
+                        var resolvedPath = storageService.ResolveNotesPath(
+                            _settings.StorageMode, 
+                            _settings.CustomNotesPath);
+                        
+                        if (_settings.StorageMode != StorageMode.Local || 
+                            !string.Equals(_settings.DefaultNotePath, resolvedPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _settings.DefaultNotePath = resolvedPath;
+                            _settings.MetadataPath = Path.Combine(resolvedPath, ".metadata");
+                        }
+
+                        // Keep global path service in sync with loaded settings
+                        PathService.RootPath = _settings.DefaultNotePath;
+                    }
+                    else
+                    {
+                        _settings = new AppSettings();
+                        PathService.RootPath = _settings.DefaultNotePath;
+                        await SaveSettingsAsync();
+                    }
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Error loading settings: {ex.Message}");
                     _settings = new AppSettings();
+                    PathService.RootPath = _settings.DefaultNotePath;
+                    await SaveSettingsAsync();
                 }
             }
             else
             {
                 _settings = new AppSettings();
+                PathService.RootPath = _settings.DefaultNotePath;
                 await SaveSettingsAsync();
             }
 
@@ -70,6 +102,7 @@ namespace NoteNest.Core.Services
         public async Task UpdateSettingsAsync(AppSettings settings)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            PathService.RootPath = _settings.DefaultNotePath;
             await SaveSettingsAsync();
         }
 
