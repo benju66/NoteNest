@@ -87,6 +87,38 @@ namespace NoteNest.Core.Services
                 await SaveSettingsAsync();
             }
 
+            // Ensure defaults AFTER loading/creating settings
+            if (_settings.RecentFiles == null)
+            {
+                _settings.RecentFiles = new System.Collections.Generic.List<string>();
+            }
+            if (_settings.WindowSettings == null)
+            {
+                _settings.WindowSettings = new WindowSettings();
+            }
+
+            if (string.IsNullOrEmpty(_settings.DefaultNotePath))
+            {
+                _settings.DefaultNotePath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "NoteNest");
+            }
+
+            if (string.IsNullOrEmpty(_settings.MetadataPath))
+            {
+                _settings.MetadataPath = Path.Combine(_settings.DefaultNotePath, ".metadata");
+            }
+
+            if (_settings.AutoSaveInterval == 0) _settings.AutoSaveInterval = 30;
+            if (_settings.FontSize == 0) _settings.FontSize = 14;
+            if (_settings.TabSize == 0) _settings.TabSize = 4;
+            if (_settings.MaxBackups == 0) _settings.MaxBackups = 5;
+            if (string.IsNullOrEmpty(_settings.Theme)) _settings.Theme = "System";
+            if (string.IsNullOrEmpty(_settings.FontFamily)) _settings.FontFamily = "Consolas";
+            if (string.IsNullOrEmpty(_settings.DefaultNoteFormat)) _settings.DefaultNoteFormat = ".txt";
+            if (string.IsNullOrEmpty(_settings.QuickNoteHotkey)) _settings.QuickNoteHotkey = "Win+N";
+            if (string.IsNullOrEmpty(_settings.QuickTaskHotkey)) _settings.QuickTaskHotkey = "Win+T";
+
             return _settings;
         }
 

@@ -120,11 +120,12 @@ namespace NoteNest.UI.Windows
                 {
                     _viewModel.Settings.DefaultNotePath = newPath;
                     _viewModel.Settings.MetadataPath = System.IO.Path.Combine(newPath, ".metadata");
+                    await _viewModel.CommitSettings();
                     
                     _viewModel.RefreshStorageProperties();
                     
                     MessageBox.Show(
-                        "Migration completed! Click OK to save settings.");
+                        "Migration completed and saved. You may need to restart NoteNest.");
                 }
             }
             catch (Exception ex)
