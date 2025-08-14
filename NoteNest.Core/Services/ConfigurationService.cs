@@ -45,18 +45,21 @@ namespace NoteNest.Core.Services
                     if (loadedSettings != null)
                     {
                         _settings = loadedSettings;
-                        
-                        // Ensure paths are resolved based on storage mode
-                        var storageService = new StorageLocationService();
-                        var resolvedPath = storageService.ResolveNotesPath(
-                            _settings.StorageMode, 
-                            _settings.CustomNotesPath);
-                        
-                        if (_settings.StorageMode != StorageMode.Local || 
-                            !string.Equals(_settings.DefaultNotePath, resolvedPath, StringComparison.OrdinalIgnoreCase))
+
+                        // Only resolve paths if they're empty or don't exist
+                        if (string.IsNullOrEmpty(_settings.DefaultNotePath) ||
+                            !Directory.Exists(_settings.DefaultNotePath))
                         {
-                            _settings.DefaultNotePath = resolvedPath;
-                            _settings.MetadataPath = Path.Combine(resolvedPath, ".metadata");
+                            var storageService = new StorageLocationService();
+                            _settings.DefaultNotePath = storageService.ResolveNotesPath(
+                                _settings.StorageMode,
+                                _settings.CustomNotesPath);
+                        }
+
+                        // Ensure metadata path is set
+                        if (string.IsNullOrEmpty(_settings.MetadataPath))
+                        {
+                            _settings.MetadataPath = Path.Combine(_settings.DefaultNotePath, ".metadata");
                         }
 
                         // Keep global path service in sync with loaded settings
