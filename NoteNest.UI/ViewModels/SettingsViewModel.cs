@@ -12,6 +12,7 @@ namespace NoteNest.UI.ViewModels
     public class SettingsViewModel : ViewModelBase
     {
         private readonly ConfigurationService _configService;
+        private readonly AppSettings _originalSettings;
         private AppSettings _settings;
         private bool _showLeftPanelOnStartup = true;
         private bool _showRightPanelOnStartup = false;
@@ -42,7 +43,8 @@ namespace NoteNest.UI.ViewModels
         public SettingsViewModel(ConfigurationService configService)
         {
             _configService = configService;
-            _settings = configService.Settings ?? new AppSettings();
+            _originalSettings = configService.Settings ?? new AppSettings();
+            _settings = CloneSettings(_originalSettings);
             _storageService = new StorageLocationService();
 
             BrowseDefaultPathCommand = new RelayCommand(_ => BrowseDefaultPath());
@@ -151,8 +153,8 @@ namespace NoteNest.UI.ViewModels
         {
             get
             {
-                // Return the actual saved path, not a recalculated one
-                return Settings.DefaultNotePath;
+                // Return the actual saved path, not the in-progress working copy
+                return _originalSettings.DefaultNotePath;
             }
         }
 
@@ -173,17 +175,9 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        public async Task SaveSettings()
+        public async Task CommitSettings()
         {
-            try
-            {
-                // Just persist current settings as-is without recalculating paths
-                await _configService.UpdateSettingsAsync(_settings);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
+            await _configService.UpdateSettingsAsync(_settings);
         }
 
         public void RefreshStorageProperties()
@@ -195,6 +189,86 @@ namespace NoteNest.UI.ViewModels
             OnPropertyChanged(nameof(CurrentStoragePath));
             OnPropertyChanged(nameof(StorageModeDescription));
             OnPropertyChanged(nameof(Settings));
+        }
+
+        public string GetCurrentSavedPath()
+        {
+            return _originalSettings.DefaultNotePath;
+        }
+
+        public string GetSelectedDestinationPath()
+        {
+            return CalculatePathFromMode(_settings);
+        }
+
+        private string CalculatePathFromMode(AppSettings settings)
+        {
+            if (settings == null)
+                return string.Empty;
+
+            switch (settings.StorageMode)
+            {
+                case StorageMode.OneDrive:
+                    var oneDrive = _storageService.GetOneDrivePath();
+                    return !string.IsNullOrEmpty(oneDrive)
+                        ? System.IO.Path.Combine(oneDrive, "NoteNest")
+                        : _storageService.ResolveNotesPath(StorageMode.Local);
+                case StorageMode.Custom:
+                    return settings.CustomNotesPath;
+                case StorageMode.Local:
+                default:
+                    return _storageService.ResolveNotesPath(StorageMode.Local);
+            }
+        }
+
+        private static AppSettings CloneSettings(AppSettings source)
+        {
+            if (source == null)
+            {
+                return new AppSettings();
+            }
+
+            var clone = new AppSettings
+            {
+                DefaultNotePath = source.DefaultNotePath,
+                MetadataPath = source.MetadataPath,
+                AutoSave = source.AutoSave,
+                AutoSaveInterval = source.AutoSaveInterval,
+                WordWrap = source.WordWrap,
+                Theme = source.Theme,
+                FontSize = source.FontSize,
+                FontFamily = source.FontFamily,
+                ShowLineNumbers = source.ShowLineNumbers,
+                ShowStatusBar = source.ShowStatusBar,
+                HighlightCurrentLine = source.HighlightCurrentLine,
+                TabSize = source.TabSize,
+                InsertSpaces = source.InsertSpaces,
+                CreateBackup = source.CreateBackup,
+                MaxBackups = source.MaxBackups,
+                ShowWelcomeScreen = source.ShowWelcomeScreen,
+                CheckForUpdates = source.CheckForUpdates,
+                StorageMode = source.StorageMode,
+                CustomNotesPath = source.CustomNotesPath,
+                AutoDetectOneDrive = source.AutoDetectOneDrive,
+                DefaultNoteFormat = source.DefaultNoteFormat,
+                EnableTaskPanel = source.EnableTaskPanel,
+                ParseMarkdownCheckboxes = source.ParseMarkdownCheckboxes,
+                QuickNoteHotkey = source.QuickNoteHotkey,
+                QuickTaskHotkey = source.QuickTaskHotkey,
+                RecentFiles = source.RecentFiles != null ? new System.Collections.Generic.List<string>(source.RecentFiles) : new System.Collections.Generic.List<string>(),
+                WindowSettings = source.WindowSettings != null
+                    ? new NoteNest.Core.Models.WindowSettings
+                    {
+                        Width = source.WindowSettings.Width,
+                        Height = source.WindowSettings.Height,
+                        Left = source.WindowSettings.Left,
+                        Top = source.WindowSettings.Top,
+                        IsMaximized = source.WindowSettings.IsMaximized
+                    }
+                    : new NoteNest.Core.Models.WindowSettings()
+            };
+
+            return clone;
         }
     }
 }

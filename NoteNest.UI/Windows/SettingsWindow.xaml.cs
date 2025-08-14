@@ -57,7 +57,7 @@ namespace NoteNest.UI.Windows
         {
             try
             {
-                await _viewModel.SaveSettings();
+                await _viewModel.CommitSettings();
                 DialogResult = true;
                 Close();
             }
@@ -78,22 +78,8 @@ namespace NoteNest.UI.Windows
             try
             {
                 var storageService = new Core.Services.StorageLocationService();
-                var currentPath = _viewModel.Settings.DefaultNotePath;
-                string newPath;
-                var mode = _viewModel.Settings.StorageMode;
-                if (mode == Core.Models.StorageMode.Custom)
-                {
-                    newPath = _viewModel.Settings.CustomNotesPath;
-                }
-                else if (mode == Core.Models.StorageMode.OneDrive)
-                {
-                    var od = storageService.GetOneDrivePath();
-                    newPath = !string.IsNullOrEmpty(od) ? System.IO.Path.Combine(od, "NoteNest") : storageService.ResolveNotesPath(Core.Models.StorageMode.Local);
-                }
-                else
-                {
-                    newPath = storageService.ResolveNotesPath(Core.Models.StorageMode.Local);
-                }
+                var currentPath = _viewModel.GetCurrentSavedPath();
+                var newPath = _viewModel.GetSelectedDestinationPath();
                 
                 if (string.IsNullOrEmpty(currentPath) || string.IsNullOrEmpty(newPath))
                 {
@@ -132,33 +118,13 @@ namespace NoteNest.UI.Windows
                 
                 if (migrationWindow.ShowDialog() == true && migrationWindow.MigrationSuccessful)
                 {
-                    var oneDrivePath = storageService.GetOneDrivePath();
-                    
-                    if (!string.IsNullOrEmpty(oneDrivePath) && newPath.StartsWith(oneDrivePath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _viewModel.Settings.StorageMode = Core.Models.StorageMode.OneDrive;
-                    }
-                    else if (!newPath.Contains("Documents\\NoteNest", StringComparison.OrdinalIgnoreCase))
-                    {
-                        _viewModel.Settings.StorageMode = Core.Models.StorageMode.Custom;
-                        _viewModel.Settings.CustomNotesPath = newPath;
-                    }
-                    else
-                    {
-                        _viewModel.Settings.StorageMode = Core.Models.StorageMode.Local;
-                    }
-                    
                     _viewModel.Settings.DefaultNotePath = newPath;
                     _viewModel.Settings.MetadataPath = System.IO.Path.Combine(newPath, ".metadata");
-                    await _viewModel.SaveSettings();
                     
                     _viewModel.RefreshStorageProperties();
                     
                     MessageBox.Show(
-                        "Migration completed successfully!\n\nPlease restart NoteNest for the changes to take effect.",
-                        "Restart Required",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                        "Migration completed! Click OK to save settings.");
                 }
             }
             catch (Exception ex)
