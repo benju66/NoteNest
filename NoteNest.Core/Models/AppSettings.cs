@@ -2,6 +2,13 @@ using System.Collections.Generic;
 
 namespace NoteNest.Core.Models
 {
+    public enum StorageMode
+    {
+        Local,
+        OneDrive,
+        Custom
+    }
+
     public class AppSettings
     {
         public string DefaultNotePath { get; set; }
@@ -23,6 +30,15 @@ namespace NoteNest.Core.Models
         public bool CheckForUpdates { get; set; }
         public List<string> RecentFiles { get; set; }
         public WindowSettings WindowSettings { get; set; }
+
+        public StorageMode StorageMode { get; set; } = StorageMode.Local;
+        public string CustomNotesPath { get; set; }
+        public bool AutoDetectOneDrive { get; set; } = true;
+        public string DefaultNoteFormat { get; set; } = ".txt";
+        public bool EnableTaskPanel { get; set; } = true;
+        public bool ParseMarkdownCheckboxes { get; set; } = true;
+        public string QuickNoteHotkey { get; set; } = "Win+N";
+        public string QuickTaskHotkey { get; set; } = "Win+T";
 
         public AppSettings()
         {

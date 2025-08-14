@@ -25,6 +25,7 @@ namespace NoteNest.UI.Windows
                 AppearanceSettings.Visibility = Visibility.Collapsed;
                 EditorSettings.Visibility = Visibility.Collapsed;
                 FilesSettings.Visibility = Visibility.Collapsed;
+                StorageSettings.Visibility = Visibility.Collapsed;
 
                 // Show selected page
                 switch (item.Tag?.ToString())
@@ -40,6 +41,9 @@ namespace NoteNest.UI.Windows
                         break;
                     case "Files":
                         FilesSettings.Visibility = Visibility.Visible;
+                        break;
+                    case "Storage":
+                        StorageSettings.Visibility = Visibility.Visible;
                         break;
                 }
             }
@@ -63,6 +67,11 @@ namespace NoteNest.UI.Windows
         {
             DialogResult = false;
             Close();
+        }
+
+        private void MigrateNotes_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show("Migration wizard will be implemented in Day 2", "Coming Soon");
         }
     }
 }
