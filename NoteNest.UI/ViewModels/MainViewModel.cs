@@ -175,6 +175,19 @@ namespace NoteNest.UI.ViewModels
                 _stateManager = ServiceLocator.GetService<IStateManager>() ??
                     new StateManager(_logger);
 
+                // Forward StateManager property changes to ViewModel properties
+                try
+                {
+                    _stateManager.PropertyChanged += (s, e) =>
+                    {
+                        if (e.PropertyName == nameof(IStateManager.IsLoading))
+                            OnPropertyChanged(nameof(IsLoading));
+                        if (e.PropertyName == nameof(IStateManager.StatusMessage))
+                            OnPropertyChanged(nameof(StatusMessage));
+                    };
+                }
+                catch { }
+
                 // Create ServiceErrorHandler WITH StateManager
                 var errorHandler = ServiceLocator.GetService<IServiceErrorHandler>() ??
                     new ServiceErrorHandler(_logger, _stateManager);

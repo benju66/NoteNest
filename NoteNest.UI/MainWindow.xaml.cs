@@ -17,6 +17,13 @@ namespace NoteNest.UI
         {
             InitializeComponent();
             UpdateThemeMenuChecks();
+
+            // Ensure NoteNestPanel uses the same DataContext as the window
+            this.Loaded += (sender, e) =>
+            {
+                if (MainPanel != null && DataContext != null)
+                    MainPanel.DataContext = DataContext;
+            };
         }
 
         private void NewNoteMenuItem_Click(object sender, RoutedEventArgs e)
