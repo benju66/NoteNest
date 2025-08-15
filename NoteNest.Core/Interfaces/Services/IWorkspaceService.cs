@@ -21,6 +21,7 @@ namespace NoteNest.Core.Interfaces.Services
         
         bool HasUnsavedChanges { get; }
         ITabItem? FindTabByNote(NoteModel note);
+        ITabItem? FindTabByPath(string filePath);
     }
     
     public interface ITabItem

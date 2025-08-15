@@ -41,7 +41,15 @@ namespace NoteNest.UI.Services
                     sp.GetRequiredService<IAppLogger>(),
                     sp.GetRequiredService<IFileSystemProvider>()
                 ));
-            services.AddSingleton<IWorkspaceService, WorkspaceService>();
+            // Update WorkspaceService registration
+            services.AddSingleton<IWorkspaceService>(sp => 
+                new WorkspaceService(
+                    sp.GetRequiredService<ContentCache>(),
+                    sp.GetRequiredService<NoteService>(),
+                    sp.GetRequiredService<IServiceErrorHandler>(),
+                    sp.GetRequiredService<IAppLogger>(),
+                    sp.GetRequiredService<INoteOperationsService>()
+                ));
             services.AddSingleton<IDialogService, DialogService>();
             
             // ViewModels (Transient - new instance each time)

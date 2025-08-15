@@ -26,13 +26,15 @@ namespace NoteNest.UI.ViewModels
         private readonly IStateManager _stateManager;
         // Add new service field
         private readonly INoteOperationsService _noteOperationsService;
+        // Add workspace service
+        private readonly IWorkspaceService _workspaceService;
+        private readonly WorkspaceViewModel _workspaceViewModel;
         
         private readonly NoteService _noteService;
         private readonly ConfigurationService _configService;
         private readonly FileWatcherService _fileWatcher;
         private readonly IAppLogger _logger;
         private readonly SearchIndexService _searchIndex;
-        private readonly ContentCache _contentCache;
         private DispatcherTimer _autoSaveTimer;
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -61,16 +63,22 @@ namespace NoteNest.UI.ViewModels
             set => SetProperty(ref _categories, value);
         }
 
-        public ObservableCollection<NoteTabItem> OpenTabs
-        {
-            get => _openTabs;
-            set => SetProperty(ref _openTabs, value);
-        }
+        public ObservableCollection<NoteTabItem> OpenTabs => _workspaceViewModel?.OpenTabs ?? _openTabs;
 
         public NoteTabItem SelectedTab
         {
-            get => _selectedTab;
-            set => SetProperty(ref _selectedTab, value);
+            get => _workspaceViewModel?.SelectedTab ?? _selectedTab;
+            set
+            {
+                if (_workspaceViewModel != null)
+                {
+                    _workspaceViewModel.SelectedTab = value;
+                }
+                else
+                {
+                    SetProperty(ref _selectedTab, value);
+                }
+            }
         }
 
         public CategoryTreeItem SelectedCategory
@@ -171,7 +179,6 @@ namespace NoteNest.UI.ViewModels
                 _noteService = new NoteService(fileSystem, _configService, _logger);
                 _fileWatcher = new FileWatcherService(_logger);
                 _searchIndex = new SearchIndexService();
-                _contentCache = new ContentCache(50);
 
                 // Create StateManager FIRST
                 _stateManager = ServiceLocator.GetService<IStateManager>() ??
@@ -215,11 +222,14 @@ namespace NoteNest.UI.ViewModels
                         fileSystem,
                         _configService);
 
-                // Initialize collections
+                // Create WorkspaceService
+                _workspaceService = ServiceLocator.GetRequiredService<IWorkspaceService>();
+
+                // Create WorkspaceViewModel for UI binding
+                _workspaceViewModel = new WorkspaceViewModel(_workspaceService);
+
+                // Initialize collections (OpenTabs now comes from WorkspaceViewModel)
                 Categories = new ObservableCollection<CategoryTreeItem>();
-                OpenTabs = new ObservableCollection<NoteTabItem>();
-                // Set up collection change tracking for notes
-                OpenTabs.CollectionChanged += OnOpenTabsChanged;
 
                 // Initialize commands
                 InitializeCommands();
@@ -262,8 +272,8 @@ namespace NoteNest.UI.ViewModels
         {
             NewNoteCommand = new RelayCommand(async _ => await CreateNewNoteAsync(), _ => SelectedCategory != null);
             OpenNoteCommand = new RelayCommand<NoteTreeItem>(async note => await OpenNoteAsync(note));
-            SaveNoteCommand = new RelayCommand(async _ => await SaveCurrentNoteAsync(), _ => SelectedTab?.IsDirty == true);
-            SaveAllCommand = new RelayCommand(async _ => await SaveAllNotesAsync(), _ => OpenTabs.Any(t => t.IsDirty));
+            SaveNoteCommand = new RelayCommand(async _ => await SaveCurrentNoteAsync(), _ => _workspaceService?.HasUnsavedChanges == true || SelectedTab?.IsDirty == true);
+            SaveAllCommand = new RelayCommand(async _ => await SaveAllNotesAsync(), _ => _workspaceService?.HasUnsavedChanges == true);
             CloseTabCommand = new RelayCommand<NoteTabItem>(async tab => await CloseTabAsync(tab));
             NewCategoryCommand = new RelayCommand(async _ => await CreateNewCategoryAsync());
             NewSubCategoryCommand = new RelayCommand<CategoryTreeItem>(async cat => await CreateNewSubCategoryAsync(cat), _ => SelectedCategory != null);
@@ -457,36 +467,30 @@ namespace NoteNest.UI.ViewModels
 			_isOpeningNote = true;
 			try
 			{
-				await SafeExecuteAsync(async () =>
+				// Check if already open using service
+				var existingTab = _workspaceService.FindTabByNote(noteItem.Model);
+				if (existingTab != null)
 				{
-					// Check if already open
-					var targetPath = NormalizePath(noteItem.Model.FilePath);
-					var existingTab = OpenTabs.FirstOrDefault(t => NormalizePath(t.Note.FilePath) == targetPath);
-					if (existingTab != null)
+					// Find UI tab
+					var uiTab = OpenTabs.FirstOrDefault(t => 
+						t.Note.FilePath.Equals(noteItem.Model.FilePath, StringComparison.OrdinalIgnoreCase));
+					
+					if (uiTab != null)
 					{
-						SelectedTab = existingTab;
+						SelectedTab = uiTab;
 						return;
 					}
+				}
 
-					// Use content cache for faster loading
-					if (string.IsNullOrEmpty(noteItem.Model.Content))
-					{
-						noteItem.Model.Content = await _contentCache.GetContentAsync(
-							noteItem.Model.FilePath,
-							async (path) => 
-							{
-								var note = await _noteService.LoadNoteAsync(path);
-								return note.Content;
-							});
-					}
+				// Open through service (loads content)
+				await _workspaceService.OpenNoteAsync(noteItem.Model);
+				
+				// Create UI tab
+				var tab = new NoteTabItem(noteItem.Model);
+				_workspaceViewModel.AddTab(tab);
+				SelectedTab = tab;
 
-					var tab = new NoteTabItem(noteItem.Model);
-					OpenTabs.Add(tab);
-					SelectedTab = tab;
-
-					StatusMessage = $"Opened: {noteItem.Model.Title}";
-					_logger.Debug($"Opened note: {noteItem.Model.FilePath}");
-				}, "Open Note");
+				_stateManager.StatusMessage = $"Opened: {noteItem.Model.Title}";
 			}
 			finally
 			{
@@ -511,21 +515,18 @@ namespace NoteNest.UI.ViewModels
 
         private async Task SaveAllNotesAsync(CancellationToken cancellationToken)
         {
-            if (!OpenTabs.Any(t => t.IsDirty)) return;
+            if (!_workspaceService.HasUnsavedChanges) return;
             
             _stateManager.BeginOperation("Saving all notes...");
             
             try
             {
-                // Save through service (it tracks open notes)
-                await _noteOperationsService.SaveAllNotesAsync();
+                await _workspaceService.SaveAllTabsAsync();
                 
                 // Update UI state
                 foreach (var tab in OpenTabs.Where(t => t.IsDirty))
                 {
                     if (cancellationToken.IsCancellationRequested) break;
-                    
-                    tab.IsDirty = false;
                     tab.UpdateLastSaved();
                 }
                 
@@ -552,10 +553,13 @@ namespace NoteNest.UI.ViewModels
                 if (result == true)
                 {
                     await _noteOperationsService.SaveNoteAsync(tab.Note);
+                    tab.IsDirty = false;
                 }
             }
 
-            OpenTabs.Remove(tab); // This will trigger untracking via CollectionChanged
+            // Remove through workspace
+            _workspaceViewModel.RemoveTab(tab);
+            
             _logger.Debug($"Closed tab: {tab.Note.Title}");
         }
 
@@ -1067,11 +1071,11 @@ namespace NoteNest.UI.ViewModels
         {
             if (noteItem == null) return;
             
-            // Close tab if open
+            // Close tab if open via workspace
             var openTab = OpenTabs.FirstOrDefault(t => ReferenceEquals(t.Note, noteItem.Model));
             if (openTab != null)
             {
-                OpenTabs.Remove(openTab);
+                _workspaceViewModel.RemoveTab(openTab);
             }
             
             // Delete through service
@@ -1093,30 +1097,7 @@ namespace NoteNest.UI.ViewModels
             _stateManager.StatusMessage = $"Deleted '{noteItem.Title}'";
         }
 
-        // Add handler for tracking open notes
-        private void OnOpenTabsChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
-        {
-            if (_noteOperationsService == null) return;
-            
-            if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
-            {
-                foreach (NoteTabItem tab in e.NewItems)
-                {
-                    _noteOperationsService.TrackOpenNote(tab.Note);
-                }
-            }
-            else if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Remove)
-            {
-                foreach (NoteTabItem tab in e.OldItems)
-                {
-                    _noteOperationsService.UntrackOpenNote(tab.Note);
-                }
-            }
-            else if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
-            {
-                _noteOperationsService.ClearTrackedNotes();
-            }
-        }
+        // Removed: OnOpenTabsChanged tracking; tracking handled by workspace service
 
         private string NormalizePath(string path)
         {
@@ -1204,9 +1185,15 @@ namespace NoteNest.UI.ViewModels
                     
                     try
                     {
+                        // Dispose workspace view model
+                        (_workspaceViewModel as IDisposable)?.Dispose();
+                        
+                        // Close all tabs through service
+                        _workspaceService?.CloseAllTabsAsync().Wait(TimeSpan.FromSeconds(2));
+                        
                         // Step 1: Cancel all background operations immediately
                         _cancellationTokenSource?.Cancel();
-
+ 
                         // Step 2: Wait briefly for initialization to complete
                         try
                         {
@@ -1280,30 +1267,11 @@ namespace NoteNest.UI.ViewModels
                             _logger?.Warning($"Error disposing cancellation token: {ex.Message}");
                         }
                         
-                        // Dispose new services
-                        try
-                        {
-                            _contentCache?.Dispose();
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger?.Warning($"Error disposing content cache: {ex.Message}");
-                        }
-                        
                         _logger?.Info("MainViewModel disposed successfully");
                     }
                     catch (Exception ex)
                     {
-                        // Final safety net - log but don't throw
-                        try
-                        {
-                            _logger?.Error(ex, "Error during MainViewModel disposal");
-                        }
-                        catch
-                        {
-                            // If even logging fails, write to debug output
-                            System.Diagnostics.Debug.WriteLine($"Fatal error during MainViewModel disposal: {ex.Message}");
-                        }
+                        _logger?.Error(ex, "Error during disposal");
                     }
                 }
                 _disposed = true;
