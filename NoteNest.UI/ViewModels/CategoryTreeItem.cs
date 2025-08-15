@@ -210,6 +210,12 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        // Public wrapper to notify property changes from outside this class
+        public new void OnPropertyChanged(string propertyName)
+        {
+            base.OnPropertyChanged(propertyName);
+        }
+
         public void Dispose()
         {
             if (_model is INotifyPropertyChanged inpc)

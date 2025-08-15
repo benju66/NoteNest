@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using NoteNest.Core.Interfaces;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services.Logging;
@@ -11,51 +15,182 @@ namespace NoteNest.Core.Services.Implementation
         private readonly NoteService _noteService;
         private readonly IServiceErrorHandler _errorHandler;
         private readonly IAppLogger _logger;
+        private readonly IFileSystemProvider _fileSystem;
+        private readonly ConfigurationService _configService;
+        
+        // Store references to open notes for SaveAll functionality
+        private readonly List<NoteModel> _openNotes = new List<NoteModel>();
         
         public NoteOperationsService(
             NoteService noteService,
             IServiceErrorHandler errorHandler,
-            IAppLogger logger)
+            IAppLogger logger,
+            IFileSystemProvider fileSystem,
+            ConfigurationService configService)
         {
             _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
             _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            _configService = configService ?? throw new ArgumentNullException(nameof(configService));
+            
+            _logger.Debug("NoteOperationsService initialized");
         }
         
         public async Task<NoteModel> CreateNoteAsync(CategoryModel category, string title, string content = "")
         {
-            // TODO: Implement in Phase 2
-            throw new NotImplementedException("Will be implemented in Phase 2");
+            if (category == null)
+                throw new ArgumentNullException(nameof(category));
+            if (string.IsNullOrWhiteSpace(title))
+                throw new ArgumentException("Note title cannot be empty.", nameof(title));
+            
+            return await _errorHandler.SafeExecuteAsync(async () =>
+            {
+                var note = await _noteService.CreateNoteAsync(category, title, content ?? string.Empty);
+                
+                _logger.Info($"Created new note: {title} in category: {category.Name}");
+                return note;
+            }, "Create Note");
         }
         
         public async Task SaveNoteAsync(NoteModel note)
         {
-            // TODO: Implement in Phase 2
-            throw new NotImplementedException("Will be implemented in Phase 2");
+            if (note == null)
+                throw new ArgumentNullException(nameof(note));
+            
+            await _errorHandler.SafeExecuteAsync(async () =>
+            {
+                await _noteService.SaveNoteAsync(note);
+                
+                // Add to recent files
+                _configService.AddRecentFile(note.FilePath);
+                await _configService.SaveSettingsAsync();
+                
+                _logger.Info($"Saved note: {note.Title}");
+            }, "Save Note");
         }
         
         public async Task DeleteNoteAsync(NoteModel note)
         {
-            // TODO: Implement in Phase 2
-            throw new NotImplementedException("Will be implemented in Phase 2");
+            if (note == null)
+                throw new ArgumentNullException(nameof(note));
+            
+            await _errorHandler.SafeExecuteAsync(async () =>
+            {
+                await _noteService.DeleteNoteAsync(note);
+                
+                // Remove from open notes tracking
+                _openNotes.Remove(note);
+                
+                _logger.Info($"Deleted note: {note.Title}");
+            }, "Delete Note");
         }
         
         public async Task<bool> RenameNoteAsync(NoteModel note, string newName)
         {
-            // TODO: Implement in Phase 2
-            throw new NotImplementedException("Will be implemented in Phase 2");
+            if (note == null)
+                throw new ArgumentNullException(nameof(note));
+            if (string.IsNullOrWhiteSpace(newName))
+                throw new ArgumentException("New name cannot be empty.", nameof(newName));
+            
+            return await _errorHandler.SafeExecuteAsync(async () =>
+            {
+                var oldPath = note.FilePath;
+                var directory = Path.GetDirectoryName(oldPath);
+                var newFileName = PathService.SanitizeName(newName) + ".txt";
+                var newPath = Path.Combine(directory, newFileName);
+                
+                // Check if file already exists
+                if (await _fileSystem.ExistsAsync(newPath) && newPath != oldPath)
+                {
+                    _logger.Warning($"Cannot rename - file already exists: {newPath}");
+                    return false;
+                }
+                
+                // Rename physical file
+                if (await _fileSystem.ExistsAsync(oldPath))
+                {
+                    // Use file system operations to rename
+                    // Note: IFileSystemProvider might need a MoveAsync method
+                    if (File.Exists(oldPath))
+                    {
+                        File.Move(oldPath, newPath);
+                    }
+                }
+                
+                // Update note model
+                note.Title = newName;
+                note.FilePath = newPath;
+                
+                _logger.Info($"Renamed note from '{Path.GetFileName(oldPath)}' to '{newFileName}'");
+                return true;
+            }, "Rename Note");
         }
         
         public async Task<bool> MoveNoteAsync(NoteModel note, CategoryModel targetCategory)
         {
-            // TODO: Implement in Phase 2
-            throw new NotImplementedException("Will be implemented in Phase 2");
+            if (note == null)
+                throw new ArgumentNullException(nameof(note));
+            if (targetCategory == null)
+                throw new ArgumentNullException(nameof(targetCategory));
+            
+            return await _errorHandler.SafeExecuteAsync(async () =>
+            {
+                var success = await _noteService.MoveNoteAsync(note, targetCategory);
+                
+                if (success)
+                {
+                    _logger.Info($"Moved note '{note.Title}' to category '{targetCategory.Name}'");
+                }
+                
+                return success;
+            }, "Move Note");
         }
         
         public async Task SaveAllNotesAsync()
         {
-            // TODO: Implement in Phase 2
-            throw new NotImplementedException("Will be implemented in Phase 2");
+            await _errorHandler.SafeExecuteAsync(async () =>
+            {
+                var saveCount = 0;
+                var notes = _openNotes.ToList(); // Create a copy to avoid modification during iteration
+                
+                foreach (var note in notes)
+                {
+                    if (note.IsDirty)
+                    {
+                        await _noteService.SaveNoteAsync(note);
+                        saveCount++;
+                    }
+                }
+                
+                if (saveCount > 0)
+                {
+                    await _configService.SaveSettingsAsync();
+                    _logger.Info($"Saved {saveCount} notes");
+                }
+            }, "Save All Notes");
+        }
+        
+        // Helper methods for tracking open notes
+        public void TrackOpenNote(NoteModel note)
+        {
+            if (note != null && !_openNotes.Contains(note))
+            {
+                _openNotes.Add(note);
+            }
+        }
+        
+        public void UntrackOpenNote(NoteModel note)
+        {
+            if (note != null)
+            {
+                _openNotes.Remove(note);
+            }
+        }
+        
+        public void ClearTrackedNotes()
+        {
+            _openNotes.Clear();
         }
     }
 }

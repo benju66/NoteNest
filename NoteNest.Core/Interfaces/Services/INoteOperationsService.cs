@@ -11,5 +11,10 @@ namespace NoteNest.Core.Interfaces.Services
         Task<bool> RenameNoteAsync(NoteModel note, string newName);
         Task<bool> MoveNoteAsync(NoteModel note, CategoryModel targetCategory);
         Task SaveAllNotesAsync();
+        
+        // Methods for tracking open notes (for SaveAll functionality)
+        void TrackOpenNote(NoteModel note);
+        void UntrackOpenNote(NoteModel note);
+        void ClearTrackedNotes();
     }
 }

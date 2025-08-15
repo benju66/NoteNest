@@ -35,6 +35,21 @@ namespace NoteNest.UI.Services
 				return result == MessageBoxResult.Yes;
 			});
 		}
+
+		public async Task<bool?> ShowYesNoCancelAsync(string message, string title)
+		{
+			return await Application.Current.Dispatcher.InvokeAsync(() =>
+			{
+				var result = MessageBox.Show(message, title, MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+				
+				return result switch
+				{
+					MessageBoxResult.Yes => true,
+					MessageBoxResult.No => false,
+					_ => (bool?)null
+				};
+			});
+		}
 		
 		public void ShowError(string message, string title = "Error")
 		{

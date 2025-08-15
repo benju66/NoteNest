@@ -24,6 +24,8 @@ namespace NoteNest.UI.ViewModels
         private readonly ICategoryManagementService _categoryService;
         private readonly IDialogService _dialogService;
         private readonly IStateManager _stateManager;
+        // Add new service field
+        private readonly INoteOperationsService _noteOperationsService;
         
         private readonly NoteService _noteService;
         private readonly ConfigurationService _configService;
@@ -204,9 +206,20 @@ namespace NoteNest.UI.ViewModels
                 _dialogService = ServiceLocator.GetService<IDialogService>() ??
                     new DialogService();
 
+                // Add NoteOperationsService
+                _noteOperationsService = ServiceLocator.GetService<INoteOperationsService>() ??
+                    new NoteOperationsService(
+                        _noteService,
+                        errorHandler,
+                        _logger,
+                        fileSystem,
+                        _configService);
+
                 // Initialize collections
                 Categories = new ObservableCollection<CategoryTreeItem>();
                 OpenTabs = new ObservableCollection<NoteTabItem>();
+                // Set up collection change tracking for notes
+                OpenTabs.CollectionChanged += OnOpenTabsChanged;
 
                 // Initialize commands
                 InitializeCommands();
@@ -413,21 +426,19 @@ namespace NoteNest.UI.ViewModels
 
         private async Task CreateNewNoteAsync()
         {
-            await SafeExecuteAsync(async () =>
+            if (SelectedCategory == null)
             {
-                if (SelectedCategory == null)
-                {
-                    MessageBox.Show(
-                        "Please select a category first to create a new note.", 
-                        "No Category Selected", 
-                        MessageBoxButton.OK, 
-                        MessageBoxImage.Information);
-                    return;
-                }
+                _dialogService.ShowInfo(
+                    "Please select a category first to create a new note.", 
+                    "No Category Selected");
+                return;
+            }
 
-                var title = "New Note " + DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
-                var note = await _noteService.CreateNoteAsync(SelectedCategory.Model, title, string.Empty);
-                
+            var title = "New Note " + DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
+            var note = await _noteOperationsService.CreateNoteAsync(SelectedCategory.Model, title, string.Empty);
+            
+            if (note != null)
+            {
                 var noteItem = new NoteTreeItem(note);
                 SelectedCategory.Notes.Add(noteItem);
                 SelectedCategory.IsExpanded = true;
@@ -435,9 +446,8 @@ namespace NoteNest.UI.ViewModels
                 SelectedNote = noteItem;
                 await OpenNoteAsync(noteItem);
                 
-                StatusMessage = $"Created: {title}";
-                _logger.Info($"Created new note: {title}");
-            }, "Create New Note");
+                _stateManager.StatusMessage = $"Created: {title}";
+            }
         }
 
 		private async Task OpenNoteAsync(NoteTreeItem noteItem)
@@ -488,17 +498,10 @@ namespace NoteNest.UI.ViewModels
         {
             if (SelectedTab == null) return;
 
-            await SafeExecuteAsync(async () =>
-            {
-                await _noteService.SaveNoteAsync(SelectedTab.Note);
-                SelectedTab.IsDirty = false;
-                StatusMessage = $"Saved: {SelectedTab.Note.Title}";
-                
-                _configService.AddRecentFile(SelectedTab.Note.FilePath);
-                await _configService.SaveSettingsAsync();
-                
-                _logger.Info($"Saved note: {SelectedTab.Note.Title}");
-            }, "Save Note");
+            await _noteOperationsService.SaveNoteAsync(SelectedTab.Note);
+            SelectedTab.IsDirty = false;
+            SelectedTab.UpdateLastSaved();
+            _stateManager.StatusMessage = $"Saved: {SelectedTab.Note.Title}";
         }
 
         private async Task SaveAllNotesAsync()
@@ -508,52 +511,30 @@ namespace NoteNest.UI.ViewModels
 
         private async Task SaveAllNotesAsync(CancellationToken cancellationToken)
         {
+            if (!OpenTabs.Any(t => t.IsDirty)) return;
+            
+            _stateManager.BeginOperation("Saving all notes...");
+            
             try
             {
-                if (_disposed || cancellationToken.IsCancellationRequested)
-                {
-                    _logger?.Info("SaveAllNotesAsync cancelled - disposed or cancellation requested");
-                    return;
-                }
-
-                var dirtyTabs = OpenTabs?.Where(t => t.IsDirty).ToList() ?? new List<NoteTabItem>();
-                var savedCount = 0;
+                // Save through service (it tracks open notes)
+                await _noteOperationsService.SaveAllNotesAsync();
                 
-                foreach (var tab in dirtyTabs)
+                // Update UI state
+                foreach (var tab in OpenTabs.Where(t => t.IsDirty))
                 {
-                    if (cancellationToken.IsCancellationRequested || _disposed)
-                        break;
-                        
-                    try
-                    {
-                        await _noteService.SaveNoteAsync(tab.Note);
-                        tab.IsDirty = false;
-                        savedCount++;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.Warning($"Failed to save note {tab.Note.Title}: {ex.Message}");
-                        // Continue with other notes
-                    }
+                    if (cancellationToken.IsCancellationRequested) break;
+                    
+                    tab.IsDirty = false;
+                    tab.UpdateLastSaved();
                 }
                 
-                if (savedCount > 0 && !_disposed)
-                {
-                    StatusMessage = $"Saved {savedCount} notes";
-                    _logger?.Info($"Saved {savedCount} notes");
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                _logger?.Info("SaveAllNotesAsync was cancelled");
+                _stateManager.EndOperation("All notes saved");
             }
             catch (Exception ex)
             {
-                _logger?.Error(ex, "Error in SaveAllNotesAsync");
-                if (!_disposed)
-                {
-                    StatusMessage = "Error saving notes";
-                }
+                _logger.Error(ex, "Failed to save all notes");
+                _stateManager.EndOperation("Error saving notes");
             }
         }
 
@@ -563,20 +544,18 @@ namespace NoteNest.UI.ViewModels
 
             if (tab.IsDirty)
             {
-                var result = MessageBox.Show(
-                    $"Save changes to {tab.Note.Title}?",
-                    "Unsaved Changes",
-                    MessageBoxButton.YesNoCancel,
-                    MessageBoxImage.Question);
+                var result = await _dialogService.ShowYesNoCancelAsync(
+                    $"Save changes to '{tab.Title}'?",
+                    "Unsaved Changes");
 
-                if (result == MessageBoxResult.Cancel) return;
-                if (result == MessageBoxResult.Yes)
+                if (result == null) return; // Cancel
+                if (result == true)
                 {
-                    await SaveCurrentNoteAsync();
+                    await _noteOperationsService.SaveNoteAsync(tab.Note);
                 }
             }
 
-            OpenTabs.Remove(tab);
+            OpenTabs.Remove(tab); // This will trigger untracking via CollectionChanged
             _logger.Debug($"Closed tab: {tab.Note.Title}");
         }
 
@@ -926,8 +905,9 @@ namespace NoteNest.UI.ViewModels
                 {
                     foreach (var tab in dirtyTabs)
                     {
-                        await _noteService.SaveNoteAsync(tab.Note);
+                        await _noteOperationsService.SaveNoteAsync(tab.Note);
                         tab.IsDirty = false;
+                        tab.UpdateLastSaved();
                     }
                     
                     StatusMessage = $"Auto-saved {dirtyTabs.Count} note(s)";
@@ -1061,73 +1041,81 @@ namespace NoteNest.UI.ViewModels
         {
             if (noteItem == null || string.IsNullOrWhiteSpace(newName)) return;
 
-            await SafeExecuteAsync(() =>
+            var success = await _noteOperationsService.RenameNoteAsync(noteItem.Model, newName);
+            
+            if (!success)
             {
-                var oldPath = noteItem.Model.FilePath;
-                var directory = Path.GetDirectoryName(oldPath);
-                var newFileName = PathService.SanitizeName(newName) + ".txt";
-                var newPath = Path.Combine(directory, newFileName);
-                
-                if (File.Exists(newPath) && newPath != oldPath)
-                {
-                    MessageBox.Show("A note with this name already exists.", "Name Conflict", 
-                        MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-                
-                if (File.Exists(oldPath))
-                {
-                    File.Move(oldPath, newPath);
-                }
-                
-                noteItem.Model.Title = newName;
-                noteItem.Model.FilePath = newPath;
-                
-                var oldNorm = NormalizePath(oldPath);
-                var openTab = OpenTabs.FirstOrDefault(t => NormalizePath(t.Note.FilePath) == oldNorm);
-                if (openTab != null)
-                {
-                    openTab.Note.Title = newName;
-                    openTab.Note.FilePath = newPath;
-                    openTab.OnPropertyChanged(nameof(NoteTabItem.Title));
-                }
-                
-                StatusMessage = $"Renamed note to '{newName}'";
-                _logger.Info($"Renamed note from {oldPath} to {newPath}");
-            }, "Rename Note");
+                _dialogService.ShowError("A note with this name already exists.", "Name Conflict");
+                return;
+            }
+            
+            // Update UI elements
+            noteItem.OnPropertyChanged(nameof(NoteTreeItem.Title));
+            noteItem.OnPropertyChanged(nameof(NoteTreeItem.FilePath));
+            
+            // Update open tab if exists
+            var openTab = OpenTabs.FirstOrDefault(t => ReferenceEquals(t.Note, noteItem.Model));
+            if (openTab != null)
+            {
+                openTab.OnPropertyChanged(nameof(NoteTabItem.Title));
+            }
+            
+            _stateManager.StatusMessage = $"Renamed note to '{newName}'";
         }
 
         public async Task DeleteNoteAsync(NoteTreeItem noteItem)
         {
             if (noteItem == null) return;
-
-            await SafeExecuteAsync(async () =>
+            
+            // Close tab if open
+            var openTab = OpenTabs.FirstOrDefault(t => ReferenceEquals(t.Note, noteItem.Model));
+            if (openTab != null)
             {
-                var targetPath = NormalizePath(noteItem.Model.FilePath);
-                var openTab = OpenTabs.FirstOrDefault(t => NormalizePath(t.Note.FilePath) == targetPath);
-                if (openTab != null)
+                OpenTabs.Remove(openTab);
+            }
+            
+            // Delete through service
+            await _noteOperationsService.DeleteNoteAsync(noteItem.Model);
+            
+            // Remove from tree
+            CategoryTreeItem containingCategory = null;
+            foreach (var cat in Categories)
+            {
+                containingCategory = FindCategoryContainingNote(cat, noteItem);
+                if (containingCategory != null) break;
+            }
+            
+            if (containingCategory != null)
+            {
+                containingCategory.Notes.Remove(noteItem);
+            }
+            
+            _stateManager.StatusMessage = $"Deleted '{noteItem.Title}'";
+        }
+
+        // Add handler for tracking open notes
+        private void OnOpenTabsChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (_noteOperationsService == null) return;
+            
+            if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+            {
+                foreach (NoteTabItem tab in e.NewItems)
                 {
-                    OpenTabs.Remove(openTab);
+                    _noteOperationsService.TrackOpenNote(tab.Note);
                 }
-                
-                await _noteService.DeleteNoteAsync(noteItem.Model);
-                
-                // Find the category containing this note
-                CategoryTreeItem containingCategory = null;
-                foreach (var cat in Categories)
+            }
+            else if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Remove)
+            {
+                foreach (NoteTabItem tab in e.OldItems)
                 {
-                    containingCategory = FindCategoryContainingNote(cat, noteItem);
-                    if (containingCategory != null) break;
+                    _noteOperationsService.UntrackOpenNote(tab.Note);
                 }
-                
-                if (containingCategory != null)
-                {
-                    containingCategory.Notes.Remove(noteItem);
-                }
-                
-                StatusMessage = $"Deleted '{noteItem.Title}'";
-                _logger.Info($"Deleted note: {noteItem.Model.FilePath}");
-            }, "Delete Note");
+            }
+            else if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+            {
+                _noteOperationsService.ClearTrackedNotes();
+            }
         }
 
         private string NormalizePath(string path)
@@ -1162,43 +1150,38 @@ namespace NoteNest.UI.ViewModels
         public async Task<bool> MoveNoteToCategory(NoteTreeItem noteItem, CategoryTreeItem targetCategory)
         {
             if (noteItem == null || targetCategory == null) return false;
-            try
+            
+            var success = await _noteOperationsService.MoveNoteAsync(noteItem.Model, targetCategory.Model);
+            
+            if (success)
             {
-                var success = await _noteService.MoveNoteAsync(noteItem.Model, targetCategory.Model);
-                if (success)
+                // Remove from old category tree
+                CategoryTreeItem oldCategory = null;
+                foreach (var cat in Categories)
                 {
-                    // Remove from old category tree
-                    CategoryTreeItem oldCategory = null;
-                    foreach (var cat in Categories)
-                    {
-                        oldCategory = FindCategoryContainingNote(cat, noteItem);
-                        if (oldCategory != null) break;
-                    }
-                    if (oldCategory != null)
-                    {
-                        oldCategory.Notes.Remove(noteItem);
-                    }
-
-                    // Add to new category tree (reuse same NoteTreeItem instance)
-                    targetCategory.Notes.Add(noteItem);
-
-                    // If open in tabs, update selected tab paths/titles
-                    var openTab = OpenTabs.FirstOrDefault(t => ReferenceEquals(t.Note, noteItem.Model));
-                    if (openTab != null)
-                    {
-                        openTab.OnPropertyChanged(nameof(NoteTabItem.Title));
-                    }
-
-                    StatusMessage = $"Moved '{noteItem.Title}' to '{targetCategory.Name}'";
+                    oldCategory = FindCategoryContainingNote(cat, noteItem);
+                    if (oldCategory != null) break;
                 }
-                return success;
+                
+                if (oldCategory != null)
+                {
+                    oldCategory.Notes.Remove(noteItem);
+                }
+                
+                // Add to new category tree
+                targetCategory.Notes.Add(noteItem);
+                
+                // Update open tab if exists
+                var openTab = OpenTabs.FirstOrDefault(t => ReferenceEquals(t.Note, noteItem.Model));
+                if (openTab != null)
+                {
+                    openTab.OnPropertyChanged(nameof(NoteTabItem.Title));
+                }
+                
+                _stateManager.StatusMessage = $"Moved '{noteItem.Title}' to '{targetCategory.Name}'";
             }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to move note");
-                StatusMessage = "Failed to move note";
-                return false;
-            }
+            
+            return success;
         }
 
         #endregion

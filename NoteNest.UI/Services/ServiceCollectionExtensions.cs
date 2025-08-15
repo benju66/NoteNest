@@ -24,7 +24,14 @@ namespace NoteNest.UI.Services
             // New Services (Singleton)
             services.AddSingleton<IServiceErrorHandler, ServiceErrorHandler>();
             services.AddSingleton<IStateManager, StateManager>();
-            services.AddSingleton<INoteOperationsService, NoteOperationsService>();
+            services.AddSingleton<INoteOperationsService>(sp => 
+                new NoteOperationsService(
+                    sp.GetRequiredService<NoteService>(),
+                    sp.GetRequiredService<IServiceErrorHandler>(),
+                    sp.GetRequiredService<IAppLogger>(),
+                    sp.GetRequiredService<IFileSystemProvider>(),
+                    sp.GetRequiredService<ConfigurationService>()
+                ));
             // Update the CategoryManagementService registration to include IFileSystemProvider
             services.AddSingleton<ICategoryManagementService>(sp => 
                 new CategoryManagementService(
