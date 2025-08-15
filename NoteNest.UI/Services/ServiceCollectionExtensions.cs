@@ -25,8 +25,17 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IServiceErrorHandler, ServiceErrorHandler>();
             services.AddSingleton<IStateManager, StateManager>();
             services.AddSingleton<INoteOperationsService, NoteOperationsService>();
-            services.AddSingleton<ICategoryManagementService, CategoryManagementService>();
+            // Update the CategoryManagementService registration to include IFileSystemProvider
+            services.AddSingleton<ICategoryManagementService>(sp => 
+                new CategoryManagementService(
+                    sp.GetRequiredService<NoteService>(),
+                    sp.GetRequiredService<ConfigurationService>(),
+                    sp.GetRequiredService<IServiceErrorHandler>(),
+                    sp.GetRequiredService<IAppLogger>(),
+                    sp.GetRequiredService<IFileSystemProvider>()
+                ));
             services.AddSingleton<IWorkspaceService, WorkspaceService>();
+            services.AddSingleton<IDialogService, DialogService>();
             
             // ViewModels (Transient - new instance each time)
             services.AddTransient<MainViewModel>();

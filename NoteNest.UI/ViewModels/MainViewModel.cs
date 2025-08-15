@@ -12,11 +12,19 @@ using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Commands;
 using System.IO;
+using NoteNest.Core.Interfaces.Services;
+using NoteNest.UI.Services;
+using NoteNest.Core.Services.Implementation;
 
 namespace NoteNest.UI.ViewModels
 {
     public class MainViewModel : ViewModelBase, IDisposable
     {
+        // Add new service fields
+        private readonly ICategoryManagementService _categoryService;
+        private readonly IDialogService _dialogService;
+        private readonly IStateManager _stateManager;
+        
         private readonly NoteService _noteService;
         private readonly ConfigurationService _configService;
         private readonly FileWatcherService _fileWatcher;
@@ -103,14 +111,26 @@ namespace NoteNest.UI.ViewModels
 
         public bool IsLoading
         {
-            get => _isLoading;
-            set => SetProperty(ref _isLoading, value);
+            get => _stateManager?.IsLoading ?? _isLoading;
+            set
+            {
+                if (_stateManager != null)
+                    _stateManager.IsLoading = value;
+                else
+                    SetProperty(ref _isLoading, value);
+            }
         }
 
         public string StatusMessage
         {
-            get => _statusMessage;
-            set => SetProperty(ref _statusMessage, value);
+            get => _stateManager?.StatusMessage ?? _statusMessage;
+            set
+            {
+                if (_stateManager != null)
+                    _stateManager.StatusMessage = value;
+                else
+                    SetProperty(ref _statusMessage, value);
+            }
         }
 
         #endregion
@@ -143,15 +163,28 @@ namespace NoteNest.UI.ViewModels
 
             try
             {
-                // Initialize services
+                // Initialize services (existing)
                 var fileSystem = new DefaultFileSystemProvider();
                 _configService = new ConfigurationService(fileSystem);
                 _noteService = new NoteService(fileSystem, _configService, _logger);
                 _fileWatcher = new FileWatcherService(_logger);
-                
-                // Initialize new services
                 _searchIndex = new SearchIndexService();
-                _contentCache = new ContentCache(50); // 50MB cache
+                _contentCache = new ContentCache(50);
+
+                // Get services from DI container if available, otherwise create manually
+                _categoryService = ServiceLocator.GetService<ICategoryManagementService>() ??
+                    new CategoryManagementService(
+                        _noteService,
+                        _configService,
+                        new ServiceErrorHandler(_logger, null),
+                        _logger,
+                        fileSystem);
+
+                _dialogService = ServiceLocator.GetService<IDialogService>() ??
+                    new DialogService();
+
+                _stateManager = ServiceLocator.GetService<IStateManager>() ??
+                    new StateManager(_logger);
 
                 // Initialize collections
                 Categories = new ObservableCollection<CategoryTreeItem>();
@@ -160,17 +193,15 @@ namespace NoteNest.UI.ViewModels
                 // Initialize commands
                 InitializeCommands();
 
-                // Properly track the initialization task
+                // Start initialization
                 _initializationTask = InitializeAsync(_cancellationTokenSource.Token);
             }
             catch (Exception ex)
             {
                 _logger.Fatal(ex, "Failed to initialize MainViewModel");
-                MessageBox.Show(
+                _dialogService?.ShowError(
                     "Failed to initialize application. Please check the log file for details.",
-                    "Startup Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                    "Startup Error");
             }
         }
 
@@ -294,20 +325,14 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                IsLoading = true;
+                _stateManager.BeginOperation("Loading categories...");
                 Categories.Clear();
 
-                var settings = _configService.Settings;
+                var flatCategories = await _categoryService.LoadCategoriesAsync();
                 
-                // Ensure directories exist
-                PathService.EnsureDirectoriesExist();
-
-                var flatCategories = await _noteService.LoadCategoriesAsync(settings.MetadataPath);
-
-                // LoadCategoriesAsync now handles default creation internally
                 if (!flatCategories.Any())
                 {
-                    _logger.Info("No categories loaded - defaults should have been created");
+                    _logger.Info("No categories loaded");
                 }
 
                 // Stop all existing watchers before setting up new ones
@@ -321,21 +346,16 @@ namespace NoteNest.UI.ViewModels
                     Categories.Add(rootItem);
                 }
 
-                // Use single recursive watcher for the entire projects directory
+                // Set up file watcher
                 _fileWatcher.StartWatching(PathService.ProjectsPath, "*.txt", includeSubdirectories: true);
 
-                StatusMessage = $"Loaded {flatCategories.Count} categories";
-                _logger.Info($"Successfully loaded {flatCategories.Count} categories");
+                _stateManager.EndOperation($"Loaded {flatCategories.Count} categories");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to load categories");
-                MessageBox.Show($"Error loading categories: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                StatusMessage = "Error loading categories";
-            }
-            finally
-            {
-                IsLoading = false;
+                _dialogService.ShowError($"Error loading categories: {ex.Message}", "Error");
+                _stateManager.EndOperation("Error loading categories");
             }
         }
 
@@ -533,143 +553,77 @@ namespace NoteNest.UI.ViewModels
 
         private async Task CreateNewCategoryAsync()
         {
-            await SafeExecuteAsync(async () =>
-            {
-                var dialog = new Dialogs.InputDialog(
+            var name = await _dialogService.ShowInputDialogAsync(
                     "New Category",
                     "Enter category name:",
-                    "");
-                
-                dialog.ValidationFunction = (text) =>
-                {
-                    if (Categories.Any(c => c.Name.Equals(text, StringComparison.OrdinalIgnoreCase)))
-                        return "A category with this name already exists.";
-                    return null;
-                };
-                
-                if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.ResponseText)) 
-                    return;
-
-                var name = dialog.ResponseText;
-                var safeName = PathService.SanitizeName(name);
-                
-                var category = new CategoryModel
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    ParentId = null,
-                    Name = name,
-                    Path = Path.Combine(PathService.ProjectsPath, safeName), // Absolute path for runtime
-                    Tags = new List<string>()
-                };
-
-                var fileSystem = new DefaultFileSystemProvider();
-                if (!await fileSystem.ExistsAsync(category.Path))
-                {
-                    await fileSystem.CreateDirectoryAsync(category.Path);
-                }
-
-                // Add to current flat list and save
-                var allCategories = GetAllCategoriesFlat();
-                allCategories.Add(category);
-                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
-                
-                await LoadCategoriesAsync(); // Reload to include new category
-                StatusMessage = $"Created category: {name}";
-                _logger.Info($"Created category: {name}");
-            }, "Create Category");
+                "",
+                text => Categories.Any(c => c.Name.Equals(text, StringComparison.OrdinalIgnoreCase)) 
+                    ? "A category with this name already exists." 
+                    : null);
+            
+            if (string.IsNullOrWhiteSpace(name)) return;
+            
+            var category = await _categoryService.CreateCategoryAsync(name);
+            if (category != null)
+            {
+                await LoadCategoriesAsync(); // Refresh tree
+                _stateManager.StatusMessage = $"Created category: {name}";
+            }
         }
 
         public async Task CreateNewSubCategoryAsync(CategoryTreeItem parentCategory)
-        {
-            await SafeExecuteAsync(async () =>
             {
                 if (parentCategory == null)
                 {
                     parentCategory = SelectedCategory;
                 }
+            
                 if (parentCategory == null)
                 {
-                    MessageBox.Show("Please select a parent category first.", "No Category Selected", 
-                        MessageBoxButton.OK, MessageBoxImage.Information);
+                _dialogService.ShowInfo(
+                    "Please select a parent category first.", 
+                    "No Category Selected");
                     return;
                 }
 
-                var dialog = new Dialogs.InputDialog(
+            var name = await _dialogService.ShowInputDialogAsync(
                     "New Subcategory",
                     $"Enter subcategory name for '{parentCategory.Name}':",
-                    "");
-
-                dialog.ValidationFunction = (text) =>
-                {
-                    if (parentCategory.SubCategories.Any(c => c.Name.Equals(text, StringComparison.OrdinalIgnoreCase)))
-                        return "A subcategory with this name already exists.";
-                    return null;
-                };
-
-                if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.ResponseText))
-                    return;
-
-                var name = dialog.ResponseText;
-                var safeName = PathService.SanitizeName(name);
-                var subCategory = new CategoryModel
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    ParentId = parentCategory.Model.Id,
-                    Name = name,
-                    Path = Path.Combine(parentCategory.Model.Path, safeName), // Absolute path for runtime
-                    Tags = new List<string>()
-                };
-
-                var fileSystem = new DefaultFileSystemProvider();
-                if (!await fileSystem.ExistsAsync(subCategory.Path))
-                {
-                    await fileSystem.CreateDirectoryAsync(subCategory.Path);
-                }
-
-                // Add to flat list and save
-                var allCategories = GetAllCategoriesFlat();
-                allCategories.Add(subCategory);
-                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
-                
-                await LoadCategoriesAsync(); // Reload to include new subcategory
-                StatusMessage = $"Created subcategory: {name} under {parentCategory.Name}";
-                _logger.Info($"Created subcategory: {name} under {parentCategory.Name}");
-            }, "Create Subcategory");
+                "",
+                text => parentCategory.SubCategories.Any(c => c.Name.Equals(text, StringComparison.OrdinalIgnoreCase))
+                    ? "A subcategory with this name already exists."
+                    : null);
+            
+            if (string.IsNullOrWhiteSpace(name)) return;
+            
+            var subCategory = await _categoryService.CreateSubCategoryAsync(parentCategory.Model, name);
+            if (subCategory != null)
+            {
+                await LoadCategoriesAsync(); // Refresh tree
+                _stateManager.StatusMessage = $"Created subcategory: {name} under {parentCategory.Name}";
+            }
         }
 
         private async Task DeleteCategoryAsync()
         {
             if (SelectedCategory == null) return;
 
-            await SafeExecuteAsync(async () =>
-            {
                 int subCount = CountAllCategories(new ObservableCollection<CategoryTreeItem>(new[] { SelectedCategory })) - 1;
                 int noteCount = CountAllNotes(SelectedCategory);
 
                 var warning = $"Delete category '{SelectedCategory.Name}'" +
-                              (subCount > 0 || noteCount > 0 ? $" including {subCount} subcategories and {noteCount} notes" : "") + "?";
+                          (subCount > 0 || noteCount > 0 ? 
+                           $" including {subCount} subcategories and {noteCount} notes" : "") + "?";
 
-                var result = MessageBox.Show(warning, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (result != MessageBoxResult.Yes) return;
+            if (!await _dialogService.ShowConfirmationDialogAsync(warning, "Confirm Delete"))
+                return;
 
                 var categoryName = SelectedCategory.Name;
-                var categoryId = SelectedCategory.Model.Id;
-                
-                // Delete physical directory
-                if (Directory.Exists(SelectedCategory.Model.Path))
-                {
-                    Directory.Delete(SelectedCategory.Model.Path, recursive: true);
-                }
-
-                // Remove from categories list and save
-                var allCategories = GetAllCategoriesFlat();
-                RemoveCategoryAndChildren(allCategories, categoryId);
-                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
-
-                await LoadCategoriesAsync(); // Reload after deletion
-                StatusMessage = $"Deleted category: {categoryName}";
-                _logger.Info($"Deleted category: {categoryName}");
-            }, "Delete Category");
+            if (await _categoryService.DeleteCategoryAsync(SelectedCategory.Model))
+            {
+                await LoadCategoriesAsync(); // Refresh tree
+                _stateManager.StatusMessage = $"Deleted category: {categoryName}";
+            }
         }
 
         private void RemoveCategoryAndChildren(List<CategoryModel> allCategories, string categoryId)
@@ -1046,6 +1000,7 @@ namespace NoteNest.UI.ViewModels
 
         private List<CategoryModel> GetAllCategoriesFlat()
         {
+            // This is a local tree traversal, doesn't need to go through service
             var list = new List<CategoryModel>();
             void Walk(ObservableCollection<CategoryTreeItem> items)
             {
@@ -1067,36 +1022,26 @@ namespace NoteNest.UI.ViewModels
         {
             if (categoryItem == null || string.IsNullOrWhiteSpace(newName)) return;
 
-            await SafeExecuteAsync(async () =>
+            if (await _categoryService.RenameCategoryAsync(categoryItem.Model, newName))
             {
-                var oldName = categoryItem.Model.Name;
+                // Update the local model to reflect the change immediately
                 categoryItem.Model.Name = newName;
-                
-                var allCategories = GetAllCategoriesFlat();
-                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
-                
-                StatusMessage = $"Renamed category from '{oldName}' to '{newName}'";
-                _logger.Info($"Renamed category from '{oldName}' to '{newName}'");
-            }, "Rename Category");
+                categoryItem.OnPropertyChanged(nameof(CategoryTreeItem.Name));
+                _stateManager.StatusMessage = $"Renamed category to '{newName}'";
+            }
         }
 
         public async Task ToggleCategoryPinAsync(CategoryTreeItem categoryItem)
         {
             if (categoryItem == null) return;
 
-            await SafeExecuteAsync(async () =>
+            if (await _categoryService.ToggleCategoryPinAsync(categoryItem.Model))
             {
-                categoryItem.Model.Pinned = !categoryItem.Model.Pinned;
-                
-                var allCategories = GetAllCategoriesFlat();
-                await _noteService.SaveCategoriesAsync(_configService.Settings.MetadataPath, allCategories);
-                
-                await LoadCategoriesAsync();
-                
-                StatusMessage = categoryItem.Model.Pinned ? 
-                    $"Pinned '{categoryItem.Name}'" : $"Unpinned '{categoryItem.Name}'";
-                _logger.Info(StatusMessage);
-            }, "Toggle Pin");
+                await LoadCategoriesAsync(); // Refresh to reorder by pin status
+                _stateManager.StatusMessage = categoryItem.Model.Pinned ? 
+                    $"Pinned category: {categoryItem.Name}" : 
+                    $"Unpinned category: {categoryItem.Name}";
+            }
         }
 
         public async Task RenameNoteAsync(NoteTreeItem noteItem, string newName)
@@ -1131,7 +1076,7 @@ namespace NoteNest.UI.ViewModels
                 {
                     openTab.Note.Title = newName;
                     openTab.Note.FilePath = newPath;
-                    openTab.OnPropertyChanged(nameof(openTab.Title));
+                    openTab.OnPropertyChanged(nameof(NoteTabItem.Title));
                 }
                 
                 StatusMessage = $"Renamed note to '{newName}'";
@@ -1228,7 +1173,7 @@ namespace NoteNest.UI.ViewModels
                     var openTab = OpenTabs.FirstOrDefault(t => ReferenceEquals(t.Note, noteItem.Model));
                     if (openTab != null)
                     {
-                        openTab.OnPropertyChanged(nameof(openTab.Title));
+                        openTab.OnPropertyChanged(nameof(NoteTabItem.Title));
                     }
 
                     StatusMessage = $"Moved '{noteItem.Title}' to '{targetCategory.Name}'";
