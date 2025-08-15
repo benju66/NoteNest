@@ -171,20 +171,25 @@ namespace NoteNest.UI.ViewModels
                 _searchIndex = new SearchIndexService();
                 _contentCache = new ContentCache(50);
 
-                // Get services from DI container if available, otherwise create manually
+                // Create StateManager FIRST
+                _stateManager = ServiceLocator.GetService<IStateManager>() ??
+                    new StateManager(_logger);
+
+                // Create ServiceErrorHandler WITH StateManager
+                var errorHandler = ServiceLocator.GetService<IServiceErrorHandler>() ??
+                    new ServiceErrorHandler(_logger, _stateManager);
+
+                // Now create CategoryService with proper error handler
                 _categoryService = ServiceLocator.GetService<ICategoryManagementService>() ??
                     new CategoryManagementService(
                         _noteService,
                         _configService,
-                        new ServiceErrorHandler(_logger, null),
+                        errorHandler,
                         _logger,
                         fileSystem);
 
                 _dialogService = ServiceLocator.GetService<IDialogService>() ??
                     new DialogService();
-
-                _stateManager = ServiceLocator.GetService<IStateManager>() ??
-                    new StateManager(_logger);
 
                 // Initialize collections
                 Categories = new ObservableCollection<CategoryTreeItem>();
@@ -199,6 +204,7 @@ namespace NoteNest.UI.ViewModels
             catch (Exception ex)
             {
                 _logger.Fatal(ex, "Failed to initialize MainViewModel");
+                IsLoading = false;
                 _dialogService?.ShowError(
                     "Failed to initialize application. Please check the log file for details.",
                     "Startup Error");
@@ -295,7 +301,16 @@ namespace NoteNest.UI.ViewModels
                 // Initialize auto-save after settings are loaded
                 InitializeAutoSave();
 
-                await LoadCategoriesAsync();
+                try
+                {
+                    await LoadCategoriesAsync();
+                }
+                catch (Exception catEx)
+                {
+                    _logger.Error(catEx, "Failed to load categories - continuing without them");
+                    Categories.Clear();
+                }
+                
                 cancellationToken.ThrowIfCancellationRequested();
 
                 StatusMessage = "Ready";
@@ -318,6 +333,11 @@ namespace NoteNest.UI.ViewModels
             finally
             {
                 IsLoading = false;
+                if (_stateManager != null)
+                {
+                    _stateManager.IsLoading = false;
+                    _stateManager.EndOperation("Ready");
+                }
             }
         }
 
@@ -626,27 +646,7 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        private void RemoveCategoryAndChildren(List<CategoryModel> allCategories, string categoryId)
-        {
-            // Find all children recursively
-            var toRemove = new List<string> { categoryId };
-            var queue = new Queue<string>();
-            queue.Enqueue(categoryId);
-
-            while (queue.Count > 0)
-            {
-                var currentId = queue.Dequeue();
-                var children = allCategories.Where(c => c.ParentId == currentId).Select(c => c.Id).ToList();
-                foreach (var childId in children)
-                {
-                    toRemove.Add(childId);
-                    queue.Enqueue(childId);
-                }
-            }
-
-            // Remove all found categories
-            allCategories.RemoveAll(c => toRemove.Contains(c.Id));
-        }
+        
 
         #endregion
 
