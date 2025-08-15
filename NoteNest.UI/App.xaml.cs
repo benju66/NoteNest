@@ -5,6 +5,8 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using ModernWpf;
@@ -14,20 +16,32 @@ namespace NoteNest.UI
 {
     public partial class App : Application
     {
+        private IHost _host;
         private IAppLogger _logger;
+
+        public IServiceProvider ServiceProvider { get; private set; }
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e);
-
             try
             {
                 // Set shutdown mode to ensure clean exit when main window closes
                 ShutdownMode = ShutdownMode.OnMainWindowClose;
-                
-                // Initialize logging first
-                _logger = AppLogger.Instance;
-                _logger.Info("Application starting up");
+
+                // Build DI container
+                _host = Host.CreateDefaultBuilder()
+                    .ConfigureServices((context, services) =>
+                    {
+                        services.AddNoteNestServices();
+                    })
+                    .Build();
+
+                ServiceProvider = _host.Services;
+                ServiceLocator.SetServiceProvider(ServiceProvider);
+
+                // Get logger
+                _logger = ServiceProvider.GetRequiredService<IAppLogger>();
+                _logger.Info("Application starting with DI container");
 
                 // Initialize ModernWPF theme from settings
                 try
@@ -40,31 +54,32 @@ namespace NoteNest.UI
                     // Continue with default theme
                 }
 
-                // Set up global exception handlers
+                // Setup global exception handlers
                 AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
-                DispatcherUnhandledException += OnDispatcherUnhandledException;
+                Current.DispatcherUnhandledException += OnDispatcherUnhandledException;
                 TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
-                // Ensure directories early (optional). Can be deferred until after settings load.
-                // try
-                // {
-                //     PathService.EnsureDirectoriesExist();
-                //     _logger.Info($"Data directory: {PathService.RootPath}");
-                //     _logger.Info($"Settings directory: {PathService.AppDataPath}");
-                // }
-                // catch (Exception ex)
-                // {
-                //     _logger?.Fatal(ex, "Failed to create required directories");
-                //     ShowDetailedError("Failed to create required directories", ex);
-                //     Shutdown(1);
-                // }
+                // Create and show main window
+                var mainWindow = new MainWindow();
+
+                // IMPORTANT: For Phase 1, still use old constructor pattern
+                // This maintains backward compatibility
+                mainWindow.DataContext = new ViewModels.MainViewModel(); // OLD WAY - still works!
+
+                // TODO: In Phase 3, switch to:
+                // mainWindow.DataContext = ServiceProvider.GetRequiredService<MainViewModel>();
+
+                mainWindow.Show();
+                MainWindow = mainWindow;
             }
             catch (Exception ex)
             {
-                // If logger fails, show detailed error
-                ShowDetailedError("Failed to initialize logging", ex);
+                // If startup fails early, show detailed error
+                ShowDetailedError("Failed to start application", ex);
                 Shutdown(1);
             }
+
+            base.OnStartup(e);
         }
 
         private void ShowDetailedError(string context, Exception ex)
@@ -116,7 +131,7 @@ namespace NoteNest.UI
                 MessageBoxImage.Error);
         }
 
-        protected override void OnExit(ExitEventArgs e)
+        protected override async void OnExit(ExitEventArgs e)
         {
             _logger?.Info("Application shutting down");
 
@@ -154,6 +169,20 @@ namespace NoteNest.UI
             }
             finally
             {
+                // Dispose DI container
+                if (_host != null)
+                {
+                    try
+                    {
+                        await _host.StopAsync();
+                    }
+                    catch { }
+                    finally
+                    {
+                        _host.Dispose();
+                    }
+                }
+
                 // Dispose logger last
                 try
                 {
