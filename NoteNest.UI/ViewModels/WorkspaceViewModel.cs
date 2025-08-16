@@ -11,11 +11,12 @@ namespace NoteNest.UI.ViewModels
     /// <summary>
     /// Provides UI-bindable workspace state synchronized with WorkspaceService
     /// </summary>
-    public class WorkspaceViewModel : ViewModelBase
+    public class WorkspaceViewModel : ViewModelBase, IDisposable
     {
         private readonly IWorkspaceService _workspaceService;
         private readonly ObservableCollection<NoteTabItem> _uiTabs;
         private NoteTabItem? _selectedTab;
+        private bool _disposed;
         
         public ObservableCollection<NoteTabItem> OpenTabs => _uiTabs;
         
@@ -26,13 +27,12 @@ namespace NoteNest.UI.ViewModels
             {
                 if (SetProperty(ref _selectedTab, value))
                 {
-                    // Sync with service
+                    // Sync selection with service
                     if (_workspaceService != null && value != null)
                     {
                         var adapter = _workspaceService.OpenTabs
                             .OfType<TabItemAdapter>()
                             .FirstOrDefault(a => ReferenceEquals(a.UnderlyingTab, value));
-                        
                         if (adapter != null)
                         {
                             _workspaceService.SelectedTab = adapter;
@@ -57,6 +57,9 @@ namespace NoteNest.UI.ViewModels
             {
                 ncc.CollectionChanged += OnServiceTabsCollectionChanged;
             }
+
+            // Initialize from any existing service tabs
+            SyncFromService();
         }
         
         public void AddTab(NoteTabItem noteTab)
@@ -86,12 +89,19 @@ namespace NoteNest.UI.ViewModels
         
         private void OnServiceTabOpened(object sender, TabEventArgs e)
         {
-            // Handle if service opens a tab directly
+            // If service opened a UI-backed tab (adapter), mirror it in UI list
+            if (e.Tab is TabItemAdapter adapter && !_uiTabs.Contains(adapter.UnderlyingTab))
+            {
+                _uiTabs.Add(adapter.UnderlyingTab);
+            }
         }
         
         private void OnServiceTabClosed(object sender, TabEventArgs e)
         {
-            // Handle if service closes a tab directly
+            if (e.Tab is TabItemAdapter adapter && _uiTabs.Contains(adapter.UnderlyingTab))
+            {
+                _uiTabs.Remove(adapter.UnderlyingTab);
+            }
         }
         
         private void OnServiceTabSelectionChanged(object sender, TabChangedEventArgs e)
@@ -100,12 +110,100 @@ namespace NoteNest.UI.ViewModels
             if (e.NewTab is TabItemAdapter adapter)
             {
                 SelectedTab = adapter.UnderlyingTab;
+                return;
+            }
+
+            // Fallback: match by note if service sent a different ITabItem implementation
+            var serviceTab = e.NewTab;
+            if (serviceTab?.Note != null)
+            {
+                var match = _uiTabs.FirstOrDefault(t =>
+                    t.Note?.FilePath?.Equals(serviceTab.Note.FilePath, StringComparison.OrdinalIgnoreCase) == true);
+                if (match != null)
+                {
+                    SelectedTab = match;
+                }
             }
         }
         
         private void OnServiceTabsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
             // Keep UI collection in sync with service collection
+            if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null)
+            {
+                foreach (var item in e.NewItems)
+                {
+                    if (item is TabItemAdapter adapter && !_uiTabs.Contains(adapter.UnderlyingTab))
+                    {
+                        _uiTabs.Add(adapter.UnderlyingTab);
+                    }
+                }
+            }
+            else if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems != null)
+            {
+                foreach (var item in e.OldItems)
+                {
+                    if (item is TabItemAdapter adapter && _uiTabs.Contains(adapter.UnderlyingTab))
+                    {
+                        _uiTabs.Remove(adapter.UnderlyingTab);
+                    }
+                }
+            }
+            else if (e.Action == NotifyCollectionChangedAction.Reset)
+            {
+                _uiTabs.Clear();
+                SyncFromService();
+            }
+        }
+
+        private void SyncFromService()
+        {
+            foreach (var adapter in _workspaceService.OpenTabs.OfType<TabItemAdapter>())
+            {
+                if (!_uiTabs.Contains(adapter.UnderlyingTab))
+                {
+                    _uiTabs.Add(adapter.UnderlyingTab);
+                }
+            }
+        }
+
+        public NoteTabItem? FindTabByNote(NoteModel note)
+        {
+            if (note == null) return null;
+            return _uiTabs.FirstOrDefault(t =>
+                t.Note?.FilePath?.Equals(note.FilePath, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        public NoteTabItem? FindTabByPath(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return null;
+            return _uiTabs.FirstOrDefault(t =>
+                t.Note?.FilePath?.Equals(filePath, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed && disposing)
+            {
+                if (_workspaceService != null)
+                {
+                    _workspaceService.TabOpened -= OnServiceTabOpened;
+                    _workspaceService.TabClosed -= OnServiceTabClosed;
+                    _workspaceService.TabSelectionChanged -= OnServiceTabSelectionChanged;
+                    if (_workspaceService.OpenTabs is INotifyCollectionChanged ncc)
+                    {
+                        ncc.CollectionChanged -= OnServiceTabsCollectionChanged;
+                    }
+                }
+                _uiTabs.Clear();
+                _disposed = true;
+            }
         }
     }
 }
