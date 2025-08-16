@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using NoteNest.Core.Models;
+using NoteNest.Core.Interfaces.Split;
 
 namespace NoteNest.Core.Interfaces.Services
 {
@@ -42,6 +43,40 @@ namespace NoteNest.Core.Interfaces.Services
         
         #endregion
         
+        #region Split View Support
+
+        /// <summary>
+        /// Gets all workspace panes
+        /// </summary>
+        ObservableCollection<SplitPane> Panes { get; }
+
+        /// <summary>
+        /// Gets or sets the active pane
+        /// </summary>
+        SplitPane? ActivePane { get; set; }
+
+        /// <summary>
+        /// Split a pane
+        /// </summary>
+        Task<SplitPane> SplitPaneAsync(SplitPane pane, SplitOrientation orientation);
+
+        /// <summary>
+        /// Close a pane
+        /// </summary>
+        Task ClosePaneAsync(SplitPane pane);
+
+        /// <summary>
+        /// Move tab to another pane
+        /// </summary>
+        Task MoveTabToPaneAsync(ITabItem tab, SplitPane targetPane);
+
+        /// <summary>
+        /// Focus management
+        /// </summary>
+        void SetActivePane(SplitPane pane);
+
+        #endregion
+
         #region Future Split View Support (Interface prepared)
         
         // These methods will be implemented when split view is added

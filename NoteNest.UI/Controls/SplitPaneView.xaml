@@ -1,0 +1,32 @@
+<UserControl x:Class="NoteNest.UI.Controls.SplitPaneView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Border x:Name="PaneBorder" BorderThickness="2" BorderBrush="Transparent">
+        <TabControl x:Name="PaneTabControl"
+                    SelectionChanged="TabControl_SelectionChanged"
+                    GotFocus="TabControl_GotFocus">
+            <TabControl.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Title}" Margin="5,2"/>
+                        <Button Content="×" Click="CloseTab_Click"
+                                Tag="{Binding}"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="5,0"
+                                FontSize="14"/>
+                    </StackPanel>
+                </DataTemplate>
+            </TabControl.ItemTemplate>
+            <TabControl.ContentTemplate>
+                <DataTemplate>
+                    <RichTextBox x:Name="NoteEditor"
+                                 Document="{Binding Document}"
+                                 TextChanged="Editor_TextChanged"/>
+                </DataTemplate>
+            </TabControl.ContentTemplate>
+        </TabControl>
+    </Border>
+</UserControl>
+
+

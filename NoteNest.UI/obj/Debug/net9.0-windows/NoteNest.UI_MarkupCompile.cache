@@ -10,11 +10,11 @@ none
 false
 TRACE;DEBUG;NET;NET9_0;NETCOREAPP
 C:\NoteNest\NoteNest.UI\App.xaml
-5-1178670144
+8-765654153
 
-36508227741
+39-1034284439
 234622724353
-Controls\NoteNestPanel.xaml;Dialogs\InputDialog.xaml;MainWindow.xaml;Windows\MigrationWindow.xaml;Windows\SettingsWindow.xaml;
+Controls\NoteNestPanel.xaml;Controls\SplitContainer.xaml;Controls\SplitPaneView.xaml;Controls\SplitWorkspace.xaml;Dialogs\InputDialog.xaml;MainWindow.xaml;Windows\MigrationWindow.xaml;Windows\SettingsWindow.xaml;
 
 False
 

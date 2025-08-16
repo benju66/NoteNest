@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Interfaces.Split;
 
 namespace NoteNest.Core.Services.Implementation
 {
@@ -20,6 +21,8 @@ namespace NoteNest.Core.Services.Implementation
         
         private ObservableCollection<ITabItem> _openTabs;
         private ITabItem? _selectedTab;
+        private readonly ObservableCollection<SplitPane> _panes;
+        private SplitPane? _activePane;
         
         public ObservableCollection<ITabItem> OpenTabs
         {
@@ -47,6 +50,38 @@ namespace NoteNest.Core.Services.Implementation
                 });
             }
         }
+
+        #region Split View Support
+
+        /// <summary>
+        /// Gets all workspace panes
+        /// </summary>
+        public ObservableCollection<SplitPane> Panes => _panes;
+
+        /// <summary>
+        /// Gets or sets the active pane
+        /// </summary>
+        public SplitPane? ActivePane
+        {
+            get => _activePane;
+            set
+            {
+                if (_activePane != value)
+                {
+                    if (_activePane != null)
+                        _activePane.IsActive = false;
+                    
+                    _activePane = value;
+                    
+                    if (_activePane != null)
+                        _activePane.IsActive = true;
+                    
+                    OnPropertyChanged(nameof(ActivePane));
+                }
+            }
+        }
+
+        #endregion
         
         public bool HasUnsavedChanges => OpenTabs?.Any(t => t.IsDirty) ?? false;
         
@@ -69,6 +104,16 @@ namespace NoteNest.Core.Services.Implementation
             _noteOperationsService = noteOperationsService ?? throw new ArgumentNullException(nameof(noteOperationsService));
             
             _openTabs = new ObservableCollection<ITabItem>();
+            _panes = new ObservableCollection<SplitPane>();
+            
+            // Create initial pane with existing tabs
+            var initialPane = new SplitPane();
+            foreach (var tab in OpenTabs)
+            {
+                initialPane.Tabs.Add(tab);
+            }
+            _panes.Add(initialPane);
+            ActivePane = initialPane;
             
             // Subscribe to collection changes for tracking
             _openTabs.CollectionChanged += OnOpenTabsCollectionChanged;
@@ -191,6 +236,80 @@ namespace NoteNest.Core.Services.Implementation
             
             return OpenTabs.FirstOrDefault(t => 
                 t.Note?.FilePath?.Equals(filePath, StringComparison.OrdinalIgnoreCase) == true);
+        }
+
+        public async Task<SplitPane> SplitPaneAsync(SplitPane pane, SplitOrientation orientation)
+        {
+            if (pane == null)
+                throw new ArgumentNullException(nameof(pane));
+            
+            var newPane = new SplitPane();
+            
+            // Move half of the tabs to new pane (optional)
+            var tabsToMove = pane.Tabs.Skip(pane.Tabs.Count / 2).ToList();
+            foreach (var tab in tabsToMove)
+            {
+                pane.Tabs.Remove(tab);
+                newPane.Tabs.Add(tab);
+            }
+            
+            _panes.Add(newPane);
+            
+            _logger.Debug($"Split pane {pane.Id} {orientation}");
+            
+            return await Task.FromResult(newPane);
+        }
+
+        public async Task ClosePaneAsync(SplitPane pane)
+        {
+            if (pane == null || _panes.Count <= 1)
+                return;
+            
+            // Move tabs to another pane before closing
+            var targetPane = _panes.FirstOrDefault(p => p != pane);
+            if (targetPane != null)
+            {
+                foreach (var tab in pane.Tabs.ToList())
+                {
+                    pane.Tabs.Remove(tab);
+                    targetPane.Tabs.Add(tab);
+                }
+            }
+            
+            _panes.Remove(pane);
+            
+            if (ActivePane == pane)
+            {
+                ActivePane = _panes.FirstOrDefault();
+            }
+            
+            _logger.Debug($"Closed pane {pane.Id}");
+            await Task.CompletedTask;
+        }
+
+        public async Task MoveTabToPaneAsync(ITabItem tab, SplitPane targetPane)
+        {
+            if (tab == null || targetPane == null)
+                return;
+            
+            // Find source pane
+            var sourcePane = _panes.FirstOrDefault(p => p.Tabs.Contains(tab));
+            if (sourcePane != null && sourcePane != targetPane)
+            {
+                sourcePane.Tabs.Remove(tab);
+                targetPane.Tabs.Add(tab);
+                
+                // Close source pane if empty
+                if (!sourcePane.Tabs.Any())
+                {
+                    await ClosePaneAsync(sourcePane);
+                }
+            }
+        }
+
+        public void SetActivePane(SplitPane pane)
+        {
+            ActivePane = pane;
         }
 
         // Future Split View Support - current single-pane implementations
