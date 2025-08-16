@@ -6,11 +6,13 @@ using NoteNest.Core.Models;
 namespace NoteNest.UI.ViewModels
 {
     /// <summary>
-    /// Adapter that allows NoteTabItem to work with IWorkspaceService
+    /// Enhanced adapter that allows NoteTabItem to work with IWorkspaceService
+    /// Handles bidirectional synchronization and proper disposal
     /// </summary>
-    public class TabItemAdapter : ITabItem
+    public class TabItemAdapter : ITabItem, IDisposable
     {
         private readonly NoteTabItem _noteTabItem;
+        private bool _disposed;
         
         public TabItemAdapter(NoteTabItem noteTabItem)
         {
@@ -31,13 +33,25 @@ namespace NoteNest.UI.ViewModels
         public bool IsDirty
         {
             get => _noteTabItem.IsDirty;
-            set => _noteTabItem.IsDirty = value;
+            set
+            {
+                if (_noteTabItem.IsDirty != value)
+                {
+                    _noteTabItem.IsDirty = value;
+                }
+            }
         }
         
         public string Content
         {
             get => _noteTabItem.Content;
-            set => _noteTabItem.Content = value;
+            set
+            {
+                if (_noteTabItem.Content != value)
+                {
+                    _noteTabItem.Content = value;
+                }
+            }
         }
         
         // Access to underlying NoteTabItem for UI
@@ -45,15 +59,53 @@ namespace NoteNest.UI.ViewModels
         
         private void OnNoteTabItemPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            // Handle any property synchronization if needed
+            // Handle specific property changes that might affect service layer
+            switch (e.PropertyName)
+            {
+                case nameof(NoteTabItem.IsDirty):
+                    // hook for notifying service if needed
+                    break;
+                case nameof(NoteTabItem.Content):
+                    // hook for autosave triggers if needed
+                    break;
+            }
         }
         
         public void Dispose()
         {
-            if (_noteTabItem is INotifyPropertyChanged npc)
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed && disposing)
             {
-                npc.PropertyChanged -= OnNoteTabItemPropertyChanged;
+                if (_noteTabItem is INotifyPropertyChanged npc)
+                {
+                    npc.PropertyChanged -= OnNoteTabItemPropertyChanged;
+                }
+                _disposed = true;
             }
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is TabItemAdapter other)
+            {
+                return ReferenceEquals(_noteTabItem, other._noteTabItem);
+            }
+            return false;
+        }
+        
+        public override int GetHashCode()
+        {
+            return _noteTabItem?.GetHashCode() ?? 0;
+        }
+        
+        public override string ToString()
+        {
+            return $"TabItemAdapter: {Title} (ID: {Id})";
         }
     }
 }

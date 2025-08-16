@@ -192,6 +192,23 @@ namespace NoteNest.Core.Services.Implementation
             return OpenTabs.FirstOrDefault(t => 
                 t.Note?.FilePath?.Equals(filePath, StringComparison.OrdinalIgnoreCase) == true);
         }
+
+        // Future Split View Support - current single-pane implementations
+        public System.Collections.Generic.IEnumerable<object> GetActivePanes()
+        {
+            // For now, return a single "pane" representing the current workspace
+            // This will be replaced with actual split panes when split view is implemented
+            yield return new { Id = "main-pane", Tabs = OpenTabs };
+        }
+
+        public async Task<bool> MoveTabToPaneAsync(ITabItem tab, object targetPane)
+        {
+            // For now, this is a no-op since we only have one pane
+            // Will be implemented when split view is added
+            await Task.CompletedTask;
+            _logger.Debug($"MoveTabToPaneAsync called (no-op until split view): {tab?.Title}");
+            return false; // Not yet supported
+        }
         
         private void OnOpenTabsCollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         {

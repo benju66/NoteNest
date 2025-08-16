@@ -26,13 +26,19 @@ namespace NoteNest.UI.Services
             // Essential Services Only
             services.AddSingleton<NoteService>(); // Core functionality
             services.AddSingleton<IDialogService, DialogService>(); // UI interaction
-            
-            // ViewModels (Singleton for speed)
+
+            // Workspace Services (Singleton for performance)
+            services.AddSingleton<ContentCache>();
+            services.AddSingleton<INoteOperationsService, NoteOperationsService>();
+            services.AddSingleton<IWorkspaceService, WorkspaceService>();
+
+            // ViewModels (Singleton for MainViewModel, Transient for others)
             services.AddSingleton<MainViewModel>();
-            
-            // NOTE: Heavy services are created lazily in MainViewModel
-            // This keeps startup fast while maintaining testability for core components
-            
+            services.AddTransient<SettingsViewModel>();
+
+            // NOTE: WorkspaceViewModel is created lazily in MainViewModel
+            // This maintains the performance optimization while ensuring proper DI
+
             return services;
         }
     }
