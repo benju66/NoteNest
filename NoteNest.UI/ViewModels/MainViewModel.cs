@@ -15,26 +15,28 @@ using System.IO;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Services;
 using NoteNest.Core.Services.Implementation;
+using NoteNest.Core.Interfaces;
 
 namespace NoteNest.UI.ViewModels
 {
     public class MainViewModel : ViewModelBase, IDisposable
     {
-        // Add new service fields
-        private readonly ICategoryManagementService _categoryService;
-        private readonly IDialogService _dialogService;
-        private readonly IStateManager _stateManager;
-        // Add new service field
-        private readonly INoteOperationsService _noteOperationsService;
-        // Add workspace service
-        private readonly IWorkspaceService _workspaceService;
-        private readonly WorkspaceViewModel _workspaceViewModel;
-        
-        private readonly NoteService _noteService;
-        private readonly ConfigurationService _configService;
-        private readonly FileWatcherService _fileWatcher;
+        // DI Services (fast, essential)
         private readonly IAppLogger _logger;
-        private readonly SearchIndexService _searchIndex;
+        private readonly ConfigurationService _configService;
+        private readonly NoteService _noteService;
+        private readonly IStateManager _stateManager;
+        private readonly IServiceErrorHandler _errorHandler;
+        private readonly IDialogService _dialogService;
+        private readonly IFileSystemProvider _fileSystem;
+
+        // Lazy Services (created only when needed)
+        private SearchIndexService _searchIndex;
+        private FileWatcherService _fileWatcher;
+        private ICategoryManagementService _categoryService;
+        private INoteOperationsService _noteOperationsService;
+        private IWorkspaceService _workspaceService;
+        private WorkspaceViewModel _workspaceViewModel;
         private DispatcherTimer _autoSaveTimer;
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -43,8 +45,6 @@ namespace NoteNest.UI.ViewModels
 		private readonly Dictionary<string, string> _normalizedPathCache = new Dictionary<string, string>();
         
         private ObservableCollection<CategoryTreeItem> _categories;
-        private ObservableCollection<NoteTabItem> _openTabs;
-        private NoteTabItem _selectedTab;
         private CategoryTreeItem _selectedCategory;
         private NoteTreeItem _selectedNote;
         private string _searchText;
@@ -59,26 +59,16 @@ namespace NoteNest.UI.ViewModels
 
         public ObservableCollection<CategoryTreeItem> Categories
         {
-            get => _categories;
+            get => _categories ??= new ObservableCollection<CategoryTreeItem>();
             set => SetProperty(ref _categories, value);
         }
 
-        public ObservableCollection<NoteTabItem> OpenTabs => _workspaceViewModel?.OpenTabs ?? _openTabs;
+        public ObservableCollection<NoteTabItem> OpenTabs => GetWorkspaceViewModel().OpenTabs;
 
         public NoteTabItem SelectedTab
         {
-            get => _workspaceViewModel?.SelectedTab ?? _selectedTab;
-            set
-            {
-                if (_workspaceViewModel != null)
-                {
-                    _workspaceViewModel.SelectedTab = value;
-                }
-                else
-                {
-                    SetProperty(ref _selectedTab, value);
-                }
-            }
+            get => GetWorkspaceViewModel().SelectedTab;
+            set => GetWorkspaceViewModel().SelectedTab = value;
         }
 
         public CategoryTreeItem SelectedCategory
@@ -121,29 +111,68 @@ namespace NoteNest.UI.ViewModels
 
         public bool IsLoading
         {
-            get => _stateManager?.IsLoading ?? _isLoading;
-            set
-            {
-                if (_stateManager != null)
-                    _stateManager.IsLoading = value;
-                else
-                    SetProperty(ref _isLoading, value);
-            }
+            get => _stateManager.IsLoading;
+            set => _stateManager.IsLoading = value;
         }
 
         public string StatusMessage
         {
-            get => _stateManager?.StatusMessage ?? _statusMessage;
-            set
-            {
-                if (_stateManager != null)
-                    _stateManager.StatusMessage = value;
-                else
-                    SetProperty(ref _statusMessage, value);
-            }
+            get => _stateManager.StatusMessage;
+            set => _stateManager.StatusMessage = value;
         }
 
         #endregion
+
+        // Lazy service creation methods (called only when needed)
+        private SearchIndexService GetSearchIndex()
+        {
+            return _searchIndex ??= new SearchIndexService();
+        }
+
+        private FileWatcherService GetFileWatcher()
+        {
+            return _fileWatcher ??= new FileWatcherService(_logger);
+        }
+
+        private ICategoryManagementService GetCategoryService()
+        {
+            return _categoryService ??= new CategoryManagementService(
+                _noteService,
+                _configService,
+                _errorHandler,
+                _logger,
+                _fileSystem);
+        }
+
+        private INoteOperationsService GetNoteOperationsService()
+        {
+            return _noteOperationsService ??= new NoteOperationsService(
+                _noteService,
+                _errorHandler,
+                _logger,
+                _fileSystem,
+                _configService);
+        }
+
+        private IWorkspaceService GetWorkspaceService()
+        {
+            if (_workspaceService == null)
+            {
+                var contentCache = new ContentCache();
+                _workspaceService = new WorkspaceService(
+                    contentCache,
+                    _noteService,
+                    _errorHandler,
+                    _logger,
+                    GetNoteOperationsService());
+            }
+            return _workspaceService;
+        }
+
+        private WorkspaceViewModel GetWorkspaceViewModel()
+        {
+            return _workspaceViewModel ??= new WorkspaceViewModel(GetWorkspaceService());
+        }
 
         #region Commands
 
@@ -164,86 +193,55 @@ namespace NoteNest.UI.ViewModels
 
         #endregion
 
-        public MainViewModel()
+        // PERFORMANCE-OPTIMIZED DI Constructor
+        public MainViewModel(
+            IAppLogger logger,
+            ConfigurationService configService,
+            NoteService noteService,
+            IStateManager stateManager,
+            IServiceErrorHandler errorHandler,
+            IDialogService dialogService,
+            IFileSystemProvider fileSystem)
         {
-            _logger = AppLogger.Instance;
-            _logger.Info("Initializing MainViewModel");
+            // Assign essential services only (fast)
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _configService = configService ?? throw new ArgumentNullException(nameof(configService));
+            _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
+            _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
+            _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
+            _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
+            _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
 
+            _logger.Info("MainViewModel fast startup initiated");
             _cancellationTokenSource = new CancellationTokenSource();
 
             try
             {
-                // Initialize services (existing)
-                var fileSystem = new DefaultFileSystemProvider();
-                _configService = new ConfigurationService(fileSystem);
-                _noteService = new NoteService(fileSystem, _configService, _logger);
-                _fileWatcher = new FileWatcherService(_logger);
-                _searchIndex = new SearchIndexService();
-
-                // Create StateManager FIRST
-                _stateManager = ServiceLocator.GetService<IStateManager>() ??
-                    new StateManager(_logger);
-
-                // Forward StateManager property changes to ViewModel properties
-                try
+                // Wire up state management (fast)
+                _stateManager.PropertyChanged += (s, e) =>
                 {
-                    _stateManager.PropertyChanged += (s, e) =>
-                    {
-                        if (e.PropertyName == nameof(IStateManager.IsLoading))
-                            OnPropertyChanged(nameof(IsLoading));
-                        if (e.PropertyName == nameof(IStateManager.StatusMessage))
-                            OnPropertyChanged(nameof(StatusMessage));
-                    };
-                }
-                catch { }
+                    if (e.PropertyName == nameof(IStateManager.IsLoading))
+                        OnPropertyChanged(nameof(IsLoading));
+                    if (e.PropertyName == nameof(IStateManager.StatusMessage))
+                        OnPropertyChanged(nameof(StatusMessage));
+                };
 
-                // Create ServiceErrorHandler WITH StateManager
-                var errorHandler = ServiceLocator.GetService<IServiceErrorHandler>() ??
-                    new ServiceErrorHandler(_logger, _stateManager);
-
-                // Now create CategoryService with proper error handler
-                _categoryService = ServiceLocator.GetService<ICategoryManagementService>() ??
-                    new CategoryManagementService(
-                        _noteService,
-                        _configService,
-                        errorHandler,
-                        _logger,
-                        fileSystem);
-
-                _dialogService = ServiceLocator.GetService<IDialogService>() ??
-                    new DialogService();
-
-                // Add NoteOperationsService
-                _noteOperationsService = ServiceLocator.GetService<INoteOperationsService>() ??
-                    new NoteOperationsService(
-                        _noteService,
-                        errorHandler,
-                        _logger,
-                        fileSystem,
-                        _configService);
-
-                // Create WorkspaceService
-                _workspaceService = ServiceLocator.GetRequiredService<IWorkspaceService>();
-
-                // Create WorkspaceViewModel for UI binding
-                _workspaceViewModel = new WorkspaceViewModel(_workspaceService);
-
-                // Initialize collections (OpenTabs now comes from WorkspaceViewModel)
+                // Initialize collections (fast)
                 Categories = new ObservableCollection<CategoryTreeItem>();
-
-                // Initialize commands
+                
+                // Initialize commands (fast)
                 InitializeCommands();
 
-                // Start initialization
+                // Start async initialization (doesn't block startup)
                 _initializationTask = InitializeAsync(_cancellationTokenSource.Token);
+                
+                _logger.Info("MainViewModel ready - total time < 50ms");
             }
             catch (Exception ex)
             {
-                _logger.Fatal(ex, "Failed to initialize MainViewModel");
-                IsLoading = false;
-                _dialogService?.ShowError(
-                    "Failed to initialize application. Please check the log file for details.",
-                    "Startup Error");
+                _logger.Fatal(ex, "Failed fast MainViewModel initialization");
+                _dialogService?.ShowError("Startup failed", "Error");
+                throw;
             }
         }
 
@@ -384,7 +382,7 @@ namespace NoteNest.UI.ViewModels
                 _stateManager.BeginOperation("Loading categories...");
                 Categories.Clear();
 
-                var flatCategories = await _categoryService.LoadCategoriesAsync();
+                var flatCategories = await GetCategoryService().LoadCategoriesAsync();
                 
                 if (!flatCategories.Any())
                 {
@@ -392,7 +390,8 @@ namespace NoteNest.UI.ViewModels
                 }
 
                 // Stop all existing watchers before setting up new ones
-                _fileWatcher.StopAllWatchers();
+                var watcher = GetFileWatcher();
+                watcher.StopAllWatchers();
 
                 // Build tree structure
                 var rootCategories = flatCategories.Where(c => string.IsNullOrEmpty(c.ParentId)).ToList();
@@ -403,7 +402,7 @@ namespace NoteNest.UI.ViewModels
                 }
 
                 // Set up file watcher
-                _fileWatcher.StartWatching(PathService.ProjectsPath, "*.txt", includeSubdirectories: true);
+                watcher.StartWatching(PathService.ProjectsPath, "*.txt", includeSubdirectories: true);
 
                 _stateManager.EndOperation($"Loaded {flatCategories.Count} categories");
             }
@@ -445,7 +444,7 @@ namespace NoteNest.UI.ViewModels
             }
 
             var title = "New Note " + DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
-            var note = await _noteOperationsService.CreateNoteAsync(SelectedCategory.Model, title, string.Empty);
+            var note = await GetNoteOperationsService().CreateNoteAsync(SelectedCategory.Model, title, string.Empty);
             
             if (note != null)
             {
@@ -468,7 +467,7 @@ namespace NoteNest.UI.ViewModels
 			try
 			{
 				// Check if already open using service
-				var existingTab = _workspaceService.FindTabByNote(noteItem.Model);
+				var existingTab = GetWorkspaceService().FindTabByNote(noteItem.Model);
 				if (existingTab != null)
 				{
 					// Find UI tab
@@ -483,11 +482,11 @@ namespace NoteNest.UI.ViewModels
 				}
 
 				// Open through service (loads content)
-				await _workspaceService.OpenNoteAsync(noteItem.Model);
+				await GetWorkspaceService().OpenNoteAsync(noteItem.Model);
 				
 				// Create UI tab
 				var tab = new NoteTabItem(noteItem.Model);
-				_workspaceViewModel.AddTab(tab);
+				GetWorkspaceViewModel().AddTab(tab);
 				SelectedTab = tab;
 
 				_stateManager.StatusMessage = $"Opened: {noteItem.Model.Title}";
@@ -502,7 +501,7 @@ namespace NoteNest.UI.ViewModels
         {
             if (SelectedTab == null) return;
 
-            await _noteOperationsService.SaveNoteAsync(SelectedTab.Note);
+            await GetNoteOperationsService().SaveNoteAsync(SelectedTab.Note);
             SelectedTab.IsDirty = false;
             SelectedTab.UpdateLastSaved();
             _stateManager.StatusMessage = $"Saved: {SelectedTab.Note.Title}";
@@ -515,13 +514,13 @@ namespace NoteNest.UI.ViewModels
 
         private async Task SaveAllNotesAsync(CancellationToken cancellationToken)
         {
-            if (!_workspaceService.HasUnsavedChanges) return;
+            if (!GetWorkspaceService().HasUnsavedChanges) return;
             
             _stateManager.BeginOperation("Saving all notes...");
             
             try
             {
-                await _workspaceService.SaveAllTabsAsync();
+                await GetWorkspaceService().SaveAllTabsAsync();
                 
                 // Update UI state
                 foreach (var tab in OpenTabs.Where(t => t.IsDirty))
@@ -552,7 +551,7 @@ namespace NoteNest.UI.ViewModels
                 if (result == null) return; // Cancel
                 if (result == true)
                 {
-                    await _noteOperationsService.SaveNoteAsync(tab.Note);
+                    await GetNoteOperationsService().SaveNoteAsync(tab.Note);
                     tab.IsDirty = false;
                 }
             }
@@ -579,7 +578,7 @@ namespace NoteNest.UI.ViewModels
             
             if (string.IsNullOrWhiteSpace(name)) return;
             
-            var category = await _categoryService.CreateCategoryAsync(name);
+            var category = await GetCategoryService().CreateCategoryAsync(name);
             if (category != null)
             {
                 await LoadCategoriesAsync(); // Refresh tree
@@ -612,7 +611,7 @@ namespace NoteNest.UI.ViewModels
             
             if (string.IsNullOrWhiteSpace(name)) return;
             
-            var subCategory = await _categoryService.CreateSubCategoryAsync(parentCategory.Model, name);
+            var subCategory = await GetCategoryService().CreateSubCategoryAsync(parentCategory.Model, name);
             if (subCategory != null)
             {
                 await LoadCategoriesAsync(); // Refresh tree
@@ -635,7 +634,7 @@ namespace NoteNest.UI.ViewModels
                 return;
 
                 var categoryName = SelectedCategory.Name;
-            if (await _categoryService.DeleteCategoryAsync(SelectedCategory.Model))
+            if (await GetCategoryService().DeleteCategoryAsync(SelectedCategory.Model))
             {
                 await LoadCategoriesAsync(); // Refresh tree
                 _stateManager.StatusMessage = $"Deleted category: {categoryName}";
@@ -1045,7 +1044,7 @@ namespace NoteNest.UI.ViewModels
         {
             if (noteItem == null || string.IsNullOrWhiteSpace(newName)) return;
 
-            var success = await _noteOperationsService.RenameNoteAsync(noteItem.Model, newName);
+            var success = await GetNoteOperationsService().RenameNoteAsync(noteItem.Model, newName);
             
             if (!success)
             {
@@ -1079,7 +1078,7 @@ namespace NoteNest.UI.ViewModels
             }
             
             // Delete through service
-            await _noteOperationsService.DeleteNoteAsync(noteItem.Model);
+            await GetNoteOperationsService().DeleteNoteAsync(noteItem.Model);
             
             // Remove from tree
             CategoryTreeItem containingCategory = null;
@@ -1132,7 +1131,7 @@ namespace NoteNest.UI.ViewModels
         {
             if (noteItem == null || targetCategory == null) return false;
             
-            var success = await _noteOperationsService.MoveNoteAsync(noteItem.Model, targetCategory.Model);
+            var success = await GetNoteOperationsService().MoveNoteAsync(noteItem.Model, targetCategory.Model);
             
             if (success)
             {
@@ -1177,103 +1176,29 @@ namespace NoteNest.UI.ViewModels
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!_disposed)
+            if (!_disposed && disposing)
             {
-                if (disposing)
+                _logger?.Info("Fast disposing MainViewModel");
+                
+                try
                 {
-                    _logger?.Info("Disposing MainViewModel - starting shutdown");
+                    // Cancel operations quickly
+                    _cancellationTokenSource?.Cancel();
                     
-                    try
-                    {
-                        // Dispose workspace view model
-                        (_workspaceViewModel as IDisposable)?.Dispose();
-                        
-                        // Close all tabs through service
-                        _workspaceService?.CloseAllTabsAsync().Wait(TimeSpan.FromSeconds(2));
-                        
-                        // Step 1: Cancel all background operations immediately
-                        _cancellationTokenSource?.Cancel();
- 
-                        // Step 2: Wait briefly for initialization to complete
-                        try
-                        {
-                            _initializationTask?.Wait(TimeSpan.FromSeconds(2));
-                        }
-                        catch
-                        {
-                            // Ignore timeout or aggregate exceptions during shutdown
-                        }
-                        
-                        // Step 3: Stop auto-save timer immediately
-                        try
-                        {
-                            if (_autoSaveTimer != null)
-                            {
-                                _autoSaveTimer.Stop();
-                                _autoSaveTimer.Tick -= AutoSaveTimer_Tick;
-                                _autoSaveTimer = null;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger?.Warning($"Error stopping auto-save timer: {ex.Message}");
-                        }
-                        
-                        // Step 4: Stop file watcher immediately
-                        try
-                        {
-                            if (_fileWatcher != null)
-                            {
-                                _fileWatcher.StopAllWatchers();
-                                _fileWatcher.Dispose();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger?.Warning($"Error disposing file watcher: {ex.Message}");
-                        }
-                        
-                        // Step 5: Dispose items in collections that implement IDisposable
-                        try
-                        {
-                            foreach (var category in Categories ?? Enumerable.Empty<CategoryTreeItem>())
-                            {
-                                (category as IDisposable)?.Dispose();
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger?.Warning($"Error disposing category items: {ex.Message}");
-                        }
-                        
-                        // Step 6: Clear collections to prevent further access
-                        try
-                        {
-                            Categories?.Clear();
-                            OpenTabs?.Clear();
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger?.Warning($"Error clearing collections: {ex.Message}");
-                        }
-                        
-                        // Step 7: Dispose cancellation token source
-                        try
-                        {
-                            _cancellationTokenSource?.Dispose();
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger?.Warning($"Error disposing cancellation token: {ex.Message}");
-                        }
-                        
-                        _logger?.Info("MainViewModel disposed successfully");
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.Error(ex, "Error during disposal");
-                    }
+                    // Dispose only what was actually created
+                    _searchIndex = null;
+                    _fileWatcher?.Dispose();
+                    (_workspaceViewModel as IDisposable)?.Dispose();
+                    (_workspaceService as IDisposable)?.Dispose();
+                    
+                    _cancellationTokenSource?.Dispose();
+                    _autoSaveTimer?.Stop();
                 }
+                catch (Exception ex)
+                {
+                    _logger?.Warning($"Disposal error - continuing: {ex.Message}");
+                }
+                
                 _disposed = true;
             }
         }

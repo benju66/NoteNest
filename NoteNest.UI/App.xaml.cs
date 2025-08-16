@@ -1,16 +1,11 @@
 ﻿using System;
-using System.Configuration;
-using System.Data;
-using System.IO;
+using System.Diagnostics;
 using System.Windows;
-using System.Windows.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
-using ModernWpf;
 using NoteNest.UI.Services;
+using NoteNest.UI.ViewModels;
 
 namespace NoteNest.UI
 {
@@ -18,255 +13,132 @@ namespace NoteNest.UI
     {
         private IHost _host;
         private IAppLogger _logger;
+        private Stopwatch _startupTimer;
 
         public IServiceProvider ServiceProvider { get; private set; }
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            _startupTimer = Stopwatch.StartNew();
+            
             try
             {
-                // Set shutdown mode to ensure clean exit when main window closes
+                // Ultra-fast startup sequence
                 ShutdownMode = ShutdownMode.OnMainWindowClose;
 
-                // Build DI container
+                // Minimal DI container (only essential services)
                 _host = Host.CreateDefaultBuilder()
                     .ConfigureServices((context, services) =>
                     {
-                        services.AddNoteNestServices();
+                        services.AddNoteNestServices(); // Only fast services
                     })
                     .Build();
 
                 ServiceProvider = _host.Services;
-                ServiceLocator.SetServiceProvider(ServiceProvider);
-
-                // Get logger
                 _logger = ServiceProvider.GetRequiredService<IAppLogger>();
-                _logger.Info("Application starting with DI container");
 
-                // Initialize ModernWPF theme from settings
+                // Skip validation in production for speed
+                #if DEBUG
+                ValidateCriticalServices();
+                #endif
+
+                // Initialize theme (fast)
                 try
                 {
                     ThemeService.Initialize();
                 }
                 catch (Exception themeEx)
                 {
-                    _logger?.Warning($"Theme initialization failed: {themeEx.Message}");
-                    // Continue with default theme
+                    _logger?.Warning($"Theme init failed: {themeEx.Message}");
                 }
 
-                // Setup global exception handlers
-                AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
-                Current.DispatcherUnhandledException += OnDispatcherUnhandledException;
-                TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
-
-                // Create and show main window
+                // Create and show window immediately
                 var mainWindow = new MainWindow();
-
-                // IMPORTANT: For Phase 1, still use old constructor pattern
-                // This maintains backward compatibility
-                mainWindow.DataContext = new ViewModels.MainViewModel(); // OLD WAY - still works!
-
-                // TODO: In Phase 3, switch to:
-                // mainWindow.DataContext = ServiceProvider.GetRequiredService<MainViewModel>();
-
+                var mainViewModel = ServiceProvider.GetRequiredService<MainViewModel>();
+                mainWindow.DataContext = mainViewModel;
+                
                 mainWindow.Show();
                 MainWindow = mainWindow;
+                
+                _startupTimer.Stop();
+                _logger.Info($"App started in {_startupTimer.ElapsedMilliseconds}ms");
+                
+                // Setup exception handling after startup
+                SetupExceptionHandling();
             }
             catch (Exception ex)
             {
-                // If startup fails early, show detailed error
-                ShowDetailedError("Failed to start application", ex);
+                ShowStartupError(ex);
                 Shutdown(1);
             }
 
             base.OnStartup(e);
         }
 
-        private void ShowDetailedError(string context, Exception ex)
+        #if DEBUG
+        private void ValidateCriticalServices()
         {
-            var details = $"{context}\n\n" +
-                         $"Error Type: {ex.GetType().FullName}\n" +
-                         $"Message: {ex.Message}\n\n" +
-                         $"Stack Trace:\n{ex.StackTrace}\n\n";
-
-            if (ex.InnerException != null)
-            {
-                details += $"Inner Exception:\n" +
-                          $"Type: {ex.InnerException.GetType().FullName}\n" +
-                          $"Message: {ex.InnerException.Message}\n" +
-                          $"Stack: {ex.InnerException.StackTrace}\n\n";
-            }
-
-            // Try to write to a fallback log file on desktop
+            // Only validate essential services in debug mode
             try
             {
-                var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-                var errorFile = Path.Combine(desktopPath, $"NoteNest_Error_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
-                File.WriteAllText(errorFile, details);
-                details += $"Error details saved to:\n{errorFile}\n\n";
-            }
-            catch
-            {
-                // If we can't write to desktop, just show the error
-            }
-
-            // Also try to show log location
-            try
-            {
-                var logPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "NoteNest",
-                    "Logs");
-                details += $"Check logs at:\n{logPath}";
-            }
-            catch
-            {
-                // Ignore if we can't get log path
-            }
-
-            MessageBox.Show(
-                details,
-                "NoteNest Startup Error - Detailed Information",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-        }
-
-        protected override async void OnExit(ExitEventArgs e)
-        {
-            _logger?.Info("Application shutting down");
-
-            try
-            {
-                // Quick cleanup - don't wait for complex operations
-                if (MainWindow != null)
-                {
-                    try
-                    {
-                        var mainPanel = MainWindow.FindName("MainPanel") as Controls.NoteNestPanel;
-                        var viewModel = mainPanel?.DataContext as ViewModels.MainViewModel;
-                        if (viewModel != null)
-                        {
-                            _logger?.Info("Disposing MainViewModel from App.OnExit");
-                            // Dispose synchronously but don't wait for long operations
-                            viewModel.Dispose();
-                        }
-                        else
-                        {
-                            _logger?.Warning("Could not find MainViewModel to dispose");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.Warning($"Error disposing MainViewModel: {ex.Message}");
-                        // Continue shutdown anyway
-                    }
-                }
+                ServiceProvider.GetRequiredService<IAppLogger>();
+                ServiceProvider.GetRequiredService<NoteNest.Core.Services.ConfigurationService>();
+                ServiceProvider.GetRequiredService<NoteNest.Core.Services.NoteService>();
+                ServiceProvider.GetRequiredService<MainViewModel>();
+                _logger.Debug("Critical services validated");
             }
             catch (Exception ex)
             {
-                _logger?.Error(ex, "Error during shutdown cleanup");
-                // Continue shutdown anyway
+                _logger.Fatal(ex, "Critical service validation failed");
+                throw;
             }
-            finally
+        }
+        #endif
+
+        private void SetupExceptionHandling()
+        {
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
-                // Dispose DI container
-                if (_host != null)
-                {
-                    try
-                    {
-                        await _host.StopAsync();
-                    }
-                    catch { }
-                    finally
-                    {
-                        _host.Dispose();
-                    }
-                }
-
-                // Dispose logger last
-                try
-                {
-                    (_logger as IDisposable)?.Dispose();
-                }
-                catch
-                {
-                    // Ignore logger disposal errors during shutdown
-                }
-            }
-
-            base.OnExit(e);
+                _logger?.Fatal(e.ExceptionObject as Exception, "Unhandled exception");
+            };
             
-            // If normal shutdown doesn't work within reasonable time, force exit
-            _ = System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ => 
+            Current.DispatcherUnhandledException += (s, e) =>
             {
-                try
-                {
-                    System.Environment.Exit(e.ApplicationExitCode);
-                }
-                catch
-                {
-                    // Final safety net
-                }
-            });
+                _logger?.Error(e.Exception, "UI thread exception");
+                e.Handled = true; // Keep app running
+            };
         }
 
-        private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        private void ShowStartupError(Exception ex)
         {
-            var exception = e.ExceptionObject as Exception;
-            
-            if (_logger != null)
-            {
-                _logger.Fatal(exception, "Unhandled exception occurred");
-            }
-            else
-            {
-                ShowDetailedError("Unhandled exception (no logger available)", exception);
-            }
-
             MessageBox.Show(
-                $"An unexpected error occurred. The application will now close.\n\n" +
-                $"Error: {exception?.Message}\n\n" +
-                $"Please check the log file for details.",
-                "Fatal Error",
+                $"Failed to start: {ex.Message}",
+                "Startup Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
 
-        private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        
+
+        protected override async void OnExit(ExitEventArgs e)
         {
-            if (_logger != null)
+            try
             {
-                _logger.Error(e.Exception, "Unhandled dispatcher exception");
+                // Fast shutdown
+                if (MainWindow?.DataContext is IDisposable vm)
+                {
+                    vm.Dispose();
+                }
+                
+                _host?.Dispose();
+                (_logger as IDisposable)?.Dispose();
             }
-            else
+            catch
             {
-                ShowDetailedError("Dispatcher exception (no logger available)", e.Exception);
-            }
-
-            // Attempt to recover from UI exceptions
-            MessageBox.Show(
-                $"An error occurred: {e.Exception.Message}\n\n" +
-                "The application will attempt to continue.",
-                "Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-
-            // Prevent application crash
-            e.Handled = true;
-        }
-
-        private void OnUnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
-        {
-            if (_logger != null)
-            {
-                _logger.Error(e.Exception, "Unobserved task exception");
-            }
-            else
-            {
-                ShowDetailedError("Unobserved task exception (no logger available)", e.Exception);
+                // Ignore shutdown errors
             }
 
-            e.SetObserved();
+            base.OnExit(e);
         }
     }
 }

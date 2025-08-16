@@ -12,49 +12,26 @@ namespace NoteNest.UI.Services
     {
         public static IServiceCollection AddNoteNestServices(this IServiceCollection services)
         {
-            // Core Services (Singleton - shared across app lifetime)
-            services.AddSingleton<IAppLogger, AppLogger>(sp => AppLogger.Instance);
+            // ONLY register services that improve testability or are truly shared
+            
+            // Core Infrastructure (Fast Singletons)
+            services.AddSingleton<IAppLogger>(sp => AppLogger.Instance);
             services.AddSingleton<IFileSystemProvider, DefaultFileSystemProvider>();
             services.AddSingleton<ConfigurationService>();
-            services.AddSingleton<NoteService>();
-            services.AddSingleton<FileWatcherService>();
-            services.AddSingleton<SearchIndexService>();
-            services.AddSingleton<ContentCache>();
             
-            // New Services (Singleton)
-            services.AddSingleton<IServiceErrorHandler, ServiceErrorHandler>();
+            // State Management (Lightweight Singletons)
             services.AddSingleton<IStateManager, StateManager>();
-            services.AddSingleton<INoteOperationsService>(sp => 
-                new NoteOperationsService(
-                    sp.GetRequiredService<NoteService>(),
-                    sp.GetRequiredService<IServiceErrorHandler>(),
-                    sp.GetRequiredService<IAppLogger>(),
-                    sp.GetRequiredService<IFileSystemProvider>(),
-                    sp.GetRequiredService<ConfigurationService>()
-                ));
-            // Update the CategoryManagementService registration to include IFileSystemProvider
-            services.AddSingleton<ICategoryManagementService>(sp => 
-                new CategoryManagementService(
-                    sp.GetRequiredService<NoteService>(),
-                    sp.GetRequiredService<ConfigurationService>(),
-                    sp.GetRequiredService<IServiceErrorHandler>(),
-                    sp.GetRequiredService<IAppLogger>(),
-                    sp.GetRequiredService<IFileSystemProvider>()
-                ));
-            // Update WorkspaceService registration
-            services.AddSingleton<IWorkspaceService>(sp => 
-                new WorkspaceService(
-                    sp.GetRequiredService<ContentCache>(),
-                    sp.GetRequiredService<NoteService>(),
-                    sp.GetRequiredService<IServiceErrorHandler>(),
-                    sp.GetRequiredService<IAppLogger>(),
-                    sp.GetRequiredService<INoteOperationsService>()
-                ));
-            services.AddSingleton<IDialogService, DialogService>();
+            services.AddSingleton<IServiceErrorHandler, ServiceErrorHandler>();
             
-            // ViewModels (Transient - new instance each time)
-            services.AddTransient<MainViewModel>();
-            services.AddTransient<SettingsViewModel>();
+            // Essential Services Only
+            services.AddSingleton<NoteService>(); // Core functionality
+            services.AddSingleton<IDialogService, DialogService>(); // UI interaction
+            
+            // ViewModels (Singleton for speed)
+            services.AddSingleton<MainViewModel>();
+            
+            // NOTE: Heavy services are created lazily in MainViewModel
+            // This keeps startup fast while maintaining testability for core components
             
             return services;
         }
