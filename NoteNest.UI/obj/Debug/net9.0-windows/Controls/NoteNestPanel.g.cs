@@ -97,7 +97,7 @@ namespace NoteNest.UI.Controls {
                 return;
             }
             _contentLoaded = true;
-            System.Uri resourceLocater = new System.Uri("/NoteNest.UI;V1.0.0.0;component/controls/notenestpanel.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/NoteNest.UI;component/controls/notenestpanel.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\..\Controls\NoteNestPanel.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);

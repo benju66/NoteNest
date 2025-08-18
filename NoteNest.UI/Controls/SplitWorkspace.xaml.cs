@@ -26,14 +26,13 @@ namespace NoteNest.UI.Controls
             InitializeComponent();
             
             // Command handlers
-            CommandBindings.Add(new CommandBinding(SplitHorizontalCommand, ExecuteSplitHorizontal));
+            // Only vertical split for now
             CommandBindings.Add(new CommandBinding(SplitVerticalCommand, ExecuteSplitVertical));
             CommandBindings.Add(new CommandBinding(FocusNextPaneCommand, ExecuteFocusNextPane));
             CommandBindings.Add(new CommandBinding(MoveFocusLeftCommand, (s, e) => MoveFocus(FocusDirection.Left)));
             CommandBindings.Add(new CommandBinding(MoveFocusRightCommand, (s, e) => MoveFocus(FocusDirection.Right)));
 
             // Key bindings
-            InputBindings.Add(new KeyBinding(SplitHorizontalCommand, new KeyGesture(Key.OemPipe, ModifierKeys.Control | ModifierKeys.Shift)));
             InputBindings.Add(new KeyBinding(SplitVerticalCommand, new KeyGesture(Key.OemBackslash, ModifierKeys.Control)));
             InputBindings.Add(new KeyBinding(FocusNextPaneCommand, new KeyGesture(Key.F6)));
             InputBindings.Add(new KeyBinding(MoveFocusLeftCommand, new KeyGesture(Key.Left, ModifierKeys.Control | ModifierKeys.Alt)));

@@ -93,6 +93,12 @@ namespace NoteNest.UI.Controls
             if (Pane != null && PaneTabControl.SelectedItem is ITabItem tab)
             {
                 Pane.SelectedTab = tab;
+                // Keep workspace SelectedTab in sync so Save commands act on the correct tab
+                var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                if (workspaceService != null)
+                {
+                    workspaceService.SelectedTab = tab;
+                }
                 
                 // Load content into the editor if it's a new selection
                 if (e.AddedItems.Count > 0)
@@ -137,11 +143,16 @@ namespace NoteNest.UI.Controls
             if (sender is Button button && button.Tag is ITabItem tab)
             {
                 Pane?.Tabs.Remove(tab);
+                var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                if (workspaceService != null && workspaceService.OpenTabs.Contains(tab))
+                {
+                    workspaceService.OpenTabs.Remove(tab);
+                }
                 
                 // If this was the last tab, close the pane
                 if (Pane?.Tabs.Count == 0)
                 {
-                    var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                    workspaceService ??= (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
                     if (workspaceService != null && workspaceService.Panes.Count > 1)
                     {
                         _ = workspaceService.ClosePaneAsync(Pane);
@@ -150,27 +161,7 @@ namespace NoteNest.UI.Controls
             }
         }
         
-        private void Editor_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            // Mark tab as dirty
-            if (PaneTabControl.SelectedItem is ITabItem tab)
-            {
-                tab.IsDirty = true;
-                if (sender is SmartTextEditor ste)
-                {
-                    tab.Content = ste.Text;
-                }
-            }
-        }
-
-        private void Editor_Loaded(object sender, RoutedEventArgs e)
-        {
-            // Load content when editor is loaded
-            if (sender is SmartTextEditor ste && PaneTabControl.SelectedItem is ITabItem tab)
-            {
-                ste.Text = tab.Content ?? string.Empty;
-            }
-        }
+        // No longer needed with binding
 
         private void LoadTabContent(ITabItem tab)
         {

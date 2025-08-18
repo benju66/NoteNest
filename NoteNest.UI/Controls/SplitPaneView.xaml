@@ -23,6 +23,18 @@
                             <TextBlock Text="{Binding Title}" 
                                        Margin="5,2"
                                        VerticalAlignment="Center"/>
+                            <TextBlock Text="*" Margin="2,2,0,2" Foreground="OrangeRed" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDirty}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             <Button Content="×" 
                                     Click="CloseTab_Click"
                                     Tag="{Binding}"
@@ -52,11 +64,6 @@
                                                  ToolTip="Split Vertical (Ctrl+\\)"
                                                  Command="{x:Static local:SplitWorkspace.SplitVerticalCommand}"
                                                  CommandTarget="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:SplitWorkspace}}}"/>
-                                <ui:AppBarButton Icon="ViewAll"
-                                                 Label="Split H"
-                                                 ToolTip="Split Horizontal (Ctrl+Shift+|)"
-                                                 Command="{x:Static local:SplitWorkspace.SplitHorizontalCommand}"
-                                                 CommandTarget="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:SplitWorkspace}}}"/>
                                 <ui:AppBarSeparator/>
                                 <ui:AppBarButton Icon="List" Label="Bullets" Click="Toolbar_BulletList_Click"/>
                                 <ui:AppBarButton Label="Numbers" Click="Toolbar_NumberedList_Click">
@@ -83,8 +90,7 @@
                                                    Grid.Row="1"
                                                    VerticalScrollBarVisibility="Auto"
                                                    HorizontalScrollBarVisibility="Disabled"
-                                                   TextChanged="Editor_TextChanged"
-                                                   Loaded="Editor_Loaded"/>
+                                                   Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         </Grid>
                     </DataTemplate>
                 </TabControl.ContentTemplate>
