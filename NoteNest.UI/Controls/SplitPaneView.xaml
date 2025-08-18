@@ -1,31 +1,104 @@
 <UserControl x:Class="NoteNest.UI.Controls.SplitPaneView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Border x:Name="PaneBorder" BorderThickness="2" BorderBrush="Transparent">
-        <TabControl x:Name="PaneTabControl"
-                    SelectionChanged="TabControl_SelectionChanged"
-                    GotFocus="TabControl_GotFocus">
-            <TabControl.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="{Binding Title}" Margin="5,2"/>
-                        <Button Content="×" Click="CloseTab_Click"
-                                Tag="{Binding}"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Padding="5,0"
-                                FontSize="14"/>
-                    </StackPanel>
-                </DataTemplate>
-            </TabControl.ItemTemplate>
-            <TabControl.ContentTemplate>
-                <DataTemplate>
-                    <RichTextBox x:Name="NoteEditor"
-                                 Document="{Binding Document}"
-                                 TextChanged="Editor_TextChanged"/>
-                </DataTemplate>
-            </TabControl.ContentTemplate>
-        </TabControl>
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             xmlns:local="clr-namespace:NoteNest.UI.Controls"
+             mc:Ignorable="d">
+    <Border x:Name="PaneBorder" 
+            BorderThickness="2" 
+            BorderBrush="Transparent">
+        <Grid>
+            <TabControl x:Name="PaneTabControl"
+                        SelectionChanged="TabControl_SelectionChanged"
+                        GotFocus="TabControl_GotFocus">
+                <TabControl.Resources>
+                    <!-- Neutralize global TabItem Style to ensure ItemTemplate is used here -->
+                    <Style TargetType="TabItem"/>
+                </TabControl.Resources>
+                <TabControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Title}" 
+                                       Margin="5,2"
+                                       VerticalAlignment="Center"/>
+                            <Button Content="×" 
+                                    Click="CloseTab_Click"
+                                    Tag="{Binding}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="5,0"
+                                    Margin="3,0,0,0"
+                                    FontSize="14"
+                                    FontWeight="Bold"
+                                    Foreground="Gray"
+                                    Cursor="Hand"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </TabControl.ItemTemplate>
+                <TabControl.ContentTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Per-tab toolbar -->
+                            <ui:CommandBar Grid.Row="0" DefaultLabelPosition="Right">
+                                <ui:AppBarButton Icon="ViewAll"
+                                                 Label="Split V"
+                                                 ToolTip="Split Vertical (Ctrl+\\)"
+                                                 Command="{x:Static local:SplitWorkspace.SplitVerticalCommand}"
+                                                 CommandTarget="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:SplitWorkspace}}}"/>
+                                <ui:AppBarButton Icon="ViewAll"
+                                                 Label="Split H"
+                                                 ToolTip="Split Horizontal (Ctrl+Shift+|)"
+                                                 Command="{x:Static local:SplitWorkspace.SplitHorizontalCommand}"
+                                                 CommandTarget="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:SplitWorkspace}}}"/>
+                                <ui:AppBarSeparator/>
+                                <ui:AppBarButton Icon="List" Label="Bullets" Click="Toolbar_BulletList_Click"/>
+                                <ui:AppBarButton Label="Numbers" Click="Toolbar_NumberedList_Click">
+                                    <ui:AppBarButton.Icon>
+                                        <ui:FontIcon Glyph="&#xE8BE;"/>
+                                    </ui:AppBarButton.Icon>
+                                </ui:AppBarButton>
+                                <ui:AppBarButton Label="Tasks" Click="Toolbar_TaskList_Click">
+                                    <ui:AppBarButton.Icon>
+                                        <ui:FontIcon Glyph="&#xE9D5;"/>
+                                    </ui:AppBarButton.Icon>
+                                </ui:AppBarButton>
+                                <ui:AppBarSeparator/>
+                                <ui:AppBarButton Label="Indent" Click="Toolbar_Indent_Click"/>
+                                <ui:AppBarButton Label="Outdent" Click="Toolbar_Outdent_Click"/>
+                                <ui:AppBarSeparator/>
+                                <ui:AppBarButton Icon="Bold" Label="Bold" Click="Toolbar_Bold_Click"/>
+                                <ui:AppBarButton Icon="Italic" Label="Italic" Click="Toolbar_Italic_Click"/>
+                                <ui:AppBarButton Icon="Underline" Label="Underline" Click="Toolbar_Underline_Click"/>
+                            </ui:CommandBar>
+
+                            <!-- Note content viewer -->
+                            <local:SmartTextEditor x:Name="SmartEditor"
+                                                   Grid.Row="1"
+                                                   VerticalScrollBarVisibility="Auto"
+                                                   HorizontalScrollBarVisibility="Disabled"
+                                                   TextChanged="Editor_TextChanged"
+                                                   Loaded="Editor_Loaded"/>
+                        </Grid>
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
+            </TabControl>
+            
+            <!-- Show message when no tabs -->
+            <TextBlock x:Name="EmptyMessage"
+                       Text="No tabs open"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Foreground="Gray"
+                       FontStyle="Italic"
+                       Visibility="Collapsed"/>
+        </Grid>
     </Border>
 </UserControl>
 

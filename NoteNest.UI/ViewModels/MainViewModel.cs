@@ -35,7 +35,7 @@ namespace NoteNest.UI.ViewModels
         private FileWatcherService _fileWatcher;
         private ICategoryManagementService _categoryService;
         private INoteOperationsService _noteOperationsService;
-        private IWorkspaceService _workspaceService;
+        private readonly IWorkspaceService _workspaceService;
         private WorkspaceViewModel _workspaceViewModel;
         private DispatcherTimer _autoSaveTimer;
         private bool _disposed;
@@ -154,20 +154,7 @@ namespace NoteNest.UI.ViewModels
                 _configService);
         }
 
-        private IWorkspaceService GetWorkspaceService()
-        {
-            if (_workspaceService == null)
-            {
-                var contentCache = new ContentCache();
-                _workspaceService = new WorkspaceService(
-                    contentCache,
-                    _noteService,
-                    _errorHandler,
-                    _logger,
-                    GetNoteOperationsService());
-            }
-            return _workspaceService;
-        }
+        private IWorkspaceService GetWorkspaceService() => _workspaceService;
 
         private WorkspaceViewModel GetWorkspaceViewModel()
         {
@@ -201,7 +188,8 @@ namespace NoteNest.UI.ViewModels
             IStateManager stateManager,
             IServiceErrorHandler errorHandler,
             IDialogService dialogService,
-            IFileSystemProvider fileSystem)
+            IFileSystemProvider fileSystem,
+            IWorkspaceService workspaceService)
         {
             // Assign essential services only (fast)
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -211,6 +199,7 @@ namespace NoteNest.UI.ViewModels
             _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            _workspaceService = workspaceService ?? throw new ArgumentNullException(nameof(workspaceService));
 
             _logger.Info("MainViewModel fast startup initiated");
             _cancellationTokenSource = new CancellationTokenSource();
