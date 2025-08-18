@@ -16,5 +16,10 @@ namespace NoteNest.Core.Interfaces
         Task CreateDirectoryAsync(string path);
         Task<Stream> OpenReadAsync(string path);
         Task<Stream> OpenWriteAsync(string path);
+
+        // Added for atomic save support and comprehensive IO abstraction
+        Task CopyAsync(string sourcePath, string destinationPath, bool overwrite);
+        Task MoveAsync(string sourcePath, string destinationPath, bool overwrite);
+        Task ReplaceAsync(string sourceFileName, string destinationFileName, string? backupFileName);
     }
 }

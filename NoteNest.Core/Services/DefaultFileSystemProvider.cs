@@ -74,5 +74,27 @@ namespace NoteNest.Core.Services
         {
             return await Task.Run(() => File.OpenWrite(path) as Stream);
         }
+
+        public async Task CopyAsync(string sourcePath, string destinationPath, bool overwrite)
+        {
+            await Task.Run(() => File.Copy(sourcePath, destinationPath, overwrite));
+        }
+
+        public async Task MoveAsync(string sourcePath, string destinationPath, bool overwrite)
+        {
+            await Task.Run(() =>
+            {
+                if (overwrite && File.Exists(destinationPath))
+                {
+                    File.Delete(destinationPath);
+                }
+                File.Move(sourcePath, destinationPath);
+            });
+        }
+
+        public async Task ReplaceAsync(string sourceFileName, string destinationFileName, string? backupFileName)
+        {
+            await Task.Run(() => File.Replace(sourceFileName, destinationFileName, backupFileName));
+        }
     }
 }

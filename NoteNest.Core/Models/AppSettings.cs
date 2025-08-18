@@ -30,6 +30,7 @@ namespace NoteNest.Core.Models
         public bool CheckForUpdates { get; set; }
         public List<string> RecentFiles { get; set; }
         public WindowSettings WindowSettings { get; set; }
+        public int MaxRecentFiles { get; set; } = 20;
 
         public StorageMode StorageMode { get; set; } = StorageMode.Local;
         public string CustomNotesPath { get; set; }

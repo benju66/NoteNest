@@ -30,6 +30,7 @@ namespace NoteNest.UI.ViewModels
         private readonly IDialogService _dialogService;
         private readonly IFileSystemProvider _fileSystem;
         private readonly ContentCache _contentCache;
+        private readonly IWorkspaceStateService _workspaceStateService;
 
         // Lazy Services (created only when needed)
         private SearchIndexService _searchIndex;
@@ -192,7 +193,8 @@ namespace NoteNest.UI.ViewModels
             IDialogService dialogService,
             IFileSystemProvider fileSystem,
             IWorkspaceService workspaceService,
-            ContentCache contentCache)
+            ContentCache contentCache,
+            IWorkspaceStateService workspaceStateService)
         {
             // Assign essential services only (fast)
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -204,6 +206,7 @@ namespace NoteNest.UI.ViewModels
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
             _workspaceService = workspaceService ?? throw new ArgumentNullException(nameof(workspaceService));
             _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
+            _workspaceStateService = workspaceStateService ?? throw new ArgumentNullException(nameof(workspaceStateService));
 
             _logger.Info("MainViewModel fast startup initiated");
             _cancellationTokenSource = new CancellationTokenSource();
@@ -474,13 +477,35 @@ namespace NoteNest.UI.ViewModels
 					}
 				}
 
-				// Open through service (loads content)
-				await GetWorkspaceService().OpenNoteAsync(noteItem.Model);
-				
-				// Create UI tab
-				var tab = new NoteTabItem(noteItem.Model);
-				GetWorkspaceViewModel().AddTab(tab);
-				SelectedTab = tab;
+				// Feature flag path to new state service
+				bool useNewState = UI.FeatureFlags.UseNewArchitecture;
+				if (useNewState)
+				{
+					// Ensure content is loaded before opening into state service
+					if (string.IsNullOrEmpty(noteItem.Model.Content))
+					{
+						var content = await _contentCache.GetContentAsync(noteItem.Model.FilePath, async (path) =>
+						{
+							var loaded = await _noteService.LoadNoteAsync(path);
+							return loaded.Content ?? string.Empty;
+						});
+						noteItem.Model.Content = content;
+					}
+					var wn = await _workspaceStateService.OpenNoteAsync(noteItem.Model);
+					var tab = new NoteTabItem(noteItem.Model);
+					GetWorkspaceViewModel().AddTab(tab);
+					SelectedTab = tab;
+				}
+				else
+				{
+					// Open through service (loads content)
+					await GetWorkspaceService().OpenNoteAsync(noteItem.Model);
+					
+					// Create UI tab
+					var tab = new NoteTabItem(noteItem.Model);
+					GetWorkspaceViewModel().AddTab(tab);
+					SelectedTab = tab;
+				}
 
 				_stateManager.StatusMessage = $"Opened: {noteItem.Model.Title}";
 			}
@@ -494,9 +519,20 @@ namespace NoteNest.UI.ViewModels
         {
             if (SelectedTab == null) return;
 
-            await GetNoteOperationsService().SaveNoteAsync(SelectedTab.Note);
-            SelectedTab.IsDirty = false;
-            SelectedTab.UpdateLastSaved();
+            // Feature flag path to new state service
+            bool useNewState = UI.FeatureFlags.UseNewArchitecture;
+            if (useNewState)
+            {
+                await _workspaceStateService.SaveNoteAsync(SelectedTab.Note.Id);
+                SelectedTab.IsDirty = false;
+                SelectedTab.UpdateLastSaved();
+            }
+            else
+            {
+                await GetNoteOperationsService().SaveNoteAsync(SelectedTab.Note);
+                SelectedTab.IsDirty = false;
+                SelectedTab.UpdateLastSaved();
+            }
             _stateManager.StatusMessage = $"Saved: {SelectedTab.Note.Title}";
         }
 
@@ -513,16 +549,33 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
-                await GetWorkspaceService().SaveAllTabsAsync();
-                
-                // Update UI state
-                foreach (var tab in OpenTabs.Where(t => t.IsDirty))
+                if (UI.FeatureFlags.UseNewArchitecture)
                 {
-                    if (cancellationToken.IsCancellationRequested) break;
-                    tab.UpdateLastSaved();
+                    var result = await _workspaceStateService.SaveAllDirtyNotesAsync();
+                    // Update UI state
+                    foreach (var tab in OpenTabs.Where(t => t.IsDirty).ToList())
+                    {
+                        if (cancellationToken.IsCancellationRequested) break;
+                        tab.IsDirty = false;
+                        tab.UpdateLastSaved();
+                    }
+                    _stateManager.EndOperation(result.FailureCount > 0
+                        ? $"Saved {result.SuccessCount} with {result.FailureCount} errors"
+                        : "All notes saved");
                 }
-                
-                _stateManager.EndOperation("All notes saved");
+                else
+                {
+                    await GetWorkspaceService().SaveAllTabsAsync();
+                    
+                    // Update UI state
+                    foreach (var tab in OpenTabs.Where(t => t.IsDirty))
+                    {
+                        if (cancellationToken.IsCancellationRequested) break;
+                        tab.UpdateLastSaved();
+                    }
+                    
+                    _stateManager.EndOperation("All notes saved");
+                }
             }
             catch (Exception ex)
             {
@@ -535,21 +588,18 @@ namespace NoteNest.UI.ViewModels
         {
             if (tab == null) return;
 
-            // Use centralized close service with existing adapter instance
-            var adapter = GetWorkspaceService().OpenTabs
-                .OfType<TabItemAdapter>()
-                .FirstOrDefault(a => ReferenceEquals(a.UnderlyingTab, tab));
-            if (adapter == null) return;
-
             var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
-            if (closeService != null)
+            if (closeService == null) return;
+
+            // Prefer closing via ITabItem if present; otherwise close via workspace mapping
+            var toClose = GetWorkspaceService().OpenTabs
+                .FirstOrDefault(t => ReferenceEquals(t?.Note, tab.Note))
+                ?? (ITabItem)tab; // NoteTabItem now implements ITabItem
+            var closed = await closeService.CloseTabWithPromptAsync(toClose);
+            if (closed)
             {
-                var closed = await closeService.CloseTabWithPromptAsync(adapter);
-                if (closed)
-                {
-                    _workspaceViewModel.RemoveTab(tab);
-                    _logger.Debug($"Closed tab: {tab.Note.Title}");
-                }
+                _workspaceViewModel.RemoveTab(tab);
+                _logger.Debug($"Closed tab: {tab.Note.Title}");
             }
         }
 
@@ -894,18 +944,36 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                var dirtyTabs = OpenTabs.Where(t => t.IsDirty).ToList();
-                if (dirtyTabs.Any())
+                // Feature flag path to new state service
+                bool useNewState = UI.FeatureFlags.UseNewArchitecture;
+                if (useNewState)
                 {
-                    foreach (var tab in dirtyTabs)
+                    var result = await _workspaceStateService.SaveAllDirtyNotesAsync();
+                    if (result.SuccessCount > 0)
                     {
-                        await _noteOperationsService.SaveNoteAsync(tab.Note);
-                        tab.IsDirty = false;
-                        tab.UpdateLastSaved();
+                        foreach (var tab in OpenTabs.Where(t => t.IsDirty))
+                        {
+                            tab.IsDirty = false;
+                            tab.UpdateLastSaved();
+                        }
+                        StatusMessage = $"Auto-saved {result.SuccessCount} note(s)";
+                        _logger.Debug($"Auto-saved {result.SuccessCount} notes (new state)");
                     }
-                    
-                    StatusMessage = $"Auto-saved {dirtyTabs.Count} note(s)";
-                    _logger.Debug($"Auto-saved {dirtyTabs.Count} notes");
+                }
+                else
+                {
+                    var dirtyTabs = OpenTabs.Where(t => t.IsDirty).ToList();
+                    if (dirtyTabs.Any())
+                    {
+                        foreach (var tab in dirtyTabs)
+                        {
+                            await _noteOperationsService.SaveNoteAsync(tab.Note);
+                            tab.IsDirty = false;
+                            tab.UpdateLastSaved();
+                        }
+                        StatusMessage = $"Auto-saved {dirtyTabs.Count} note(s)";
+                        _logger.Debug($"Auto-saved {dirtyTabs.Count} notes");
+                    }
                 }
             }
             catch (Exception ex)

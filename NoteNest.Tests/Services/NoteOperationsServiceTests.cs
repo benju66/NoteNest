@@ -25,9 +25,12 @@ namespace NoteNest.Tests.Services
         public void Setup()
         {
             _mockFileSystem = new MockFileSystemProvider();
-            _configService = new ConfigurationService(_mockFileSystem);
+            _configService = new ConfigurationService(_mockFileSystem, null);
             _logger = new MockLogger();
-            _noteService = new NoteService(_mockFileSystem, _configService, _logger);
+            var bus = new EventBus();
+            _noteService = new NoteService(_mockFileSystem, _configService, _logger, bus);
+            // Wire config to bus to capture NoteSavedEvent for recent files
+            _configService = new ConfigurationService(_mockFileSystem, bus);
             _errorHandler = new ServiceErrorHandler(_logger, null);
             _contentCache = new ContentCache();
             

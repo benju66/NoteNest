@@ -17,7 +17,12 @@ namespace NoteNest.UI.Services
             // Core Infrastructure (Fast Singletons)
             services.AddSingleton<IAppLogger>(sp => AppLogger.Instance);
             services.AddSingleton<IFileSystemProvider, DefaultFileSystemProvider>();
-            services.AddSingleton<ConfigurationService>();
+            services.AddSingleton<IEventBus, EventBus>();
+            services.AddSingleton<ConfigurationService>(sp => new ConfigurationService(
+                sp.GetRequiredService<IFileSystemProvider>(),
+                sp.GetService<IEventBus>()));
+            services.AddSingleton<IWorkspaceStateService, WorkspaceStateService>();
+            // EventBus planned for future integration; placeholder left out to avoid large changes
             
             // State Management (Lightweight Singletons)
             services.AddSingleton<IStateManager, StateManager>();
@@ -28,7 +33,11 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IDialogService, DialogService>(); // UI interaction
 
             // Workspace Services (Singleton for performance)
-            services.AddSingleton<ContentCache>();
+            services.AddSingleton<ContentCache>(sp =>
+            {
+                var bus = sp.GetRequiredService<IEventBus>();
+                return new ContentCache(bus);
+            });
             services.AddSingleton<INoteOperationsService, NoteOperationsService>();
             services.AddSingleton<IWorkspaceService, WorkspaceService>();
             services.AddSingleton<ITabCloseService, TabCloseService>();

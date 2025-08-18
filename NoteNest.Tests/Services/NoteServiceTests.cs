@@ -127,5 +127,42 @@ namespace NoteNest.Tests.Services
         {
             throw new NotImplementedException();
         }
+
+        public Task CopyAsync(string sourcePath, string destinationPath, bool overwrite)
+        {
+            if (Files.ContainsKey(sourcePath))
+            {
+                if (!overwrite && Files.ContainsKey(destinationPath))
+                    throw new IOException("Destination exists");
+                Files[destinationPath] = Files[sourcePath];
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task MoveAsync(string sourcePath, string destinationPath, bool overwrite)
+        {
+            if (Files.ContainsKey(sourcePath))
+            {
+                if (!overwrite && Files.ContainsKey(destinationPath))
+                    throw new IOException("Destination exists");
+                Files[destinationPath] = Files[sourcePath];
+                Files.Remove(sourcePath);
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task ReplaceAsync(string sourceFileName, string destinationFileName, string? backupFileName)
+        {
+            if (Files.ContainsKey(sourceFileName))
+            {
+                if (!string.IsNullOrEmpty(backupFileName) && Files.ContainsKey(destinationFileName))
+                {
+                    Files[backupFileName] = Files[destinationFileName];
+                }
+                Files[destinationFileName] = Files[sourceFileName];
+                Files.Remove(sourceFileName);
+            }
+            return Task.CompletedTask;
+        }
     }
 }

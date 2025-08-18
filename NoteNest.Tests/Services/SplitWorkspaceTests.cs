@@ -108,10 +108,7 @@ namespace NoteNest.Tests.Services
                 return Task.CompletedTask;
             }
 
-            public Task SaveAllNotesAsync()
-            {
-                return Task.CompletedTask;
-            }
+            // Removed SaveAllNotesAsync from interface
 
             public Task SaveNoteAsync(NoteModel note)
             {

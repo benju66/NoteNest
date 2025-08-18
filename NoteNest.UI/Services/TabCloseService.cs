@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Services;
 
 namespace NoteNest.UI.Services
 {
@@ -12,17 +13,20 @@ namespace NoteNest.UI.Services
         private readonly IWorkspaceService _workspace;
         private readonly IDialogService _dialog;
         private readonly IAppLogger _logger;
+        private readonly IWorkspaceStateService? _workspaceState;
         
         public TabCloseService(
             INoteOperationsService noteOperations,
             IWorkspaceService workspace,
             IDialogService dialog,
-            IAppLogger logger)
+            IAppLogger logger,
+            IWorkspaceStateService? workspaceState = null)
         {
             _noteOperations = noteOperations ?? throw new ArgumentNullException(nameof(noteOperations));
             _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
             _dialog = dialog ?? throw new ArgumentNullException(nameof(dialog));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _workspaceState = workspaceState;
         }
         
         public async Task<bool> CloseTabWithPromptAsync(ITabItem tab)
@@ -49,7 +53,14 @@ namespace NoteNest.UI.Services
                         {
                             tab.Note.Content = tab.Content;
                         }
-                        await _noteOperations.SaveNoteAsync(tab.Note);
+                        if (UI.FeatureFlags.UseNewArchitecture && _workspaceState != null)
+                        {
+                            await _workspaceState.SaveNoteAsync(tab.Note.Id);
+                        }
+                        else
+                        {
+                            await _noteOperations.SaveNoteAsync(tab.Note);
+                        }
                         tab.IsDirty = false;
                         _logger.Info($"Saved and closing tab: {tab.Title}");
                     }
@@ -90,7 +101,14 @@ namespace NoteNest.UI.Services
                         {
                             tab.Note.Content = tab.Content;
                         }
-                        await _noteOperations.SaveNoteAsync(tab.Note);
+                        if (UI.FeatureFlags.UseNewArchitecture && _workspaceState != null)
+                        {
+                            await _workspaceState.SaveNoteAsync(tab.Note.Id);
+                        }
+                        else
+                        {
+                            await _noteOperations.SaveNoteAsync(tab.Note);
+                        }
                         tab.IsDirty = false;
                     }
                 }

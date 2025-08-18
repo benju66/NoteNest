@@ -177,17 +177,8 @@ namespace NoteNest.UI
                     settings.WindowSettings.Top = this.Top;
                     settings.WindowSettings.IsMaximized = this.WindowState == WindowState.Maximized;
                     
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await viewModel.GetConfigService().SaveSettingsAsync();
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Error saving settings during shutdown: {ex.Message}");
-                        }
-                    });
+                    // Request debounced save; final flush happens in App.OnExit
+                    viewModel.GetConfigService().RequestSaveDebounced();
                 }
             }
             catch (Exception ex)

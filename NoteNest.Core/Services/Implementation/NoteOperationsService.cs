@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Models;
@@ -63,24 +64,8 @@ namespace NoteNest.Core.Services.Implementation
             
             await _errorHandler.SafeExecuteAsync(async () =>
             {
-                // Perform the actual save operation
+                // Perform the actual save operation (event-driven cache/config will react)
                 await _noteService.SaveNoteAsync(note);
-                
-                // CRITICAL: Invalidate content cache after successful save to prevent stale data
-                _contentCache.InvalidateEntry(note.FilePath);
-                _logger.Debug($"Invalidated content cache for: {note.FilePath}");
-                
-                // Handle recent files with proper error handling (don't fail save for this)
-                try
-                {
-                    _configService.AddRecentFile(note.FilePath);
-                    await _configService.SaveSettingsAsync();
-                }
-                catch (Exception ex)
-                {
-                    _logger.Warning($"Failed to update recent files for: {note.Title}. Error: {ex.Message}");
-                    // Continue - don't fail the save operation for recent files tracking
-                }
                 
                 _logger.Info($"Successfully saved note: {note.Title}");
             }, "Save Note");
@@ -123,15 +108,10 @@ namespace NoteNest.Core.Services.Implementation
                     return false;
                 }
                 
-                // Rename physical file
+                // Rename physical file using provider
                 if (await _fileSystem.ExistsAsync(oldPath))
                 {
-                    // Use file system operations to rename
-                    // Note: IFileSystemProvider might need a MoveAsync method
-                    if (File.Exists(oldPath))
-                    {
-                        File.Move(oldPath, newPath);
-                    }
+                    await _fileSystem.MoveAsync(oldPath, newPath, overwrite: false);
                 }
                 
                 // Update note model
@@ -162,60 +142,7 @@ namespace NoteNest.Core.Services.Implementation
                 return success;
             }, "Move Note");
         }
-        
-        public async Task SaveAllNotesAsync()
-        {
-            await _errorHandler.SafeExecuteAsync(async () =>
-            {
-                var saveCount = 0;
-                var errorCount = 0;
-                var notes = _openNotes.ToList(); // Create a copy to avoid modification during iteration
-                
-                foreach (var note in notes)
-                {
-                    if (note.IsDirty)
-                    {
-                        try
-                        {
-                            await _noteService.SaveNoteAsync(note);
-                            
-                            // CRITICAL: Invalidate content cache after successful save
-                            _contentCache.InvalidateEntry(note.FilePath);
-                            
-                            saveCount++;
-                            _logger.Debug($"Saved and invalidated cache for: {note.Title}");
-                        }
-                        catch (Exception ex)
-                        {
-                            errorCount++;
-                            _logger.Error(ex, $"Failed to save note during SaveAll: {note.Title}");
-                            // Continue with other notes
-                        }
-                    }
-                }
-                
-                if (saveCount > 0)
-                {
-                    try
-                    {
-                        await _configService.SaveSettingsAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Warning($"Failed to save configuration after SaveAll. Error: {ex.Message}");
-                    }
-                    
-                    if (errorCount > 0)
-                    {
-                        _logger.Warning($"SaveAll completed with {saveCount} successes and {errorCount} errors");
-                    }
-                    else
-                    {
-                        _logger.Info($"Successfully saved all {saveCount} notes");
-                    }
-                }
-            }, "Save All Notes");
-        }
+        // Removed SaveAllNotesAsync: batch saving now handled by WorkspaceService or WorkspaceStateService
         
         // Helper methods for tracking open notes
         public void TrackOpenNote(NoteModel note)

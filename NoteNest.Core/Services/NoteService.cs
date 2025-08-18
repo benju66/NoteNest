@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Threading;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Events;
 
 namespace NoteNest.Core.Services
 {
@@ -15,13 +18,16 @@ namespace NoteNest.Core.Services
         private readonly IFileSystemProvider _fileSystem;
         private readonly ConfigurationService _configService;
         private readonly IAppLogger _logger;
+        private readonly IEventBus? _eventBus;
         private readonly JsonSerializerOptions _jsonOptions;
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
 
-        public NoteService(IFileSystemProvider fileSystem, ConfigurationService configService, IAppLogger? logger = null)
+        public NoteService(IFileSystemProvider fileSystem, ConfigurationService configService, IAppLogger? logger = null, IEventBus? eventBus = null)
         {
             _fileSystem = fileSystem ?? new DefaultFileSystemProvider();
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
             _logger = logger ?? AppLogger.Instance;
+            _eventBus = eventBus;
             
             _jsonOptions = new JsonSerializerOptions 
             { 
@@ -121,13 +127,51 @@ namespace NoteNest.Core.Services
                     _logger.Info($"Created directory for note save: {directory}");
                 }
 
-                // Perform the file write operation
-                await _fileSystem.WriteTextAsync(note.FilePath, note.Content ?? string.Empty);
+                // Atomic write with per-file lock
+                var fileLock = _fileLocks.GetOrAdd(note.FilePath, _ => new SemaphoreSlim(1, 1));
+                await fileLock.WaitAsync();
+                try
+                {
+                    var tempPath = note.FilePath + ".tmp";
+                    var backupPath = note.FilePath + ".bak";
+
+                    // Write to temp first
+                    await _fileSystem.WriteTextAsync(tempPath, note.Content ?? string.Empty);
+
+                    // Replace atomically when available
+                    try
+                    {
+                        await _fileSystem.ReplaceAsync(tempPath, note.FilePath, backupPath);
+                    }
+                    catch
+                    {
+                        // Fallback: delete then move
+                        if (await _fileSystem.ExistsAsync(note.FilePath))
+                        {
+                            await _fileSystem.DeleteAsync(note.FilePath);
+                        }
+                        await _fileSystem.MoveAsync(tempPath, note.FilePath, overwrite: false);
+                    }
+                }
+                finally
+                {
+                    fileLock.Release();
+                }
                 
                 // Update note state
                 var previousModified = note.LastModified;
                 note.LastModified = DateTime.Now;
                 note.MarkClean();
+
+                // Publish event for listeners (e.g., cache invalidation, recent files)
+                if (_eventBus != null)
+                {
+                    try
+                    {
+                        await _eventBus.PublishAsync(new NoteSavedEvent { FilePath = note.FilePath, SavedAt = note.LastModified });
+                    }
+                    catch { }
+                }
                 
                 _logger.Info($"Successfully saved note '{note.Title}' ({contentLength} chars) at {note.LastModified:yyyy-MM-dd HH:mm:ss}");
                 if (previousModified != default)

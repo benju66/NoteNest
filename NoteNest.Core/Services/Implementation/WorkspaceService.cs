@@ -209,12 +209,26 @@ namespace NoteNest.Core.Services.Implementation
             await _errorHandler.SafeExecuteAsync(async () =>
             {
                 var dirtyTabs = OpenTabs.Where(t => t.IsDirty).ToList();
-                
+                var maxParallel = 4;
+                using var gate = new System.Threading.SemaphoreSlim(maxParallel);
+                var tasks = new List<Task>();
                 foreach (var tab in dirtyTabs)
                 {
-                    await _noteOperationsService.SaveNoteAsync(tab.Note);
-                    tab.IsDirty = false;
+                    await gate.WaitAsync();
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _noteOperationsService.SaveNoteAsync(tab.Note);
+                            tab.IsDirty = false;
+                        }
+                        finally
+                        {
+                            gate.Release();
+                        }
+                    }));
                 }
+                await Task.WhenAll(tasks);
                 
                 _logger.Info($"Saved {dirtyTabs.Count} tabs");
                 OnPropertyChanged(nameof(HasUnsavedChanges));

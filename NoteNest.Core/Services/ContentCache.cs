@@ -33,6 +33,20 @@ namespace NoteNest.Core.Services
                 TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
         }
 
+        public ContentCache(IEventBus eventBus, int maxCacheSizeMB = 50) : this(maxCacheSizeMB)
+        {
+            if (eventBus != null)
+            {
+                eventBus.Subscribe<NoteNest.Core.Events.NoteSavedEvent>(e =>
+                {
+                    if (e?.FilePath != null)
+                    {
+                        InvalidateEntry(e.FilePath);
+                    }
+                });
+            }
+        }
+
         public async Task<string> GetContentAsync(string filePath, 
             Func<string, Task<string>> loadFunc)
         {

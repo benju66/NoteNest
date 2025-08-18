@@ -124,6 +124,17 @@ namespace NoteNest.UI
         {
             try
             {
+                // Flush pending config saves
+                try
+                {
+                    var config = ServiceProvider?.GetService<NoteNest.Core.Services.ConfigurationService>();
+                    if (config != null)
+                    {
+                        await config.FlushPendingAsync();
+                    }
+                }
+                catch { }
+                
                 // Fast shutdown
                 if (MainWindow?.DataContext is IDisposable vm)
                 {

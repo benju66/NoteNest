@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using NoteNest.Core.Models;
 
@@ -10,7 +11,7 @@ namespace NoteNest.Core.Interfaces.Services
         Task DeleteNoteAsync(NoteModel note);
         Task<bool> RenameNoteAsync(NoteModel note, string newName);
         Task<bool> MoveNoteAsync(NoteModel note, CategoryModel targetCategory);
-        Task SaveAllNotesAsync();
+        // Removed: SaveAllNotesAsync (use workspace or state service for batch saves)
         
         // Methods for tracking open notes (for SaveAll functionality)
         void TrackOpenNote(NoteModel note);

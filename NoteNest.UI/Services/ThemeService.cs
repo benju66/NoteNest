@@ -73,7 +73,7 @@ namespace NoteNest.UI.Services
             try
             {
                 _configurationService.Settings.Theme = theme.ToString();
-                _configurationService.SaveSettingsAsync().GetAwaiter().GetResult();
+                _configurationService.RequestSaveDebounced();
             }
             catch
             {

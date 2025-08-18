@@ -27,17 +27,7 @@ namespace NoteNest.UI.ViewModels
             {
                 if (SetProperty(ref _selectedTab, value))
                 {
-                    // Sync selection with service
-                    if (_workspaceService != null && value != null)
-                    {
-                        var adapter = _workspaceService.OpenTabs
-                            .OfType<TabItemAdapter>()
-                            .FirstOrDefault(a => ReferenceEquals(a.UnderlyingTab, value));
-                        if (adapter != null)
-                        {
-                            _workspaceService.SelectedTab = adapter;
-                        }
-                    }
+                    // New architecture: SelectedTab is UI-only; service selection sync not needed
                 }
             }
         }
@@ -65,55 +55,48 @@ namespace NoteNest.UI.ViewModels
         public void AddTab(NoteTabItem noteTab)
         {
             _uiTabs.Add(noteTab);
-            
-            // Add adapter to service
-            var adapter = new TabItemAdapter(noteTab);
-            _workspaceService.OpenTabs.Add(adapter);
+            // Keep service collection in sync using UI NoteTabItem (implements ITabItem)
+            if (!_workspaceService.OpenTabs.Contains(noteTab))
+            {
+                _workspaceService.OpenTabs.Add(noteTab);
+            }
         }
         
         public void RemoveTab(NoteTabItem noteTab)
         {
             _uiTabs.Remove(noteTab);
             
-            // Remove from service
-            var adapter = _workspaceService.OpenTabs
-                .OfType<TabItemAdapter>()
-                .FirstOrDefault(a => ReferenceEquals(a.UnderlyingTab, noteTab));
-            
-            if (adapter != null)
+            if (_workspaceService.OpenTabs.Contains(noteTab))
             {
-                _workspaceService.OpenTabs.Remove(adapter);
-                adapter.Dispose();
+                _workspaceService.OpenTabs.Remove(noteTab);
             }
         }
         
         private void OnServiceTabOpened(object sender, TabEventArgs e)
         {
-            // If service opened a UI-backed tab (adapter), mirror it in UI list
-            if (e.Tab is TabItemAdapter adapter && !_uiTabs.Contains(adapter.UnderlyingTab))
+            // Map service ITabItem to UI NoteTabItem where possible
+            if (e.Tab?.Note != null)
             {
-                _uiTabs.Add(adapter.UnderlyingTab);
+                var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, e.Tab.Note));
+                if (existing == null)
+                {
+                    _uiTabs.Add(new NoteTabItem(e.Tab.Note));
+                }
             }
         }
         
         private void OnServiceTabClosed(object sender, TabEventArgs e)
         {
-            if (e.Tab is TabItemAdapter adapter && _uiTabs.Contains(adapter.UnderlyingTab))
+            if (e.Tab?.Note != null)
             {
-                _uiTabs.Remove(adapter.UnderlyingTab);
+                var ui = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, e.Tab.Note));
+                if (ui != null) _uiTabs.Remove(ui);
             }
         }
         
         private void OnServiceTabSelectionChanged(object sender, TabChangedEventArgs e)
         {
-            // Sync selection from service to UI
-            if (e.NewTab is TabItemAdapter adapter)
-            {
-                SelectedTab = adapter.UnderlyingTab;
-                return;
-            }
-
-            // Fallback: match by note if service sent a different ITabItem implementation
+            // Sync selection from service to UI by note identity
             var serviceTab = e.NewTab;
             if (serviceTab?.Note != null)
             {
@@ -128,14 +111,18 @@ namespace NoteNest.UI.ViewModels
         
         private void OnServiceTabsCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
-            // Keep UI collection in sync with service collection
+            // Keep UI collection in sync with service collection by note reference
             if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null)
             {
                 foreach (var item in e.NewItems)
                 {
-                    if (item is TabItemAdapter adapter && !_uiTabs.Contains(adapter.UnderlyingTab))
+                    if (item is ITabItem tab && tab.Note != null)
                     {
-                        _uiTabs.Add(adapter.UnderlyingTab);
+                        var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, tab.Note));
+                        if (existing == null)
+                        {
+                            _uiTabs.Add(new NoteTabItem(tab.Note));
+                        }
                     }
                 }
             }
@@ -143,9 +130,13 @@ namespace NoteNest.UI.ViewModels
             {
                 foreach (var item in e.OldItems)
                 {
-                    if (item is TabItemAdapter adapter && _uiTabs.Contains(adapter.UnderlyingTab))
+                    if (item is ITabItem tab && tab.Note != null)
                     {
-                        _uiTabs.Remove(adapter.UnderlyingTab);
+                        var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, tab.Note));
+                        if (existing != null)
+                        {
+                            _uiTabs.Remove(existing);
+                        }
                     }
                 }
             }
@@ -158,11 +149,12 @@ namespace NoteNest.UI.ViewModels
 
         private void SyncFromService()
         {
-            foreach (var adapter in _workspaceService.OpenTabs.OfType<TabItemAdapter>())
+            foreach (var tab in _workspaceService.OpenTabs)
             {
-                if (!_uiTabs.Contains(adapter.UnderlyingTab))
+                var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, tab.Note));
+                if (existing == null)
                 {
-                    _uiTabs.Add(adapter.UnderlyingTab);
+                    _uiTabs.Add(new NoteTabItem(tab.Note));
                 }
             }
         }
