@@ -29,6 +29,7 @@ namespace NoteNest.UI.ViewModels
         private readonly IServiceErrorHandler _errorHandler;
         private readonly IDialogService _dialogService;
         private readonly IFileSystemProvider _fileSystem;
+        private readonly ContentCache _contentCache;
 
         // Lazy Services (created only when needed)
         private SearchIndexService _searchIndex;
@@ -151,7 +152,8 @@ namespace NoteNest.UI.ViewModels
                 _errorHandler,
                 _logger,
                 _fileSystem,
-                _configService);
+                _configService,
+                _contentCache);
         }
 
         private IWorkspaceService GetWorkspaceService() => _workspaceService;
@@ -189,7 +191,8 @@ namespace NoteNest.UI.ViewModels
             IServiceErrorHandler errorHandler,
             IDialogService dialogService,
             IFileSystemProvider fileSystem,
-            IWorkspaceService workspaceService)
+            IWorkspaceService workspaceService,
+            ContentCache contentCache)
         {
             // Assign essential services only (fast)
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -200,6 +203,7 @@ namespace NoteNest.UI.ViewModels
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
             _workspaceService = workspaceService ?? throw new ArgumentNullException(nameof(workspaceService));
+            _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
 
             _logger.Info("MainViewModel fast startup initiated");
             _cancellationTokenSource = new CancellationTokenSource();
@@ -531,24 +535,22 @@ namespace NoteNest.UI.ViewModels
         {
             if (tab == null) return;
 
-            if (tab.IsDirty)
-            {
-                var result = await _dialogService.ShowYesNoCancelAsync(
-                    $"Save changes to '{tab.Title}'?",
-                    "Unsaved Changes");
+            // Use centralized close service with existing adapter instance
+            var adapter = GetWorkspaceService().OpenTabs
+                .OfType<TabItemAdapter>()
+                .FirstOrDefault(a => ReferenceEquals(a.UnderlyingTab, tab));
+            if (adapter == null) return;
 
-                if (result == null) return; // Cancel
-                if (result == true)
+            var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+            if (closeService != null)
+            {
+                var closed = await closeService.CloseTabWithPromptAsync(adapter);
+                if (closed)
                 {
-                    await GetNoteOperationsService().SaveNoteAsync(tab.Note);
-                    tab.IsDirty = false;
+                    _workspaceViewModel.RemoveTab(tab);
+                    _logger.Debug($"Closed tab: {tab.Note.Title}");
                 }
             }
-
-            // Remove through workspace
-            _workspaceViewModel.RemoveTab(tab);
-            
-            _logger.Debug($"Closed tab: {tab.Note.Title}");
         }
 
         #endregion

@@ -131,49 +131,38 @@ namespace NoteNest.UI
             await dialog.ShowAsync();
         }
 
-        private void Window_Closing(object sender, CancelEventArgs e)
+        private async void Window_Closing(object sender, CancelEventArgs e)
         {
             var viewModel = MainPanel.DataContext as MainViewModel;
             if (viewModel == null) return;
 
-            // Check for unsaved changes
-            var dirtyTabs = viewModel.OpenTabs?.Where(t => t.IsDirty).ToList() ?? new List<NoteTabItem>();
-            if (dirtyTabs.Any())
+            try
             {
-                var result = MessageBox.Show(
-                    $"You have {dirtyTabs.Count} unsaved note(s). Save all before closing?",
-                    "Unsaved Changes",
-                    MessageBoxButton.YesNoCancel,
-                    MessageBoxImage.Warning);
-
-                if (result == MessageBoxResult.Cancel)
+                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.ITabCloseService)) as NoteNest.Core.Interfaces.Services.ITabCloseService;
+                if (closeService != null)
                 {
-                    e.Cancel = true;
-                    return;
-                }
-
-                if (result == MessageBoxResult.Yes)
-                {
-                    try
+                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
+                    if (workspace?.HasUnsavedChanges == true)
                     {
-                        // Use SaveAllCommand which handles the saving properly
-                        if (viewModel.SaveAllCommand.CanExecute(null))
+                        e.Cancel = true;
+                        var result = await closeService.CloseAllTabsWithPromptAsync();
+                        if (result)
                         {
-                            viewModel.SaveAllCommand.Execute(null);
+                            // After closing all, resume shutdown
+                            Close();
+                            return;
+                        }
+                        else
+                        {
+                            // User cancelled
+                            return;
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        // Log error but don't prevent shutdown
-                        System.Diagnostics.Debug.WriteLine($"Error saving during shutdown: {ex.Message}");
-                        // Show warning but allow shutdown to continue
-                        MessageBox.Show(
-                            "Some files could not be saved. The application will still close.",
-                            "Save Warning",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
-                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error during close-all prompt: {ex.Message}");
             }
 
             // Save window settings - use fire-and-forget to avoid blocking
@@ -188,7 +177,6 @@ namespace NoteNest.UI
                     settings.WindowSettings.Top = this.Top;
                     settings.WindowSettings.IsMaximized = this.WindowState == WindowState.Maximized;
                     
-                    // Fire-and-forget - don't block UI thread
                     _ = Task.Run(async () =>
                     {
                         try
@@ -204,11 +192,9 @@ namespace NoteNest.UI
             }
             catch (Exception ex)
             {
-                // Log error but don't prevent shutdown
                 System.Diagnostics.Debug.WriteLine($"Error preparing settings save during shutdown: {ex.Message}");
             }
 
-            // Initiate cleanup in background - don't wait for it
             _ = Task.Run(() =>
             {
                 try

@@ -19,6 +19,7 @@ namespace NoteNest.Tests.Services
         private NoteService _noteService;
         private IServiceErrorHandler _errorHandler;
         private IAppLogger _logger;
+        private ContentCache _contentCache;
 
         [SetUp]
         public void Setup()
@@ -28,13 +29,21 @@ namespace NoteNest.Tests.Services
             _logger = new MockLogger();
             _noteService = new NoteService(_mockFileSystem, _configService, _logger);
             _errorHandler = new ServiceErrorHandler(_logger, null);
+            _contentCache = new ContentCache();
             
             _noteOperationsService = new NoteOperationsService(
                 _noteService,
                 _errorHandler,
                 _logger,
                 _mockFileSystem,
-                _configService);
+                _configService,
+                _contentCache);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            _contentCache?.Dispose();
         }
 
         [Test]

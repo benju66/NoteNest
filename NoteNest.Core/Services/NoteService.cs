@@ -110,24 +110,50 @@ namespace NoteNest.Core.Services
 
             try
             {
+                var contentLength = note.Content?.Length ?? 0;
+                _logger.Debug($"Saving note '{note.Title}' ({contentLength} characters) to: {note.FilePath}");
+
                 // Ensure directory exists
                 var directory = Path.GetDirectoryName(note.FilePath) ?? string.Empty;
                 if (!await _fileSystem.ExistsAsync(directory))
                 {
                     await _fileSystem.CreateDirectoryAsync(directory);
-                    _logger.Debug($"Created directory: {directory}");
+                    _logger.Info($"Created directory for note save: {directory}");
                 }
 
+                // Perform the file write operation
                 await _fileSystem.WriteTextAsync(note.FilePath, note.Content ?? string.Empty);
+                
+                // Update note state
+                var previousModified = note.LastModified;
                 note.LastModified = DateTime.Now;
                 note.MarkClean();
                 
-                _logger.Debug($"Saved note: {note.Title} to {note.FilePath}");
+                _logger.Info($"Successfully saved note '{note.Title}' ({contentLength} chars) at {note.LastModified:yyyy-MM-dd HH:mm:ss}");
+                if (previousModified != default)
+                {
+                    _logger.Debug($"Note last modified changed from {previousModified:yyyy-MM-dd HH:mm:ss} to {note.LastModified:yyyy-MM-dd HH:mm:ss}");
+                }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.Error(ex, $"Access denied when saving note '{note.Title}' to: {note.FilePath}");
+                throw new InvalidOperationException($"Access denied when saving note '{note.Title}'. Check file permissions.", ex);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                _logger.Error(ex, $"Directory not found when saving note '{note.Title}' to: {note.FilePath}");
+                throw new InvalidOperationException($"Directory not found when saving note '{note.Title}'. Path may be invalid.", ex);
+            }
+            catch (IOException ex)
+            {
+                _logger.Error(ex, $"I/O error when saving note '{note.Title}' to: {note.FilePath}");
+                throw new InvalidOperationException($"I/O error when saving note '{note.Title}'. File may be locked or disk full.", ex);
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Failed to save note: {note.Title}");
-                throw new InvalidOperationException($"Failed to save note: {ex.Message}", ex);
+                _logger.Error(ex, $"Unexpected error saving note '{note.Title}' to: {note.FilePath}");
+                throw new InvalidOperationException($"Failed to save note '{note.Title}': {ex.Message}", ex);
             }
         }
 

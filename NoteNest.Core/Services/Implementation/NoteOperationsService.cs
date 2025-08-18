@@ -17,6 +17,7 @@ namespace NoteNest.Core.Services.Implementation
         private readonly IAppLogger _logger;
         private readonly IFileSystemProvider _fileSystem;
         private readonly ConfigurationService _configService;
+        private readonly ContentCache _contentCache;
         
         // Store references to open notes for SaveAll functionality
         private readonly List<NoteModel> _openNotes = new List<NoteModel>();
@@ -26,13 +27,15 @@ namespace NoteNest.Core.Services.Implementation
             IServiceErrorHandler errorHandler,
             IAppLogger logger,
             IFileSystemProvider fileSystem,
-            ConfigurationService configService)
+            ConfigurationService configService,
+            ContentCache contentCache)
         {
             _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
             _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
+            _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
             
             _logger.Debug("NoteOperationsService initialized");
         }
@@ -60,13 +63,26 @@ namespace NoteNest.Core.Services.Implementation
             
             await _errorHandler.SafeExecuteAsync(async () =>
             {
+                // Perform the actual save operation
                 await _noteService.SaveNoteAsync(note);
                 
-                // Add to recent files
-                _configService.AddRecentFile(note.FilePath);
-                await _configService.SaveSettingsAsync();
+                // CRITICAL: Invalidate content cache after successful save to prevent stale data
+                _contentCache.InvalidateEntry(note.FilePath);
+                _logger.Debug($"Invalidated content cache for: {note.FilePath}");
                 
-                _logger.Info($"Saved note: {note.Title}");
+                // Handle recent files with proper error handling (don't fail save for this)
+                try
+                {
+                    _configService.AddRecentFile(note.FilePath);
+                    await _configService.SaveSettingsAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning($"Failed to update recent files for: {note.Title}. Error: {ex.Message}");
+                    // Continue - don't fail the save operation for recent files tracking
+                }
+                
+                _logger.Info($"Successfully saved note: {note.Title}");
             }, "Save Note");
         }
         
@@ -152,21 +168,51 @@ namespace NoteNest.Core.Services.Implementation
             await _errorHandler.SafeExecuteAsync(async () =>
             {
                 var saveCount = 0;
+                var errorCount = 0;
                 var notes = _openNotes.ToList(); // Create a copy to avoid modification during iteration
                 
                 foreach (var note in notes)
                 {
                     if (note.IsDirty)
                     {
-                        await _noteService.SaveNoteAsync(note);
-                        saveCount++;
+                        try
+                        {
+                            await _noteService.SaveNoteAsync(note);
+                            
+                            // CRITICAL: Invalidate content cache after successful save
+                            _contentCache.InvalidateEntry(note.FilePath);
+                            
+                            saveCount++;
+                            _logger.Debug($"Saved and invalidated cache for: {note.Title}");
+                        }
+                        catch (Exception ex)
+                        {
+                            errorCount++;
+                            _logger.Error(ex, $"Failed to save note during SaveAll: {note.Title}");
+                            // Continue with other notes
+                        }
                     }
                 }
                 
                 if (saveCount > 0)
                 {
-                    await _configService.SaveSettingsAsync();
-                    _logger.Info($"Saved {saveCount} notes");
+                    try
+                    {
+                        await _configService.SaveSettingsAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning($"Failed to save configuration after SaveAll. Error: {ex.Message}");
+                    }
+                    
+                    if (errorCount > 0)
+                    {
+                        _logger.Warning($"SaveAll completed with {saveCount} successes and {errorCount} errors");
+                    }
+                    else
+                    {
+                        _logger.Info($"Successfully saved all {saveCount} notes");
+                    }
                 }
             }, "Save All Notes");
         }

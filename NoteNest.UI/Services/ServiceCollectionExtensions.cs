@@ -31,6 +31,7 @@ namespace NoteNest.UI.Services
             services.AddSingleton<ContentCache>();
             services.AddSingleton<INoteOperationsService, NoteOperationsService>();
             services.AddSingleton<IWorkspaceService, WorkspaceService>();
+            services.AddSingleton<ITabCloseService, TabCloseService>();
 
             // ViewModels (Singleton for MainViewModel, Transient for others)
             services.AddSingleton<MainViewModel>();

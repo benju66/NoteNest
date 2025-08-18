@@ -138,24 +138,38 @@ namespace NoteNest.UI.Controls
             return null;
         }
         
-        private void CloseTab_Click(object sender, RoutedEventArgs e)
+        private async void CloseTab_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is ITabItem tab)
             {
-                Pane?.Tabs.Remove(tab);
-                var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
-                if (workspaceService != null && workspaceService.OpenTabs.Contains(tab))
+                // Optional: flush binding for the tab editor
+                try
                 {
-                    workspaceService.OpenTabs.Remove(tab);
-                }
-                
-                // If this was the last tab, close the pane
-                if (Pane?.Tabs.Count == 0)
-                {
-                    workspaceService ??= (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
-                    if (workspaceService != null && workspaceService.Panes.Count > 1)
+                    var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
+                    if (container != null)
                     {
-                        _ = workspaceService.ClosePaneAsync(Pane);
+                        var presenter = FindVisualChild<ContentPresenter>(container);
+                        var editor = FindVisualChild<SmartTextEditor>(presenter);
+                        var binding = editor?.GetBindingExpression(TextBox.TextProperty);
+                        binding?.UpdateSource();
+                    }
+                }
+                catch { }
+
+                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                if (closeService != null)
+                {
+                    var closed = await closeService.CloseTabWithPromptAsync(tab);
+                    if (closed)
+                    {
+                        Pane?.Tabs.Remove(tab);
+
+                        // If this was the last tab, optionally close empty pane
+                        var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                        if (Pane?.Tabs.Count == 0 && workspaceService != null && workspaceService.Panes.Count > 1)
+                        {
+                            _ = workspaceService.ClosePaneAsync(Pane);
+                        }
                     }
                 }
             }
