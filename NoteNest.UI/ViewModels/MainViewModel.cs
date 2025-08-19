@@ -290,8 +290,8 @@ namespace NoteNest.UI.ViewModels
         private void InitializeCommands()
         {
             NewNoteCommand = new RelayCommand(async _ => await CreateNewNoteAsync(), _ => SelectedCategory != null);
-            SaveNoteCommand = new RelayCommand(async _ => await SaveCurrentNoteAsync(), _ => _workspaceService?.HasUnsavedChanges == true || SelectedTab?.IsDirty == true);
-            SaveAllCommand = new RelayCommand(async _ => await SaveAllNotesAsync(), _ => _workspaceService?.HasUnsavedChanges == true);
+            SaveNoteCommand = new RelayCommand(async _ => await SaveCurrentNoteAsync(), _ => SelectedTab != null);
+            SaveAllCommand = new RelayCommand(async _ => await SaveAllNotesAsync(), _ => true);
             CloseTabCommand = new RelayCommand<NoteTabItem>(async tab => await CloseTabAsync(tab));
             NewCategoryCommand = new RelayCommand(async _ => await CreateNewCategoryAsync());
             NewSubCategoryCommand = new RelayCommand<CategoryTreeItem>(async cat => await CreateNewSubCategoryAsync(cat), _ => SelectedCategory != null);
@@ -484,23 +484,36 @@ namespace NoteNest.UI.ViewModels
 
         private async Task SaveCurrentNoteAsync()
         {
-            if (SelectedTab == null) return;
+            var current = GetWorkspaceService().SelectedTab;
+            if (current == null) return;
 
             // Feature flag path to new state service
             bool useNewState = UI.FeatureFlags.UseNewArchitecture;
             if (useNewState)
             {
-                await _workspaceStateService.SaveNoteAsync(SelectedTab.Note.Id);
-                SelectedTab.IsDirty = false;
-                SelectedTab.UpdateLastSaved();
+                // Ensure state has freshest content
+                try
+                {
+                    _workspaceStateService.UpdateNoteContent(current.Note.Id, current.Content ?? string.Empty);
+                }
+                catch { }
+                var result = await _workspaceStateService.SaveNoteAsync(current.Note.Id);
+                if (result?.Success == true)
+                {
+                    current.IsDirty = false;
+                    try { current.Note?.MarkClean(); } catch { }
+                }
             }
             else
             {
-                await GetNoteOperationsService().SaveNoteAsync(SelectedTab.Note);
-                SelectedTab.IsDirty = false;
-                SelectedTab.UpdateLastSaved();
+                if (current.Note != null && current.Content != null)
+                {
+                    current.Note.Content = current.Content;
+                }
+                await GetNoteOperationsService().SaveNoteAsync(current.Note);
+                current.IsDirty = false;
             }
-            _stateManager.StatusMessage = $"Saved: {SelectedTab.Note.Title}";
+            _stateManager.StatusMessage = $"Saved: {current.Note.Title}";
         }
 
         private async Task SaveAllNotesAsync()

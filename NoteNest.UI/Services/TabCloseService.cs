@@ -43,9 +43,23 @@ namespace NoteNest.UI.Services
                         {
                             tab.Note.Content = tab.Content;
                         }
-                        await _noteOperations.SaveNoteAsync(tab.Note);
-                        tab.IsDirty = false;
-                        _logger.Info($"Auto-saved on close: {tab.Title}");
+                        bool saved = false;
+                        if (UI.FeatureFlags.UseNewArchitecture && _workspaceState != null)
+                        {
+                            var result = await _workspaceState.SaveNoteAsync(tab.Note.Id);
+                            saved = result?.Success == true;
+                        }
+                        else
+                        {
+                            await _noteOperations.SaveNoteAsync(tab.Note);
+                            saved = true;
+                        }
+                        if (saved)
+                        {
+                            tab.IsDirty = false;
+                            try { tab.Note?.MarkClean(); } catch { }
+                            _logger.Info($"Auto-saved on close: {tab.Title}");
+                        }
                     }
                     catch (Exception ex)
                     {

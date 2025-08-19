@@ -102,7 +102,7 @@ namespace NoteNest.UI.Controls
                 : new SolidColorBrush(Colors.LightGray);
         }
         
-        private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (Pane != null && PaneTabControl.SelectedItem is ITabItem tab)
             {
@@ -117,9 +117,29 @@ namespace NoteNest.UI.Controls
                         {
                             oldTab.Note.Content = oldTab.Content;
                         }
-                        var noteOps = (Application.Current as App)?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
-                        noteOps?.SaveNoteAsync(oldTab.Note).ConfigureAwait(false);
-                        oldTab.IsDirty = false;
+                        var state = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                        // Keep state content in sync before saving
+                        try { state?.UpdateNoteContent(oldTab.Note.Id, oldTab.Content ?? string.Empty); } catch { }
+                        bool saved = false;
+                        if (state != null)
+                        {
+                            var result = await state.SaveNoteAsync(oldTab.Note.Id);
+                            saved = result?.Success == true;
+                        }
+                        else
+                        {
+                            var noteOps = (Application.Current as App)?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
+                            if (noteOps != null)
+                            {
+                                await noteOps.SaveNoteAsync(oldTab.Note);
+                                saved = true;
+                            }
+                        }
+                        if (saved)
+                        {
+                            oldTab.IsDirty = false;
+                            try { oldTab.Note?.MarkClean(); } catch { }
+                        }
                     }
                     catch { }
                 }
@@ -131,8 +151,16 @@ namespace NoteNest.UI.Controls
                     workspaceService.SelectedTab = tab;
                 }
                 
-                // Always load content when a tab is selected
+                // Always load content when a tab is selected and sync NoteModel.IsDirty
                 LoadTabContent(tab);
+                try
+                {
+                    if (tab.Note != null)
+                    {
+                        tab.Note.IsDirty = tab.IsDirty;
+                    }
+                }
+                catch { }
             }
         }
         
@@ -164,6 +192,26 @@ namespace NoteNest.UI.Controls
                 _idleSaveTimer.Stop();
                 _idleSaveTimer.Start();
             }
+            // Update state live so saves have the latest content
+            try
+            {
+                var workspaceService = app?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                var tab = Pane?.SelectedTab ?? workspaceService?.SelectedTab;
+                var state = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                if (tab?.Note != null && state != null)
+                {
+                    // Read text from editor to ensure freshest value
+                    if (sender is SmartTextEditor editor)
+                    {
+                        state.UpdateNoteContent(tab.Note.Id, editor.Text ?? string.Empty);
+                    }
+                    else
+                    {
+                        state.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty);
+                    }
+                }
+            }
+            catch { }
         }
 
         private async void IdleSaveTimer_Tick(object? sender, EventArgs e)
@@ -181,12 +229,29 @@ namespace NoteNest.UI.Controls
                     {
                         tab.Note.Content = tab.Content;
                     }
-                    var noteOps = app?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
-                    if (noteOps != null)
+                    var state = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                    // Sync state content before save
+                    try { state?.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty); } catch { }
+                    bool saved = false;
+                    if (state != null)
                     {
-                        await noteOps.SaveNoteAsync(tab.Note);
+                        var result = await state.SaveNoteAsync(tab.Note.Id);
+                        saved = result?.Success == true;
                     }
-                    tab.IsDirty = false;
+                    else
+                    {
+                        var noteOps = app?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
+                        if (noteOps != null)
+                        {
+                            await noteOps.SaveNoteAsync(tab.Note);
+                            saved = true;
+                        }
+                    }
+                    if (saved)
+                    {
+                        tab.IsDirty = false;
+                        try { tab.Note?.MarkClean(); } catch { }
+                    }
                 }
             }
             catch { }
