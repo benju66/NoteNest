@@ -35,9 +35,7 @@ namespace NoteNest.UI.Services
             
             try
             {
-                var app = System.Windows.Application.Current as UI.App;
-                var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
-                if (tab.IsDirty && config?.Settings?.AutoSaveOnClose == true)
+                if (tab.IsDirty)
                 {
                     try
                     {
@@ -45,14 +43,7 @@ namespace NoteNest.UI.Services
                         {
                             tab.Note.Content = tab.Content;
                         }
-                        if (UI.FeatureFlags.UseNewArchitecture && _workspaceState != null)
-                        {
-                            await _workspaceState.SaveNoteAsync(tab.Note.Id);
-                        }
-                        else
-                        {
-                            await _noteOperations.SaveNoteAsync(tab.Note);
-                        }
+                        await _noteOperations.SaveNoteAsync(tab.Note);
                         tab.IsDirty = false;
                         _logger.Info($"Auto-saved on close: {tab.Title}");
                     }
@@ -62,10 +53,6 @@ namespace NoteNest.UI.Services
                         // Fallback to prompt only if auto-save fails
                         await PromptAndMaybeSaveAsync(tab);
                     }
-                }
-                else if (tab.IsDirty)
-                {
-                    await PromptAndMaybeSaveAsync(tab);
                 }
                 
                 await _workspace.CloseTabAsync(tab);

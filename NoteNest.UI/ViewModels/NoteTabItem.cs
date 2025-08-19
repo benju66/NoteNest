@@ -15,7 +15,7 @@ namespace NoteNest.UI.ViewModels
         public NoteModel Note => _note;
         public string Id => _note?.Id ?? string.Empty;
 
-        public string Title => _note.Title + (IsDirty ? " *" : "");
+        public string Title => _note.Title + (IsDirty ? " ·" : "");
 
         public string Content
         {

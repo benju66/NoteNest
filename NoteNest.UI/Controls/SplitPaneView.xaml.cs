@@ -109,7 +109,7 @@ namespace NoteNest.UI.Controls
                 // Auto-save on tab switch if enabled
                 var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
                 var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
-                if (config?.Settings?.AutoSaveOnTabSwitch == true && Pane.SelectedTab is ITabItem oldTab && oldTab.IsDirty)
+                if (Pane.SelectedTab is ITabItem oldTab && oldTab.IsDirty)
                 {
                     try
                     {
@@ -117,16 +117,8 @@ namespace NoteNest.UI.Controls
                         {
                             oldTab.Note.Content = oldTab.Content;
                         }
-                        var state = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                        if (UI.FeatureFlags.UseNewArchitecture && state != null)
-                        {
-                            state.SaveNoteAsync(oldTab.Note.Id).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            var noteOps = (Application.Current as App)?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
-                            noteOps?.SaveNoteAsync(oldTab.Note).ConfigureAwait(false);
-                        }
+                        var noteOps = (Application.Current as App)?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
+                        noteOps?.SaveNoteAsync(oldTab.Note).ConfigureAwait(false);
                         oldTab.IsDirty = false;
                     }
                     catch { }
@@ -163,7 +155,7 @@ namespace NoteNest.UI.Controls
         {
             var app = Application.Current as App;
             var configService = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
-            if (configService?.Settings?.AutoSaveIdleMs > 0 && configService.Settings.AutoSave)
+            if (configService?.Settings?.AutoSaveIdleMs > 0)
             {
                 _idleSaveTimer ??= new System.Windows.Threading.DispatcherTimer();
                 _idleSaveTimer.Interval = TimeSpan.FromMilliseconds(configService.Settings.AutoSaveIdleMs);
@@ -181,34 +173,31 @@ namespace NoteNest.UI.Controls
             {
                 var app = Application.Current as App;
                 var configService = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
-                if (configService?.Settings?.AutoSave == true)
+                var workspaceService = app?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                var tab = Pane?.SelectedTab ?? workspaceService?.SelectedTab;
+                if (tab != null && tab.IsDirty)
                 {
-                    var workspaceService = app?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
-                    var tab = Pane?.SelectedTab ?? workspaceService?.SelectedTab;
-                    if (tab != null && tab.IsDirty)
+                    if (tab.Note != null && tab.Content != null)
                     {
-                        if (tab.Note != null && tab.Content != null)
-                        {
-                            tab.Note.Content = tab.Content;
-                        }
-                        var state = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                        if (UI.FeatureFlags.UseNewArchitecture && state != null)
-                        {
-                            await state.SaveNoteAsync(tab.Note.Id);
-                        }
-                        else
-                        {
-                            var noteOps = app?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
-                            if (noteOps != null)
-                            {
-                                await noteOps.SaveNoteAsync(tab.Note);
-                            }
-                        }
-                        tab.IsDirty = false;
+                        tab.Note.Content = tab.Content;
                     }
+                    var noteOps = app?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
+                    if (noteOps != null)
+                    {
+                        await noteOps.SaveNoteAsync(tab.Note);
+                    }
+                    tab.IsDirty = false;
                 }
             }
             catch { }
+        }
+
+        public void SelectTab(ITabItem tab)
+        {
+            if (tab == null) return;
+            Pane.SelectedTab = tab;
+            PaneTabControl.SelectedItem = tab;
+            LoadTabContent(tab);
         }
 
         private NoteNestPanel? FindNoteNestPanel(DependencyObject? obj)

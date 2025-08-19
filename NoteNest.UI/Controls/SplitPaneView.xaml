@@ -28,7 +28,7 @@
                                     </PriorityBinding>
                                 </TextBlock.Text>
                             </TextBlock>
-                            <TextBlock Text="*" Margin="2,2,0,2" Foreground="OrangeRed" VerticalAlignment="Center">
+                            <TextBlock Text="·" Margin="2,2,0,2" Foreground="Black" VerticalAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed"/>
