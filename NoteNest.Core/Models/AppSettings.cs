@@ -41,6 +41,14 @@ namespace NoteNest.Core.Models
         public string QuickNoteHotkey { get; set; } = "Win+N";
         public string QuickTaskHotkey { get; set; } = "Win+T";
 
+        // UX preferences
+        public bool SingleClickOpenNotes { get; set; } = true;
+        public bool AutoSaveOnTabSwitch { get; set; } = true;
+        public bool AutoSaveOnClose { get; set; } = true;
+        public bool AutoSaveOnFocusLost { get; set; } = true;
+        public int AutoSaveIdleMs { get; set; } = 2000;
+        public bool ShowTreeDirtyDot { get; set; } = true;
+
         public AppSettings()
         {
             // Initialize collections/objects to prevent null reference issues.

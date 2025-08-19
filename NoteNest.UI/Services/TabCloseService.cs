@@ -35,19 +35,11 @@ namespace NoteNest.UI.Services
             
             try
             {
-                if (tab.IsDirty)
+                var app = System.Windows.Application.Current as UI.App;
+                var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+                if (tab.IsDirty && config?.Settings?.AutoSaveOnClose == true)
                 {
-                    var result = await _dialog.ShowYesNoCancelAsync(
-                        $"Save changes to '{tab.Title}'?",
-                        "Unsaved Changes");
-                    
-                    if (result == null)
-                    {
-                        _logger.Debug($"Close cancelled for tab: {tab.Title}");
-                        return false;
-                    }
-                    
-                    if (result == true)
+                    try
                     {
                         if (tab.Note != null && tab.Content != null)
                         {
@@ -62,12 +54,18 @@ namespace NoteNest.UI.Services
                             await _noteOperations.SaveNoteAsync(tab.Note);
                         }
                         tab.IsDirty = false;
-                        _logger.Info($"Saved and closing tab: {tab.Title}");
+                        _logger.Info($"Auto-saved on close: {tab.Title}");
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        _logger.Info($"Closing without saving: {tab.Title}");
+                        _logger.Error(ex, $"Auto-save on close failed: {tab.Title}");
+                        // Fallback to prompt only if auto-save fails
+                        await PromptAndMaybeSaveAsync(tab);
                     }
+                }
+                else if (tab.IsDirty)
+                {
+                    await PromptAndMaybeSaveAsync(tab);
                 }
                 
                 await _workspace.CloseTabAsync(tab);
@@ -78,6 +76,41 @@ namespace NoteNest.UI.Services
                 _logger.Error(ex, $"Error closing tab: {tab.Title}");
                 _dialog.ShowError($"Error closing tab: {ex.Message}", "Close Error");
                 return false;
+            }
+        }
+
+        private async Task PromptAndMaybeSaveAsync(ITabItem tab)
+        {
+            var result = await _dialog.ShowYesNoCancelAsync(
+                $"Save changes to '{tab.Title}'?",
+                "Unsaved Changes");
+            
+            if (result == null)
+            {
+                _logger.Debug($"Close cancelled for tab: {tab.Title}");
+                throw new OperationCanceledException();
+            }
+            
+            if (result == true)
+            {
+                if (tab.Note != null && tab.Content != null)
+                {
+                    tab.Note.Content = tab.Content;
+                }
+                if (UI.FeatureFlags.UseNewArchitecture && _workspaceState != null)
+                {
+                    await _workspaceState.SaveNoteAsync(tab.Note.Id);
+                }
+                else
+                {
+                    await _noteOperations.SaveNoteAsync(tab.Note);
+                }
+                tab.IsDirty = false;
+                _logger.Info($"Saved and closing tab: {tab.Title}");
+            }
+            else
+            {
+                _logger.Info($"Closing without saving: {tab.Title}");
             }
         }
         

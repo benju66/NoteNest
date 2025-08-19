@@ -171,11 +171,17 @@ namespace NoteNest.UI.ViewModels
         private readonly PropertyChangedEventHandler _modelPropertyChangedHandler;
         private bool _isVisible = true;
         private bool _isSelected;
+        private bool _isDirty;
 
         public NoteModel Model => _model;
         public string Title => _model.Title;
         public string FilePath => _model.FilePath;
         public string CategoryId => _model.CategoryId;
+        public bool IsDirty
+        {
+            get => _isDirty;
+            private set => SetProperty(ref _isDirty, value);
+        }
 
         public bool IsVisible
         {
@@ -202,12 +208,19 @@ namespace NoteNest.UI.ViewModels
                 {
                     OnPropertyChanged(nameof(FilePath));
                 }
+                else if (e.PropertyName == nameof(NoteModel.IsDirty))
+                {
+                    IsDirty = _model.IsDirty;
+                }
             };
 
             if (_model is INotifyPropertyChanged inpc)
             {
                 inpc.PropertyChanged += _modelPropertyChangedHandler;
             }
+
+            // Initialize dirty state
+            _isDirty = _model.IsDirty;
         }
 
         // Public wrapper to notify property changes from outside this class

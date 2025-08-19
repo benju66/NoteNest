@@ -95,7 +95,8 @@
                                                    Grid.Row="1"
                                                    VerticalScrollBarVisibility="Auto"
                                                    HorizontalScrollBarVisibility="Disabled"
-                                                   Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                                   Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                   TextChanged="SmartEditor_TextChanged"/>
                         </Grid>
                     </DataTemplate>
                 </TabControl.ContentTemplate>

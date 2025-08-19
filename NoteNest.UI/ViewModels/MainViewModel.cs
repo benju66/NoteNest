@@ -43,7 +43,6 @@ namespace NoteNest.UI.ViewModels
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Task _initializationTask;
-		private bool _isOpeningNote = false;
 		private readonly Dictionary<string, string> _normalizedPathCache = new Dictionary<string, string>();
         
         private ObservableCollection<CategoryTreeItem> _categories;
@@ -63,6 +62,29 @@ namespace NoteNest.UI.ViewModels
         {
             get => _categories ??= new ObservableCollection<CategoryTreeItem>();
             set => SetProperty(ref _categories, value);
+        }
+
+        // Raised to request opening a note in the active split pane (handled by NoteNestPanel)
+        public event Action<NoteTreeItem> NoteOpenRequested;
+
+        private void OnServiceTabSelectionChanged(object sender, TabChangedEventArgs e)
+        {
+            // Update ViewModel selection from service event
+            if (e?.NewTab is NoteTabItem noteTab)
+            {
+                SelectedTab = noteTab;
+                CommandManager.InvalidateRequerySuggested();
+            }
+            else if (e?.NewTab != null && e.NewTab.Note != null)
+            {
+                var match = OpenTabs.FirstOrDefault(t =>
+                    t.Note?.FilePath?.Equals(e.NewTab.Note.FilePath, StringComparison.OrdinalIgnoreCase) == true);
+                if (match != null)
+                {
+                    SelectedTab = match;
+                    CommandManager.InvalidateRequerySuggested();
+                }
+            }
         }
 
         public ObservableCollection<NoteTabItem> OpenTabs => GetWorkspaceViewModel().OpenTabs;
@@ -167,7 +189,7 @@ namespace NoteNest.UI.ViewModels
         #region Commands
 
         public ICommand NewNoteCommand { get; private set; }
-        public ICommand OpenNoteCommand { get; private set; }
+        // Removed: OpenNoteCommand in favor of split-pane exclusive flow
         public ICommand SaveNoteCommand { get; private set; }
         public ICommand SaveAllCommand { get; private set; }
         public ICommand CloseTabCommand { get; private set; }
@@ -228,6 +250,9 @@ namespace NoteNest.UI.ViewModels
                 // Initialize commands (fast)
                 InitializeCommands();
 
+                // Service-driven selection sync
+                _workspaceService.TabSelectionChanged += OnServiceTabSelectionChanged;
+
                 // Start async initialization (doesn't block startup)
                 _initializationTask = InitializeAsync(_cancellationTokenSource.Token);
                 
@@ -265,7 +290,6 @@ namespace NoteNest.UI.ViewModels
         private void InitializeCommands()
         {
             NewNoteCommand = new RelayCommand(async _ => await CreateNewNoteAsync(), _ => SelectedCategory != null);
-            OpenNoteCommand = new RelayCommand<NoteTreeItem>(async note => await OpenNoteAsync(note));
             SaveNoteCommand = new RelayCommand(async _ => await SaveCurrentNoteAsync(), _ => _workspaceService?.HasUnsavedChanges == true || SelectedTab?.IsDirty == true);
             SaveAllCommand = new RelayCommand(async _ => await SaveAllNotesAsync(), _ => _workspaceService?.HasUnsavedChanges == true);
             CloseTabCommand = new RelayCommand<NoteTabItem>(async tab => await CloseTabAsync(tab));
@@ -449,71 +473,14 @@ namespace NoteNest.UI.ViewModels
                 SelectedCategory.IsExpanded = true;
                 
                 SelectedNote = noteItem;
-                await OpenNoteAsync(noteItem);
+                // Route open via split-pane exclusive flow
+                NoteOpenRequested?.Invoke(noteItem);
                 
                 _stateManager.StatusMessage = $"Created: {title}";
             }
         }
 
-		private async Task OpenNoteAsync(NoteTreeItem noteItem)
-        {
-			if (noteItem == null || _isOpeningNote) return;
-
-			_isOpeningNote = true;
-			try
-			{
-				// Check if already open using service
-				var existingTab = GetWorkspaceService().FindTabByNote(noteItem.Model);
-				if (existingTab != null)
-				{
-					// Find UI tab
-					var uiTab = OpenTabs.FirstOrDefault(t => 
-						t.Note.FilePath.Equals(noteItem.Model.FilePath, StringComparison.OrdinalIgnoreCase));
-					
-					if (uiTab != null)
-					{
-						SelectedTab = uiTab;
-						return;
-					}
-				}
-
-				// Feature flag path to new state service
-				bool useNewState = UI.FeatureFlags.UseNewArchitecture;
-				if (useNewState)
-				{
-					// Ensure content is loaded before opening into state service
-					if (string.IsNullOrEmpty(noteItem.Model.Content))
-					{
-						var content = await _contentCache.GetContentAsync(noteItem.Model.FilePath, async (path) =>
-						{
-							var loaded = await _noteService.LoadNoteAsync(path);
-							return loaded.Content ?? string.Empty;
-						});
-						noteItem.Model.Content = content;
-					}
-					var wn = await _workspaceStateService.OpenNoteAsync(noteItem.Model);
-					var tab = new NoteTabItem(noteItem.Model);
-					GetWorkspaceViewModel().AddTab(tab);
-					SelectedTab = tab;
-				}
-				else
-				{
-					// Open through service (loads content)
-					await GetWorkspaceService().OpenNoteAsync(noteItem.Model);
-					
-					// Create UI tab
-					var tab = new NoteTabItem(noteItem.Model);
-					GetWorkspaceViewModel().AddTab(tab);
-					SelectedTab = tab;
-				}
-
-				_stateManager.StatusMessage = $"Opened: {noteItem.Model.Title}";
-			}
-			finally
-			{
-				_isOpeningNote = false;
-			}
-        }
+		// Removed: OpenNoteAsync - opening is handled exclusively by split-pane layer
 
         private async Task SaveCurrentNoteAsync()
         {
@@ -804,9 +771,9 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        private async Task OpenFromSearchAsync()
+        private Task OpenFromSearchAsync()
         {
-            if (_searchResults.Count == 0) return;
+            if (_searchResults.Count == 0) return Task.CompletedTask;
             
             if (_searchSelectionIndex < 0 && _searchResults.Count > 0)
             {
@@ -816,8 +783,11 @@ namespace NoteNest.UI.ViewModels
             
             if (SelectedNote != null)
             {
-                await OpenNoteAsync(SelectedNote);
+                // Route open via event to split-pane layer
+                NoteOpenRequested?.Invoke(SelectedNote);
             }
+
+            return Task.CompletedTask;
         }
 
         // Add new search method using the index
