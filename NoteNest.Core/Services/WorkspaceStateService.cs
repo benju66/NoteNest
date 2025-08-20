@@ -126,7 +126,8 @@ namespace NoteNest.Core.Services
             {
                 return new SaveResult { Success = true, NoteId = noteId, SavedAt = DateTime.Now };
             }
-            note.Model.Content = note.CurrentContent;
+            // On save, push state content into the model that hits disk
+            note.Model.Content = note.CurrentContent ?? string.Empty;
             await _noteService.SaveNoteAsync(note.Model);
             note.OriginalContent = note.CurrentContent;
             note.LastSavedAt = note.Model.LastModified;

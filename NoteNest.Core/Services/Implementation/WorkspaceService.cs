@@ -395,10 +395,15 @@ namespace NoteNest.Core.Services.Implementation
             get => _content ?? Note?.Content ?? string.Empty;
             set
             {
-                _content = value;
-                if (Note != null)
+                var incoming = value ?? string.Empty;
+                var current = _content ?? Note?.Content ?? string.Empty;
+                if (!string.Equals(incoming, current, StringComparison.Ordinal))
                 {
-                    Note.Content = value;
+                    _content = incoming;
+                    if (Note != null)
+                    {
+                        Note.Content = incoming;
+                    }
                     IsDirty = true;
                 }
             }

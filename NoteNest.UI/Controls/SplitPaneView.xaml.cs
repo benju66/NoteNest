@@ -138,7 +138,7 @@ namespace NoteNest.UI.Controls
                         if (saved)
                         {
                             oldTab.IsDirty = false;
-                            try { oldTab.Note?.MarkClean(); } catch { }
+                            try { oldTab.Note.IsDirty = false; oldTab.Note?.MarkClean(); } catch { }
                         }
                     }
                     catch { }
@@ -250,7 +250,7 @@ namespace NoteNest.UI.Controls
                     if (saved)
                     {
                         tab.IsDirty = false;
-                        try { tab.Note?.MarkClean(); } catch { }
+                        try { tab.Note.IsDirty = false; tab.Note?.MarkClean(); } catch { }
                     }
                 }
             }

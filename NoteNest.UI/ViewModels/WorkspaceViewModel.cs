@@ -41,6 +41,29 @@ namespace NoteNest.UI.ViewModels
             _workspaceService.TabOpened += OnServiceTabOpened;
             _workspaceService.TabClosed += OnServiceTabClosed;
             _workspaceService.TabSelectionChanged += OnServiceTabSelectionChanged;
+
+            // Subscribe to state dirty events when new architecture is enabled
+            if (UI.FeatureFlags.UseNewArchitecture)
+            {
+                try
+                {
+                    var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                    if (state != null)
+                    {
+                        state.NoteStateChanged += (s, e) =>
+                        {
+                            var match = _uiTabs.FirstOrDefault(t => t.Note?.Id == e.NoteId);
+                            if (match != null)
+                            {
+                                match.IsDirty = e.IsDirty;
+                                // Keep model dirty indicator in sync for tree dot
+                                try { match.Note.IsDirty = e.IsDirty; } catch { }
+                            }
+                        };
+                    }
+                }
+                catch { }
+            }
             
             // Subscribe to service collection changes
             if (_workspaceService.OpenTabs is INotifyCollectionChanged ncc)
@@ -80,7 +103,20 @@ namespace NoteNest.UI.ViewModels
                 var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, e.Tab.Note));
                 if (existing == null)
                 {
-                    _uiTabs.Add(new NoteTabItem(e.Tab.Note));
+                    var uiTab = new NoteTabItem(e.Tab.Note);
+                    if (UI.FeatureFlags.UseNewArchitecture)
+                    {
+                        try
+                        {
+                            var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                            if (state != null && state.OpenNotes.TryGetValue(e.Tab.Note.Id, out var wn))
+                            {
+                                uiTab.IsDirty = wn.IsDirty;
+                            }
+                        }
+                        catch { }
+                    }
+                    _uiTabs.Add(uiTab);
                 }
             }
         }

@@ -57,7 +57,7 @@ namespace NoteNest.UI.Services
                         if (saved)
                         {
                             tab.IsDirty = false;
-                            try { tab.Note?.MarkClean(); } catch { }
+                            try { tab.Note.IsDirty = false; tab.Note?.MarkClean(); } catch { }
                             _logger.Info($"Auto-saved on close: {tab.Title}");
                         }
                     }

@@ -19,25 +19,55 @@ namespace NoteNest.UI.ViewModels
 
         public string Content
         {
-            get => _content;
+            get
+            {
+                if (UI.FeatureFlags.UseNewArchitecture)
+                {
+                    try
+                    {
+                        var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                        if (state != null && !string.IsNullOrEmpty(_note?.Id) && state.OpenNotes.TryGetValue(_note.Id, out var wn))
+                        {
+                            return wn.CurrentContent ?? _content ?? string.Empty;
+                        }
+                    }
+                    catch { }
+                }
+                return _content ?? _note?.Content ?? string.Empty;
+            }
             set
             {
-                if (SetProperty(ref _content, value))
+                var newValue = value ?? string.Empty;
+                // Always keep local cache for UI binding responsiveness
+                var changed = SetProperty(ref _content, newValue);
+                if (!changed) return;
+
+                if (UI.FeatureFlags.UseNewArchitecture)
                 {
-                    _note.Content = value;
-                    // When new architecture is enabled, also update workspace state
-                    if (UI.FeatureFlags.UseNewArchitecture)
+                    // Do not set _note.Content directly in new architecture; push into state
+                    try
                     {
-                        try
+                        var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                        state?.UpdateNoteContent(_note.Id, newValue);
+                        // Determine dirty by comparing with state's OriginalContent
+                        if (state != null && state.OpenNotes.TryGetValue(_note.Id, out var wn))
                         {
-                            var workspace = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                            workspace?.UpdateNoteContent(_note.Id, value);
+                            IsDirty = !string.Equals(wn.OriginalContent ?? string.Empty, newValue ?? string.Empty, StringComparison.Ordinal);
                         }
-                        catch { }
+                        else
+                        {
+                            IsDirty = true;
+                        }
                     }
-                    IsDirty = true;
-                    UpdateWordCount();
+                    catch { }
                 }
+                else
+                {
+                    // Legacy path keeps model content in sync
+                    _note.Content = newValue;
+                    IsDirty = true;
+                }
+                UpdateWordCount();
             }
         }
 
