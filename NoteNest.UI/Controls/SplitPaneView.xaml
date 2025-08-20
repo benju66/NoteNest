@@ -20,14 +20,7 @@
                 <TabControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Margin="5,2" VerticalAlignment="Center">
-                                <TextBlock.Text>
-                                    <PriorityBinding>
-                                        <Binding Path="DisplayTitle"/>
-                                        <Binding Path="Title"/>
-                                    </PriorityBinding>
-                                </TextBlock.Text>
-                            </TextBlock>
+                            <TextBlock Margin="5,2" VerticalAlignment="Center" Text="{Binding Title}"/>
                             <TextBlock Text="·" Margin="2,2,0,2" Foreground="Black" VerticalAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">

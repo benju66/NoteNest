@@ -24,8 +24,9 @@ namespace NoteNest.Tests.Services
             var errorHandler = new ServiceErrorHandler(logger);
             var contentCache = new ContentCache();
             var noteOps = new NoteOperationsServiceMock();
+            var workspaceStateService = new NoteNest.Core.Services.WorkspaceStateService(noteService);
 
-            _workspaceService = new WorkspaceService(contentCache, noteService, errorHandler, logger, noteOps);
+            _workspaceService = new WorkspaceService(contentCache, noteService, errorHandler, logger, noteOps, workspaceStateService);
         }
 
         [Test]

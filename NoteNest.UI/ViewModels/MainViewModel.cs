@@ -487,33 +487,21 @@ namespace NoteNest.UI.ViewModels
             var current = GetWorkspaceService().SelectedTab;
             if (current == null) return;
 
-            // Feature flag path to new state service
-            bool useNewState = UI.FeatureFlags.UseNewArchitecture;
-            if (useNewState)
+            // Ensure state has freshest content and save
+            try
             {
-                // Ensure state has freshest content
-                try
-                {
-                    _workspaceStateService.UpdateNoteContent(current.Note.Id, current.Content ?? string.Empty);
-                }
-                catch { }
-                var result = await _workspaceStateService.SaveNoteAsync(current.Note.Id);
-                if (result?.Success == true)
-                {
-                    current.IsDirty = false;
-                    try { current.Note?.MarkClean(); } catch { }
-                }
+                var text = current.Content ?? string.Empty;
+                System.Diagnostics.Debug.WriteLine($"[VM] SaveCurrent START noteId={current.Note?.Id} len={text.Length} at={DateTime.Now:HH:mm:ss.fff}");
+                _workspaceStateService.UpdateNoteContent(current.Note.Id, text);
             }
-            else
+            catch { }
+            
+            var result = await _workspaceStateService.SaveNoteAsync(current.Note.Id);
+            System.Diagnostics.Debug.WriteLine($"[VM] SaveCurrent END noteId={current.Note?.Id} success={result?.Success} at={DateTime.Now:HH:mm:ss.fff}");
+            if (result?.Success == true)
             {
-                if (current.Note != null && current.Content != null)
-                {
-                    current.Note.Content = current.Content;
-                }
-                await GetNoteOperationsService().SaveNoteAsync(current.Note);
-                current.IsDirty = false;
+                _stateManager.StatusMessage = $"Saved: {current.Note.Title}";
             }
-            _stateManager.StatusMessage = $"Saved: {current.Note.Title}";
         }
 
         private async Task SaveAllNotesAsync()
@@ -529,33 +517,10 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
-                if (UI.FeatureFlags.UseNewArchitecture)
-                {
-                    var result = await _workspaceStateService.SaveAllDirtyNotesAsync();
-                    // Update UI state
-                    foreach (var tab in OpenTabs.Where(t => t.IsDirty).ToList())
-                    {
-                        if (cancellationToken.IsCancellationRequested) break;
-                        tab.IsDirty = false;
-                        tab.UpdateLastSaved();
-                    }
-                    _stateManager.EndOperation(result.FailureCount > 0
-                        ? $"Saved {result.SuccessCount} with {result.FailureCount} errors"
-                        : "All notes saved");
-                }
-                else
-                {
-                    await GetWorkspaceService().SaveAllTabsAsync();
-                    
-                    // Update UI state
-                    foreach (var tab in OpenTabs.Where(t => t.IsDirty))
-                    {
-                        if (cancellationToken.IsCancellationRequested) break;
-                        tab.UpdateLastSaved();
-                    }
-                    
-                    _stateManager.EndOperation("All notes saved");
-                }
+                var result = await _workspaceStateService.SaveAllDirtyNotesAsync();
+                _stateManager.EndOperation(result.FailureCount > 0
+                    ? $"Saved {result.SuccessCount} with {result.FailureCount} errors"
+                    : "All notes saved");
             }
             catch (Exception ex)
             {
@@ -909,6 +874,7 @@ namespace NoteNest.UI.ViewModels
                 {
                     if (!_cancellationTokenSource.Token.IsCancellationRequested)
                     {
+                        System.Diagnostics.Debug.WriteLine($"[VM] AutoSaveTimer tick at={DateTime.Now:HH:mm:ss.fff}");
                         await AutoSaveAsync();
                     }
                 }
@@ -927,36 +893,13 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                // Feature flag path to new state service
-                bool useNewState = UI.FeatureFlags.UseNewArchitecture;
-                if (useNewState)
+                System.Diagnostics.Debug.WriteLine($"[VM] AutoSave START at={DateTime.Now:HH:mm:ss.fff}");
+                var result = await _workspaceStateService.SaveAllDirtyNotesAsync();
+                System.Diagnostics.Debug.WriteLine($"[VM] AutoSave END success={result?.SuccessCount} fail={result?.FailureCount} at={DateTime.Now:HH:mm:ss.fff}");
+                if (result.SuccessCount > 0)
                 {
-                    var result = await _workspaceStateService.SaveAllDirtyNotesAsync();
-                    if (result.SuccessCount > 0)
-                    {
-                        foreach (var tab in OpenTabs.Where(t => t.IsDirty))
-                        {
-                            tab.IsDirty = false;
-                            tab.UpdateLastSaved();
-                        }
-                        StatusMessage = $"Auto-saved {result.SuccessCount} note(s)";
-                        _logger.Debug($"Auto-saved {result.SuccessCount} notes (new state)");
-                    }
-                }
-                else
-                {
-                    var dirtyTabs = OpenTabs.Where(t => t.IsDirty).ToList();
-                    if (dirtyTabs.Any())
-                    {
-                        foreach (var tab in dirtyTabs)
-                        {
-                            await _noteOperationsService.SaveNoteAsync(tab.Note);
-                            tab.IsDirty = false;
-                            tab.UpdateLastSaved();
-                        }
-                        StatusMessage = $"Auto-saved {dirtyTabs.Count} note(s)";
-                        _logger.Debug($"Auto-saved {dirtyTabs.Count} notes");
-                    }
+                    StatusMessage = $"Auto-saved {result.SuccessCount} note(s)";
+                    _logger.Debug($"Auto-saved {result.SuccessCount} notes");
                 }
             }
             catch (Exception ex)

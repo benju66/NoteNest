@@ -8,7 +8,7 @@ using NoteNest.Core.Models;
 
 namespace NoteNest.Core.Services
 {
-    // Feature-flagged scaffold; not wired yet
+    // Centralized state management for open notes and content tracking
     public interface IWorkspaceStateService
     {
         IReadOnlyDictionary<string, WorkspaceNote> OpenNotes { get; }
@@ -106,10 +106,16 @@ namespace NoteNest.Core.Services
             {
                 var wasDirty = note.IsDirty;
                 note.CurrentContent = content;
+                System.Diagnostics.Debug.WriteLine($"[State] UpdateNoteContent noteId={noteId} len={content?.Length ?? 0} wasDirty={wasDirty} nowDirty={note.IsDirty} at={DateTime.Now:HH:mm:ss.fff}");
                 if (wasDirty != note.IsDirty)
                 {
                     NoteStateChanged?.Invoke(this, new NoteStateChangedEventArgs { NoteId = noteId, IsDirty = note.IsDirty });
                 }
+            }
+            else
+            {
+                // This should not happen if WorkspaceService properly registers notes
+                System.Diagnostics.Debug.WriteLine($"[State][WARN] Attempted to update content for untracked note: {noteId} at={DateTime.Now:HH:mm:ss.fff}");
             }
         }
 
@@ -118,25 +124,39 @@ namespace NoteNest.Core.Services
 
         public async Task<SaveResult> SaveNoteAsync(string noteId)
         {
+            System.Diagnostics.Debug.WriteLine($"[State] SaveNoteAsync START noteId={noteId} at={DateTime.Now:HH:mm:ss.fff}");
             if (!_openNotes.TryGetValue(noteId, out var note))
             {
+                System.Diagnostics.Debug.WriteLine($"[State][ERROR] SaveNoteAsync noteId={noteId} failed: not open at={DateTime.Now:HH:mm:ss.fff}");
                 return new SaveResult { Success = false, NoteId = noteId, ErrorMessage = "Note not open" };
             }
             if (!note.IsDirty)
             {
-                return new SaveResult { Success = true, NoteId = noteId, SavedAt = DateTime.Now };
+                var ts = DateTime.Now;
+                System.Diagnostics.Debug.WriteLine($"[State] SaveNoteAsync noteId={noteId} skipped (not dirty) at={ts:HH:mm:ss.fff}");
+                return new SaveResult { Success = true, NoteId = noteId, SavedAt = ts };
             }
             // On save, push state content into the model that hits disk
             note.Model.Content = note.CurrentContent ?? string.Empty;
-            await _noteService.SaveNoteAsync(note.Model);
+            try
+            {
+                await _noteService.SaveNoteAsync(note.Model);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[State][ERROR] SaveNoteAsync noteId={noteId} threw: {ex.Message} at={DateTime.Now:HH:mm:ss.fff}");
+                return new SaveResult { Success = false, NoteId = noteId, ErrorMessage = ex.Message };
+            }
             note.OriginalContent = note.CurrentContent;
             note.LastSavedAt = note.Model.LastModified;
             NoteStateChanged?.Invoke(this, new NoteStateChangedEventArgs { NoteId = noteId, IsDirty = false });
+            System.Diagnostics.Debug.WriteLine($"[State] SaveNoteAsync OK noteId={noteId} savedAt={note.Model.LastModified:HH:mm:ss.fff} len={note.OriginalContent?.Length ?? 0}");
             return new SaveResult { Success = true, NoteId = noteId, SavedAt = note.Model.LastModified };
         }
 
         public async Task<BatchSaveResult> SaveAllDirtyNotesAsync(int maxParallel = 4)
         {
+            System.Diagnostics.Debug.WriteLine($"[State] SaveAllDirtyNotesAsync START at={DateTime.Now:HH:mm:ss.fff}");
             var dirty = GetDirtyNotes().Select(d => d.NoteId).ToList();
             var results = new List<SaveResult>();
             using var gate = new System.Threading.SemaphoreSlim(maxParallel);
@@ -154,13 +174,15 @@ namespace NoteNest.Core.Services
                 }
             });
             await Task.WhenAll(tasks);
-            return new BatchSaveResult
+            var batch = new BatchSaveResult
             {
                 AllSucceeded = results.All(r => r.Success),
                 SuccessCount = results.Count(r => r.Success),
                 FailureCount = results.Count(r => !r.Success),
                 Results = results
             };
+            System.Diagnostics.Debug.WriteLine($"[State] SaveAllDirtyNotesAsync END success={batch.SuccessCount} fail={batch.FailureCount} at={DateTime.Now:HH:mm:ss.fff}");
+            return batch;
         }
     }
 }

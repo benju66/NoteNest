@@ -15,24 +15,22 @@ namespace NoteNest.UI.ViewModels
         public NoteModel Note => _note;
         public string Id => _note?.Id ?? string.Empty;
 
-        public string Title => _note.Title + (IsDirty ? " ·" : "");
+        public string Title => _note.Title;
 
         public string Content
         {
             get
             {
-                if (UI.FeatureFlags.UseNewArchitecture)
+                try
                 {
-                    try
+                    var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                    if (state != null && !string.IsNullOrEmpty(_note?.Id) && state.OpenNotes.TryGetValue(_note.Id, out var wn))
                     {
-                        var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                        if (state != null && !string.IsNullOrEmpty(_note?.Id) && state.OpenNotes.TryGetValue(_note.Id, out var wn))
-                        {
-                            return wn.CurrentContent ?? _content ?? string.Empty;
-                        }
+                        var value = wn.CurrentContent ?? _content ?? string.Empty;
+                        return value;
                     }
-                    catch { }
                 }
+                catch { }
                 return _content ?? _note?.Content ?? string.Empty;
             }
             set
@@ -42,31 +40,23 @@ namespace NoteNest.UI.ViewModels
                 var changed = SetProperty(ref _content, newValue);
                 if (!changed) return;
 
-                if (UI.FeatureFlags.UseNewArchitecture)
+                // Push content changes to WorkspaceStateService (single source of truth)
+                try
                 {
-                    // Do not set _note.Content directly in new architecture; push into state
-                    try
+                    var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                    state?.UpdateNoteContent(_note.Id, newValue);
+                    System.Diagnostics.Debug.WriteLine($"[Tab] Content set noteId={_note?.Id} len={newValue.Length} at={DateTime.Now:HH:mm:ss.fff}");
+                    // Determine dirty by comparing with state's OriginalContent
+                    if (state != null && state.OpenNotes.TryGetValue(_note.Id, out var wn))
                     {
-                        var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                        state?.UpdateNoteContent(_note.Id, newValue);
-                        // Determine dirty by comparing with state's OriginalContent
-                        if (state != null && state.OpenNotes.TryGetValue(_note.Id, out var wn))
-                        {
-                            IsDirty = !string.Equals(wn.OriginalContent ?? string.Empty, newValue ?? string.Empty, StringComparison.Ordinal);
-                        }
-                        else
-                        {
-                            IsDirty = true;
-                        }
+                        IsDirty = !string.Equals(wn.OriginalContent ?? string.Empty, newValue ?? string.Empty, StringComparison.Ordinal);
                     }
-                    catch { }
+                    else
+                    {
+                        IsDirty = true;
+                    }
                 }
-                else
-                {
-                    // Legacy path keeps model content in sync
-                    _note.Content = newValue;
-                    IsDirty = true;
-                }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Tab][ERROR] Content set failed: {ex.Message}"); }
                 UpdateWordCount();
             }
         }

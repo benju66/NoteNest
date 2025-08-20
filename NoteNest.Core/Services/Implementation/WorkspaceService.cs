@@ -18,6 +18,7 @@ namespace NoteNest.Core.Services.Implementation
         private readonly IServiceErrorHandler _errorHandler;
         private readonly IAppLogger _logger;
         private readonly INoteOperationsService _noteOperationsService;
+        private readonly NoteNest.Core.Services.IWorkspaceStateService? _stateService;
         
         private ObservableCollection<ITabItem> _openTabs;
         private ITabItem? _selectedTab;
@@ -95,13 +96,15 @@ namespace NoteNest.Core.Services.Implementation
             NoteService noteService,
             IServiceErrorHandler errorHandler,
             IAppLogger logger,
-            INoteOperationsService noteOperationsService)
+            INoteOperationsService noteOperationsService,
+            NoteNest.Core.Services.IWorkspaceStateService workspaceStateService)
         {
             _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
             _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
             _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _noteOperationsService = noteOperationsService ?? throw new ArgumentNullException(nameof(noteOperationsService));
+            _stateService = workspaceStateService ?? throw new ArgumentNullException(nameof(workspaceStateService));
             
             _openTabs = new ObservableCollection<ITabItem>();
             _panes = new ObservableCollection<SplitPane>();
@@ -134,20 +137,28 @@ namespace NoteNest.Core.Services.Implementation
                 {
                     SelectedTab = existingTab;
                     _logger.Debug($"Note already open, switching to tab: {note.Title}");
+                    System.Diagnostics.Debug.WriteLine($"[WS] OpenNoteAsync SKIP already-open id={note.Id} title={note.Title}");
                     return existingTab;
                 }
                 
                 // Load content if needed
                 if (string.IsNullOrEmpty(note.Content))
                 {
+                    System.Diagnostics.Debug.WriteLine($"[WS] Loading content for {note.Title} from {note.FilePath}");
                     note.Content = await _contentCache.GetContentAsync(
                         note.FilePath,
                         async (path) => 
                         {
                             var loadedNote = await _noteService.LoadNoteAsync(path);
+                            System.Diagnostics.Debug.WriteLine($"[WS] Loaded content len={loadedNote?.Content?.Length ?? 0} for {note.Title}");
                             return loadedNote.Content;
                         });
                 }
+                
+                // CRITICAL FIX: Register note with WorkspaceStateService
+                var wn = await _stateService.OpenNoteAsync(note);
+                _logger.Debug($"Registered note with state service: {note.Title}");
+                System.Diagnostics.Debug.WriteLine($"[WS] Registered note id={note.Id} title={note.Title} contentLen={wn?.CurrentContent?.Length ?? 0}");
                 
                 // Create new tab
                 // Note: The actual tab creation is delegated to UI layer
@@ -155,6 +166,7 @@ namespace NoteNest.Core.Services.Implementation
                 var tab = new WorkspaceTabItem(note);
                 
                 _logger.Info($"Opened note: {note.Title}");
+                System.Diagnostics.Debug.WriteLine($"[WS] Opened note id={note.Id} title={note.Title}");
                 
                 TabOpened?.Invoke(this, new TabEventArgs { Tab = tab });
                 return tab;
@@ -169,22 +181,28 @@ namespace NoteNest.Core.Services.Implementation
             return await _errorHandler.SafeExecuteAsync(async () =>
             {
                 // Note: Save prompt is handled by UI layer
-                // This just removes the tab
-                
+                // Ensure unregistration from state even if the tab is not in OpenTabs
+
+                // Always attempt to unregister the note from state service
+                if (tab.Note != null)
+                {
+                    var ok = await _stateService.CloseNoteAsync(tab.Note.Id);
+                    _logger.Debug($"Unregistered note from state service: {tab.Title}");
+                    System.Diagnostics.Debug.WriteLine($"[WS] Unregister note id={tab.Note.Id} ok={ok}");
+                }
+
+                // Remove from service OpenTabs if present
                 if (OpenTabs.Contains(tab))
                 {
                     OpenTabs.Remove(tab);
-                    
-                    // Untrack from note operations
-                    _noteOperationsService?.UntrackOpenNote(tab.Note);
-                    
-                    TabClosed?.Invoke(this, new TabEventArgs { Tab = tab });
-                    
-                    _logger.Debug($"Closed tab: {tab.Title}");
-                    return true;
                 }
-                
-                return false;
+
+                // Untrack from note operations
+                _noteOperationsService?.UntrackOpenNote(tab.Note);
+
+                TabClosed?.Invoke(this, new TabEventArgs { Tab = tab });
+                _logger.Debug($"Closed tab: {tab.Title}");
+                return true;
             }, "Close Tab");
         }
         
@@ -208,30 +226,13 @@ namespace NoteNest.Core.Services.Implementation
         {
             await _errorHandler.SafeExecuteAsync(async () =>
             {
-                var dirtyTabs = OpenTabs.Where(t => t.IsDirty).ToList();
-                var maxParallel = 4;
-                using var gate = new System.Threading.SemaphoreSlim(maxParallel);
-                var tasks = new List<Task>();
-                foreach (var tab in dirtyTabs)
-                {
-                    await gate.WaitAsync();
-                    tasks.Add(Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _noteOperationsService.SaveNoteAsync(tab.Note);
-                            tab.IsDirty = false;
-                        }
-                        finally
-                        {
-                            gate.Release();
-                        }
-                    }));
-                }
-                await Task.WhenAll(tasks);
-                
-                _logger.Info($"Saved {dirtyTabs.Count} tabs");
+                // Save all dirty notes via state service
+                var result = await _stateService.SaveAllDirtyNotesAsync();
+                _logger.Info($"Saved {result.SuccessCount} notes via state service");
+                System.Diagnostics.Debug.WriteLine($"[WS] SaveAllTabsAsync completed success={result.SuccessCount} fail={result.FailureCount}");
                 OnPropertyChanged(nameof(HasUnsavedChanges));
+
+
             }, "Save All Tabs");
         }
         

@@ -42,28 +42,30 @@ namespace NoteNest.UI.ViewModels
             _workspaceService.TabClosed += OnServiceTabClosed;
             _workspaceService.TabSelectionChanged += OnServiceTabSelectionChanged;
 
-            // Subscribe to state dirty events when new architecture is enabled
-            if (UI.FeatureFlags.UseNewArchitecture)
+            // Subscribe to WorkspaceStateService events
+            try
             {
-                try
+                var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                if (state != null)
                 {
-                    var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                    if (state != null)
+                    state.NoteStateChanged += (s, e) =>
                     {
-                        state.NoteStateChanged += (s, e) =>
+                        var match = _uiTabs.FirstOrDefault(t => t.Note?.Id == e.NoteId);
+                        if (match != null)
                         {
-                            var match = _uiTabs.FirstOrDefault(t => t.Note?.Id == e.NoteId);
-                            if (match != null)
-                            {
-                                match.IsDirty = e.IsDirty;
-                                // Keep model dirty indicator in sync for tree dot
-                                try { match.Note.IsDirty = e.IsDirty; } catch { }
-                            }
-                        };
-                    }
+                            match.IsDirty = e.IsDirty;
+                            // Keep model dirty indicator in sync for tree dot
+                            try { match.Note.IsDirty = e.IsDirty; } catch { }
+                            System.Diagnostics.Debug.WriteLine($"[VM] NoteStateChanged noteId={e.NoteId} isDirty={e.IsDirty}");
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[VM][WARN] NoteStateChanged for unknown UI tab noteId={e.NoteId}");
+                        }
+                    };
                 }
-                catch { }
             }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[VM][ERROR] Subscribing NoteStateChanged failed: {ex.Message}"); }
             
             // Subscribe to service collection changes
             if (_workspaceService.OpenTabs is INotifyCollectionChanged ncc)
@@ -104,19 +106,17 @@ namespace NoteNest.UI.ViewModels
                 if (existing == null)
                 {
                     var uiTab = new NoteTabItem(e.Tab.Note);
-                    if (UI.FeatureFlags.UseNewArchitecture)
+                try
+                {
+                    var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                    if (state != null && state.OpenNotes.TryGetValue(e.Tab.Note.Id, out var wn))
                     {
-                        try
-                        {
-                            var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                            if (state != null && state.OpenNotes.TryGetValue(e.Tab.Note.Id, out var wn))
-                            {
-                                uiTab.IsDirty = wn.IsDirty;
-                            }
-                        }
-                        catch { }
+                        uiTab.IsDirty = wn.IsDirty;
                     }
+                }
+                catch { }
                     _uiTabs.Add(uiTab);
+                    System.Diagnostics.Debug.WriteLine($"[VM] TabOpened noteId={e.Tab.Note.Id} title={e.Tab.Note.Title}");
                 }
             }
         }
@@ -127,6 +127,7 @@ namespace NoteNest.UI.ViewModels
             {
                 var ui = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, e.Tab.Note));
                 if (ui != null) _uiTabs.Remove(ui);
+                System.Diagnostics.Debug.WriteLine($"[VM] TabClosed noteId={e.Tab.Note.Id} title={e.Tab.Note.Title}");
             }
         }
         

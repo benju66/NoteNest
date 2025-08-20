@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -23,6 +24,16 @@ namespace NoteNest.UI
             
             try
             {
+                try
+                {
+                    var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NoteNest");
+                    Directory.CreateDirectory(logDir);
+                    var logFile = Path.Combine(logDir, "debug.log");
+                    System.Diagnostics.Trace.Listeners.Add(new TextWriterTraceListener(logFile));
+                    System.Diagnostics.Trace.AutoFlush = true;
+                    System.Diagnostics.Debug.WriteLine($"[App] Debug listener configured at {logFile} {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
+                }
+                catch { }
                 // Ultra-fast startup sequence
                 ShutdownMode = ShutdownMode.OnMainWindowClose;
 
