@@ -11,17 +11,29 @@ namespace NoteNest.Core.Services
         private readonly IAppLogger _logger;
         private bool _disposed;
         private readonly Dictionary<string, DateTime> _lastEventTimes = new();
-        private readonly TimeSpan _debounceInterval = TimeSpan.FromMilliseconds(500);
+        private readonly TimeSpan _debounceInterval;
+        private readonly ConfigurationService? _config;
 
         public event EventHandler<FileChangedEventArgs>? FileChanged;
         public event EventHandler<FileChangedEventArgs>? FileCreated;
         public event EventHandler<FileChangedEventArgs>? FileDeleted;
         public event EventHandler<FileRenamedEventArgs>? FileRenamed;
 
-        public FileWatcherService(IAppLogger? logger = null)
+        public FileWatcherService(IAppLogger? logger = null, ConfigurationService? config = null)
         {
             _watchers = new Dictionary<string, FileSystemWatcher>();
             _logger = logger ?? AppLogger.Instance;
+            _config = config;
+            try
+            {
+                var s = config?.Settings;
+                var ms = s?.FileWatcherDebounceMs > 0 ? s.FileWatcherDebounceMs : 500;
+                _debounceInterval = TimeSpan.FromMilliseconds(ms);
+            }
+            catch
+            {
+                _debounceInterval = TimeSpan.FromMilliseconds(500);
+            }
         }
 
         public void StartWatching(string path, string filter = "*.txt", bool includeSubdirectories = false)
@@ -55,8 +67,17 @@ namespace NoteNest.Core.Services
                     EnableRaisingEvents = true
                 };
 
-                // Set buffer size to handle many changes
-                watcher.InternalBufferSize = 64 * 1024; // 64KB buffer
+                // Set buffer size to handle many changes (configurable)
+                try
+                {
+                    var bufferKB = _config?.Settings?.FileWatcherBufferKB ?? 64;
+                    if (bufferKB < 4) bufferKB = 4; // minimum supported
+                    watcher.InternalBufferSize = bufferKB * 1024;
+                }
+                catch
+                {
+                    watcher.InternalBufferSize = 64 * 1024;
+                }
 
                 watcher.Changed += OnFileChanged;
                 watcher.Created += OnFileCreated;

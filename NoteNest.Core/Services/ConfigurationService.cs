@@ -227,8 +227,13 @@ namespace NoteNest.Core.Services
         }
 
         // Debounced save requester for callers who may call frequently
-        public void RequestSaveDebounced(int debounceMs = 5000)
+        public void RequestSaveDebounced(int debounceMs = 0)
         {
+            if (debounceMs <= 0)
+            {
+                try { debounceMs = _settings?.SettingsSaveDebounceMs > 0 ? _settings.SettingsSaveDebounceMs : 5000; }
+                catch { debounceMs = 5000; }
+            }
             _saveTimer?.Dispose();
             _saveTimer = new System.Threading.Timer(async _ =>
             {

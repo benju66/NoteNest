@@ -24,16 +24,16 @@ namespace NoteNest.Core.Services
             public int AccessCount { get; set; }
         }
 
-        public ContentCache(int maxCacheSizeMB = 50)
+        public ContentCache(int maxCacheSizeMB = 50, int expirationMinutes = 10, int cleanupMinutes = 5)
         {
             _cache = new ConcurrentDictionary<string, CacheEntry>();
             _maxCacheSize = maxCacheSizeMB * 1024 * 1024; // Convert to bytes
-            _defaultExpiration = TimeSpan.FromMinutes(10);
-            _cleanupTimer = new Timer(CleanupExpired, null, 
-                TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+            _defaultExpiration = TimeSpan.FromMinutes(Math.Max(1, expirationMinutes));
+            var cleanup = TimeSpan.FromMinutes(Math.Max(1, cleanupMinutes));
+            _cleanupTimer = new Timer(CleanupExpired, null, cleanup, cleanup);
         }
 
-        public ContentCache(IEventBus eventBus, int maxCacheSizeMB = 50) : this(maxCacheSizeMB)
+        public ContentCache(IEventBus eventBus, int maxCacheSizeMB = 50, int expirationMinutes = 10, int cleanupMinutes = 5) : this(maxCacheSizeMB, expirationMinutes, cleanupMinutes)
         {
             if (eventBus != null)
             {

@@ -27,6 +27,7 @@ namespace NoteNest.UI.Windows
                 FilesSettings.Visibility = Visibility.Collapsed;
                 StorageSettings.Visibility = Visibility.Collapsed;
                 FeaturesSettings.Visibility = Visibility.Collapsed;
+                AdvancedSettings.Visibility = Visibility.Collapsed;
 
                 // Show selected page
                 switch (item.Tag?.ToString())
@@ -48,6 +49,9 @@ namespace NoteNest.UI.Windows
                         break;
                     case "Features":
                         FeaturesSettings.Visibility = Visibility.Visible;
+                        break;
+                    case "Advanced":
+                        AdvancedSettings.Visibility = Visibility.Visible;
                         break;
                 }
             }

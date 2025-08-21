@@ -232,5 +232,75 @@ namespace NoteNest.Core.Services
                 return "Untitled";
             }
         }
+
+        /// <summary>
+        /// Returns true if the provided file name is valid after sanitization.
+        /// </summary>
+        public static bool IsValidFileName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            try
+            {
+                var sanitized = SanitizeName(name);
+                return !string.IsNullOrWhiteSpace(sanitized);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Normalize an absolute path (resolves '..' and returns full path).
+        /// Returns null if invalid.
+        /// </summary>
+        public static string? NormalizeAbsolutePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Ensures that a given absolute path lies under the configured RootPath.
+        /// Returns false if the path is outside RootPath or invalid.
+        /// </summary>
+        public static bool IsUnderRoot(string absolutePath)
+        {
+            try
+            {
+                var full = NormalizeAbsolutePath(absolutePath);
+                var root = NormalizeAbsolutePath(RootPath);
+                if (string.IsNullOrEmpty(full) || string.IsNullOrEmpty(root)) return false;
+                return full.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if a relative path does not traverse outside of RootPath when combined.
+        /// </summary>
+        public static bool IsSafeRelativePath(string relativePath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(relativePath)) return false;
+                var combined = Path.Combine(RootPath, relativePath);
+                return IsUnderRoot(combined);
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 }

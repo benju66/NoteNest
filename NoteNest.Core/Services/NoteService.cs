@@ -42,11 +42,20 @@ namespace NoteNest.Core.Services
         {
             if (category == null)
                 throw new ArgumentNullException(nameof(category));
+            if (string.IsNullOrWhiteSpace(title) || !PathService.IsValidFileName(title))
+                throw new ArgumentException("Invalid note title.", nameof(title));
 
             try
             {
                 var fileName = SanitizeFileName(title) + ".txt";
                 var filePath = Path.Combine(category.Path, fileName);
+                // Ensure target path is normalized and under root
+                var normalized = PathService.NormalizeAbsolutePath(filePath) ?? filePath;
+                if (!PathService.IsUnderRoot(normalized))
+                {
+                    _logger.Warning($"Attempt to create note outside root: {normalized}");
+                    throw new InvalidOperationException("Cannot create note outside of workspace root.");
+                }
                 
                 // Ensure unique filename
                 int counter = 1;
@@ -370,6 +379,13 @@ namespace NoteNest.Core.Services
                 var oldPath = note.FilePath;
                 var fileName = Path.GetFileName(oldPath);
                 var newPath = Path.Combine(targetCategory.Path, fileName);
+                // Ensure target path remains within root
+                var normalized = PathService.NormalizeAbsolutePath(newPath) ?? newPath;
+                if (!PathService.IsUnderRoot(normalized))
+                {
+                    _logger.Warning($"Attempt to move note outside root: {normalized}");
+                    return false;
+                }
 
                 // Ensure unique filename in target directory
                 int counter = 1;

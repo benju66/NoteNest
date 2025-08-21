@@ -267,6 +267,15 @@ namespace NoteNest.UI.ViewModels
                 ParseMarkdownCheckboxes = source.ParseMarkdownCheckboxes,
                 QuickNoteHotkey = source.QuickNoteHotkey,
                 QuickTaskHotkey = source.QuickTaskHotkey,
+                AutoSaveIdleMs = source.AutoSaveIdleMs,
+                ShowTreeDirtyDot = source.ShowTreeDirtyDot,
+                FileWatcherDebounceMs = source.FileWatcherDebounceMs,
+                FileWatcherBufferKB = source.FileWatcherBufferKB,
+                ContentCacheMaxMB = source.ContentCacheMaxMB,
+                ContentCacheExpirationMinutes = source.ContentCacheExpirationMinutes,
+                ContentCacheCleanupMinutes = source.ContentCacheCleanupMinutes,
+                SearchIndexContentWordLimit = source.SearchIndexContentWordLimit,
+                SettingsSaveDebounceMs = source.SettingsSaveDebounceMs,
                 RecentFiles = source.RecentFiles != null ? new System.Collections.Generic.List<string>(source.RecentFiles) : new System.Collections.Generic.List<string>(),
                 WindowSettings = source.WindowSettings != null
                     ? new NoteNest.Core.Models.WindowSettings
@@ -315,6 +324,15 @@ namespace NoteNest.UI.ViewModels
             target.ParseMarkdownCheckboxes = source.ParseMarkdownCheckboxes;
             target.QuickNoteHotkey = source.QuickNoteHotkey;
             target.QuickTaskHotkey = source.QuickTaskHotkey;
+            target.AutoSaveIdleMs = source.AutoSaveIdleMs;
+            target.ShowTreeDirtyDot = source.ShowTreeDirtyDot;
+            target.FileWatcherDebounceMs = source.FileWatcherDebounceMs;
+            target.FileWatcherBufferKB = source.FileWatcherBufferKB;
+            target.ContentCacheMaxMB = source.ContentCacheMaxMB;
+            target.ContentCacheExpirationMinutes = source.ContentCacheExpirationMinutes;
+            target.ContentCacheCleanupMinutes = source.ContentCacheCleanupMinutes;
+            target.SearchIndexContentWordLimit = source.SearchIndexContentWordLimit;
+            target.SettingsSaveDebounceMs = source.SettingsSaveDebounceMs;
 
             target.RecentFiles = source.RecentFiles != null
                 ? new System.Collections.Generic.List<string>(source.RecentFiles)

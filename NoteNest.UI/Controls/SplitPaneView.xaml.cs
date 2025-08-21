@@ -132,7 +132,10 @@ namespace NoteNest.UI.Controls
                             var binding = editor?.GetBindingExpression(TextBox.TextProperty);
                             binding?.UpdateSource();
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"Failed to flush binding on tab switch: {ex.Message}"); } catch { }
+                        }
                         // Save using state service
                         var result = await state.SaveNoteAsync(oldTab.Note.Id);
                         System.Diagnostics.Debug.WriteLine($"[UI] Tab switch auto-save END noteId={oldTab?.Note?.Id} success={result?.Success} at={DateTime.Now:HH:mm:ss.fff}");
@@ -168,7 +171,10 @@ namespace NoteNest.UI.Controls
                             var stateLen = (stateNew != null && stateNew.OpenNotes.TryGetValue(newTab.Note.Id, out var wn2)) ? (wn2.CurrentContent?.Length ?? 0) : -1;
                             System.Diagnostics.Debug.WriteLine($"[UI] Switched TO tab id={newTab.Note.Id} shownLen={shownLen} stateLen={stateLen}");
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"Failed to inspect editor on tab switch: {ex.Message}"); } catch { }
+                        }
                     }
                 }
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[UI][WARN] Sync dirty flag failed: {ex.Message}"); }
@@ -214,7 +220,10 @@ namespace NoteNest.UI.Controls
                     System.Diagnostics.Debug.WriteLine($"[UI] TextChanged ignored for untracked noteId={tab.Note.Id}");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"TextChanged inspection failed: {ex.Message}"); } catch { }
+            }
         }
 
         private async void IdleSaveTimer_Tick(object? sender, EventArgs e)
@@ -241,7 +250,10 @@ namespace NoteNest.UI.Controls
                             var binding = editor?.GetBindingExpression(TextBox.TextProperty);
                             binding?.UpdateSource();
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"Failed to flush binding on idle save: {ex.Message}"); } catch { }
+                        }
                         // Save
                         var result = await state.SaveNoteAsync(tab.Note.Id);
                         System.Diagnostics.Debug.WriteLine($"[UI] IdleSave END noteId={tab?.Note?.Id} success={result?.Success} at={DateTime.Now:HH:mm:ss.fff}");
@@ -315,7 +327,10 @@ namespace NoteNest.UI.Controls
                             editor.TextChanged -= SmartEditor_TextChanged;
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"Failed to detach TextChanged on close: {ex.Message}"); } catch { }
+                    }
                     var closed = await closeService.CloseTabWithPromptAsync(tab);
                     if (closed)
                     {

@@ -36,8 +36,16 @@ namespace NoteNest.UI.Services
             services.AddSingleton<ContentCache>(sp =>
             {
                 var bus = sp.GetRequiredService<IEventBus>();
-                return new ContentCache(bus);
+                var config = sp.GetRequiredService<ConfigurationService>();
+                var s = config.Settings;
+                return new ContentCache(
+                    bus,
+                    maxCacheSizeMB: s.ContentCacheMaxMB,
+                    expirationMinutes: s.ContentCacheExpirationMinutes,
+                    cleanupMinutes: s.ContentCacheCleanupMinutes);
             });
+
+            // Note: FileWatcherService is constructed lazily in MainViewModel with ConfigurationService injection.
             services.AddSingleton<INoteOperationsService, NoteOperationsService>();
             services.AddSingleton<IWorkspaceService, WorkspaceService>();
             services.AddSingleton<ITabCloseService, TabCloseService>();

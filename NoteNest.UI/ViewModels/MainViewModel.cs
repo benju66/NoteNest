@@ -150,12 +150,12 @@ namespace NoteNest.UI.ViewModels
         // Lazy service creation methods (called only when needed)
         private SearchIndexService GetSearchIndex()
         {
-            return _searchIndex ??= new SearchIndexService();
+            return _searchIndex ??= new SearchIndexService(_configService?.Settings?.SearchIndexContentWordLimit ?? 500);
         }
 
         private FileWatcherService GetFileWatcher()
         {
-            return _fileWatcher ??= new FileWatcherService(_logger);
+            return _fileWatcher ??= new FileWatcherService(_logger, _configService);
         }
 
         private ICategoryManagementService GetCategoryService()

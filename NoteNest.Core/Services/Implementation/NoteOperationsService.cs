@@ -100,6 +100,13 @@ namespace NoteNest.Core.Services.Implementation
                 var directory = Path.GetDirectoryName(oldPath);
                 var newFileName = PathService.SanitizeName(newName) + ".txt";
                 var newPath = Path.Combine(directory, newFileName);
+                // Prevent renaming outside workspace root
+                var normalized = PathService.NormalizeAbsolutePath(newPath) ?? newPath;
+                if (!PathService.IsUnderRoot(normalized))
+                {
+                    _logger.Warning($"Attempt to rename note outside root: {normalized}");
+                    return false;
+                }
                 
                 // Check if file already exists
                 if (await _fileSystem.ExistsAsync(newPath) && newPath != oldPath)

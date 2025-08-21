@@ -13,10 +13,12 @@ namespace NoteNest.Core.Services
         private readonly object _indexLock = new object();
         private DateTime _lastIndexTime;
         private bool _indexDirty = true;
+        private readonly int _contentWordLimit;
 
-        public SearchIndexService()
+        public SearchIndexService(int contentWordLimit = 500)
         {
             _searchIndex = new Dictionary<string, HashSet<SearchResult>>(StringComparer.OrdinalIgnoreCase);
+            _contentWordLimit = contentWordLimit > 100 ? contentWordLimit : 500;
         }
 
         public class SearchResult
@@ -77,7 +79,7 @@ namespace NoteNest.Core.Services
             if (!string.IsNullOrEmpty(note.Content))
             {
                 var contentWords = TokenizeText(note.Content);
-                foreach (var word in contentWords.Take(500)) // Limit to first 500 words
+                foreach (var word in contentWords.Take(_contentWordLimit)) // Configurable limit
                 {
                     AddToIndex(word, result, 1.0f);
                 }

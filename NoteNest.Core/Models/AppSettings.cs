@@ -49,6 +49,15 @@ namespace NoteNest.Core.Models
         public int AutoSaveIdleMs { get; set; } = 2000;
         public bool ShowTreeDirtyDot { get; set; } = true;
 
+        // File watcher & caching configuration
+        public int FileWatcherDebounceMs { get; set; } = 500;
+        public int FileWatcherBufferKB { get; set; } = 64;
+        public int ContentCacheMaxMB { get; set; } = 50;
+        public int ContentCacheExpirationMinutes { get; set; } = 10;
+        public int ContentCacheCleanupMinutes { get; set; } = 5;
+        public int SearchIndexContentWordLimit { get; set; } = 500;
+        public int SettingsSaveDebounceMs { get; set; } = 5000;
+
         public AppSettings()
         {
             // Initialize collections/objects to prevent null reference issues.

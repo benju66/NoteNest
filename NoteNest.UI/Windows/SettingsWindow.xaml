@@ -44,6 +44,11 @@
                         <ui:SymbolIcon Symbol="ViewAll"/>
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Advanced" Tag="Advanced">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="Setting"/>
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
             </ui:NavigationView.MenuItems>
             
             <ScrollViewer Padding="20">
@@ -305,6 +310,47 @@
                                      Text="{Binding Settings.QuickTaskHotkey}"
                                      Margin="0,4"/>
                         </Grid>
+                    </StackPanel>
+
+                    <!-- Advanced Settings Page -->
+                    <StackPanel x:Name="AdvancedSettings" Visibility="Collapsed">
+                        <TextBlock Text="Advanced Settings" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,16"/>
+
+                        <TextBlock Text="File Watcher" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8"/>
+                        <ui:NumberBox Header="Debounce (ms)"
+                                     Value="{Binding Settings.FileWatcherDebounceMs}"
+                                     Minimum="50" Maximum="60000"
+                                     Margin="0,8"/>
+                        <ui:NumberBox Header="Buffer (KB)"
+                                     Value="{Binding Settings.FileWatcherBufferKB}"
+                                     Minimum="4" Maximum="2048"
+                                     Margin="0,8"/>
+
+                        <TextBlock Text="Content Cache" Style="{StaticResource SubtitleTextBlockStyle}" Margin="16,16,0,8"/>
+                        <ui:NumberBox Header="Max Size (MB)"
+                                     Value="{Binding Settings.ContentCacheMaxMB}"
+                                     Minimum="10" Maximum="2048"
+                                     Margin="0,8"/>
+                        <ui:NumberBox Header="Expiration (minutes)"
+                                     Value="{Binding Settings.ContentCacheExpirationMinutes}"
+                                     Minimum="1" Maximum="43200"
+                                     Margin="0,8"/>
+                        <ui:NumberBox Header="Cleanup Interval (minutes)"
+                                     Value="{Binding Settings.ContentCacheCleanupMinutes}"
+                                     Minimum="1" Maximum="43200"
+                                     Margin="0,8"/>
+
+                        <TextBlock Text="Search Index" Style="{StaticResource SubtitleTextBlockStyle}" Margin="16,16,0,8"/>
+                        <ui:NumberBox Header="Content Word Limit"
+                                     Value="{Binding Settings.SearchIndexContentWordLimit}"
+                                     Minimum="100" Maximum="100000"
+                                     Margin="0,8"/>
+
+                        <TextBlock Text="App Settings Save" Style="{StaticResource SubtitleTextBlockStyle}" Margin="16,16,0,8"/>
+                        <ui:NumberBox Header="Settings Save Debounce (ms)"
+                                     Value="{Binding Settings.SettingsSaveDebounceMs}"
+                                     Minimum="100" Maximum="600000"
+                                     Margin="0,8"/>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>
