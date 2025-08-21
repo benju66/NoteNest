@@ -43,7 +43,6 @@ namespace NoteNest.UI.ViewModels
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Task _initializationTask;
-		private readonly Dictionary<string, string> _normalizedPathCache = new Dictionary<string, string>();
         
         private ObservableCollection<CategoryTreeItem> _categories;
         private CategoryTreeItem _selectedCategory;
@@ -1082,30 +1081,6 @@ namespace NoteNest.UI.ViewModels
         }
 
         // Removed: OnOpenTabsChanged tracking; tracking handled by workspace service
-
-        private string NormalizePath(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path)) return string.Empty;
-
-            if (_normalizedPathCache.TryGetValue(path, out var cached))
-                return cached;
-
-            try
-            {
-                var absolute = System.IO.Path.IsPathRooted(path) ? path : PathService.ToAbsolutePath(path);
-                var full = System.IO.Path.GetFullPath(absolute);
-                var normalized = full.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)
-                                     .ToLowerInvariant();
-                _normalizedPathCache[path] = normalized;
-                return normalized;
-            }
-            catch
-            {
-                var fallback = path.Trim().ToLowerInvariant();
-                _normalizedPathCache[path] = fallback;
-                return fallback;
-            }
-        }
 
         public ConfigurationService GetConfigService()
         {
