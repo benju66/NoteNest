@@ -18,6 +18,7 @@ namespace NoteNest.UI.Controls
         private bool _isDragging;
         private readonly TabDragManager _dragManager;
         private readonly DropZoneManager _dropZoneManager;
+        private static WeakReference<SplitPaneView> _lastHighlightedPane;
 
         public DraggableTabControl()
         {
@@ -58,19 +59,51 @@ namespace NoteNest.UI.Controls
                 var screenPoint = PointToScreen(e.GetPosition(this));
                 _dragManager.UpdateManualDrag(screenPoint);
                 var target = _dropZoneManager.GetDropTarget(screenPoint);
-                if (target != null && target.Element == this)
+                if (target != null)
                 {
-                    var headerPanel = GetHeaderPanel();
-                    if (headerPanel != null)
+                    if (target.Element is DraggableTabControl targetControl)
                     {
-                        var local = headerPanel.PointFromScreen(screenPoint);
-                        var idx = CalculateIndexFromPoint(local, headerPanel);
-                        _dropZoneManager.ShowInsertionLine(headerPanel, idx);
+                        var headerPanel = targetControl.GetHeaderPanel();
+                        if (headerPanel != null)
+                        {
+                            var local = headerPanel.PointFromScreen(screenPoint);
+                            var idx = CalculateIndexFromPoint(local, headerPanel);
+                            _dropZoneManager.ShowInsertionLine(headerPanel, idx);
+                        }
+
+                        // Pane highlight on destination
+                        var spv = FindAncestor<SplitPaneView>(targetControl);
+                        if (spv != null)
+                        {
+                            // Clear previous highlight
+                            if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev) && prev != spv)
+                            {
+                                prev.SetDropHighlight(false);
+                            }
+                            spv.SetDropHighlight(true);
+                            _lastHighlightedPane = new WeakReference<SplitPaneView>(spv);
+                        }
+                    }
+                    else if (target.Element == this)
+                    {
+                        var headerPanel = GetHeaderPanel();
+                        if (headerPanel != null)
+                        {
+                            var local = headerPanel.PointFromScreen(screenPoint);
+                            var idx = CalculateIndexFromPoint(local, headerPanel);
+                            _dropZoneManager.ShowInsertionLine(headerPanel, idx);
+                        }
                     }
                 }
                 else
                 {
                     _dropZoneManager.HideInsertionLine();
+                    // Clear highlight if any
+                    if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev))
+                    {
+                        prev.SetDropHighlight(false);
+                        _lastHighlightedPane = null;
+                    }
                 }
 
                 // Detach preview/hand-off to OLE when far outside this window
@@ -135,6 +168,11 @@ namespace NoteNest.UI.Controls
             _isDragging = false;
             _dragManager.EndManualDrag(true);
             _dropZoneManager.HideInsertionLine();
+            if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev))
+            {
+                prev.SetDropHighlight(false);
+                _lastHighlightedPane = null;
+            }
             PreviewKeyDown -= OnDragKeyDown;
         }
 
