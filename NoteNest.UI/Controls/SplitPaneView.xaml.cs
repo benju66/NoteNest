@@ -16,6 +16,7 @@ namespace NoteNest.UI.Controls
         private System.Windows.Threading.DispatcherTimer? _idleSaveTimer;
         private DateTime _lastTextChangedAt;
         private int _typingBurstCount;
+        private bool _isDropHighlight;
         
         public static readonly DependencyProperty IsActiveProperty =
             DependencyProperty.Register(nameof(IsActive), typeof(bool),
@@ -99,9 +100,24 @@ namespace NoteNest.UI.Controls
         
         private void UpdateVisualState()
         {
-            PaneBorder.BorderBrush = IsActive 
-                ? new SolidColorBrush(Colors.DodgerBlue)
-                : new SolidColorBrush(Colors.LightGray);
+            if (_isDropHighlight)
+            {
+                PaneBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(0, 122, 204));
+                PaneBorder.Background = new SolidColorBrush(Color.FromArgb(32, 0, 122, 204));
+            }
+            else
+            {
+                PaneBorder.BorderBrush = IsActive 
+                    ? new SolidColorBrush(Colors.DodgerBlue)
+                    : new SolidColorBrush(Colors.LightGray);
+                PaneBorder.Background = Brushes.Transparent;
+            }
+        }
+
+        public void SetDropHighlight(bool isHighlighted)
+        {
+            _isDropHighlight = isHighlighted;
+            UpdateVisualState();
         }
         
         private async void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)

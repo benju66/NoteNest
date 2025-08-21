@@ -5,6 +5,7 @@ using NoteNest.Core.Services;
 using NoteNest.Core.Services.Implementation;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.ViewModels;
+using NoteNest.UI.Services.DragDrop;
 
 namespace NoteNest.UI.Services
 {
@@ -49,6 +50,11 @@ namespace NoteNest.UI.Services
             services.AddSingleton<INoteOperationsService, NoteOperationsService>();
             services.AddSingleton<IWorkspaceService, WorkspaceService>();
             services.AddSingleton<ITabCloseService, TabCloseService>();
+
+            // Drag & Drop services
+            services.AddSingleton<TabDragManager>();
+            services.AddSingleton<DropZoneManager>();
+            services.AddSingleton<SpringLoadedPaneManager>();
 
             // ViewModels (Singleton for MainViewModel, Transient for others)
             services.AddSingleton<MainViewModel>();

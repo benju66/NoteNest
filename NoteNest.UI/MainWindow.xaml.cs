@@ -8,6 +8,10 @@ using System.Collections.Generic;
 using ModernWpf.Controls;
 using NoteNest.UI.Services;
 using NoteNest.UI.Windows;
+using NoteNest.Core.Interfaces.Services;
+using NoteNest.UI.Controls;
+using NoteNest.UI.Services.DragDrop;
+using NoteNest.Core.Models;
 
 namespace NoteNest.UI
 {
@@ -17,6 +21,7 @@ namespace NoteNest.UI
         {
             InitializeComponent();
             UpdateThemeMenuChecks();
+            AllowDrop = true;
 
             // Ensure NoteNestPanel uses the same DataContext as the window
             this.Loaded += (sender, e) =>
@@ -24,6 +29,144 @@ namespace NoteNest.UI
                 if (MainPanel != null && DataContext != null)
                     MainPanel.DataContext = DataContext;
             };
+        }
+
+        protected override void OnDragEnter(DragEventArgs e)
+        {
+            base.OnDragEnter(e);
+            if (e.Data.GetDataPresent("NoteNestTab"))
+            {
+                TogglePaneDropHighlight(e.GetPosition(this), true);
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+            }
+        }
+
+        protected override void OnDragOver(DragEventArgs e)
+        {
+            base.OnDragOver(e);
+            if (e.Data.GetDataPresent("NoteNestTab"))
+            {
+                // Spring-load: activate pane under cursor after delay
+                var hoveredPaneControl = FindPaneControlAtPoint(e.GetPosition(this));
+                if (hoveredPaneControl != null)
+                {
+                    var spring = (Application.Current as App)?.ServiceProvider?.GetService(typeof(SpringLoadedPaneManager)) as SpringLoadedPaneManager;
+                    spring?.BeginHover(hoveredPaneControl);
+                    spring!.PaneActivated -= OnPaneActivated;
+                    spring.PaneActivated += OnPaneActivated;
+                }
+                TogglePaneDropHighlight(e.GetPosition(this), true);
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+            }
+        }
+
+        protected override async void OnDrop(DragEventArgs e)
+        {
+            base.OnDrop(e);
+            if (e.Data.GetDataPresent("NoteNestTab"))
+            {
+                var tab = e.Data.GetData("NoteNestTab") as ITabItem;
+                if (tab == null) return;
+                var point = e.GetPosition(this);
+                var targetPane = FindPaneAtPoint(point);
+                if (targetPane != null)
+                {
+                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                    if (workspace != null)
+                    {
+                        await workspace.MoveTabToPaneAsync(tab, targetPane);
+                    }
+                }
+                TogglePaneDropHighlight(e.GetPosition(this), false);
+                e.Handled = true;
+            }
+        }
+
+        protected override void OnDragLeave(DragEventArgs e)
+        {
+            base.OnDragLeave(e);
+            TogglePaneDropHighlight(e.GetPosition(this), false);
+        }
+
+        private void TogglePaneDropHighlight(Point point, bool on)
+        {
+            var ctrl = FindPaneControlAtPoint(point) as FrameworkElement;
+            var spv = ctrl != null ? FindAncestor<SplitPaneView>(ctrl) : null;
+            // Turn off all first
+            var root = this;
+            TurnAllPaneHighlights(false);
+            if (on && spv != null)
+            {
+                spv.SetDropHighlight(true);
+            }
+        }
+
+        private void TurnAllPaneHighlights(bool on)
+        {
+            // Walk visual tree for SplitPaneView and reset
+            void ResetHighlights(DependencyObject parent)
+            {
+                int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+                for (int i = 0; i < count; i++)
+                {
+                    var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                    if (child is SplitPaneView spv)
+                    {
+                        spv.SetDropHighlight(on);
+                    }
+                    ResetHighlights(child);
+                }
+            }
+            ResetHighlights(this);
+        }
+
+        private SplitPane FindPaneAtPoint(Point point)
+        {
+            // Try hit testing for a DraggableTabControl and climb to SplitPaneView
+            var element = InputHitTest(point) as DependencyObject;
+            while (element != null && element is not DraggableTabControl)
+            {
+                element = System.Windows.Media.VisualTreeHelper.GetParent(element);
+            }
+            if (element is DraggableTabControl dtc)
+            {
+                var spv = FindAncestor<SplitPaneView>(dtc);
+                return spv?.Pane;
+            }
+            return null;
+        }
+
+        private FrameworkElement FindPaneControlAtPoint(Point point)
+        {
+            var element = InputHitTest(point) as DependencyObject;
+            while (element != null && element is not DraggableTabControl)
+            {
+                element = System.Windows.Media.VisualTreeHelper.GetParent(element);
+            }
+            return element as FrameworkElement;
+        }
+
+        private void OnPaneActivated(object? sender, FrameworkElement paneControl)
+        {
+            var spv = FindAncestor<SplitPaneView>(paneControl);
+            var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+            if (spv?.Pane != null && workspace != null)
+            {
+                workspace.SetActivePane(spv.Pane);
+            }
+        }
+
+        private static T FindAncestor<T>(DependencyObject start) where T : DependencyObject
+        {
+            var current = start;
+            while (current != null)
+            {
+                if (current is T t) return t;
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+            }
+            return null;
         }
 
         private void NewNoteMenuItem_Click(object sender, RoutedEventArgs e)

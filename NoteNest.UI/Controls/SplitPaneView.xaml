@@ -10,14 +10,14 @@
             BorderThickness="2" 
             BorderBrush="Transparent">
         <Grid>
-            <TabControl x:Name="PaneTabControl"
+            <local:DraggableTabControl x:Name="PaneTabControl"
                         SelectionChanged="TabControl_SelectionChanged"
                         GotFocus="TabControl_GotFocus">
-                <TabControl.Resources>
+                <local:DraggableTabControl.Resources>
                     <!-- Neutralize global TabItem Style to ensure ItemTemplate is used here -->
                     <Style TargetType="TabItem"/>
-                </TabControl.Resources>
-                <TabControl.ItemTemplate>
+                </local:DraggableTabControl.Resources>
+                <local:DraggableTabControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Margin="5,2" VerticalAlignment="Center" Text="{Binding Title}"/>
@@ -46,8 +46,8 @@
                                     Cursor="Hand"/>
                         </StackPanel>
                     </DataTemplate>
-                </TabControl.ItemTemplate>
-                <TabControl.ContentTemplate>
+                </local:DraggableTabControl.ItemTemplate>
+                <local:DraggableTabControl.ContentTemplate>
                     <DataTemplate>
                         <Grid>
                             <Grid.RowDefinitions>
@@ -92,8 +92,8 @@
                                                    TextChanged="SmartEditor_TextChanged"/>
                         </Grid>
                     </DataTemplate>
-                </TabControl.ContentTemplate>
-            </TabControl>
+                </local:DraggableTabControl.ContentTemplate>
+            </local:DraggableTabControl>
             
             <!-- Show message when no tabs -->
             <TextBlock x:Name="EmptyMessage"
