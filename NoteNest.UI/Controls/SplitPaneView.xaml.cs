@@ -13,6 +13,7 @@ namespace NoteNest.UI.Controls
     public partial class SplitPaneView : UserControl
     {
         public SplitPane? Pane { get; private set; }
+        public event EventHandler<ITabItem>? SelectedTabChanged;
         private System.Windows.Threading.DispatcherTimer? _idleSaveTimer;
         private DateTime _lastTextChangedAt;
         private int _typingBurstCount;
@@ -54,11 +55,13 @@ namespace NoteNest.UI.Controls
             if (pane.SelectedTab != null)
             {
                 PaneTabControl.SelectedItem = pane.SelectedTab;
+                SelectedTabChanged?.Invoke(this, pane.SelectedTab);
             }
             else if (pane.Tabs.Count > 0)
             {
                 PaneTabControl.SelectedItem = pane.Tabs[0];
                 pane.SelectedTab = pane.Tabs[0];
+                SelectedTabChanged?.Invoke(this, pane.SelectedTab);
             }
             
             IsActive = pane.IsActive;
@@ -173,6 +176,7 @@ namespace NoteNest.UI.Controls
                 {
                     workspaceService.SelectedTab = newTab;
                 }
+                try { SelectedTabChanged?.Invoke(this, newTab); } catch { }
                 
                 // Sync note dirty flag with tab (for tree view indicator)
                 try

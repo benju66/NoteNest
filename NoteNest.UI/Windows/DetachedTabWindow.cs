@@ -49,6 +49,8 @@ namespace NoteNest.UI.Windows
             _pane = new SplitPane();
             _paneView = new SplitPaneView();
             _paneView.BindToPane(_pane);
+            _paneView.SelectedTabChanged -= PaneView_SelectedTabChanged;
+            _paneView.SelectedTabChanged += PaneView_SelectedTabChanged;
             Content = _paneView;
             AllowDrop = true;
             // Register this pane so DnD services can discover it and it participates in service moves
@@ -88,6 +90,10 @@ namespace NoteNest.UI.Windows
                 _dialogService.OwnerWindow = Application.Current?.MainWindow;
             }
             _workspaceService?.UnregisterPane(_pane);
+            if (_paneView != null)
+            {
+                _paneView.SelectedTabChanged -= PaneView_SelectedTabChanged;
+            }
             if (_pane?.Tabs != null)
             {
                 _pane.Tabs.CollectionChanged -= Tabs_CollectionChanged;
@@ -121,6 +127,19 @@ namespace NoteNest.UI.Windows
                 }
                 finally { _closingRequested = false; }
             }
+        }
+
+        private void PaneView_SelectedTabChanged(object? sender, ITabItem e)
+        {
+            try
+            {
+                // Update window title to reflect current selected tab
+                if (e?.Title != null)
+                {
+                    Title = $"{e.Title} - NoteNest";
+                }
+            }
+            catch { }
         }
     }
 }
