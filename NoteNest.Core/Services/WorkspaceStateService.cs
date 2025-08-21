@@ -27,6 +27,7 @@ namespace NoteNest.Core.Services
         void AssociateNoteWithWindow(string noteId, string windowKey, bool isDetached);
         bool IsNoteDetached(string noteId);
         string? GetNoteWindowKey(string noteId);
+        void ClearWindowAssociation(string noteId);
     }
 
     public class WorkspaceNote
@@ -238,6 +239,12 @@ namespace NoteNest.Core.Services
         public string? GetNoteWindowKey(string noteId)
         {
             return _windowTracking.TryGetValue(noteId, out var assoc) ? assoc.WindowKey : null;
+        }
+
+        public void ClearWindowAssociation(string noteId)
+        {
+            if (string.IsNullOrEmpty(noteId)) return;
+            _windowTracking.TryRemove(noteId, out _);
         }
     }
 }

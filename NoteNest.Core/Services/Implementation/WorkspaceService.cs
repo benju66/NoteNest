@@ -185,10 +185,11 @@ namespace NoteNest.Core.Services.Implementation
                 // Note: Save prompt is handled by UI layer
                 // Ensure unregistration from state even if the tab is not in OpenTabs
 
-                // Always attempt to unregister the note from state service
+                // Always attempt to unregister the note from state service and clear window association
                 if (tab.Note != null)
                 {
                     var ok = await _stateService.CloseNoteAsync(tab.Note.Id);
+                    _stateService.ClearWindowAssociation(tab.Note.Id);
                     _logger.Debug($"Unregistered note from state service: {tab.Title}");
                     System.Diagnostics.Debug.WriteLine($"[WS] Unregister note id={tab.Note.Id} ok={ok}");
                 }
