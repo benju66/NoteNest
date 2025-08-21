@@ -85,6 +85,21 @@ namespace NoteNest.UI.Controls
                 }
             }
             
+            // If this pane just became empty, request close of the pane (if there is another sibling pane)
+            if (Pane != null && Pane.Tabs.Count == 0)
+            {
+                try
+                {
+                    var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                    if (workspaceService != null)
+                    {
+                        _ = workspaceService.ClosePaneAsync(Pane);
+                    }
+                }
+                catch { }
+                return;
+            }
+
             // Auto-select first tab if none selected
             if (Pane != null && Pane.SelectedTab == null && Pane.Tabs.Count > 0)
             {

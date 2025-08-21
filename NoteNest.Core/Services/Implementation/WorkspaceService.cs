@@ -59,6 +59,7 @@ namespace NoteNest.Core.Services.Implementation
         /// Gets all workspace panes
         /// </summary>
         public ObservableCollection<SplitPane> Panes => _panes;
+        public ObservableCollection<SplitPane> DetachedPanes => _detachedPanes;
 
         /// <summary>
         /// Gets or sets the active pane
@@ -261,7 +262,7 @@ namespace NoteNest.Core.Services.Implementation
             if (pane == null)
                 throw new ArgumentNullException(nameof(pane));
             
-            var newPane = new SplitPane();
+            var newPane = new SplitPane { OwnerKey = pane.OwnerKey };
             
             // Move half of the tabs to new pane (optional)
             var tabsToMove = pane.Tabs.Skip(pane.Tabs.Count / 2).ToList();
@@ -271,7 +272,23 @@ namespace NoteNest.Core.Services.Implementation
                 newPane.Tabs.Add(tab);
             }
             
-            _panes.Add(newPane);
+            // Add to correct collection based on ownership
+            if (!string.IsNullOrEmpty(pane.OwnerKey))
+            {
+                if (!_detachedPanes.Contains(pane))
+                {
+                    // Ensure the original pane is tracked as detached
+                    _detachedPanes.Add(pane);
+                }
+                if (!_detachedPanes.Contains(newPane))
+                {
+                    _detachedPanes.Add(newPane);
+                }
+            }
+            else
+            {
+                _panes.Add(newPane);
+            }
             
             _logger.Debug($"Split pane {pane.Id} {orientation}");
             
@@ -280,11 +297,21 @@ namespace NoteNest.Core.Services.Implementation
 
         public async Task ClosePaneAsync(SplitPane pane)
         {
-            if (pane == null || _panes.Count <= 1)
+            if (pane == null)
                 return;
             
+            // Determine owner scope and siblings
+            bool isDetached = !string.IsNullOrEmpty(pane.OwnerKey);
+            var siblings = isDetached
+                ? _detachedPanes.Where(p => p.OwnerKey == pane.OwnerKey).ToList()
+                : _panes.ToList();
+
+            // Do not close the last remaining pane in the owner scope
+            if (siblings.Count <= 1)
+                return;
+
             // Move tabs to another pane before closing
-            var targetPane = _panes.FirstOrDefault(p => p != pane);
+            SplitPane? targetPane = siblings.FirstOrDefault(p => p != pane);
             if (targetPane != null)
             {
                 foreach (var tab in pane.Tabs.ToList())
@@ -294,11 +321,20 @@ namespace NoteNest.Core.Services.Implementation
                 }
             }
             
-            _panes.Remove(pane);
+            if (isDetached)
+            {
+                _detachedPanes.Remove(pane);
+            }
+            else
+            {
+                _panes.Remove(pane);
+            }
             
             if (ActivePane == pane)
             {
-                ActivePane = _panes.FirstOrDefault();
+                ActivePane = isDetached
+                    ? _detachedPanes.FirstOrDefault(p => p.OwnerKey == pane.OwnerKey) ?? _panes.FirstOrDefault()
+                    : _panes.FirstOrDefault();
             }
             
             _logger.Debug($"Closed pane {pane.Id}");
@@ -365,8 +401,15 @@ namespace NoteNest.Core.Services.Implementation
 
         public void RegisterPane(SplitPane pane)
         {
-            if (pane != null && !_detachedPanes.Contains(pane))
-                _detachedPanes.Add(pane);
+            if (pane == null) return;
+            if (!string.IsNullOrEmpty(pane.OwnerKey))
+            {
+                if (!_detachedPanes.Contains(pane)) _detachedPanes.Add(pane);
+            }
+            else
+            {
+                if (!_panes.Contains(pane)) _panes.Add(pane);
+            }
         }
 
         public void UnregisterPane(SplitPane pane)

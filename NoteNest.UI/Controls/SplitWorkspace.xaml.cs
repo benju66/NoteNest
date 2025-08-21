@@ -18,6 +18,7 @@ namespace NoteNest.UI.Controls
         public static readonly RoutedCommand MoveFocusLeftCommand = new();
         public static readonly RoutedCommand MoveFocusRightCommand = new();
         private IWorkspaceService? _workspaceService;
+        public string? OwnerKeyFilter { get; set; }
         private readonly Dictionary<string, SplitPaneView> _paneViews = new();
         private SplitContainer? _splitContainer;
         
@@ -46,19 +47,26 @@ namespace NoteNest.UI.Controls
             // Log initialization
             System.Diagnostics.Debug.WriteLine($"SplitWorkspace Initialize: Found {_workspaceService.Panes.Count} panes");
 
-            // Ensure at least one pane exists
-            if (_workspaceService.Panes.Count == 0)
+            // Ensure at least one pane exists for main workspace only
+            if (string.IsNullOrEmpty(OwnerKeyFilter))
             {
-                var initialPane = new SplitPane();
-                _workspaceService.Panes.Add(initialPane);
-                _workspaceService.ActivePane = initialPane;
-                System.Diagnostics.Debug.WriteLine("Created initial pane");
+                if (_workspaceService.Panes.Count == 0)
+                {
+                    var initialPane = new SplitPane();
+                    _workspaceService.Panes.Add(initialPane);
+                    _workspaceService.ActivePane = initialPane;
+                    System.Diagnostics.Debug.WriteLine("Created initial main pane");
+                }
             }
 
             // Subscribe to pane collection changes
             if (_workspaceService.Panes is INotifyCollectionChanged ncc)
             {
                 ncc.CollectionChanged += OnPanesCollectionChanged;
+            }
+            if (_workspaceService.DetachedPanes is INotifyCollectionChanged dncc)
+            {
+                dncc.CollectionChanged += OnPanesCollectionChanged;
             }
             
             // Initialize with existing panes
@@ -87,7 +95,10 @@ namespace NoteNest.UI.Controls
             WorkspaceGrid.Children.Clear();
             _paneViews.Clear();
             
-            var panes = _workspaceService.Panes.ToList();
+            var allPanes = _workspaceService.Panes.Concat(_workspaceService.DetachedPanes);
+            var panes = allPanes
+                .Where(p => OwnerKeyFilter == null ? string.IsNullOrEmpty(p.OwnerKey) : p.OwnerKey == OwnerKeyFilter)
+                .ToList();
             System.Diagnostics.Debug.WriteLine($"RebuildLayout: Rebuilding with {panes.Count} panes");
             
             if (panes.Count == 0)
@@ -124,7 +135,7 @@ namespace NoteNest.UI.Controls
                 WorkspaceGrid.Children.Add(_splitContainer);
                 System.Diagnostics.Debug.WriteLine($"RebuildLayout: Two panes - Pane1: {panes[0].Tabs.Count} tabs, Pane2: {panes[1].Tabs.Count} tabs");
             }
-            // For MVP, limit to 2 panes. More complex layouts in Phase 2
+            // For MVP, limit to 2 panes per owner. More complex layouts in Phase 2
         }
         
         public void SetActivePane(SplitPane pane)

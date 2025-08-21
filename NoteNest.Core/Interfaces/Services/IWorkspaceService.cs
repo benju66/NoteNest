@@ -51,6 +51,11 @@ namespace NoteNest.Core.Interfaces.Services
         ObservableCollection<SplitPane> Panes { get; }
 
         /// <summary>
+        /// Gets detached window panes (scoped by OwnerKey)
+        /// </summary>
+        ObservableCollection<SplitPane> DetachedPanes { get; }
+
+        /// <summary>
         /// Gets or sets the active pane
         /// </summary>
         SplitPane? ActivePane { get; set; }

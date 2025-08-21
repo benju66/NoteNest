@@ -18,7 +18,7 @@ namespace NoteNest.UI.Windows
         private readonly IWorkspaceStateService _stateService;
         private readonly IDialogService _dialogService;
         private SplitPane _pane;
-        private SplitPaneView _paneView;
+        private SplitWorkspace _workspaceView;
         private IServiceProvider _services;
         private bool _closingRequested;
 
@@ -46,12 +46,12 @@ namespace NoteNest.UI.Windows
 
         private void InitializeContent()
         {
-            _pane = new SplitPane();
-            _paneView = new SplitPaneView();
-            _paneView.BindToPane(_pane);
-            _paneView.SelectedTabChanged -= PaneView_SelectedTabChanged;
-            _paneView.SelectedTabChanged += PaneView_SelectedTabChanged;
-            Content = _paneView;
+            _pane = new SplitPane { OwnerKey = $"detached:{GetHashCode()}" };
+            _workspaceView = new SplitWorkspace();
+            // Initialize with existing workspace service; filter panes by OwnerKey within the view
+            _workspaceView.OwnerKeyFilter = $"detached:{GetHashCode()}";
+            _workspaceView.Initialize(_workspaceService);
+            Content = _workspaceView;
             AllowDrop = true;
             // Register this pane so DnD services can discover it and it participates in service moves
             _workspaceService?.RegisterPane(_pane);
@@ -61,6 +61,7 @@ namespace NoteNest.UI.Windows
                 _pane.Tabs.CollectionChanged -= Tabs_CollectionChanged;
                 _pane.Tabs.CollectionChanged += Tabs_CollectionChanged;
             }
+            // Do not add detached pane to main panes; it lives only in DetachedPanes
         }
 
         public void AddTab(ITabItem tab)
@@ -74,6 +75,7 @@ namespace NoteNest.UI.Windows
             {
                 _stateService.AssociateNoteWithWindow(tab.Note.Id, $"detached:{GetHashCode()}", true);
             }
+            try { Title = $"{tab.Title} - NoteNest"; } catch { }
         }
 
         protected override void OnClosing(CancelEventArgs e)
@@ -90,10 +92,7 @@ namespace NoteNest.UI.Windows
                 _dialogService.OwnerWindow = Application.Current?.MainWindow;
             }
             _workspaceService?.UnregisterPane(_pane);
-            if (_paneView != null)
-            {
-                _paneView.SelectedTabChanged -= PaneView_SelectedTabChanged;
-            }
+            // no event unhook needed for SplitWorkspace
             if (_pane?.Tabs != null)
             {
                 _pane.Tabs.CollectionChanged -= Tabs_CollectionChanged;

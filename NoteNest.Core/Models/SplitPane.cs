@@ -11,6 +11,7 @@ namespace NoteNest.Core.Models
         public bool IsActive { get; set; }
         public double MinWidth => 150;
         public double MinHeight => 100;
+        public string? OwnerKey { get; set; }
         
         // Tabs in this pane
         public ObservableCollection<ITabItem> Tabs { get; }
