@@ -69,6 +69,7 @@ namespace NoteNest.Core.Interfaces.Services
         /// Move tab to another pane
         /// </summary>
         Task MoveTabToPaneAsync(ITabItem tab, SplitPane targetPane);
+        Task MoveTabToPaneAsync(ITabItem tab, SplitPane targetPane, int targetIndex);
 
         /// <summary>
         /// Focus management

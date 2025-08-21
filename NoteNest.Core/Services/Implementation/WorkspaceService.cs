@@ -322,6 +322,37 @@ namespace NoteNest.Core.Services.Implementation
             }
         }
 
+        public async Task MoveTabToPaneAsync(ITabItem tab, SplitPane targetPane, int targetIndex)
+        {
+            if (tab == null || targetPane == null)
+                return;
+            var sourcePane = _panes.FirstOrDefault(p => p.Tabs.Contains(tab));
+            if (sourcePane == null)
+                return;
+            if (sourcePane == targetPane)
+            {
+                // Reorder within the same pane
+                var currentIndex = sourcePane.Tabs.IndexOf(tab);
+                if (currentIndex < 0) return;
+                var insertIndex = targetIndex;
+                if (insertIndex > currentIndex) insertIndex--;
+                if (insertIndex == currentIndex) return;
+                sourcePane.Tabs.RemoveAt(currentIndex);
+                if (insertIndex < 0) insertIndex = 0;
+                if (insertIndex > sourcePane.Tabs.Count) insertIndex = sourcePane.Tabs.Count;
+                sourcePane.Tabs.Insert(insertIndex, tab);
+                return;
+            }
+            // Move across panes at index
+            sourcePane.Tabs.Remove(tab);
+            var boundedIndex = Math.Max(0, Math.Min(targetIndex, targetPane.Tabs.Count));
+            targetPane.Tabs.Insert(boundedIndex, tab);
+            if (!sourcePane.Tabs.Any())
+            {
+                await ClosePaneAsync(sourcePane);
+            }
+        }
+
         public void SetActivePane(SplitPane pane)
         {
             ActivePane = pane;

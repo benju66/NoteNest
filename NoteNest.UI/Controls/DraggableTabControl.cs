@@ -76,8 +76,12 @@ namespace NoteNest.UI.Controls
                 // Detach preview/hand-off to OLE when far outside this window
                 if (_dragManager.IsOutsideDetachThreshold(screenPoint))
                 {
-                    // Switch to OLE drag for cross-window scenarios
-                    _dragManager.StartOleDrag();
+                    // Only switch to OLE for drags that originated in a detached window
+                    var owner = Window.GetWindow(this);
+                    if (owner is DetachedTabWindow)
+                    {
+                        _dragManager.StartOleDrag();
+                    }
                 }
             }
         }
@@ -244,13 +248,10 @@ namespace NoteNest.UI.Controls
                 var targetPane = GetPaneFromControl(targetControl);
                 if (workspace != null && targetPane != null)
                 {
-                    // Remove from current list (reordering List)
-                    if (ItemsSource is System.Collections.IList list && list.Contains(tab))
-                    {
-                        list.Remove(tab);
-                    }
-                    // Let service move the tab to the target pane; UI binding will update
-                    _ = workspace.MoveTabToPaneAsync(tab, targetPane);
+                    var headerPanel = targetControl.GetHeaderPanel();
+                    var local = headerPanel.PointFromScreen(screenPoint);
+                    var idx = CalculateIndexFromPoint(local, headerPanel);
+                    _ = workspace.MoveTabToPaneAsync(tab, targetPane, idx);
                 }
             }
             catch { }

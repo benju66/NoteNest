@@ -68,6 +68,7 @@ namespace NoteNest.UI
             if (e.Data.GetDataPresent("NoteNestTab"))
             {
                 var tab = e.Data.GetData("NoteNestTab") as ITabItem;
+                var sourceWindow = e.Data.GetData("SourceWindow") as Window;
                 if (tab == null) return;
                 var point = e.GetPosition(this);
                 var targetPane = FindPaneAtPoint(point);
@@ -77,6 +78,12 @@ namespace NoteNest.UI
                     if (workspace != null)
                     {
                         await workspace.MoveTabToPaneAsync(tab, targetPane);
+                        if (sourceWindow is DetachedTabWindow dw)
+                        {
+                            dw.RemoveTab(tab);
+                        }
+                        var state = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                        state?.AssociateNoteWithWindow(tab.Note.Id, "main", false);
                     }
                 }
                 TogglePaneDropHighlight(e.GetPosition(this), false);
