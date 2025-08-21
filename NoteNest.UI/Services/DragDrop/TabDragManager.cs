@@ -123,13 +123,14 @@ namespace NoteNest.UI.Services.DragDrop
         {
             if (!(_draggedTab?.TryGetTarget(out var tab) ?? false) || _sourceElement == null)
                 return;
-
-            EndManualDrag(false);
-
+            // Hide ghost during OLE; recalc manual visuals on re-entry
+            if (_ghostPopup != null) _ghostPopup.IsOpen = false;
             var data = new DataObject("NoteNestTab", tab);
             data.SetData("SourceWindow", _sourceWindow);
 
             System.Windows.DragDrop.DoDragDrop(_sourceElement, data, DragDropEffects.Move);
+            // When OLE completes, clear manual state
+            EndManualDrag(true);
         }
 
         private static double CalculateDistanceFromRect(Point p, Rect r)

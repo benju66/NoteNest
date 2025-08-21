@@ -23,6 +23,7 @@ namespace NoteNest.Core.Services.Implementation
         private ObservableCollection<ITabItem> _openTabs;
         private ITabItem? _selectedTab;
         private readonly ObservableCollection<SplitPane> _panes;
+        private readonly ObservableCollection<SplitPane> _detachedPanes;
         private SplitPane? _activePane;
         
         public ObservableCollection<ITabItem> OpenTabs
@@ -108,6 +109,7 @@ namespace NoteNest.Core.Services.Implementation
             
             _openTabs = new ObservableCollection<ITabItem>();
             _panes = new ObservableCollection<SplitPane>();
+            _detachedPanes = new ObservableCollection<SplitPane>();
             
             // Create initial pane with existing tabs
             var initialPane = new SplitPane();
@@ -308,7 +310,8 @@ namespace NoteNest.Core.Services.Implementation
                 return;
             
             // Find source pane
-            var sourcePane = _panes.FirstOrDefault(p => p.Tabs.Contains(tab));
+            var sourcePane = _panes.FirstOrDefault(p => p.Tabs.Contains(tab))
+                ?? _detachedPanes.FirstOrDefault(p => p.Tabs.Contains(tab));
             if (sourcePane != null && sourcePane != targetPane)
             {
                 sourcePane.Tabs.Remove(tab);
@@ -326,7 +329,8 @@ namespace NoteNest.Core.Services.Implementation
         {
             if (tab == null || targetPane == null)
                 return;
-            var sourcePane = _panes.FirstOrDefault(p => p.Tabs.Contains(tab));
+            var sourcePane = _panes.FirstOrDefault(p => p.Tabs.Contains(tab))
+                ?? _detachedPanes.FirstOrDefault(p => p.Tabs.Contains(tab));
             if (sourcePane == null)
                 return;
             if (sourcePane == targetPane)
@@ -356,6 +360,18 @@ namespace NoteNest.Core.Services.Implementation
         public void SetActivePane(SplitPane pane)
         {
             ActivePane = pane;
+        }
+
+        public void RegisterPane(SplitPane pane)
+        {
+            if (pane != null && !_detachedPanes.Contains(pane))
+                _detachedPanes.Add(pane);
+        }
+
+        public void UnregisterPane(SplitPane pane)
+        {
+            if (pane != null && _detachedPanes.Contains(pane))
+                _detachedPanes.Remove(pane);
         }
 
         // Future Split View Support - current single-pane implementations

@@ -106,16 +106,7 @@ namespace NoteNest.UI.Controls
                     }
                 }
 
-                // Detach preview/hand-off to OLE when far outside this window
-                if (_dragManager.IsOutsideDetachThreshold(screenPoint))
-                {
-                    // Only switch to OLE for drags that originated in a detached window
-                    var owner = Window.GetWindow(this);
-                    if (owner is DetachedTabWindow)
-                    {
-                        _dragManager.StartOleDrag();
-                    }
-                }
+                // Stay in manual-drag mode across windows; rely on screenPoint targeting
             }
         }
 
@@ -230,8 +221,23 @@ namespace NoteNest.UI.Controls
                     var headerPanel = GetHeaderPanel();
                     if (headerPanel != null)
                     {
-                        var index = CalculateIndexFromPoint(e.GetPosition(headerPanel), headerPanel);
-                        ReorderWithinPane(tab, index);
+                        var idx = CalculateIndexFromPoint(e.GetPosition(headerPanel), headerPanel);
+                        var list = ItemsSource as System.Collections.IList;
+                        if (list != null && list.Contains(tab))
+                        {
+                            ReorderWithinPane(tab, idx);
+                        }
+                        else
+                        {
+                            // Cross-window/tabcontrol drop: move via service at computed index
+                            var services = (Application.Current as App)?.ServiceProvider;
+                            var workspace = services?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                            var targetPane = GetPaneFromControl(this);
+                            if (workspace != null && targetPane != null)
+                            {
+                                _ = workspace.MoveTabToPaneAsync(tab, targetPane, idx);
+                            }
+                        }
                     }
                 }
                 _dropZoneManager.HideInsertionLine();

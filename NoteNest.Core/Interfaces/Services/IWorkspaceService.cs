@@ -76,6 +76,12 @@ namespace NoteNest.Core.Interfaces.Services
         /// </summary>
         void SetActivePane(SplitPane pane);
 
+        /// <summary>
+        /// Register/unregister panes created outside the main window (e.g., detached windows)
+        /// </summary>
+        void RegisterPane(SplitPane pane);
+        void UnregisterPane(SplitPane pane);
+
         #endregion
 
         #region Future Split View Support (Interface prepared)

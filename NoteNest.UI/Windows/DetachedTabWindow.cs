@@ -8,6 +8,7 @@ using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services;
 using NoteNest.UI.Services;
 using NoteNest.UI.Controls;
+using NoteNest.Core.Models;
 
 namespace NoteNest.UI.Windows
 {
@@ -16,12 +17,15 @@ namespace NoteNest.UI.Windows
         private readonly IWorkspaceService _workspaceService;
         private readonly IWorkspaceStateService _stateService;
         private readonly IDialogService _dialogService;
-        private DraggableTabControl _tabControl;
+        private SplitPane _pane;
+        private SplitPaneView _paneView;
+        private IServiceProvider _services;
 
-        public int TabCount => _tabControl?.Items.Count ?? 0;
+        public int TabCount => _pane?.Tabs?.Count ?? 0;
 
         public DetachedTabWindow(ITabItem initialTab, Point screenPosition, IServiceProvider services)
         {
+            _services = services;
             _workspaceService = services.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
             _stateService = services.GetService(typeof(IWorkspaceStateService)) as IWorkspaceStateService;
             _dialogService = services.GetService(typeof(IDialogService)) as IDialogService;
@@ -41,26 +45,22 @@ namespace NoteNest.UI.Windows
 
         private void InitializeContent()
         {
-            _tabControl = new DraggableTabControl();
-            var grid = new Grid();
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            Grid.SetRow(_tabControl, 1);
-            grid.Children.Add(_tabControl);
-            Content = grid;
+            _pane = new SplitPane();
+            _paneView = new SplitPaneView();
+            _paneView.BindToPane(_pane);
+            Content = _paneView;
             AllowDrop = true;
+            // Register this pane so DnD services can discover it and it participates in service moves
+            _workspaceService?.RegisterPane(_pane);
         }
 
         public void AddTab(ITabItem tab)
         {
-            var tabItem = new TabItem
+            if (!_pane.Tabs.Contains(tab))
             {
-                Header = tab.Title,
-                DataContext = tab
-            };
-            _tabControl.Items.Add(tabItem);
-            _tabControl.SelectedItem = tabItem;
-
+                _pane.Tabs.Add(tab);
+            }
+            _pane.SelectedTab = tab;
             if (tab.Note != null && _stateService != null)
             {
                 _stateService.AssociateNoteWithWindow(tab.Note.Id, $"detached:{GetHashCode()}", true);
@@ -80,17 +80,18 @@ namespace NoteNest.UI.Windows
             {
                 _dialogService.OwnerWindow = Application.Current?.MainWindow;
             }
+            _workspaceService?.UnregisterPane(_pane);
             base.OnClosed(e);
         }
 
         public void RemoveTab(ITabItem tab)
         {
-            var tabItem = _tabControl.Items.Cast<TabItem>().FirstOrDefault(ti => ti.DataContext == tab);
-            if (tabItem != null)
+            if (_pane.Tabs.Contains(tab))
             {
-                _tabControl.Items.Remove(tabItem);
-                if (_tabControl.Items.Count == 0)
+                _pane.Tabs.Remove(tab);
+                if (_pane.Tabs.Count == 0)
                 {
+                    _workspaceService?.UnregisterPane(_pane);
                     Close();
                 }
             }
