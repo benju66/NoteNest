@@ -202,10 +202,15 @@ namespace NoteNest.UI.Controls
             if (ItemsSource is System.Collections.IList list)
             {
                 var currentIndex = list.IndexOf(tab);
-                if (currentIndex < 0 || currentIndex == index) return;
+                if (currentIndex < 0) return;
+                // Adjust target index when moving to the right, because removing shifts indices left
+                var targetIndex = index;
+                if (targetIndex > currentIndex) targetIndex--;
+                if (targetIndex == currentIndex) return;
+
                 list.Remove(tab);
-                if (index >= 0 && index <= list.Count)
-                    list.Insert(index, tab);
+                if (targetIndex >= 0 && targetIndex <= list.Count)
+                    list.Insert(targetIndex, tab);
                 else
                     list.Add(tab);
                 SelectedItem = tab;
