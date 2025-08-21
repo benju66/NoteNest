@@ -62,7 +62,11 @@ namespace NoteNest.UI.Controls
                 {
                     var headerPanel = GetHeaderPanel();
                     if (headerPanel != null)
-                        _dropZoneManager.ShowInsertionLine(headerPanel, target.TabIndex);
+                    {
+                        var local = headerPanel.PointFromScreen(screenPoint);
+                        var idx = CalculateIndexFromPoint(local, headerPanel);
+                        _dropZoneManager.ShowInsertionLine(headerPanel, idx);
+                    }
                 }
                 else
                 {
@@ -103,11 +107,17 @@ namespace NoteNest.UI.Controls
                 var target = _dropZoneManager.GetDropTarget(screenPoint);
                 if (target != null && target.Element == this)
                 {
-                    ReorderWithinPane(draggedTab, target.TabIndex);
+                    var headerPanel = GetHeaderPanel();
+                    if (headerPanel != null)
+                    {
+                        var local = headerPanel.PointFromScreen(screenPoint);
+                        var idx = CalculateIndexFromPoint(local, headerPanel);
+                        ReorderWithinPane(draggedTab, idx);
+                    }
                 }
                 else if (target?.Element is DraggableTabControl other)
                 {
-                    MoveToOtherPane(draggedTab, other, target.TabIndex);
+                    MoveToOtherPane(draggedTab, other, screenPoint);
                 }
                 else
                 {
@@ -220,7 +230,7 @@ namespace NoteNest.UI.Controls
             return element as TabItem;
         }
 
-        private void MoveToOtherPane(ITabItem tab, DraggableTabControl targetControl, int index)
+        private void MoveToOtherPane(ITabItem tab, DraggableTabControl targetControl, Point screenPoint)
         {
             try
             {
@@ -234,8 +244,7 @@ namespace NoteNest.UI.Controls
                     {
                         list.Remove(tab);
                     }
-                    // Add to target pane at index
-                    // Let service move the tab to the pane; UI binding will update
+                    // Let service move the tab to the target pane; UI binding will update
                     _ = workspace.MoveTabToPaneAsync(tab, targetPane);
                 }
             }
