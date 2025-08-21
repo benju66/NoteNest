@@ -14,6 +14,8 @@ namespace NoteNest.UI.Controls
     {
         public SplitPane? Pane { get; private set; }
         private System.Windows.Threading.DispatcherTimer? _idleSaveTimer;
+        private DateTime _lastTextChangedAt;
+        private int _typingBurstCount;
         
         public static readonly DependencyProperty IsActiveProperty =
             DependencyProperty.Register(nameof(IsActive), typeof(bool),
@@ -203,11 +205,53 @@ namespace NoteNest.UI.Controls
             if (configService?.Settings?.AutoSaveIdleMs > 0)
             {
                 _idleSaveTimer ??= new System.Windows.Threading.DispatcherTimer();
-                _idleSaveTimer.Interval = TimeSpan.FromMilliseconds(configService.Settings.AutoSaveIdleMs);
+                // Smart idle interval: base on settings, adapt on rapid typing and large notes
+                var baseMs = configService.Settings.AutoSaveIdleMs;
+                var now = DateTime.UtcNow;
+                var sinceLast = (now - _lastTextChangedAt).TotalMilliseconds;
+                var adaptiveEnabled = configService.Settings.AdaptiveAutoSaveEnabled;
+
+                if (adaptiveEnabled && sinceLast < 500)
+                {
+                    _typingBurstCount = Math.Min(_typingBurstCount + 1, 5);
+                }
+                else
+                {
+                    _typingBurstCount = 0;
+                }
+
+                var adaptiveMs = baseMs;
+                // If rapidly typing, extend debounce modestly
+                if (adaptiveEnabled && _typingBurstCount >= 2)
+                {
+                    var preset = (configService.Settings.AdaptiveAutoSavePreset ?? "Balanced").ToLowerInvariant();
+                    var bump = preset == "aggressive" ? 150 : preset == "conservative" ? 500 : 300;
+                    adaptiveMs += bump;
+                }
+
+                // If note is very large, increase debounce
+                try
+                {
+                    var tab = Pane?.SelectedTab;
+                    var contentLen = tab?.Content?.Length ?? 0;
+                    if (adaptiveEnabled)
+                    {
+                        if (contentLen > 50000) adaptiveMs = (int)(adaptiveMs * 1.5);
+                        if (contentLen > 200000) adaptiveMs = (int)(adaptiveMs * 2);
+                    }
+                }
+                catch { }
+
+                // Clamp interval
+                if (adaptiveMs < 250) adaptiveMs = 250;
+                if (adaptiveMs > 60000) adaptiveMs = 60000;
+
+                _idleSaveTimer.Interval = TimeSpan.FromMilliseconds(adaptiveMs);
                 _idleSaveTimer.Tick -= IdleSaveTimer_Tick;
                 _idleSaveTimer.Tick += IdleSaveTimer_Tick;
                 _idleSaveTimer.Stop();
                 _idleSaveTimer.Start();
+                _lastTextChangedAt = now;
             }
             // Do not push content here; rely on binding to NoteTabItem.Content to update state.
             try

@@ -148,7 +148,12 @@ namespace NoteNest.Core.Services
                 }
 
                 _logger.Debug($"File changed: {e.FullPath}");
-                FileChanged?.Invoke(this, new FileChangedEventArgs(e.FullPath, e.ChangeType));
+                // Marshal handler to thread pool to avoid any potential UI thread dependency in subscribers
+                _ = System.Threading.Tasks.Task.Run(() =>
+                {
+                    try { FileChanged?.Invoke(this, new FileChangedEventArgs(e.FullPath, e.ChangeType)); }
+                    catch (Exception cbEx) { _logger.Warning($"FileChanged handler error: {cbEx.Message}"); }
+                });
             }
             catch (Exception ex)
             {
@@ -161,7 +166,11 @@ namespace NoteNest.Core.Services
             try
             {
                 _logger.Debug($"File created: {e.FullPath}");
-                FileCreated?.Invoke(this, new FileChangedEventArgs(e.FullPath, e.ChangeType));
+                _ = System.Threading.Tasks.Task.Run(() =>
+                {
+                    try { FileCreated?.Invoke(this, new FileChangedEventArgs(e.FullPath, e.ChangeType)); }
+                    catch (Exception cbEx) { _logger.Warning($"FileCreated handler error: {cbEx.Message}"); }
+                });
             }
             catch (Exception ex)
             {
@@ -174,7 +183,11 @@ namespace NoteNest.Core.Services
             try
             {
                 _logger.Debug($"File deleted: {e.FullPath}");
-                FileDeleted?.Invoke(this, new FileChangedEventArgs(e.FullPath, e.ChangeType));
+                _ = System.Threading.Tasks.Task.Run(() =>
+                {
+                    try { FileDeleted?.Invoke(this, new FileChangedEventArgs(e.FullPath, e.ChangeType)); }
+                    catch (Exception cbEx) { _logger.Warning($"FileDeleted handler error: {cbEx.Message}"); }
+                });
             }
             catch (Exception ex)
             {
@@ -187,7 +200,11 @@ namespace NoteNest.Core.Services
             try
             {
                 _logger.Debug($"File renamed: {e.OldFullPath} -> {e.FullPath}");
-                FileRenamed?.Invoke(this, new FileRenamedEventArgs(e.OldFullPath, e.FullPath));
+                _ = System.Threading.Tasks.Task.Run(() =>
+                {
+                    try { FileRenamed?.Invoke(this, new FileRenamedEventArgs(e.OldFullPath, e.FullPath)); }
+                    catch (Exception cbEx) { _logger.Warning($"FileRenamed handler error: {cbEx.Message}"); }
+                });
             }
             catch (Exception ex)
             {

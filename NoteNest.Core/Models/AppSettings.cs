@@ -58,6 +58,10 @@ namespace NoteNest.Core.Models
         public int SearchIndexContentWordLimit { get; set; } = 500;
         public int SettingsSaveDebounceMs { get; set; } = 5000;
 
+        // Adaptive auto-save behavior
+        public bool AdaptiveAutoSaveEnabled { get; set; } = true;
+        public string AdaptiveAutoSavePreset { get; set; } = "Balanced"; // Conservative | Balanced | Aggressive
+
         public AppSettings()
         {
             // Initialize collections/objects to prevent null reference issues.

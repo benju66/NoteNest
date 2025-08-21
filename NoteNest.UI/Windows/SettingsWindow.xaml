@@ -351,6 +351,19 @@
                                      Value="{Binding Settings.SettingsSaveDebounceMs}"
                                      Minimum="100" Maximum="600000"
                                      Margin="0,8"/>
+
+                        <TextBlock Text="Auto-save" Style="{StaticResource SubtitleTextBlockStyle}" Margin="16,16,0,8"/>
+                        <ui:ToggleSwitch Header="Enable adaptive idle auto-save"
+                                        IsOn="{Binding Settings.AdaptiveAutoSaveEnabled}"
+                                        Margin="0,8"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8" IsEnabled="{Binding Settings.AdaptiveAutoSaveEnabled}">
+                            <TextBlock Text="Adaptive preset:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox SelectedItem="{Binding Settings.AdaptiveAutoSavePreset}" Width="160">
+                                <ComboBoxItem>Conservative</ComboBoxItem>
+                                <ComboBoxItem>Balanced</ComboBoxItem>
+                                <ComboBoxItem>Aggressive</ComboBoxItem>
+                            </ComboBox>
+                        </StackPanel>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>
