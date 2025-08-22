@@ -12,10 +12,18 @@ using NoteNest.UI.Windows;
 
 namespace NoteNest.UI.Controls
 {
+    public enum DragState
+    {
+        Idle,
+        Starting,
+        Dragging,
+        Completing,
+        Cancelling
+    }
     public class DraggableTabControl : TabControl
     {
         private Point _dragStartPoint;
-        private bool _isDragging;
+        private DragState _dragState = DragState.Idle;
         private readonly TabDragManager _dragManager;
         private readonly DropZoneManager _dropZoneManager;
         private static WeakReference<SplitPaneView> _lastHighlightedPane;
@@ -53,7 +61,7 @@ namespace NoteNest.UI.Controls
                 return;
             _lastMouseUpdate = now;
             InvalidateCoordinateCache();
-            if (e.LeftButton == MouseButtonState.Pressed && !_isDragging)
+            if (e.LeftButton == MouseButtonState.Pressed && _dragState == DragState.Idle)
             {
                 var current = GetScreenPoint(e);
                 var diff = _dragStartPoint - current;
@@ -66,7 +74,7 @@ namespace NoteNest.UI.Controls
                     }
                 }
             }
-            else if (_isDragging)
+            else if (_dragState == DragState.Dragging)
             {
                 var screenPoint = GetScreenPoint(e);
                 _dragManager.UpdateManualDrag(screenPoint);
@@ -173,22 +181,52 @@ namespace NoteNest.UI.Controls
         protected override void OnPreviewMouseLeftButtonUp(MouseButtonEventArgs e)
         {
             base.OnPreviewMouseLeftButtonUp(e);
-            if (_isDragging)
+            if (_dragState == DragState.Dragging)
             {
-                CompleteDrop(PointToScreen(e.GetPosition(this)));
+                CompleteDrop(GetScreenPoint(e));
             }
         }
 
         private void StartManualDrag(ITabItem tab)
         {
-            _isDragging = true;
-            var window = Window.GetWindow(this);
-            _dragManager.BeginManualDrag(tab, this, window, _dragStartPoint);
-            PreviewKeyDown += OnDragKeyDown;
+            if (_dragState != DragState.Idle)
+            {
+                System.Diagnostics.Debug.WriteLine($"Attempted to start drag while in state: {_dragState}");
+                return;
+            }
+
+            _dragState = DragState.Starting;
+
+            try
+            {
+                var window = Window.GetWindow(this);
+                if (_dragManager.BeginManualDrag(tab, this, window, _dragStartPoint))
+                {
+                    _dragState = DragState.Dragging;
+                    PreviewKeyDown += OnDragKeyDown;
+                }
+                else
+                {
+                    _dragState = DragState.Idle;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Failed to start drag: {ex.Message}");
+                _dragState = DragState.Idle;
+            }
         }
 
         private void CompleteDrop(Point screenPoint)
         {
+            if (_dragState != DragState.Dragging)
+            {
+                System.Diagnostics.Debug.WriteLine($"Attempted to complete drop while in state: {_dragState}");
+                return;
+            }
+
+            _dragState = DragState.Completing;
+
             try
             {
                 var draggedTab = _dragManager.GetDraggedTab();
@@ -200,7 +238,7 @@ namespace NoteNest.UI.Controls
                         var headerPanel = GetHeaderPanel();
                         if (headerPanel != null)
                         {
-                            var local = headerPanel.PointFromScreen(screenPoint);
+                            var local = GetLocalPoint(headerPanel, screenPoint);
                             var idx = CalculateIndexFromPoint(local, headerPanel);
                             ReorderWithinPane(draggedTab, idx);
                         }
@@ -222,30 +260,19 @@ namespace NoteNest.UI.Controls
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Drop operation failed: {ex.Message}");
-                // Swallow to avoid crashing the drag pipeline
             }
             finally
             {
-                _isDragging = false;
-                try { _dragManager.EndManualDrag(true); } catch { }
-                try { _dropZoneManager.HideInsertionLine(); } catch { }
-                if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev))
-                {
-                    try { prev.SetDropHighlight(false); } catch { }
-                    _lastHighlightedPane = null;
-                }
-                PreviewKeyDown -= OnDragKeyDown;
+                EndDragOperation(true);
             }
         }
 
         private void OnDragKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape)
+            if (e.Key == Key.Escape && _dragState == DragState.Dragging)
             {
-                _isDragging = false;
-                _dragManager.EndManualDrag(false);
-                _dropZoneManager.HideInsertionLine();
-                PreviewKeyDown -= OnDragKeyDown;
+                _dragState = DragState.Cancelling;
+                EndDragOperation(false);
                 e.Handled = true;
             }
         }
@@ -432,6 +459,43 @@ namespace NoteNest.UI.Controls
                 window.Show();
             }
             catch { }
+        }
+
+        private void EndDragOperation(bool completed)
+        {
+            try
+            {
+                _dragManager.EndManualDrag(completed);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error ending drag manager: {ex.Message}");
+            }
+
+            try
+            {
+                _dropZoneManager.HideInsertionLine();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error hiding insertion line: {ex.Message}");
+            }
+
+            if (_lastHighlightedPane?.TryGetTarget(out var prev) == true)
+            {
+                try
+                {
+                    prev.SetDropHighlight(false);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error clearing highlight: {ex.Message}");
+                }
+                _lastHighlightedPane = null;
+            }
+
+            PreviewKeyDown -= OnDragKeyDown;
+            _dragState = DragState.Idle;
         }
     }
 
