@@ -66,55 +66,60 @@ namespace NoteNest.UI.Controls
             {
                 var screenPoint = PointToScreen(e.GetPosition(this));
                 _dragManager.UpdateManualDrag(screenPoint);
-                var target = _dropZoneManager.GetDropTarget(screenPoint);
-                if (target != null)
-                {
-                    if (target.Element is DraggableTabControl targetControl)
-                    {
-                        var headerPanel = targetControl.GetHeaderPanel();
-                        if (headerPanel != null)
-                        {
-                            var local = headerPanel.PointFromScreen(screenPoint);
-                            var idx = CalculateIndexFromPoint(local, headerPanel);
-                            _dropZoneManager.ShowInsertionLine(headerPanel, idx);
-                        }
-
-                        // Pane highlight on destination
-                        var spv = FindAncestor<SplitPaneView>(targetControl);
-                        if (spv != null)
-                        {
-                            // Clear previous highlight
-                            if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev) && prev != spv)
-                            {
-                                prev.SetDropHighlight(false);
-                            }
-                            spv.SetDropHighlight(true);
-                            _lastHighlightedPane = new WeakReference<SplitPaneView>(spv);
-                        }
-                    }
-                    else if (target.Element == this)
-                    {
-                        var headerPanel = GetHeaderPanel();
-                        if (headerPanel != null)
-                        {
-                            var local = headerPanel.PointFromScreen(screenPoint);
-                            var idx = CalculateIndexFromPoint(local, headerPanel);
-                            _dropZoneManager.ShowInsertionLine(headerPanel, idx);
-                        }
-                    }
-                }
-                else
-                {
-                    _dropZoneManager.HideInsertionLine();
-                    // Clear highlight if any
-                    if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev))
-                    {
-                        prev.SetDropHighlight(false);
-                        _lastHighlightedPane = null;
-                    }
-                }
+                UpdateDropTarget(screenPoint);
 
                 // Stay in manual-drag mode across windows; rely on screenPoint targeting
+            }
+        }
+
+        private void UpdateDropTarget(Point screenPoint)
+        {
+            var target = _dropZoneManager.GetDropTarget(screenPoint);
+            if (target != null)
+            {
+                if (target.Element is DraggableTabControl targetControl)
+                {
+                    var headerPanel = targetControl.GetHeaderPanel();
+                    if (headerPanel != null)
+                    {
+                        var local = headerPanel.PointFromScreen(screenPoint);
+                        var idx = CalculateIndexFromPoint(local, headerPanel);
+                        _dropZoneManager.ShowInsertionLine(headerPanel, idx);
+                    }
+
+                    // Pane highlight on destination
+                    var spv = FindAncestor<SplitPaneView>(targetControl);
+                    if (spv != null)
+                    {
+                        // Clear previous highlight
+                        if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev) && prev != spv)
+                        {
+                            prev.SetDropHighlight(false);
+                        }
+                        spv.SetDropHighlight(true);
+                        _lastHighlightedPane = new WeakReference<SplitPaneView>(spv);
+                    }
+                }
+                else if (target.Element == this)
+                {
+                    var headerPanel = GetHeaderPanel();
+                    if (headerPanel != null)
+                    {
+                        var local = headerPanel.PointFromScreen(screenPoint);
+                        var idx = CalculateIndexFromPoint(local, headerPanel);
+                        _dropZoneManager.ShowInsertionLine(headerPanel, idx);
+                    }
+                }
+            }
+            else
+            {
+                _dropZoneManager.HideInsertionLine();
+                // Clear highlight if any
+                if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev))
+                {
+                    prev.SetDropHighlight(false);
+                    _lastHighlightedPane = null;
+                }
             }
         }
 
