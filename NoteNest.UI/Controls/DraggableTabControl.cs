@@ -10,6 +10,7 @@ using NoteNest.UI.Services.DragDrop;
 using NoteNest.Core.Models;
 using NoteNest.UI.Windows;
 using NoteNest.UI.Utils;
+using System.Runtime.CompilerServices;
 
 namespace NoteNest.UI.Controls
 {
@@ -33,13 +34,51 @@ namespace NoteNest.UI.Controls
         private Point _cachedScreenPoint;
         private bool _screenPointValid;
         private readonly System.Collections.Generic.Dictionary<FrameworkElement, Point> _localPointCache = new();
+        private readonly ConditionalWeakTable<FrameworkElement, SplitPaneView> _ancestorCache = new();
+        private readonly ConditionalWeakTable<FrameworkElement, TimestampHolder> _cacheTimestamp = new();
+        private static readonly TimeSpan CACHE_LIFETIME = TimeSpan.FromMinutes(5);
+        private System.Windows.Threading.DispatcherTimer? _cacheCleanupTimer;
+
+        private sealed class TimestampHolder
+        {
+            public DateTime Timestamp { get; }
+            public TimestampHolder(DateTime ts) { Timestamp = ts; }
+        }
 
         public DraggableTabControl()
         {
             _dragManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(TabDragManager)) as TabDragManager ?? new TabDragManager();
             _dropZoneManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(DropZoneManager)) as DropZoneManager ?? new DropZoneManager();
             AllowDrop = true;
-            Loaded += (s, e) => _dropZoneManager.RegisterDropZone($"TabControl_{GetHashCode()}", this);
+            Loaded += (s, e) =>
+            {
+                _dropZoneManager.RegisterDropZone($"TabControl_{GetHashCode()}", this);
+
+                // Periodically clean the visual tree cache
+                _cacheCleanupTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMinutes(2)
+                };
+                _cacheCleanupTimer.Tick += (sender, args) => InvalidateVisualTreeCache();
+                _cacheCleanupTimer.Start();
+            };
+
+            // Clean caches on unload
+            Unloaded += (s, e) =>
+            {
+                try
+                {
+                    if (_cacheCleanupTimer != null)
+                    {
+                        _cacheCleanupTimer.Stop();
+                        _cacheCleanupTimer = null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error cleaning cache on unload: {ex.Message}");
+                }
+            };
         }
 
         protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -128,8 +167,8 @@ namespace NoteNest.UI.Controls
                             _dropZoneManager.ShowInsertionLine(headerPanel, idx);
                         }
 
-                        // Pane highlight on destination
-                        var spv = FindAncestor<SplitPaneView>(targetControl);
+                        // Pane highlight on destination (cached ancestor)
+                        var spv = FindCachedSplitPaneAncestor(targetControl);
                         if (spv != null)
                         {
                             // Clear previous highlight
@@ -482,6 +521,74 @@ namespace NoteNest.UI.Controls
 
             PreviewKeyDown -= OnDragKeyDown;
             _dragState = DragState.Idle;
+        }
+
+        private SplitPaneView? FindCachedSplitPaneAncestor(FrameworkElement element)
+        {
+            if (element == null) return null;
+
+            if (_ancestorCache.TryGetValue(element, out var cachedResult))
+            {
+                if (_cacheTimestamp.TryGetValue(element, out var tsHolder))
+                {
+                    if (DateTime.UtcNow - tsHolder.Timestamp < CACHE_LIFETIME)
+                    {
+                        if (cachedResult != null && IsElementInVisualTree(cachedResult))
+                        {
+                            return cachedResult;
+                        }
+                    }
+                }
+
+                // Cache is stale, remove it
+                _ancestorCache.Remove(element);
+                _cacheTimestamp.Remove(element);
+            }
+
+            var result = ComputeSplitPaneAncestor(element);
+            if (result != null)
+            {
+                _ancestorCache.Add(element, result);
+                _cacheTimestamp.Add(element, new TimestampHolder(DateTime.UtcNow));
+            }
+
+            return result;
+        }
+
+        private static SplitPaneView? ComputeSplitPaneAncestor(FrameworkElement element)
+        {
+            try
+            {
+                var current = element as DependencyObject;
+                while (current != null)
+                {
+                    if (current is SplitPaneView splitPane)
+                        return splitPane;
+                    current = VisualTreeHelper.GetParent(current);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error finding SplitPaneView ancestor: {ex.Message}");
+            }
+            return null;
+        }
+
+        private static bool IsElementInVisualTree(FrameworkElement element)
+        {
+            try
+            {
+                return PresentationSource.FromVisual(element) != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void InvalidateVisualTreeCache()
+        {
+            // Best-effort: no-op for now; ConditionalWeakTable entries will auto-expire with GC
         }
     }
 
