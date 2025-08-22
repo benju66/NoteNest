@@ -28,6 +28,8 @@ namespace NoteNest.Tests.Services
             _configService = new ConfigurationService(_mockFileSystem, null);
             _logger = new MockLogger();
             var bus = new EventBus();
+            // Ensure tests operate under the workspace root
+            NoteNest.Core.Services.PathService.RootPath = "C:\\Test";
             _noteService = new NoteService(_mockFileSystem, _configService, _logger, bus);
             // Wire config to bus to capture NoteSavedEvent for recent files
             _configService = new ConfigurationService(_mockFileSystem, bus);

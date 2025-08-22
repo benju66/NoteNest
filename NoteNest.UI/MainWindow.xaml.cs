@@ -12,6 +12,8 @@ using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Controls;
 using NoteNest.UI.Services.DragDrop;
 using NoteNest.Core.Models;
+using NoteNest.Core.Services;
+using NoteNest.Core.Interfaces.Services;
 
 namespace NoteNest.UI
 {
@@ -220,6 +222,82 @@ namespace NoteNest.UI
         private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
         {
             Close();
+        }
+
+        private async void ConvertNotesFormatMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                var fileSystem = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.IFileSystemProvider)) as NoteNest.Core.Interfaces.IFileSystemProvider;
+                var markdown = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IMarkdownService)) as IMarkdownService;
+                var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
+                if (config == null || fileSystem == null || markdown == null || logger == null)
+                    return;
+
+                // Simple choice dialog
+                var dialog = new ContentDialog
+                {
+                    Title = "Convert Notes Format",
+                    Content = new System.Windows.Controls.StackPanel
+                    {
+                        Children =
+                        {
+                            new System.Windows.Controls.TextBlock{ Text = "Select target format:", Margin = new Thickness(0,0,0,8)},
+                            new System.Windows.Controls.RadioButton { Name = "RbMd", Content = "Markdown (.md)", IsChecked = true },
+                            new System.Windows.Controls.RadioButton { Name = "RbTxt", Content = "Plain Text (.txt)", Margin = new Thickness(0,4,0,0)},
+                            new System.Windows.Controls.CheckBox { Name = "CbBackup", Content = "Create backups (*.bak)", Margin = new Thickness(0,12,0,0), IsChecked = true }
+                        }
+                    },
+                    PrimaryButtonText = "Convert",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Primary,
+                    Owner = this
+                };
+
+                var result = await dialog.ShowAsync();
+                if (result != ContentDialogResult.Primary) return;
+
+                // Extract selections
+                var panel = dialog.Content as System.Windows.Controls.StackPanel;
+                var rbMd = panel?.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => (string)r.Content == "Markdown (.md)");
+                var rbTxt = panel?.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => (string)r.Content == "Plain Text (.txt)");
+                var cbBackup = panel?.Children.OfType<System.Windows.Controls.CheckBox>().FirstOrDefault(c => c.Content?.ToString() == "Create backups (*.bak)");
+
+                var target = (rbTxt?.IsChecked == true) ? NoteFormat.PlainText : NoteFormat.Markdown;
+                var doBackups = cbBackup?.IsChecked == true;
+
+                var migration = new FormatMigrationService(fileSystem, markdown, logger);
+                var progress = new System.Progress<NoteNest.Core.Services.MigrationProgress>(p =>
+                {
+                    try { System.Diagnostics.Debug.WriteLine($"[FormatMigration] {p.PercentComplete}% {p.CurrentFile}"); } catch { }
+                });
+                var root = config.Settings?.DefaultNotePath ?? PathService.RootPath;
+                var migResult = await migration.MigrateAsync(root, target, doBackups, progress);
+                var ok = migResult.Success;
+
+                var doneDialog = new ContentDialog
+                {
+                    Title = ok ? "Conversion Complete" : "Conversion Finished with Errors",
+                    Content = ok 
+                        ? $"Converted {migResult.ConvertedFiles} of {migResult.TotalFiles} files. Skipped {migResult.SkippedFiles}."
+                        : $"Converted {migResult.ConvertedFiles} of {migResult.TotalFiles}. Failed {migResult.FailedFiles}. Check logs for details.",
+                    PrimaryButtonText = "OK",
+                    Owner = this
+                };
+                await doneDialog.ShowAsync();
+            }
+            catch (Exception ex)
+            {
+                var err = new ContentDialog
+                {
+                    Title = "Error",
+                    Content = ex.Message,
+                    PrimaryButtonText = "OK",
+                    Owner = this
+                };
+                await err.ShowAsync();
+            }
         }
 
         private void FindMenuItem_Click(object sender, RoutedEventArgs e)

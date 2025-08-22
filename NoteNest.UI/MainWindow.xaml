@@ -29,6 +29,11 @@
                         <ui:SymbolIcon Symbol="NewFolder"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Header="Convert Notes _Format..." Click="ConvertNotesFormatMenuItem_Click">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="Refresh"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Header="_Open" InputGestureText="Ctrl+O">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="OpenFile"/>

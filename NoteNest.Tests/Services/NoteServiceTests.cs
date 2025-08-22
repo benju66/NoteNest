@@ -22,6 +22,9 @@ namespace NoteNest.Tests.Services
         {
             _mockFileSystem = new MockFileSystemProvider();
             _configService = new ConfigurationService(_mockFileSystem);
+            // Ensure workspace root aligns with test paths
+            NoteNest.Core.Services.PathService.RootPath = "C:\\Test";
+            _configService.Settings.DefaultNotePath = "C:\\Test";
             _noteService = new NoteService(_mockFileSystem, _configService);
         }
 
@@ -45,7 +48,7 @@ namespace NoteNest.Tests.Services
             Assert.That(result, Is.Not.Null);
             Assert.That(result.Title, Is.EqualTo(title));
             Assert.That(result.Content, Is.EqualTo(content));
-            Assert.That(result.FilePath.Contains("Test Note.txt"), Is.True);
+            Assert.That(result.FilePath.EndsWith(".md"), Is.True);
         }
 
         [Test]

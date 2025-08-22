@@ -25,14 +25,19 @@ namespace NoteNest.Core.Services
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
 
-        public NoteService(IFileSystemProvider fileSystem, ConfigurationService configService, IAppLogger? logger = null, IEventBus? eventBus = null)
+        public NoteService(
+            IFileSystemProvider fileSystem,
+            ConfigurationService configService,
+            IAppLogger? logger = null,
+            IEventBus? eventBus = null,
+            IMarkdownService? markdownService = null)
         {
             _fileSystem = fileSystem ?? new DefaultFileSystemProvider();
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
             _logger = logger ?? AppLogger.Instance;
             _eventBus = eventBus;
             _formatService = new FileFormatService(_logger);
-            _markdownService = new MarkdownService(_logger);
+            _markdownService = markdownService ?? new MarkdownService(_logger);
             
             _jsonOptions = new JsonSerializerOptions 
             { 

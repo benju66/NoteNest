@@ -31,7 +31,12 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IMarkdownService, MarkdownService>();
             
             // Essential Services Only
-            services.AddSingleton<NoteService>(); // Core functionality
+            services.AddSingleton<NoteService>(sp => new NoteService(
+                sp.GetRequiredService<IFileSystemProvider>(),
+                sp.GetRequiredService<ConfigurationService>(),
+                sp.GetRequiredService<IAppLogger>(),
+                sp.GetService<IEventBus>(),
+                sp.GetRequiredService<IMarkdownService>())); // Core functionality
             services.AddSingleton<IDialogService, DialogService>(); // UI interaction
 
             // Workspace Services (Singleton for performance)
