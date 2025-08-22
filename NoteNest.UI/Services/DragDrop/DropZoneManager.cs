@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -18,10 +20,37 @@ namespace NoteNest.UI.Services.DragDrop
         private int _currentIndex = -1;
         private bool _pendingUpdate = false;
         private readonly object _updateLock = new object();
+        private DateTime _lastCleanup = DateTime.MinValue;
+        private readonly TimeSpan _cleanupInterval = TimeSpan.FromMinutes(5);
+        private readonly object _cleanupLock = new object();
+        private int _registrationCount = 0;
 
         public void RegisterDropZone(string id, FrameworkElement element)
         {
+            if (string.IsNullOrEmpty(id) || element == null)
+                return;
+
             _dropZones[id] = new WeakReference<FrameworkElement>(element);
+
+            Interlocked.Increment(ref _registrationCount);
+
+            var now = DateTime.UtcNow;
+            var shouldCleanup = false;
+
+            lock (_cleanupLock)
+            {
+                if (now - _lastCleanup > _cleanupInterval || _registrationCount > 50)
+                {
+                    shouldCleanup = true;
+                    _lastCleanup = now;
+                    _registrationCount = 0;
+                }
+            }
+
+            if (shouldCleanup)
+            {
+                Task.Run(CleanupStaleReferences);
+            }
         }
 
         public void ShowInsertionLine(Panel headerPanel, int index)
@@ -139,16 +168,20 @@ namespace NoteNest.UI.Services.DragDrop
 
         public DropTarget? GetDropTarget(Point screenPoint)
         {
-            foreach (var kvp in _dropZones.ToList())
+            var zonesToCheck = _dropZones.ToList();
+            var deadZones = new List<string>();
+
+            foreach (var kvp in zonesToCheck)
             {
-                if (!kvp.Value.TryGetTarget(out var element) || !element.IsVisible)
+                if (!kvp.Value.TryGetTarget(out var element) || element == null || !element.IsVisible)
+                {
+                    deadZones.Add(kvp.Key);
                     continue;
+                }
 
                 try
                 {
                     var local = element.PointFromScreen(screenPoint);
-
-                    // Better bounds checking
                     var bounds = new Rect(0, 0, element.ActualWidth, element.ActualHeight);
                     if (bounds.Contains(local))
                     {
@@ -164,16 +197,138 @@ namespace NoteNest.UI.Services.DragDrop
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Error in hit testing for {kvp.Key}: {ex.Message}");
-                    continue;
+                    deadZones.Add(kvp.Key);
                 }
             }
+
+            if (deadZones.Count > 0)
+            {
+                foreach (var deadKey in deadZones)
+                {
+                    _dropZones.Remove(deadKey);
+                }
+
+                if (deadZones.Count > 5)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Removed {deadZones.Count} dead zones during hit testing");
+                }
+            }
+
             return null;
+        }
+
+        private void CleanupStaleReferences()
+        {
+            try
+            {
+                var staleKeys = new List<string>();
+                var validCount = 0;
+
+                foreach (var kvp in _dropZones.ToList())
+                {
+                    if (!kvp.Value.TryGetTarget(out var element))
+                    {
+                        staleKeys.Add(kvp.Key);
+                    }
+                    else if (element != null)
+                    {
+                        bool isValid = false;
+                        try
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                isValid = PresentationSource.FromVisual(element) != null && element.IsLoaded;
+                            });
+                        }
+                        catch { isValid = false; }
+
+                        if (isValid) validCount++; else staleKeys.Add(kvp.Key);
+                    }
+                }
+
+                if (staleKeys.Count > 0)
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        foreach (var key in staleKeys)
+                        {
+                            _dropZones.Remove(key);
+                        }
+                    });
+                }
+
+                System.Diagnostics.Debug.WriteLine($"DropZone cleanup: Removed {staleKeys.Count} stale references, {validCount} valid zones remaining");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error during drop zone cleanup: {ex.Message}");
+            }
+        }
+
+        public void ForceCleanup()
+        {
+            lock (_cleanupLock)
+            {
+                _lastCleanup = DateTime.MinValue;
+            }
+            CleanupStaleReferences();
+        }
+
+        public (int total, int valid, int stale) GetDropZoneStatistics()
+        {
+            try
+            {
+                int total = _dropZones.Count;
+                int valid = 0;
+                int stale = 0;
+
+                foreach (var kvp in _dropZones.ToList())
+                {
+                    if (kvp.Value.TryGetTarget(out var element) && element != null)
+                    {
+                        try
+                        {
+                            bool isValid = false;
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                isValid = PresentationSource.FromVisual(element) != null;
+                            });
+                            if (isValid) valid++; else stale++;
+                        }
+                        catch { stale++; }
+                    }
+                    else
+                    {
+                        stale++;
+                    }
+                }
+
+                return (total, valid, stale);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error getting drop zone statistics: {ex.Message}");
+                return (_dropZones.Count, 0, 0);
+            }
         }
 
         public void Dispose()
         {
-            HideInsertionLineImmediate();
-            _dropZones.Clear();
+            try
+            {
+                HideInsertionLineImmediate();
+                lock (_cleanupLock)
+                {
+                    _dropZones.Clear();
+                    _lastCleanup = DateTime.MinValue;
+                    _registrationCount = 0;
+                }
+                System.Diagnostics.Debug.WriteLine("DropZoneManager disposed");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error disposing DropZoneManager: {ex.Message}");
+            }
         }
 
         private static int CalculateIndex(FrameworkElement container, Point localPoint)
