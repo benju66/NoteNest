@@ -18,6 +18,7 @@ namespace NoteNest.Core.Services
         private readonly IFileSystemProvider _fileSystem;
         private readonly ConfigurationService _configService;
         private readonly IAppLogger _logger;
+        private readonly FileFormatService _formatService;
         private readonly IEventBus? _eventBus;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
@@ -28,6 +29,7 @@ namespace NoteNest.Core.Services
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
             _logger = logger ?? AppLogger.Instance;
             _eventBus = eventBus;
+            _formatService = new FileFormatService(_logger);
             
             _jsonOptions = new JsonSerializerOptions 
             { 
@@ -47,7 +49,23 @@ namespace NoteNest.Core.Services
 
             try
             {
-                var fileName = SanitizeFileName(title) + ".txt";
+                // Use centralized format service
+                NoteFormat format = NoteFormat.Markdown;
+                var setting = _configService.Settings?.DefaultNoteFormat;
+                if (!string.IsNullOrWhiteSpace(setting))
+                {
+                    if (Enum.TryParse<NoteFormat>(setting, true, out var parsed))
+                    {
+                        format = parsed;
+                    }
+                    else if (setting.StartsWith("."))
+                    {
+                        format = _formatService.DetectFormatFromPath("file" + setting);
+                    }
+                }
+
+                var extension = _formatService.GetExtensionForFormat(format);
+                var fileName = SanitizeFileName(title) + extension;
                 var filePath = Path.Combine(category.Path, fileName);
                 // Ensure target path is normalized and under root
                 var normalized = PathService.NormalizeAbsolutePath(filePath) ?? filePath;
@@ -61,7 +79,7 @@ namespace NoteNest.Core.Services
                 int counter = 1;
                 while (await _fileSystem.ExistsAsync(filePath))
                 {
-                    fileName = $"{SanitizeFileName(title)}_{counter++}.txt";
+                    fileName = $"{SanitizeFileName(title)}_{counter++}{extension}";
                     filePath = Path.Combine(category.Path, fileName);
                 }
 

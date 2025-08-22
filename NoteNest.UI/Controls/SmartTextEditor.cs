@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using NoteNest.Core.Models;
 
 namespace NoteNest.UI.Controls
 {
@@ -51,12 +52,92 @@ namespace NoteNest.UI.Controls
         protected override void OnTextChanged(TextChangedEventArgs e)
         {
             base.OnTextChanged(e);
-            // Mark as modified when text changes
+            _lineCount = 0;
             if (!_isProcessingKey)
             {
                 IsModified = true;
             }
         }
+
+        #region Scroll Preservation Support
+
+        private int _lineCount;
+        private NoteFormat _editingFormat = NoteFormat.PlainText;
+
+        public NoteFormat EditingFormat
+        {
+            get => _editingFormat;
+            set
+            {
+                _editingFormat = value;
+                UpdateEditingMode();
+            }
+        }
+
+        public int LineCount 
+        {
+            get 
+            {
+                if (_lineCount == 0 && !string.IsNullOrEmpty(Text))
+                    _lineCount = Text.Split('\n').Length;
+                return _lineCount;
+            }
+        }
+
+        private int GetFirstVisibleLineIndex()
+        {
+            try
+            {
+                var scrollViewer = GetScrollViewer();
+                if (scrollViewer == null) return -1;
+                
+                var verticalOffset = scrollViewer.VerticalOffset;
+                var lineHeight = FontSize * 1.3;
+                return Math.Max(0, (int)(verticalOffset / lineHeight));
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        private void ScrollToLine(int lineIndex)
+        {
+            if (lineIndex < 0) return;
+            
+            try
+            {
+                var scrollViewer = GetScrollViewer();
+                if (scrollViewer == null) return;
+                
+                var lineHeight = FontSize * 1.3;
+                var offset = lineIndex * lineHeight;
+                scrollViewer.ScrollToVerticalOffset(offset);
+            }
+            catch { }
+        }
+
+        private ScrollViewer GetScrollViewer()
+        {
+            if (Template?.FindName("PART_ContentHost", this) is ScrollViewer sv)
+                return sv;
+            return null;
+        }
+
+        private void UpdateEditingMode()
+        {
+            // Update tooltip and behavior based on format
+            if (_editingFormat == NoteFormat.Markdown)
+            {
+                ToolTip = "Markdown mode - syntax preserved";
+            }
+            else
+            {
+                ToolTip = "Plain text mode";
+            }
+        }
+
+        #endregion
 
         #region Core Key Handling
 
@@ -88,6 +169,12 @@ namespace NoteNest.UI.Controls
 
         private void HandleEnterKey(KeyEventArgs e)
         {
+            if (EditingFormat == NoteFormat.Markdown)
+            {
+                // In markdown mode, preserve raw syntax; let default behavior handle Enter
+                return;
+            }
+
             var caretIndex = CaretIndex;
             var currentLine = GetCurrentLine();
             var lineStart = GetCurrentLineStart();
@@ -182,6 +269,16 @@ namespace NoteNest.UI.Controls
 
         private void HandleTabKey(KeyEventArgs e)
         {
+            if (EditingFormat == NoteFormat.Markdown)
+            {
+                // In markdown mode, just insert a tab character
+                e.Handled = true;
+                var caret = CaretIndex;
+                Text = Text.Insert(caret, "\t");
+                CaretIndex = caret + 1;
+                return;
+            }
+
             if (SelectionLength > 0)
             {
                 e.Handled = true;
