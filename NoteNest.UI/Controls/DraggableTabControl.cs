@@ -11,6 +11,8 @@ using NoteNest.Core.Models;
 using NoteNest.UI.Windows;
 using NoteNest.UI.Utils;
 using System.Runtime.CompilerServices;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation;
 
 namespace NoteNest.UI.Controls
 {
@@ -38,6 +40,7 @@ namespace NoteNest.UI.Controls
         private readonly ConditionalWeakTable<FrameworkElement, TimestampHolder> _cacheTimestamp = new();
         private static readonly TimeSpan CACHE_LIFETIME = TimeSpan.FromMinutes(5);
         private System.Windows.Threading.DispatcherTimer? _cacheCleanupTimer;
+        private string _lastPerformedAction = string.Empty;
 
         private sealed class TimestampHolder
         {
@@ -50,6 +53,8 @@ namespace NoteNest.UI.Controls
             _dragManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(TabDragManager)) as TabDragManager ?? new TabDragManager();
             _dropZoneManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(DropZoneManager)) as DropZoneManager ?? new DropZoneManager();
             AllowDrop = true;
+            Focusable = true;
+            KeyboardNavigation.SetTabNavigation(this, KeyboardNavigationMode.Cycle);
             Loaded += (s, e) =>
             {
                 _dropZoneManager.RegisterDropZone($"TabControl_{GetHashCode()}", this);
@@ -61,6 +66,9 @@ namespace NoteNest.UI.Controls
                 };
                 _cacheCleanupTimer.Tick += (sender, args) => InvalidateVisualTreeCache();
                 _cacheCleanupTimer.Start();
+
+                // Accessibility tooltips/help text
+                SetupAccessibilityTooltips();
             };
 
             // Clean caches on unload
@@ -124,97 +132,52 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        private Point GetScreenPoint(MouseEventArgs e)
+        protected override void OnPreviewKeyDown(KeyEventArgs e)
         {
-            if (!_screenPointValid)
-            {
-                _cachedScreenPoint = PointToScreen(e.GetPosition(this));
-                _screenPointValid = true;
-            }
-            return _cachedScreenPoint;
-        }
+            base.OnPreviewKeyDown(e);
 
-        private Point GetLocalPoint(FrameworkElement element, Point screenPoint)
-        {
-            if (!_localPointCache.TryGetValue(element, out var localPoint))
+            if (_dragState == DragState.Dragging)
             {
-                localPoint = element.PointFromScreen(screenPoint);
-                _localPointCache[element] = localPoint;
-            }
-            return localPoint;
-        }
-
-        private void InvalidateCoordinateCache()
-        {
-            _screenPointValid = false;
-            _localPointCache.Clear();
-        }
-
-        private void UpdateDropTarget(Point screenPoint)
-        {
-            try
-            {
-                var target = _dropZoneManager.GetDropTarget(screenPoint);
-                if (target != null)
+                if (e.Key == Key.Escape)
                 {
-                    if (target.Element is DraggableTabControl targetControl)
-                    {
-                        var headerPanel = targetControl.GetHeaderPanel();
-                        if (headerPanel != null)
-                        {
-                            var local = GetLocalPoint(headerPanel, screenPoint);
-                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
-                            _dropZoneManager.ShowInsertionLine(headerPanel, idx);
-                        }
-
-                        // Pane highlight on destination (cached ancestor)
-                        var spv = FindCachedSplitPaneAncestor(targetControl);
-                        if (spv != null)
-                        {
-                            // Clear previous highlight
-                            if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev) && prev != spv)
-                            {
-                                prev.SetDropHighlight(false);
-                            }
-                            spv.SetDropHighlight(true);
-                            _lastHighlightedPane = new WeakReference<SplitPaneView>(spv);
-                        }
-                    }
-                    else if (target.Element == this)
-                    {
-                        var headerPanel = GetHeaderPanel();
-                        if (headerPanel != null)
-                        {
-                            var local = GetLocalPoint(headerPanel, screenPoint);
-                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
-                            _dropZoneManager.ShowInsertionLine(headerPanel, idx);
-                        }
-                    }
-                }
-                else
-                {
-                    _dropZoneManager.HideInsertionLine();
-                    // Clear highlight if any
-                    if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev))
-                    {
-                        prev.SetDropHighlight(false);
-                        _lastHighlightedPane = null;
-                    }
+                    _dragState = DragState.Cancelling;
+                    EndDragOperation(false);
+                    e.Handled = true;
+                    return;
                 }
             }
-            catch (Exception ex)
+
+            if (_dragState == DragState.Idle && SelectedItem is ITabItem tabItem)
             {
-                System.Diagnostics.Debug.WriteLine($"Drop target update failed: {ex.Message}");
-                try { _dropZoneManager.HideInsertionLine(); } catch { }
-                try
+                bool handled = false;
+                var mods = Keyboard.Modifiers;
+
+                if (e.Key == Key.F6 && mods == ModifierKeys.Control)
                 {
-                    if (_lastHighlightedPane?.TryGetTarget(out var prev) == true)
-                    {
-                        prev.SetDropHighlight(false);
-                        _lastHighlightedPane = null;
-                    }
+                    handled = MoveTabToNextPane(tabItem);
                 }
-                catch { }
+                else if (e.Key == Key.F6 && mods == (ModifierKeys.Control | ModifierKeys.Shift))
+                {
+                    handled = MoveTabToPreviousPane(tabItem);
+                }
+                else if (e.Key == Key.Left && mods == (ModifierKeys.Control | ModifierKeys.Shift))
+                {
+                    handled = MoveTabWithinPane(tabItem, -1);
+                }
+                else if (e.Key == Key.Right && mods == (ModifierKeys.Control | ModifierKeys.Shift))
+                {
+                    handled = MoveTabWithinPane(tabItem, 1);
+                }
+                else if (e.Key == Key.D && mods == ModifierKeys.Control)
+                {
+                    handled = DetachTabToNewWindow(tabItem);
+                }
+
+                if (handled)
+                {
+                    e.Handled = true;
+                    AnnounceTabMovement(tabItem, GetLastPerformedAction());
+                }
             }
         }
 
@@ -589,6 +552,295 @@ namespace NoteNest.UI.Controls
         private void InvalidateVisualTreeCache()
         {
             // Best-effort: no-op for now; ConditionalWeakTable entries will auto-expire with GC
+        }
+
+        private bool MoveTabToNextPane(ITabItem tab)
+        {
+            try
+            {
+                var workspace = GetWorkspaceService();
+                var currentPane = GetPaneFromControl(this);
+                if (workspace == null || currentPane == null) return false;
+
+                var panesList = string.IsNullOrEmpty(currentPane.OwnerKey)
+                    ? workspace.Panes.ToList()
+                    : workspace.DetachedPanes.Where(p => p.OwnerKey == currentPane.OwnerKey).ToList();
+
+                if (panesList.Count > 1)
+                {
+                    var currentIndex = panesList.IndexOf(currentPane);
+                    if (currentIndex >= 0)
+                    {
+                        var nextIndex = (currentIndex + 1) % panesList.Count;
+                        var targetPane = panesList[nextIndex];
+                        _ = workspace.MoveTabToPaneAsync(tab, targetPane, 0);
+                        _lastPerformedAction = $"Moved to pane {nextIndex + 1}";
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error moving tab to next pane: {ex.Message}");
+            }
+            return false;
+        }
+
+        private bool MoveTabToPreviousPane(ITabItem tab)
+        {
+            try
+            {
+                var workspace = GetWorkspaceService();
+                var currentPane = GetPaneFromControl(this);
+                if (workspace == null || currentPane == null) return false;
+
+                var panesList = string.IsNullOrEmpty(currentPane.OwnerKey)
+                    ? workspace.Panes.ToList()
+                    : workspace.DetachedPanes.Where(p => p.OwnerKey == currentPane.OwnerKey).ToList();
+
+                if (panesList.Count > 1)
+                {
+                    var currentIndex = panesList.IndexOf(currentPane);
+                    if (currentIndex >= 0)
+                    {
+                        var prevIndex = currentIndex == 0 ? panesList.Count - 1 : currentIndex - 1;
+                        var targetPane = panesList[prevIndex];
+                        _ = workspace.MoveTabToPaneAsync(tab, targetPane, 0);
+                        _lastPerformedAction = $"Moved to pane {prevIndex + 1}";
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error moving tab to previous pane: {ex.Message}");
+            }
+            return false;
+        }
+
+        private bool MoveTabWithinPane(ITabItem tab, int direction)
+        {
+            try
+            {
+                var workspace = GetWorkspaceService();
+                var currentPane = GetPaneFromControl(this);
+                if (workspace == null || currentPane == null) return false;
+
+                var currentIndex = currentPane.Tabs.IndexOf(tab);
+                if (currentIndex >= 0)
+                {
+                    var newIndex = currentIndex + direction;
+                    if (newIndex >= 0 && newIndex < currentPane.Tabs.Count)
+                    {
+                        _ = workspace.MoveTabToPaneAsync(tab, currentPane, newIndex);
+                        _lastPerformedAction = direction > 0 ? "Moved right" : "Moved left";
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error moving tab within pane: {ex.Message}");
+            }
+            return false;
+        }
+
+        private bool DetachTabToNewWindow(ITabItem tab)
+        {
+            try
+            {
+                var currentPosition = PointToScreen(new Point(0, 0));
+                var offsetPosition = new Point(currentPosition.X + 50, currentPosition.Y + 50);
+                DetachToNewWindow(tab, offsetPosition);
+                _lastPerformedAction = "Detached to new window";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error detaching tab: {ex.Message}");
+                return false;
+            }
+        }
+
+        private IWorkspaceService? GetWorkspaceService()
+        {
+            try
+            {
+                var app = Application.Current as App;
+                return app?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private string GetLastPerformedAction()
+        {
+            return _lastPerformedAction;
+        }
+
+        private void AnnounceTabMovement(ITabItem tab, string action)
+        {
+            try
+            {
+                var announcement = $"Tab '{tab.Title}' {action}";
+
+                if (AutomationPeer.ListenerExists(AutomationEvents.LiveRegionChanged))
+                {
+                    var peer = UIElementAutomationPeer.FromElement(this);
+                    if (peer != null)
+                    {
+                        peer.RaiseNotificationEvent(
+                            AutomationNotificationKind.ActionCompleted,
+                            AutomationNotificationProcessing.MostRecent,
+                            announcement,
+                            "TabMovement");
+                    }
+                }
+
+                Application.Current.Dispatcher.BeginInvoke(() =>
+                {
+                    try
+                    {
+                        if (Items.Contains(tab))
+                        {
+                            SelectedItem = tab;
+                            Focus();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Error setting focus after move: {ex.Message}");
+                    }
+                }, System.Windows.Threading.DispatcherPriority.Background);
+
+                System.Diagnostics.Debug.WriteLine($"Accessibility: {announcement}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error announcing tab movement: {ex.Message}");
+            }
+        }
+
+        private void SetupAccessibilityTooltips()
+        {
+            try
+            {
+                var tooltipText = "Keyboard shortcuts:\n" +
+                                 "Ctrl+F6: Move to next pane\n" +
+                                 "Ctrl+Shift+F6: Move to previous pane\n" +
+                                 "Ctrl+Shift+\u2190/\u2192: Move within pane\n" +
+                                 "Ctrl+D: Detach to new window\n" +
+                                 "Esc: Cancel drag operation";
+
+                ToolTip = new ToolTip
+                {
+                    Content = tooltipText,
+                    Placement = PlacementMode.Bottom
+                };
+
+                AutomationProperties.SetHelpText(this, tooltipText);
+                AutomationProperties.SetName(this, "Tab Control with Keyboard Navigation");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error setting up accessibility tooltips: {ex.Message}");
+            }
+        }
+
+        private Point GetScreenPoint(MouseEventArgs e)
+        {
+            if (!_screenPointValid)
+            {
+                _cachedScreenPoint = PointToScreen(e.GetPosition(this));
+                _screenPointValid = true;
+            }
+            return _cachedScreenPoint;
+        }
+
+        private Point GetLocalPoint(FrameworkElement element, Point screenPoint)
+        {
+            if (!_localPointCache.TryGetValue(element, out var localPoint))
+            {
+                localPoint = element.PointFromScreen(screenPoint);
+                _localPointCache[element] = localPoint;
+            }
+            return localPoint;
+        }
+
+        private void InvalidateCoordinateCache()
+        {
+            _screenPointValid = false;
+            _localPointCache.Clear();
+        }
+
+        private void UpdateDropTarget(Point screenPoint)
+        {
+            try
+            {
+                var target = _dropZoneManager.GetDropTarget(screenPoint);
+                if (target != null)
+                {
+                    if (target.Element is DraggableTabControl targetControl)
+                    {
+                        var headerPanel = targetControl.GetHeaderPanel();
+                        if (headerPanel != null)
+                        {
+                            var local = GetLocalPoint(headerPanel, screenPoint);
+                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
+                            _dropZoneManager.ShowInsertionLine(headerPanel, idx);
+                        }
+
+                        // Pane highlight on destination (cached ancestor)
+                        var spv = FindCachedSplitPaneAncestor(targetControl);
+                        if (spv != null)
+                        {
+                            // Clear previous highlight
+                            if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev) && prev != spv)
+                            {
+                                prev.SetDropHighlight(false);
+                            }
+                            spv.SetDropHighlight(true);
+                            _lastHighlightedPane = new WeakReference<SplitPaneView>(spv);
+                        }
+                    }
+                    else if (target.Element == this)
+                    {
+                        var headerPanel = GetHeaderPanel();
+                        if (headerPanel != null)
+                        {
+                            var local = GetLocalPoint(headerPanel, screenPoint);
+                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
+                            _dropZoneManager.ShowInsertionLine(headerPanel, idx);
+                        }
+                    }
+                }
+                else
+                {
+                    _dropZoneManager.HideInsertionLine();
+                    // Clear highlight if any
+                    if (_lastHighlightedPane != null && _lastHighlightedPane.TryGetTarget(out var prev))
+                    {
+                        prev.SetDropHighlight(false);
+                        _lastHighlightedPane = null;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Drop target update failed: {ex.Message}");
+                try { _dropZoneManager.HideInsertionLine(); } catch { }
+                try
+                {
+                    if (_lastHighlightedPane?.TryGetTarget(out var prev) == true)
+                    {
+                        prev.SetDropHighlight(false);
+                        _lastHighlightedPane = null;
+                    }
+                }
+                catch { }
+            }
         }
     }
 
