@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using NoteNest.Core.Interfaces.Services;
+using NoteNest.UI.Config;
 
 namespace NoteNest.UI.Services.DragDrop
 {
@@ -50,10 +51,11 @@ namespace NoteNest.UI.Services.DragDrop
 
         private void CreateGhost(ITabItem tab, Point startScreenPoint)
         {
+            byte alpha = (byte)(Math.Round(Math.Max(0.0, Math.Min(1.0, DragConfig.Instance.GhostOpacity)) * 255));
             var ghost = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(128, 240, 240, 240)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(128, 128, 128, 128)),
+                Background = new SolidColorBrush(Color.FromArgb(alpha, 240, 240, 240)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(alpha, 128, 128, 128)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(2),
                 Padding = new Thickness(8, 4, 8, 4),
@@ -86,7 +88,8 @@ namespace NoteNest.UI.Services.DragDrop
             var rect = new Rect(_sourceWindow.Left, _sourceWindow.Top, _sourceWindow.ActualWidth, _sourceWindow.ActualHeight);
             if (rect.Contains(screenPoint)) return false;
             var distance = CalculateDistanceFromRect(screenPoint, rect);
-            return distance > threshold;
+            var thresh = DragConfig.Instance.DetachThresholdPixels;
+            return distance > thresh;
         }
 
         public void EndManualDrag(bool completed)
@@ -123,13 +126,11 @@ namespace NoteNest.UI.Services.DragDrop
         {
             if (!(_draggedTab?.TryGetTarget(out var tab) ?? false) || _sourceElement == null)
                 return;
-            // Hide ghost during OLE; recalc manual visuals on re-entry
             if (_ghostPopup != null) _ghostPopup.IsOpen = false;
             var data = new DataObject("NoteNestTab", tab);
             data.SetData("SourceWindow", _sourceWindow);
 
             System.Windows.DragDrop.DoDragDrop(_sourceElement, data, DragDropEffects.Move);
-            // When OLE completes, clear manual state
             EndManualDrag(true);
         }
 

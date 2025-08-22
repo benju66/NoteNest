@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
+using NoteNest.UI.Config;
 
 namespace NoteNest.UI.Services.DragDrop
 {
@@ -12,7 +13,7 @@ namespace NoteNest.UI.Services.DragDrop
 
         public InsertionAdorner(UIElement adornedElement) : base(adornedElement)
         {
-            _pen = new Pen(new SolidColorBrush(Color.FromRgb(0, 122, 204)), 2);
+            _pen = new Pen(new SolidColorBrush(Color.FromRgb(0, 122, 204)), DragConfig.Instance.InsertionLineThickness);
             IsHitTestVisible = false;
         }
 

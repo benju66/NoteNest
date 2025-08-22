@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Threading;
 using NoteNest.UI.Utils;
+using NoteNest.UI.Config;
 
 namespace NoteNest.UI.Services.DragDrop
 {
@@ -21,7 +22,6 @@ namespace NoteNest.UI.Services.DragDrop
         private bool _pendingUpdate = false;
         private readonly object _updateLock = new object();
         private DateTime _lastCleanup = DateTime.MinValue;
-        private readonly TimeSpan _cleanupInterval = TimeSpan.FromMinutes(5);
         private readonly object _cleanupLock = new object();
         private int _registrationCount = 0;
 
@@ -39,7 +39,8 @@ namespace NoteNest.UI.Services.DragDrop
 
             lock (_cleanupLock)
             {
-                if (now - _lastCleanup > _cleanupInterval || _registrationCount > 50)
+                var interval = DragConfig.Instance.CacheCleanupInterval;
+                if (now - _lastCleanup > interval || _registrationCount > 50)
                 {
                     shouldCleanup = true;
                     _lastCleanup = now;

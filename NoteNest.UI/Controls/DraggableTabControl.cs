@@ -13,6 +13,7 @@ using NoteNest.UI.Utils;
 using System.Runtime.CompilerServices;
 using System.Windows.Automation.Peers;
 using System.Windows.Automation;
+using NoteNest.UI.Config;
 
 namespace NoteNest.UI.Controls
 {
@@ -33,6 +34,7 @@ namespace NoteNest.UI.Controls
         private static WeakReference<SplitPaneView> _lastHighlightedPane;
         private long _lastMouseUpdate;
         private const long MOUSE_UPDATE_TICKS = 166667; // ~16.67ms => ~60 FPS
+        private long MouseUpdateTicks => DragConfig.Instance.MouseUpdateIntervalTicks;
         private Point _cachedScreenPoint;
         private bool _screenPointValid;
         private readonly System.Collections.Generic.Dictionary<FrameworkElement, Point> _localPointCache = new();
@@ -105,7 +107,7 @@ namespace NoteNest.UI.Controls
 
             // Throttle high-frequency mouse move handling to ~60 FPS for smoothness and lower CPU usage
             var now = DateTime.UtcNow.Ticks;
-            if (now - _lastMouseUpdate < MOUSE_UPDATE_TICKS)
+            if (now - _lastMouseUpdate < MouseUpdateTicks)
                 return;
             _lastMouseUpdate = now;
             InvalidateCoordinateCache();
@@ -113,7 +115,8 @@ namespace NoteNest.UI.Controls
             {
                 var current = GetScreenPoint(e);
                 var diff = _dragStartPoint - current;
-                if (Math.Abs(diff.X) > 5 || Math.Abs(diff.Y) > 5)
+                var threshold = DragConfig.Instance.DragThresholdPixels;
+                if (Math.Abs(diff.X) > threshold || Math.Abs(diff.Y) > threshold)
                 {
                     var tabItem = FindTabItemFromPoint(e.GetPosition(this));
                     if (tabItem?.DataContext is ITabItem tab)
