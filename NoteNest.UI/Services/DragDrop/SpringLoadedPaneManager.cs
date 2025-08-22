@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Windows;
+using NoteNest.UI.Config;
 
 namespace NoteNest.UI.Services.DragDrop
 {
@@ -8,7 +9,7 @@ namespace NoteNest.UI.Services.DragDrop
     {
         private Timer? _timer;
         private WeakReference<FrameworkElement>? _hoveredPane;
-        private const int DelayMs = 500;
+        private int DelayMs => DragConfig.Instance.SpringLoadDelayMs;
 
         public event EventHandler<FrameworkElement>? PaneActivated;
 
