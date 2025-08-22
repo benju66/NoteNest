@@ -19,6 +19,8 @@ namespace NoteNest.UI.Controls
         private readonly TabDragManager _dragManager;
         private readonly DropZoneManager _dropZoneManager;
         private static WeakReference<SplitPaneView> _lastHighlightedPane;
+        private long _lastMouseUpdate;
+        private const long MOUSE_UPDATE_TICKS = 166667; // ~16.67ms => ~60 FPS
 
         public DraggableTabControl()
         {
@@ -41,6 +43,12 @@ namespace NoteNest.UI.Controls
         protected override void OnPreviewMouseMove(MouseEventArgs e)
         {
             base.OnPreviewMouseMove(e);
+
+            // Throttle high-frequency mouse move handling to ~60 FPS for smoothness and lower CPU usage
+            var now = DateTime.UtcNow.Ticks;
+            if (now - _lastMouseUpdate < MOUSE_UPDATE_TICKS)
+                return;
+            _lastMouseUpdate = now;
             if (e.LeftButton == MouseButtonState.Pressed && !_isDragging)
             {
                 var current = PointToScreen(e.GetPosition(this));
