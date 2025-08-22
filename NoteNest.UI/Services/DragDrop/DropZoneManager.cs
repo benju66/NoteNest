@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using NoteNest.UI.Utils;
 
 namespace NoteNest.UI.Services.DragDrop
 {
@@ -80,17 +81,7 @@ namespace NoteNest.UI.Services.DragDrop
         {
             if (container is Panel panel)
             {
-                double acc = 0;
-                for (int i = 0; i < panel.Children.Count; i++)
-                {
-                    if (panel.Children[i] is FrameworkElement child)
-                    {
-                        acc += child.ActualWidth;
-                        if (localPoint.X < acc)
-                            return i;
-                    }
-                }
-                return panel.Children.Count;
+                return TabIndexCalculator.CalculateInsertionIndex(panel, localPoint);
             }
             return 0;
         }
