@@ -9,6 +9,7 @@ using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Services.DragDrop;
 using NoteNest.Core.Models;
 using NoteNest.UI.Windows;
+using NoteNest.UI.Utils;
 
 namespace NoteNest.UI.Controls
 {
@@ -123,7 +124,7 @@ namespace NoteNest.UI.Controls
                         if (headerPanel != null)
                         {
                             var local = GetLocalPoint(headerPanel, screenPoint);
-                            var idx = CalculateIndexFromPoint(local, headerPanel);
+                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
                             _dropZoneManager.ShowInsertionLine(headerPanel, idx);
                         }
 
@@ -146,7 +147,7 @@ namespace NoteNest.UI.Controls
                         if (headerPanel != null)
                         {
                             var local = GetLocalPoint(headerPanel, screenPoint);
-                            var idx = CalculateIndexFromPoint(local, headerPanel);
+                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
                             _dropZoneManager.ShowInsertionLine(headerPanel, idx);
                         }
                     }
@@ -239,7 +240,7 @@ namespace NoteNest.UI.Controls
                         if (headerPanel != null)
                         {
                             var local = GetLocalPoint(headerPanel, screenPoint);
-                            var idx = CalculateIndexFromPoint(local, headerPanel);
+                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
                             ReorderWithinPane(draggedTab, idx);
                         }
                     }
@@ -295,7 +296,7 @@ namespace NoteNest.UI.Controls
                 var headerPanel = GetHeaderPanel();
                 if (headerPanel != null)
                 {
-                    var index = CalculateIndexFromPoint(e.GetPosition(headerPanel), headerPanel);
+                    var index = TabIndexCalculator.CalculateInsertionIndex(headerPanel, e.GetPosition(headerPanel));
                     _dropZoneManager.ShowInsertionLine(headerPanel, index);
                 }
                 e.Effects = DragDropEffects.Move;
@@ -319,7 +320,7 @@ namespace NoteNest.UI.Controls
                     var headerPanel = GetHeaderPanel();
                     if (headerPanel != null)
                     {
-                        var idx = CalculateIndexFromPoint(e.GetPosition(headerPanel), headerPanel);
+                        var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, e.GetPosition(headerPanel));
                         var list = ItemsSource as System.Collections.IList;
                         if (list != null && list.Contains(tab))
                         {
@@ -392,7 +393,7 @@ namespace NoteNest.UI.Controls
                 {
                     var headerPanel = targetControl.GetHeaderPanel();
                     var local = headerPanel.PointFromScreen(screenPoint);
-                    var idx = CalculateIndexFromPoint(local, headerPanel);
+                    var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
                     _ = workspace.MoveTabToPaneAsync(tab, targetPane, idx);
                 }
             }
@@ -428,21 +429,6 @@ namespace NoteNest.UI.Controls
                 current = VisualTreeHelper.GetParent(current);
             }
             return null;
-        }
-
-        private static int CalculateIndexFromPoint(Point local, Panel panel)
-        {
-            double acc = 0;
-            for (int i = 0; i < panel.Children.Count; i++)
-            {
-                if (panel.Children[i] is FrameworkElement child)
-                {
-                    acc += child.ActualWidth;
-                    if (local.X < acc)
-                        return i;
-                }
-            }
-            return panel.Children.Count;
         }
 
         private void DetachToNewWindow(ITabItem tab, Point screenPoint)
