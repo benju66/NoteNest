@@ -21,6 +21,9 @@ namespace NoteNest.UI.Controls
         private static WeakReference<SplitPaneView> _lastHighlightedPane;
         private long _lastMouseUpdate;
         private const long MOUSE_UPDATE_TICKS = 166667; // ~16.67ms => ~60 FPS
+        private Point _cachedScreenPoint;
+        private bool _screenPointValid;
+        private readonly System.Collections.Generic.Dictionary<FrameworkElement, Point> _localPointCache = new();
 
         public DraggableTabControl()
         {
@@ -49,9 +52,10 @@ namespace NoteNest.UI.Controls
             if (now - _lastMouseUpdate < MOUSE_UPDATE_TICKS)
                 return;
             _lastMouseUpdate = now;
+            InvalidateCoordinateCache();
             if (e.LeftButton == MouseButtonState.Pressed && !_isDragging)
             {
-                var current = PointToScreen(e.GetPosition(this));
+                var current = GetScreenPoint(e);
                 var diff = _dragStartPoint - current;
                 if (Math.Abs(diff.X) > 5 || Math.Abs(diff.Y) > 5)
                 {
@@ -64,12 +68,38 @@ namespace NoteNest.UI.Controls
             }
             else if (_isDragging)
             {
-                var screenPoint = PointToScreen(e.GetPosition(this));
+                var screenPoint = GetScreenPoint(e);
                 _dragManager.UpdateManualDrag(screenPoint);
                 UpdateDropTarget(screenPoint);
 
                 // Stay in manual-drag mode across windows; rely on screenPoint targeting
             }
+        }
+
+        private Point GetScreenPoint(MouseEventArgs e)
+        {
+            if (!_screenPointValid)
+            {
+                _cachedScreenPoint = PointToScreen(e.GetPosition(this));
+                _screenPointValid = true;
+            }
+            return _cachedScreenPoint;
+        }
+
+        private Point GetLocalPoint(FrameworkElement element, Point screenPoint)
+        {
+            if (!_localPointCache.TryGetValue(element, out var localPoint))
+            {
+                localPoint = element.PointFromScreen(screenPoint);
+                _localPointCache[element] = localPoint;
+            }
+            return localPoint;
+        }
+
+        private void InvalidateCoordinateCache()
+        {
+            _screenPointValid = false;
+            _localPointCache.Clear();
         }
 
         private void UpdateDropTarget(Point screenPoint)
@@ -84,7 +114,7 @@ namespace NoteNest.UI.Controls
                         var headerPanel = targetControl.GetHeaderPanel();
                         if (headerPanel != null)
                         {
-                            var local = headerPanel.PointFromScreen(screenPoint);
+                            var local = GetLocalPoint(headerPanel, screenPoint);
                             var idx = CalculateIndexFromPoint(local, headerPanel);
                             _dropZoneManager.ShowInsertionLine(headerPanel, idx);
                         }
@@ -107,7 +137,7 @@ namespace NoteNest.UI.Controls
                         var headerPanel = GetHeaderPanel();
                         if (headerPanel != null)
                         {
-                            var local = headerPanel.PointFromScreen(screenPoint);
+                            var local = GetLocalPoint(headerPanel, screenPoint);
                             var idx = CalculateIndexFromPoint(local, headerPanel);
                             _dropZoneManager.ShowInsertionLine(headerPanel, idx);
                         }
