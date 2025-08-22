@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Threading;
 using NoteNest.UI.Utils;
 
 namespace NoteNest.UI.Services.DragDrop
@@ -15,6 +16,8 @@ namespace NoteNest.UI.Services.DragDrop
         private AdornerLayer? _adornerLayer;
         private Panel? _currentPanel;
         private int _currentIndex = -1;
+        private bool _pendingUpdate = false;
+        private readonly object _updateLock = new object();
 
         public void RegisterDropZone(string id, FrameworkElement element)
         {
@@ -23,58 +26,154 @@ namespace NoteNest.UI.Services.DragDrop
 
         public void ShowInsertionLine(Panel headerPanel, int index)
         {
+            // Quick exit if no change needed
+            if (_currentPanel == headerPanel && _currentIndex == index)
+                return;
+
+            // Prevent update flooding
+            lock (_updateLock)
+            {
+                if (_pendingUpdate)
+                    return;
+                _pendingUpdate = true;
+            }
+
+            // Batch the update on the UI thread at render priority
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    UpdateInsertionLineImmediate(headerPanel, index);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error updating insertion line: {ex.Message}");
+                }
+                finally
+                {
+                    lock (_updateLock)
+                    {
+                        _pendingUpdate = false;
+                    }
+                }
+            }, DispatcherPriority.Render);
+        }
+
+        private void UpdateInsertionLineImmediate(Panel headerPanel, int index)
+        {
+            // Remove old adorner if panel changed
             if (_currentPanel != headerPanel || _adorner == null)
             {
-                HideInsertionLine();
-                _adornerLayer = AdornerLayer.GetAdornerLayer(headerPanel);
-                if (_adornerLayer == null) return;
-                _adorner = new InsertionAdorner(headerPanel);
-                _adornerLayer.Add(_adorner);
-                _currentPanel = headerPanel;
-                _currentIndex = -1;
-            }
-            if (_currentIndex == index) return;
-            _currentIndex = index;
+                HideInsertionLineImmediate();
 
-            double offset = 0;
-            for (int i = 0; i < Math.Min(index, headerPanel.Children.Count); i++)
-            {
-                if (headerPanel.Children[i] is FrameworkElement child)
-                    offset += child.ActualWidth;
+                if (headerPanel != null)
+                {
+                    _adornerLayer = AdornerLayer.GetAdornerLayer(headerPanel);
+                    if (_adornerLayer != null)
+                    {
+                        _adorner = new InsertionAdorner(headerPanel);
+                        _adornerLayer.Add(_adorner);
+                        _currentPanel = headerPanel;
+                    }
+                }
             }
-            _adorner.UpdatePosition(offset, true);
+
+            // Update position if we have a valid adorner
+            if (_adorner != null && headerPanel != null)
+            {
+                _currentIndex = index;
+
+                double offset = 0;
+                int validIndex = Math.Max(0, Math.Min(index, headerPanel.Children.Count));
+
+                for (int i = 0; i < validIndex; i++)
+                {
+                    if (headerPanel.Children[i] is FrameworkElement child && child.IsVisible)
+                    {
+                        offset += child.ActualWidth;
+                    }
+                }
+
+                _adorner.UpdatePosition(offset, true);
+            }
         }
 
         public void HideInsertionLine()
         {
+            // Cancel any pending updates
+            lock (_updateLock)
+            {
+                if (_pendingUpdate)
+                {
+                    _pendingUpdate = false;
+                }
+            }
+
+            // Schedule immediate hide on UI thread
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                HideInsertionLineImmediate();
+            }, DispatcherPriority.Send);
+        }
+
+        private void HideInsertionLineImmediate()
+        {
             if (_adorner != null && _adornerLayer != null)
             {
-                _adornerLayer.Remove(_adorner);
+                try
+                {
+                    _adornerLayer.Remove(_adorner);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error removing adorner: {ex.Message}");
+                }
+
                 _adorner = null;
-                _currentPanel = null;
-                _currentIndex = -1;
+                _adornerLayer = null;
             }
+
+            _currentPanel = null;
+            _currentIndex = -1;
         }
 
         public DropTarget? GetDropTarget(Point screenPoint)
         {
-            foreach (var kvp in _dropZones)
+            foreach (var kvp in _dropZones.ToList())
             {
                 if (!kvp.Value.TryGetTarget(out var element) || !element.IsVisible)
                     continue;
-                var local = element.PointFromScreen(screenPoint);
-                if (element.InputHitTest(local) != null)
+
+                try
                 {
-                    return new DropTarget
+                    var local = element.PointFromScreen(screenPoint);
+
+                    // Better bounds checking
+                    var bounds = new Rect(0, 0, element.ActualWidth, element.ActualHeight);
+                    if (bounds.Contains(local))
                     {
-                        ZoneId = kvp.Key,
-                        Element = element,
-                        LocalPosition = local,
-                        TabIndex = CalculateIndex(element, local)
-                    };
+                        return new DropTarget
+                        {
+                            ZoneId = kvp.Key,
+                            Element = element,
+                            LocalPosition = local,
+                            TabIndex = CalculateIndex(element, local)
+                        };
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error in hit testing for {kvp.Key}: {ex.Message}");
+                    continue;
                 }
             }
             return null;
+        }
+
+        public void Dispose()
+        {
+            HideInsertionLineImmediate();
+            _dropZones.Clear();
         }
 
         private static int CalculateIndex(FrameworkElement container, Point localPoint)
