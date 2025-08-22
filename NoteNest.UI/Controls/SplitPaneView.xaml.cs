@@ -7,6 +7,8 @@ using System.Windows.Media;
 using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Controls;
+using NoteNest.Core.Events;
+using NoteNest.Core.Services;
 
 namespace NoteNest.UI.Controls
 {
@@ -32,6 +34,16 @@ namespace NoteNest.UI.Controls
         public SplitPaneView()
         {
             InitializeComponent();
+            try
+            {
+                var bus = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IEventBus)) as IEventBus;
+                bus?.Subscribe<AppSettingsChangedEvent>(_ =>
+                {
+                    // Apply to current active editor when settings change
+                    Dispatcher.Invoke(() => TryApplyEditorSettingsToActiveEditor());
+                });
+            }
+            catch { }
         }
         
         public void BindToPane(SplitPane pane)
@@ -56,12 +68,14 @@ namespace NoteNest.UI.Controls
             {
                 PaneTabControl.SelectedItem = pane.SelectedTab;
                 SelectedTabChanged?.Invoke(this, pane.SelectedTab);
+                TryApplyEditorSettingsToActiveEditor();
             }
             else if (pane.Tabs.Count > 0)
             {
                 PaneTabControl.SelectedItem = pane.Tabs[0];
                 pane.SelectedTab = pane.Tabs[0];
                 SelectedTabChanged?.Invoke(this, pane.SelectedTab);
+                TryApplyEditorSettingsToActiveEditor();
             }
             
             IsActive = pane.IsActive;
@@ -192,6 +206,7 @@ namespace NoteNest.UI.Controls
                     workspaceService.SelectedTab = newTab;
                 }
                 try { SelectedTabChanged?.Invoke(this, newTab); } catch { }
+                TryApplyEditorSettingsToActiveEditor();
                 
                 // Sync note dirty flag with tab (for tree view indicator)
                 try
@@ -216,6 +231,26 @@ namespace NoteNest.UI.Controls
                 }
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[UI][WARN] Sync dirty flag failed: {ex.Message}"); }
             }
+        }
+
+        private void TryApplyEditorSettingsToActiveEditor()
+        {
+            try
+            {
+                var app = Application.Current as App;
+                var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+                var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
+                var presenter = FindVisualChild<ContentPresenter>(container);
+                var editor = FindVisualChild<SmartTextEditor>(presenter);
+                if (editor != null && config?.Settings != null)
+                {
+                    editor.SetSpellCheckEnabled(config.Settings.EnableSpellCheck);
+                    editor.SetSpellCheckLanguage("en-US");
+                    var format = Pane?.SelectedTab?.Note?.Format ?? config.Settings.DefaultNoteFormat;
+                    editor.UpdateFormatSettings(format);
+                }
+            }
+            catch { }
         }
         
         private void TabControl_GotFocus(object sender, RoutedEventArgs e)

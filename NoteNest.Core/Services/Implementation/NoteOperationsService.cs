@@ -98,7 +98,12 @@ namespace NoteNest.Core.Services.Implementation
             {
                 var oldPath = note.FilePath;
                 var directory = Path.GetDirectoryName(oldPath);
-                var newFileName = PathService.SanitizeName(newName) + ".txt";
+                var currentExt = Path.GetExtension(oldPath);
+                if (string.IsNullOrEmpty(currentExt))
+                {
+                    currentExt = note.Format == NoteFormat.Markdown ? ".md" : ".txt";
+                }
+                var newFileName = PathService.SanitizeName(newName) + currentExt;
                 var newPath = Path.Combine(directory, newFileName);
                 // Prevent renaming outside workspace root
                 var normalized = PathService.NormalizeAbsolutePath(newPath) ?? newPath;

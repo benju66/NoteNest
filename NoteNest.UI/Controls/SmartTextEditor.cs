@@ -47,6 +47,14 @@ namespace NoteNest.UI.Controls
             HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled;
             VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto;
             PreviewKeyDown += OnPreviewKeyDown;
+
+            // Default spell-check settings (can be overridden via methods below)
+            try
+            {
+                SpellCheck.IsEnabled = true;
+                Language = System.Windows.Markup.XmlLanguage.GetLanguage("en-US");
+            }
+            catch { }
         }
 
         protected override void OnTextChanged(TextChangedEventArgs e)
@@ -135,6 +143,36 @@ namespace NoteNest.UI.Controls
             {
                 ToolTip = "Plain text mode";
             }
+        }
+
+        #endregion
+
+        #region Spell Check & Format Helpers
+
+        public void SetSpellCheckEnabled(bool enabled)
+        {
+            try { SpellCheck.IsEnabled = enabled; } catch { }
+        }
+
+        public void SetSpellCheckLanguage(string cultureName)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(cultureName))
+                {
+                    Language = System.Windows.Markup.XmlLanguage.GetLanguage(cultureName);
+                }
+            }
+            catch
+            {
+                try { Language = System.Windows.Markup.XmlLanguage.GetLanguage("en-US"); } catch { }
+            }
+        }
+
+        public void UpdateFormatSettings(NoteFormat format)
+        {
+            EditingFormat = format;
+            // Additional format-specific tweaks could be added here later
         }
 
         #endregion

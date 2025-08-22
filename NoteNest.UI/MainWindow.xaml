@@ -24,6 +24,11 @@
                         <ui:SymbolIcon Symbol="Add"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem Header="New _Category" Click="NewCategoryMenuItem_Click">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="NewFolder"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Header="_Open" InputGestureText="Ctrl+O">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="OpenFile"/>

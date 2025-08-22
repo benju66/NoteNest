@@ -191,6 +191,11 @@ namespace NoteNest.UI
             MainPanel?.ViewModel?.SaveAllCommand.Execute(null);
         }
 
+        private void NewCategoryMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            MainPanel?.ViewModel?.NewCategoryCommand.Execute(null);
+        }
+
         private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
         {
             var viewModel = MainPanel?.ViewModel;

@@ -3,6 +3,7 @@ C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.deps.json
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.runtimeconfig.json
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.UI.pdb
+C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Markdig.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Microsoft.Extensions.Configuration.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Microsoft.Extensions.Configuration.Abstractions.dll
 C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\Microsoft.Extensions.Configuration.Binder.dll

@@ -270,11 +270,14 @@
                         
                         <TextBlock Text="Default file format" Style="{StaticResource BaseTextBlockStyle}" 
                                    Margin="0,0,0,4"/>
-                        <ComboBox SelectedValue="{Binding Settings.DefaultNoteFormat}" 
-                                  Margin="0,0,0,16">
-                            <ComboBoxItem Content="Plain Text (.txt)" Tag=".txt"/>
-                            <ComboBoxItem Content="Markdown (.md)" Tag=".md"/>
-                        </ComboBox>
+                        <StackPanel Orientation="Vertical" Margin="0,0,0,12">
+                            <RadioButton Content="Markdown (.md)" IsChecked="{Binding UseMarkdownFormat}"/>
+                            <RadioButton Content="Plain Text (.txt)" IsChecked="{Binding UsePlainTextFormat}"/>
+                        </StackPanel>
+
+                        <ui:ToggleSwitch Header="Enable spell check (English)" 
+                                         IsOn="{Binding Settings.EnableSpellCheck}"
+                                         Margin="0,4"/>
                         
                         <ui:ToggleSwitch Header="Enable Task Management" 
                                          IsOn="{Binding Settings.EnableTaskPanel}"

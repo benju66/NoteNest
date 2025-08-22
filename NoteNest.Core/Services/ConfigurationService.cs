@@ -137,7 +137,7 @@ namespace NoteNest.Core.Services
             if (_settings.MaxBackups == 0) _settings.MaxBackups = 5;
             if (string.IsNullOrEmpty(_settings.Theme)) _settings.Theme = "System";
             if (string.IsNullOrEmpty(_settings.FontFamily)) _settings.FontFamily = "Consolas";
-            if (string.IsNullOrEmpty(_settings.DefaultNoteFormat)) _settings.DefaultNoteFormat = ".txt";
+            // Default format enum handled by AppSettings default value
             if (string.IsNullOrEmpty(_settings.QuickNoteHotkey)) _settings.QuickNoteHotkey = "Win+N";
             if (string.IsNullOrEmpty(_settings.QuickTaskHotkey)) _settings.QuickTaskHotkey = "Win+T";
 

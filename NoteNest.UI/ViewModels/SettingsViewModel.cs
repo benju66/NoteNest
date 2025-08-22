@@ -175,6 +175,34 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        public bool UseMarkdownFormat
+        {
+            get => Settings.DefaultNoteFormat == NoteFormat.Markdown;
+            set
+            {
+                if (value)
+                {
+                    Settings.DefaultNoteFormat = NoteFormat.Markdown;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(UsePlainTextFormat));
+                }
+            }
+        }
+
+        public bool UsePlainTextFormat
+        {
+            get => Settings.DefaultNoteFormat == NoteFormat.PlainText;
+            set
+            {
+                if (value)
+                {
+                    Settings.DefaultNoteFormat = NoteFormat.PlainText;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(UseMarkdownFormat));
+                }
+            }
+        }
+
         public async Task CommitSettings()
         {
             // Save to disk and update the service's internal reference

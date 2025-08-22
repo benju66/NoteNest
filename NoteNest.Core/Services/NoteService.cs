@@ -10,6 +10,7 @@ using NoteNest.Core.Interfaces;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Events;
+using NoteNest.Core.Interfaces.Services;
 
 namespace NoteNest.Core.Services
 {
@@ -20,6 +21,7 @@ namespace NoteNest.Core.Services
         private readonly IAppLogger _logger;
         private readonly FileFormatService _formatService;
         private readonly IEventBus? _eventBus;
+        private readonly IMarkdownService _markdownService;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
 
@@ -30,6 +32,7 @@ namespace NoteNest.Core.Services
             _logger = logger ?? AppLogger.Instance;
             _eventBus = eventBus;
             _formatService = new FileFormatService(_logger);
+            _markdownService = new MarkdownService(_logger);
             
             _jsonOptions = new JsonSerializerOptions 
             { 
@@ -49,20 +52,8 @@ namespace NoteNest.Core.Services
 
             try
             {
-                // Use centralized format service
-                NoteFormat format = NoteFormat.Markdown;
-                var setting = _configService.Settings?.DefaultNoteFormat;
-                if (!string.IsNullOrWhiteSpace(setting))
-                {
-                    if (Enum.TryParse<NoteFormat>(setting, true, out var parsed))
-                    {
-                        format = parsed;
-                    }
-                    else if (setting.StartsWith("."))
-                    {
-                        format = _formatService.DetectFormatFromPath("file" + setting);
-                    }
-                }
+                // Use centralized format service via enum
+                NoteFormat format = _configService.Settings?.DefaultNoteFormat ?? NoteFormat.Markdown;
 
                 var extension = _formatService.GetExtensionForFormat(format);
                 var fileName = SanitizeFileName(title) + extension;
@@ -125,6 +116,16 @@ namespace NoteNest.Core.Services
                     LastModified = fileInfo.LastWriteTime,
                     IsDirty = false
                 };
+                // Detect and set format
+                try
+                {
+                    note.Format = _formatService.DetectFormatFromPath(filePath);
+                    if ((_configService.Settings?.AutoDetectFormat ?? true) && note.Format == NoteFormat.PlainText && !string.IsNullOrEmpty(content))
+                    {
+                        note.Format = _markdownService.DetectFormatFromContent(content);
+                    }
+                }
+                catch { }
                 
                 _logger.Debug($"Loaded note: {note.Title}");
                 return note;
@@ -145,6 +146,24 @@ namespace NoteNest.Core.Services
             {
                 var contentLength = note.Content?.Length ?? 0;
                 _logger.Debug($"Saving note '{note.Title}' ({contentLength} characters) to: {note.FilePath}");
+
+                // Optional conversion and sanitization
+                var originalPath = note.FilePath;
+                if ((_configService.Settings?.ConvertTxtToMdOnSave ?? false) && note.Format == NoteFormat.PlainText)
+                {
+                    note.Content = _markdownService.ConvertToMarkdown(note.Content ?? string.Empty);
+                    note.Format = NoteFormat.Markdown;
+                    var newPath = _markdownService.UpdateFileExtension(note.FilePath, NoteFormat.Markdown);
+                    if (!string.Equals(newPath, note.FilePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        note.FilePath = newPath;
+                    }
+                }
+
+                if (note.Format == NoteFormat.Markdown && !string.IsNullOrEmpty(note.Content))
+                {
+                    note.Content = _markdownService.SanitizeMarkdown(note.Content);
+                }
 
                 // Ensure directory exists
                 var directory = Path.GetDirectoryName(note.FilePath) ?? string.Empty;
@@ -189,6 +208,16 @@ namespace NoteNest.Core.Services
                 var previousModified = note.LastModified;
                 note.LastModified = DateTime.Now;
                 note.MarkClean();
+
+                // If we changed the file path due to conversion, remove old file if it still exists
+                try
+                {
+                    if (!string.Equals(originalPath, note.FilePath, StringComparison.OrdinalIgnoreCase) && await _fileSystem.ExistsAsync(originalPath))
+                    {
+                        await _fileSystem.DeleteAsync(originalPath);
+                    }
+                }
+                catch { }
 
                 // Publish event for listeners (e.g., cache invalidation, recent files)
                 if (_eventBus != null)
@@ -360,13 +389,16 @@ namespace NoteNest.Core.Services
                 }
 
                 var notes = new List<NoteModel>();
-                var files = await _fileSystem.GetFilesAsync(category.Path, "*.txt");
+                var txtFiles = await _fileSystem.GetFilesAsync(category.Path, "*.txt");
+                var mdFiles = await _fileSystem.GetFilesAsync(category.Path, "*.md");
+                var files = txtFiles.Concat(mdFiles);
                 
                 foreach (var file in files)
                 {
                     try
                     {
                         var note = await LoadNoteAsync(file);
+                        note.Format = _formatService.DetectFormatFromPath(file);
                         note.CategoryId = category.Id;
                         notes.Add(note);
                     }

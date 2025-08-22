@@ -28,6 +28,7 @@ namespace NoteNest.UI.Services
             // State Management (Lightweight Singletons)
             services.AddSingleton<IStateManager, StateManager>();
             services.AddSingleton<IServiceErrorHandler, ServiceErrorHandler>();
+            services.AddSingleton<IMarkdownService, MarkdownService>();
             
             // Essential Services Only
             services.AddSingleton<NoteService>(); // Core functionality

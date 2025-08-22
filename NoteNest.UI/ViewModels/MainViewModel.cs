@@ -421,7 +421,7 @@ namespace NoteNest.UI.ViewModels
                 }
 
                 // Set up file watcher
-                watcher.StartWatching(PathService.ProjectsPath, "*.txt", includeSubdirectories: true);
+                watcher.StartWatching(PathService.ProjectsPath, "*.*", includeSubdirectories: true);
 
                 _stateManager.EndOperation($"Loaded {flatCategories.Count} categories");
             }

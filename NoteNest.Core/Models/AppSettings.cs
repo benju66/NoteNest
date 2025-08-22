@@ -35,7 +35,19 @@ namespace NoteNest.Core.Models
         public StorageMode StorageMode { get; set; } = StorageMode.Local;
         public string CustomNotesPath { get; set; }
         public bool AutoDetectOneDrive { get; set; } = true;
-        public string DefaultNoteFormat { get; set; } = ".txt";
+        // Format settings
+        public NoteFormat DefaultNoteFormat { get; set; } = NoteFormat.Markdown;
+        public bool AutoDetectFormat { get; set; } = true;
+        public bool ConvertTxtToMdOnSave { get; set; } = false;
+
+        // Spell check settings
+        public bool EnableSpellCheck { get; set; } = true;
+        public string SpellCheckLanguage { get; set; } = "en-US";
+
+        // Safety settings
+        public bool RequireBackupBeforeConversion { get; set; } = true;
+        public bool ShowConversionPreview { get; set; } = true;
+        public int MaxConversionBatchSize { get; set; } = 50;
         public bool EnableTaskPanel { get; set; } = true;
         public bool ParseMarkdownCheckboxes { get; set; } = true;
         public string QuickNoteHotkey { get; set; } = "Win+N";

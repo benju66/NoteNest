@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using NoteNest.Core.Models;
+using NoteNest.Core.Interfaces.Services;
 
 namespace NoteNest.Core.Services
 {
@@ -14,11 +15,13 @@ namespace NoteNest.Core.Services
         private DateTime _lastIndexTime;
         private bool _indexDirty = true;
         private readonly int _contentWordLimit;
+        private readonly IMarkdownService _markdownService;
 
-        public SearchIndexService(int contentWordLimit = 500)
+        public SearchIndexService(int contentWordLimit = 500, IMarkdownService markdownService = null)
         {
             _searchIndex = new Dictionary<string, HashSet<SearchResult>>(StringComparer.OrdinalIgnoreCase);
             _contentWordLimit = contentWordLimit > 100 ? contentWordLimit : 500;
+            _markdownService = markdownService ?? new NoteNest.Core.Services.MarkdownService(null);
         }
 
         public class SearchResult
@@ -78,7 +81,12 @@ namespace NoteNest.Core.Services
             // Index content words (if loaded)
             if (!string.IsNullOrEmpty(note.Content))
             {
-                var contentWords = TokenizeText(note.Content);
+                var contentToIndex = note.Content;
+                if (note.Format == NoteFormat.Markdown)
+                {
+                    contentToIndex = _markdownService.StripMarkdownForIndex(contentToIndex);
+                }
+                var contentWords = TokenizeText(contentToIndex);
                 foreach (var word in contentWords.Take(_contentWordLimit)) // Configurable limit
                 {
                     AddToIndex(word, result, 1.0f);

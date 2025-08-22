@@ -2,6 +2,8 @@ using System;
 using System.Windows;
 using ModernWpf.Controls;
 using NoteNest.UI.ViewModels;
+using NoteNest.Core.Services;
+using NoteNest.Core.Events;
 
 namespace NoteNest.UI.Windows
 {
@@ -62,6 +64,16 @@ namespace NoteNest.UI.Windows
             try
             {
                 await _viewModel.CommitSettings();
+                // Small polish: broadcast settings changed so open editors apply spell check/format immediately
+                try
+                {
+                    var bus = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IEventBus)) as IEventBus;
+                    if (bus != null)
+                    {
+                        await bus.PublishAsync(new AppSettingsChangedEvent());
+                    }
+                }
+                catch { }
                 DialogResult = true;
                 Close();
             }

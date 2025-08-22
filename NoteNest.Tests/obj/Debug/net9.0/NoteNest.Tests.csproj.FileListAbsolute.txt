@@ -12,6 +12,7 @@ C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\NoteNest.Tests.deps.json
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\NoteNest.Tests.runtimeconfig.json
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\NoteNest.Tests.dll
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\NoteNest.Tests.pdb
+C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\Markdig.dll
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\Microsoft.VisualStudio.CodeCoverage.Shim.dll
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\Microsoft.TestPlatform.CoreUtilities.dll
 C:\NoteNest\NoteNest.Tests\bin\Debug\net9.0\Microsoft.TestPlatform.PlatformAbstractions.dll
