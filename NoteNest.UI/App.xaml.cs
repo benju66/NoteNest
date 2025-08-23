@@ -74,6 +74,13 @@ namespace NoteNest.UI
                 _startupTimer.Stop();
                 _logger.Info($"App started in {_startupTimer.ElapsedMilliseconds}ms");
                 
+                try
+                {
+                    var metricsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup_metrics.txt");
+                    File.AppendAllText(metricsPath, $"{DateTime.Now}: {_startupTimer.ElapsedMilliseconds}ms{Environment.NewLine}");
+                }
+                catch { }
+                
                 // Setup exception handling after startup
                 SetupExceptionHandling();
             }

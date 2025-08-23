@@ -14,7 +14,7 @@ using NoteNest.Core.Interfaces.Services;
 
 namespace NoteNest.Core.Services
 {
-    public class NoteService
+    public partial class NoteService
     {
         private readonly IFileSystemProvider _fileSystem;
         private readonly ConfigurationService _configService;

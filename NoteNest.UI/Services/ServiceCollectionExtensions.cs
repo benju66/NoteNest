@@ -5,6 +5,7 @@ using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Implementation;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Services.Safety;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.Services.DragDrop;
 
@@ -45,6 +46,7 @@ namespace NoteNest.UI.Services
                 // MainWindow may not be created yet; service tolerates null
                 return new UserNotificationService(Application.Current?.MainWindow, logger);
             });
+            services.AddSingleton<SafeFileService>();
 
             // Workspace Services (Singleton for performance)
             services.AddSingleton<ContentCache>(sp =>
