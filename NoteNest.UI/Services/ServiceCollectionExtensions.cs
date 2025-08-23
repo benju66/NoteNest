@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Windows;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services;
@@ -38,6 +39,12 @@ namespace NoteNest.UI.Services
                 sp.GetService<IEventBus>(),
                 sp.GetRequiredService<IMarkdownService>())); // Core functionality
             services.AddSingleton<IDialogService, DialogService>(); // UI interaction
+            services.AddSingleton<IUserNotificationService>(sp =>
+            {
+                var logger = sp.GetService<IAppLogger>();
+                // MainWindow may not be created yet; service tolerates null
+                return new UserNotificationService(Application.Current?.MainWindow, logger);
+            });
 
             // Workspace Services (Singleton for performance)
             services.AddSingleton<ContentCache>(sp =>
