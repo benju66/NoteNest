@@ -235,45 +235,19 @@ namespace NoteNest.UI
                 if (config == null || fileSystem == null || markdown == null || logger == null)
                     return;
 
-                // Simple choice dialog
-                var dialog = new ContentDialog
-                {
-                    Title = "Convert Notes Format",
-                    Content = new System.Windows.Controls.StackPanel
-                    {
-                        Children =
-                        {
-                            new System.Windows.Controls.TextBlock{ Text = "Select target format:", Margin = new Thickness(0,0,0,8)},
-                            new System.Windows.Controls.RadioButton { Name = "RbMd", Content = "Markdown (.md)", IsChecked = true },
-                            new System.Windows.Controls.RadioButton { Name = "RbTxt", Content = "Plain Text (.txt)", Margin = new Thickness(0,4,0,0)},
-                            new System.Windows.Controls.CheckBox { Name = "CbBackup", Content = "Create backups (*.bak)", Margin = new Thickness(0,12,0,0), IsChecked = true }
-                        }
-                    },
-                    PrimaryButtonText = "Convert",
-                    CloseButtonText = "Cancel",
-                    DefaultButton = ContentDialogButton.Primary,
-                    Owner = this
-                };
+                // Enhanced dialog window
+                var dialog = new FormatMigrationWindow(config, fileSystem, markdown, logger);
+                dialog.Owner = this;
+                var dlgOk = dialog.ShowDialog();
+                if (dlgOk != true) return;
 
-                var result = await dialog.ShowAsync();
-                if (result != ContentDialogResult.Primary) return;
-
-                // Extract selections
-                var panel = dialog.Content as System.Windows.Controls.StackPanel;
-                var rbMd = panel?.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => (string)r.Content == "Markdown (.md)");
-                var rbTxt = panel?.Children.OfType<System.Windows.Controls.RadioButton>().FirstOrDefault(r => (string)r.Content == "Plain Text (.txt)");
-                var cbBackup = panel?.Children.OfType<System.Windows.Controls.CheckBox>().FirstOrDefault(c => c.Content?.ToString() == "Create backups (*.bak)");
-
-                var target = (rbTxt?.IsChecked == true) ? NoteFormat.PlainText : NoteFormat.Markdown;
-                var doBackups = cbBackup?.IsChecked == true;
-
+                var options = dialog.Options; // filled by window
                 var migration = new FormatMigrationService(fileSystem, markdown, logger);
                 var progress = new System.Progress<NoteNest.Core.Services.MigrationProgress>(p =>
                 {
                     try { System.Diagnostics.Debug.WriteLine($"[FormatMigration] {p.PercentComplete}% {p.CurrentFile}"); } catch { }
                 });
-                var root = config.Settings?.DefaultNotePath ?? PathService.RootPath;
-                var migResult = await migration.MigrateAsync(root, target, doBackups, progress);
+                var migResult = await migration.MigrateAsync(options, progress);
                 var ok = migResult.Success;
 
                 var doneDialog = new ContentDialog
@@ -340,10 +314,31 @@ namespace NoteNest.UI
 
         private async void DocumentationMenuItem_Click(object sender, RoutedEventArgs e)
         {
+            try
+            {
+                var guidePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MARKDOWN_GUIDE.md");
+                if (!System.IO.File.Exists(guidePath))
+                {
+                    // try repo root next to exe (dev run)
+                    guidePath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "MARKDOWN_GUIDE.md");
+                    guidePath = System.IO.Path.GetFullPath(guidePath);
+                }
+                if (System.IO.File.Exists(guidePath))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = guidePath,
+                        UseShellExecute = true
+                    });
+                    return;
+                }
+            }
+            catch { }
+
             var dialog = new ModernWpf.Controls.ContentDialog
             {
                 Title = "Documentation",
-                Content = "Visit https://github.com/yourusername/NoteNest for documentation.",
+                Content = "Markdown guide file not found.",
                 PrimaryButtonText = "OK",
                 DefaultButton = ContentDialogButton.Primary,
                 Owner = this

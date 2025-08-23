@@ -82,7 +82,7 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        public int LineCount 
+        public new int LineCount 
         {
             get 
             {
@@ -92,7 +92,7 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        private int GetFirstVisibleLineIndex()
+        private new int GetFirstVisibleLineIndex()
         {
             try
             {
@@ -109,7 +109,7 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        private void ScrollToLine(int lineIndex)
+        private new void ScrollToLine(int lineIndex)
         {
             if (lineIndex < 0) return;
             

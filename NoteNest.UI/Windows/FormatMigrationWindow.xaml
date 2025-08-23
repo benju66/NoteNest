@@ -1,0 +1,58 @@
+<Window x:Class="NoteNest.UI.Windows.FormatMigrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        Title="Convert Notes Format" Height="420" Width="560"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Vertical" Margin="0,0,0,8">
+            <TextBlock Text="Scope" FontWeight="Bold"/>
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <RadioButton x:Name="RbWorkspace" Content="Entire workspace" IsChecked="True"/>
+                <RadioButton x:Name="RbFolder" Content="Specific folder:"/>
+                <TextBox x:Name="TxtFolder" Width="320" IsEnabled="False"/>
+                <Button x:Name="BtnBrowse" Content="Browse..." IsEnabled="False"/>
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Orientation="Vertical" Margin="0,8,0,0">
+            <TextBlock Text="Target format" FontWeight="Bold"/>
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <RadioButton x:Name="RbMd" Content="Markdown (.md)" IsChecked="True"/>
+                <RadioButton x:Name="RbTxt" Content="Plain Text (.txt)"/>
+                <CheckBox x:Name="CbBackups" Content="Create backups (*.bak)" IsChecked="True" Margin="16,0,0,0"/>
+                <CheckBox x:Name="CbDryRun" Content="Dry run (no changes)"/>
+            </StackPanel>
+        </StackPanel>
+
+        <GroupBox Grid.Row="2" Header="Preview" Margin="0,8,0,8">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <TextBlock Text="Exclude patterns:" VerticalAlignment="Center"/>
+                    <TextBox x:Name="TxtExclude" Width="320" ToolTip="Comma-separated globs, e.g. bin/*, obj/*"/>
+                    <Button x:Name="BtnPreview" Content="Update Preview" Click="BtnPreview_OnClick"/>
+                </StackPanel>
+                <ListBox x:Name="LstPreview"/>
+            </DockPanel>
+        </GroupBox>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <StackPanel.Resources>
+                <Style TargetType="Button">
+                    <Setter Property="Margin" Value="8,0,0,0"/>
+                </Style>
+            </StackPanel.Resources>
+            <Button Content="Cancel" IsCancel="True"/>
+            <Button Content="Convert" IsDefault="True" Click="BtnConvert_OnClick"/>
+        </StackPanel>
+    </Grid>
+</Window>
+
+
