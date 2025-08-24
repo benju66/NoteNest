@@ -38,7 +38,8 @@ namespace NoteNest.UI.Services
                 sp.GetRequiredService<ConfigurationService>(),
                 sp.GetRequiredService<IAppLogger>(),
                 sp.GetService<IEventBus>(),
-                sp.GetRequiredService<IMarkdownService>())); // Core functionality
+                sp.GetRequiredService<IMarkdownService>(),
+                sp.GetService<SafeFileService>())); // Core functionality
             services.AddSingleton<IDialogService, DialogService>(); // UI interaction
             services.AddSingleton<IUserNotificationService>(sp =>
             {

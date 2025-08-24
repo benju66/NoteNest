@@ -9,6 +9,7 @@ using System.Threading;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Services.Safety;
 using NoteNest.Core.Events;
 using NoteNest.Core.Interfaces.Services;
 
@@ -24,13 +25,15 @@ namespace NoteNest.Core.Services
         private readonly IMarkdownService _markdownService;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
+        private readonly SafeFileService? _safeFileService;
 
         public NoteService(
             IFileSystemProvider fileSystem,
             ConfigurationService configService,
             IAppLogger? logger = null,
             IEventBus? eventBus = null,
-            IMarkdownService? markdownService = null)
+            IMarkdownService? markdownService = null,
+            SafeFileService? safeFileService = null)
         {
             _fileSystem = fileSystem ?? new DefaultFileSystemProvider();
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
@@ -38,6 +41,7 @@ namespace NoteNest.Core.Services
             _eventBus = eventBus;
             _formatService = new FileFormatService(_logger);
             _markdownService = markdownService ?? new MarkdownService(_logger);
+            _safeFileService = safeFileService;
             
             _jsonOptions = new JsonSerializerOptions 
             { 
@@ -110,7 +114,9 @@ namespace NoteNest.Core.Services
                     throw new FileNotFoundException($"Note file not found: {filePath}");
                 }
 
-                var content = await _fileSystem.ReadTextAsync(filePath);
+                var content = _safeFileService != null
+                    ? await _safeFileService.ReadTextSafelyAsync(filePath)
+                    : await _fileSystem.ReadTextAsync(filePath);
                 var fileInfo = await _fileSystem.GetFileInfoAsync(filePath);
                 
                 var note = new NoteModel
@@ -178,35 +184,42 @@ namespace NoteNest.Core.Services
                     _logger.Info($"Created directory for note save: {directory}");
                 }
 
-                // Atomic write with per-file lock
-                var fileLock = _fileLocks.GetOrAdd(note.FilePath, _ => new SemaphoreSlim(1, 1));
-                await fileLock.WaitAsync();
-                try
+                if (_safeFileService != null)
                 {
-                    var tempPath = note.FilePath + ".tmp";
-                    var backupPath = note.FilePath + ".bak";
-
-                    // Write to temp first
-                    await _fileSystem.WriteTextAsync(tempPath, note.Content ?? string.Empty);
-
-                    // Replace atomically when available
+                    await _safeFileService.WriteTextSafelyAsync(note.FilePath, note.Content ?? string.Empty);
+                }
+                else
+                {
+                    // Atomic write with per-file lock (legacy path)
+                    var fileLock = _fileLocks.GetOrAdd(note.FilePath, _ => new SemaphoreSlim(1, 1));
+                    await fileLock.WaitAsync();
                     try
                     {
-                        await _fileSystem.ReplaceAsync(tempPath, note.FilePath, backupPath);
-                    }
-                    catch
-                    {
-                        // Fallback: delete then move
-                        if (await _fileSystem.ExistsAsync(note.FilePath))
+                        var tempPath = note.FilePath + ".tmp";
+                        var backupPath = note.FilePath + ".bak";
+
+                        // Write to temp first
+                        await _fileSystem.WriteTextAsync(tempPath, note.Content ?? string.Empty);
+
+                        // Replace atomically when available
+                        try
                         {
-                            await _fileSystem.DeleteAsync(note.FilePath);
+                            await _fileSystem.ReplaceAsync(tempPath, note.FilePath, backupPath);
                         }
-                        await _fileSystem.MoveAsync(tempPath, note.FilePath, overwrite: false);
+                        catch
+                        {
+                            // Fallback: delete then move
+                            if (await _fileSystem.ExistsAsync(note.FilePath))
+                            {
+                                await _fileSystem.DeleteAsync(note.FilePath);
+                            }
+                            await _fileSystem.MoveAsync(tempPath, note.FilePath, overwrite: false);
+                        }
                     }
-                }
-                finally
-                {
-                    fileLock.Release();
+                    finally
+                    {
+                        fileLock.Release();
+                    }
                 }
                 
                 // Update note state
@@ -532,10 +545,7 @@ namespace NoteNest.Core.Services
             }
         }
 
-        private string SanitizeFileName(string fileName)
-        {
-            return PathService.SanitizeName(fileName);
-        }
+        
 
         private class CategoryWrapper
         {
