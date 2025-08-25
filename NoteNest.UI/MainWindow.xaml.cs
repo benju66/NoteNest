@@ -14,6 +14,8 @@ using NoteNest.UI.Services.DragDrop;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.Core.Interfaces.Services;
+using NoteNest.Core.Plugins;
+using NoteNest.UI.ViewModels;
 
 namespace NoteNest.UI
 {
@@ -30,7 +32,43 @@ namespace NoteNest.UI
             {
                 if (MainPanel != null && DataContext != null)
                     MainPanel.DataContext = DataContext;
+
+                try
+                {
+                    var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    if (config?.Settings != null && FindName("ShowActivityBarMenuItem") is System.Windows.Controls.MenuItem mi)
+                    {
+                        mi.IsChecked = config.Settings.ShowActivityBar;
+                        ActivityBarControl.Visibility = config.Settings.ShowActivityBar
+                            ? Visibility.Visible
+                            : Visibility.Collapsed;
+                        try
+                        {
+                            var pm = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IPluginManager)) as IPluginManager;
+                            if (pm != null)
+                            {
+                                var abvm = new ActivityBarViewModel(pm);
+                                abvm.PluginActivated += OnPluginActivated;
+                                ActivityBarControl.DataContext = abvm;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
             };
+        }
+
+        private void OnPluginActivated(IPlugin plugin)
+        {
+            if (plugin == null) return;
+            var panel = plugin.GetPanel();
+            if (panel != null)
+            {
+                PluginPanelHost.Content = panel.Content;
+                PluginPanelHost.Visibility = Visibility.Visible;
+                PluginSplitter.Visibility = Visibility.Visible;
+            }
         }
 
         protected override void OnDragEnter(DragEventArgs e)
@@ -302,6 +340,21 @@ namespace NoteNest.UI
         {
             ThemeService.SetTheme(AppTheme.System);
             UpdateThemeMenuChecks();
+        }
+
+        private void ShowActivityBarMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                if (config?.Settings != null && sender is System.Windows.Controls.MenuItem mi)
+                {
+                    config.Settings.ShowActivityBar = mi.IsChecked;
+                    config.RequestSaveDebounced();
+                    ActivityBarControl.Visibility = mi.IsChecked ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+            catch { }
         }
 
         private void UpdateThemeMenuChecks()

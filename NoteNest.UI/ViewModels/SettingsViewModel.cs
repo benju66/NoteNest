@@ -17,6 +17,7 @@ namespace NoteNest.UI.ViewModels
         private bool _showLeftPanelOnStartup = true;
         private bool _showRightPanelOnStartup = false;
         private StorageLocationService _storageService;
+        private bool _showActivityBar;
 
         public AppSettings Settings
         {
@@ -46,10 +47,24 @@ namespace NoteNest.UI.ViewModels
             _originalSettings = configService.Settings ?? new AppSettings();
             _settings = CloneSettings(_originalSettings);
             _storageService = new StorageLocationService();
+            _showActivityBar = _settings.ShowActivityBar;
 
             BrowseDefaultPathCommand = new RelayCommand(_ => BrowseDefaultPath());
             BrowseMetadataPathCommand = new RelayCommand(_ => BrowseMetadataPath());
             BrowseCustomPathCommand = new RelayCommand(_ => BrowseCustomPath());
+        }
+
+        public bool ShowActivityBar
+        {
+            get => _showActivityBar;
+            set
+            {
+                if (SetProperty(ref _showActivityBar, value))
+                {
+                    Settings.ShowActivityBar = value;
+                    OnPropertyChanged(nameof(Settings));
+                }
+            }
         }
 
         private void BrowseDefaultPath()

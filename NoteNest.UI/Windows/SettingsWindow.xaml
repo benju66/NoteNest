@@ -98,6 +98,10 @@
                             <Rectangle Width="40" Height="40" Fill="#E81123" RadiusX="4" RadiusY="4"/>
                             <Rectangle Width="40" Height="40" Fill="#0063B1" RadiusX="4" RadiusY="4"/>
                         </ui:GridView>
+
+                        <Separator Margin="0,16,0,8"/>
+                        <ui:ToggleSwitch Header="Show Activity Bar"
+                                         IsOn="{Binding ShowActivityBar}"/>
                     </StackPanel>
                     
                     <!-- Editor Settings Page -->

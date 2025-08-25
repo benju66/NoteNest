@@ -112,6 +112,8 @@
                     <MenuItem Header="_Dark" Name="DarkThemeMenuItem" Click="DarkTheme_Click" IsCheckable="True"/>
                     <MenuItem Header="_System" Name="SystemThemeMenuItem" Click="SystemTheme_Click" IsCheckable="True" IsChecked="True"/>
                 </MenuItem>
+                <Separator/>
+                <MenuItem Header="Show _Activity Bar" Name="ShowActivityBarMenuItem" IsCheckable="True" Click="ShowActivityBarMenuItem_Click"/>
             </MenuItem>
             
             <MenuItem Header="_Help">
@@ -128,7 +130,35 @@
             </MenuItem>
         </Menu>
         
-        <!-- Main Panel -->
-        <controls:NoteNestPanel Grid.Row="1" x:Name="MainPanel" />
+        <!-- Main Layout with optional Activity Bar -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Activity Bar: visibility bound in code-behind to settings -->
+            <controls:ActivityBar x:Name="ActivityBarControl"
+                                  Grid.Column="0"
+                                  Visibility="Collapsed"/>
+
+            <!-- Main Panel -->
+            <controls:NoteNestPanel Grid.Column="1" x:Name="MainPanel" />
+
+            <!-- Splitter between main content and plugin panel -->
+            <GridSplitter Grid.Column="2"
+                          HorizontalAlignment="Left"
+                          Width="3"
+                          Background="Transparent"
+                          Visibility="Collapsed"
+                          x:Name="PluginSplitter"/>
+
+            <!-- Plugin Panel Host -->
+            <ContentControl Grid.Column="2"
+                            x:Name="PluginPanelHost"
+                            Width="300"
+                            Visibility="Collapsed"/>
+        </Grid>
     </Grid>
 </Window>

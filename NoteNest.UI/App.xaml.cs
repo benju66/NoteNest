@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Services;
 using NoteNest.UI.ViewModels;
+using NoteNest.Core.Plugins;
 
 namespace NoteNest.UI
 {
@@ -18,7 +19,7 @@ namespace NoteNest.UI
 
         public IServiceProvider ServiceProvider { get; private set; }
 
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             _startupTimer = Stopwatch.StartNew();
             
@@ -81,6 +82,17 @@ namespace NoteNest.UI
                 }
                 catch { }
                 
+                // Load test plugin (Phase 2 validation)
+                try
+                {
+                    var pluginManager = ServiceProvider.GetService<IPluginManager>();
+                    if (pluginManager != null)
+                    {
+                        await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.TestPlugin { IsEnabled = true });
+                    }
+                }
+                catch { }
+
                 // Setup exception handling after startup
                 SetupExceptionHandling();
             }

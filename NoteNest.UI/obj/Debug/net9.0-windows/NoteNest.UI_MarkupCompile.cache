@@ -1,20 +1,20 @@
 ﻿NoteNest.UI
-1.0.0.0
+
 
 winexe
 C#
 .cs
-c:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\
 NoteNest.UI
 none
 false
-TRACE;DEBUG;NET;NET9_0;NETCOREAPP;WINDOWS;WINDOWS7_0;NET5_0_OR_GREATER;NET6_0_OR_GREATER;NET7_0_OR_GREATER;NET8_0_OR_GREATER;NET9_0_OR_GREATER;NETCOREAPP3_0_OR_GREATER;NETCOREAPP3_1_OR_GREATER;WINDOWS7_0_OR_GREATER
-c:\NoteNest\NoteNest.UI\App.xaml
-9-1749431727
+TRACE;DEBUG;NET;NET9_0;NETCOREAPP
+C:\NoteNest\NoteNest.UI\App.xaml
+10-1290478544
 
-551639953398
-235-1118955001
-Controls\NoteNestPanel.xaml;Controls\SplitContainer.xaml;Controls\SplitPaneView.xaml;Controls\SplitWorkspace.xaml;Dialogs\InputDialog.xaml;MainWindow.xaml;Windows\FormatMigrationWindow.xaml;Windows\MigrationWindow.xaml;Windows\SettingsWindow.xaml;
+561580026784
+2351547867247
+Controls\ActivityBar.xaml;Controls\NoteNestPanel.xaml;Controls\SplitContainer.xaml;Controls\SplitPaneView.xaml;Controls\SplitWorkspace.xaml;Dialogs\InputDialog.xaml;MainWindow.xaml;Windows\FormatMigrationWindow.xaml;Windows\MigrationWindow.xaml;Windows\SettingsWindow.xaml;
 
-True
+False
 

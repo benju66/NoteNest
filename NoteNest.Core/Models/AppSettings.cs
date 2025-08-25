@@ -60,6 +60,7 @@ namespace NoteNest.Core.Models
         public bool AutoSaveOnFocusLost { get; set; } = true;
         public int AutoSaveIdleMs { get; set; } = 2000;
         public bool ShowTreeDirtyDot { get; set; } = true;
+        public bool ShowActivityBar { get; set; } = true;
 
         // File watcher & caching configuration
         public int FileWatcherDebounceMs { get; set; } = 500;

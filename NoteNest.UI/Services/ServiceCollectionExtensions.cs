@@ -9,6 +9,7 @@ using NoteNest.Core.Services.Safety;
 using NoteNest.Core.Services.Notes;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.Services.DragDrop;
+using NoteNest.Core.Plugins;
 
 namespace NoteNest.UI.Services
 {
@@ -85,6 +86,10 @@ namespace NoteNest.UI.Services
 
             // NOTE: WorkspaceViewModel is created lazily in MainViewModel
             // This maintains the performance optimization while ensuring proper DI
+
+            // Plugin system services
+            services.AddSingleton<IPluginDataStore, PluginDataStore>();
+            services.AddSingleton<IPluginManager, PluginManager>();
 
             return services;
         }
