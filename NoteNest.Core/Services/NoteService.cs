@@ -176,51 +176,7 @@ namespace NoteNest.Core.Services
                     note.Content = _markdownService.SanitizeMarkdown(note.Content);
                 }
 
-                // Ensure directory exists
-                var directory = Path.GetDirectoryName(note.FilePath) ?? string.Empty;
-                if (!await _fileSystem.ExistsAsync(directory))
-                {
-                    await _fileSystem.CreateDirectoryAsync(directory);
-                    _logger.Info($"Created directory for note save: {directory}");
-                }
-
-                if (_safeFileService != null)
-                {
-                    await _safeFileService.WriteTextSafelyAsync(note.FilePath, note.Content ?? string.Empty);
-                }
-                else
-                {
-                    // Atomic write with per-file lock (legacy path)
-                    var fileLock = _fileLocks.GetOrAdd(note.FilePath, _ => new SemaphoreSlim(1, 1));
-                    await fileLock.WaitAsync();
-                    try
-                    {
-                        var tempPath = note.FilePath + ".tmp";
-                        var backupPath = note.FilePath + ".bak";
-
-                        // Write to temp first
-                        await _fileSystem.WriteTextAsync(tempPath, note.Content ?? string.Empty);
-
-                        // Replace atomically when available
-                        try
-                        {
-                            await _fileSystem.ReplaceAsync(tempPath, note.FilePath, backupPath);
-                        }
-                        catch
-                        {
-                            // Fallback: delete then move
-                            if (await _fileSystem.ExistsAsync(note.FilePath))
-                            {
-                                await _fileSystem.DeleteAsync(note.FilePath);
-                            }
-                            await _fileSystem.MoveAsync(tempPath, note.FilePath, overwrite: false);
-                        }
-                    }
-                    finally
-                    {
-                        fileLock.Release();
-                    }
-                }
+                await WriteNoteFileAsync(note);
                 
                 // Update note state
                 var previousModified = note.LastModified;
