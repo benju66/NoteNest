@@ -4,6 +4,10 @@ using System.Windows.Input;
 using NoteNest.Core.Plugins;
 using NoteNest.Core.Commands;
 using NoteNest.Core.Services;
+using System.Collections.Generic;
+using System.Linq;
+using NoteNest.Core.Events;
+using System.Linq;
 
 namespace NoteNest.UI.ViewModels
 {
@@ -22,6 +26,14 @@ namespace NoteNest.UI.ViewModels
 			_pluginManager = pluginManager ?? throw new ArgumentNullException(nameof(pluginManager));
 			Plugins = new ObservableCollection<IPlugin>(_pluginManager.LoadedPlugins);
 			_pluginManager.PluginsChanged += OnPluginsChanged;
+
+			// Refresh when settings change (visibility/order updates)
+			try
+			{
+				var bus = (App.Current as App)?.ServiceProvider?.GetService(typeof(IEventBus)) as IEventBus;
+				bus?.Subscribe<AppSettingsChangedEvent>(_ => OnPluginsChanged());
+			}
+			catch { }
 			ActivatePluginCommand = new RelayCommand<IPlugin>(async p =>
 			{
 				if (p == null) return;
@@ -39,6 +51,8 @@ namespace NoteNest.UI.ViewModels
 
             PinPluginPrimaryCommand = new RelayCommand<IPlugin>(p => PinPluginToSlot(p, false));
             PinPluginSecondaryCommand = new RelayCommand<IPlugin>(p => PinPluginToSlot(p, true));
+			// Apply initial filter/order if configured
+			OnPluginsChanged();
 		}
 
 		private void OnPluginsChanged()
@@ -46,7 +60,25 @@ namespace NoteNest.UI.ViewModels
 			App.Current.Dispatcher.Invoke(() =>
 			{
 				Plugins.Clear();
-				foreach (var p in _pluginManager.LoadedPlugins) Plugins.Add(p);
+				var config = (App.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+				var settings = config?.Settings;
+				IEnumerable<IPlugin> ordered = _pluginManager.LoadedPlugins;
+				if (settings != null && settings.PluginOrder != null && settings.PluginOrder.Count > 0)
+				{
+					ordered = ordered.OrderBy(p =>
+					{
+						int idx = settings.PluginOrder.IndexOf(p.Id);
+						return idx >= 0 ? idx : int.MaxValue;
+					});
+				}
+				foreach (var p in ordered)
+				{
+					if (settings != null && settings.VisiblePluginIds != null && settings.VisiblePluginIds.Count > 0)
+					{
+						if (!settings.VisiblePluginIds.Contains(p.Id)) continue;
+					}
+					Plugins.Add(p);
+				}
 			});
 		}
 

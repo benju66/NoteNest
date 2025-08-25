@@ -44,6 +44,7 @@ namespace NoteNest.UI
                         ActivityBarControl.Visibility = config.Settings.ShowActivityBar
                             ? Visibility.Visible
                             : Visibility.Collapsed;
+                        try { ActivityBarControl.Width = Math.Max(36, config.Settings.ActivityBarWidth); } catch { }
                         // Restore last active plugin(s); plugin column width will be applied when panel is shown
                         // Restore editor collapsed state
                         if (config.Settings.IsEditorCollapsed)
@@ -136,6 +137,12 @@ namespace NoteNest.UI
                     if (PluginColumn.Width.Value <= 0.1)
                     {
                         PluginColumn.Width = new GridLength(targetWidth);
+                    }
+                    if (config?.Settings?.CollapseEditorWhenPluginOpens == true)
+                    {
+                        EditorColumn.Width = new GridLength(0);
+                        config.Settings.IsEditorCollapsed = true;
+                        config.RequestSaveDebounced();
                     }
                 }
                 catch { }

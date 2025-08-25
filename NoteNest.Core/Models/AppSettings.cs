@@ -71,6 +71,13 @@ namespace NoteNest.Core.Models
         public double EditorColumnWidth { get; set; } = 1.0; // star size placeholder
         public Dictionary<string, string> PluginPanelSlotByPluginId { get; set; } = new();
 
+        // Activity Bar settings and plugin management
+        public double ActivityBarWidth { get; set; } = 48;
+        public List<string> EnabledPluginIds { get; set; } = new();
+        public List<string> VisiblePluginIds { get; set; } = new();
+        public List<string> PluginOrder { get; set; } = new();
+        public bool CollapseEditorWhenPluginOpens { get; set; } = false;
+
         // File watcher & caching configuration
         public int FileWatcherDebounceMs { get; set; } = 500;
         public int FileWatcherBufferKB { get; set; } = 64;
@@ -89,6 +96,9 @@ namespace NoteNest.Core.Models
             // Initialize collections/objects to prevent null reference issues.
             RecentFiles = new List<string>();
             WindowSettings = new WindowSettings();
+            EnabledPluginIds = new List<string>();
+            VisiblePluginIds = new List<string>();
+            PluginOrder = new List<string>();
             // Do not set paths or other defaults here.
         }
     }
