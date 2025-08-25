@@ -44,11 +44,7 @@ namespace NoteNest.UI
                         ActivityBarControl.Visibility = config.Settings.ShowActivityBar
                             ? Visibility.Visible
                             : Visibility.Collapsed;
-                        // Restore plugin panel width and last active plugin(s)
-                        if (config.Settings.PluginPanelWidth > 0)
-                        {
-                            PluginPanelContainer.Width = config.Settings.PluginPanelWidth;
-                        }
+                        // Restore last active plugin(s); plugin column width will be applied when panel is shown
                         // Restore editor collapsed state
                         if (config.Settings.IsEditorCollapsed)
                         {
@@ -112,6 +108,8 @@ namespace NoteNest.UI
                 PluginPanelHostSecondary.Visibility = Visibility.Collapsed;
                 PluginSplitter.Visibility = Visibility.Collapsed;
                 PluginPanelContainer.Visibility = Visibility.Collapsed;
+                // Collapse plugin column so editor uses full width
+                PluginColumn.Width = new GridLength(0);
                 return;
             }
             var panel = plugin.GetPanel();
@@ -130,6 +128,17 @@ namespace NoteNest.UI
                 }
                 PluginPanelContainer.Visibility = Visibility.Visible;
                 PluginSplitter.Visibility = Visibility.Visible;
+                // Ensure plugin column has visible width
+                try
+                {
+                    var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    var targetWidth = (config?.Settings?.PluginPanelWidth ?? 0) > 0 ? config.Settings.PluginPanelWidth : 300;
+                    if (PluginColumn.Width.Value <= 0.1)
+                    {
+                        PluginColumn.Width = new GridLength(targetWidth);
+                    }
+                }
+                catch { }
 
                 // Persist active plugin id
                 try
@@ -157,12 +166,9 @@ namespace NoteNest.UI
                 var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                 if (config?.Settings != null)
                 {
-                    var w = PluginPanelContainer.ActualWidth > 0 ? PluginPanelContainer.ActualWidth : PluginPanelContainer.Width;
-                    config.Settings.PluginPanelWidth = double.IsNaN(w) || w <= 0 ? 300 : w;
-                    if (double.IsNaN(config.Settings.PluginPanelWidth) || config.Settings.PluginPanelWidth <= 0)
-                    {
-                        config.Settings.PluginPanelWidth = 300;
-                    }
+                    var w = PluginColumn.ActualWidth;
+                    if (double.IsNaN(w) || w <= 0) w = 300;
+                    config.Settings.PluginPanelWidth = w;
                     config.RequestSaveDebounced();
                 }
             }

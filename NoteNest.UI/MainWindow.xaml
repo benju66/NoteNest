@@ -145,7 +145,8 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition x:Name="EditorColumn" Width="*"/>
-                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/> <!-- Splitter column -->
+                <ColumnDefinition x:Name="PluginColumn" Width="0"/>
             </Grid.ColumnDefinitions>
 
             <!-- Activity Bar: visibility bound in code-behind to settings -->
@@ -162,15 +163,16 @@
                           Width="4"
                           Background="Transparent"
                           ShowsPreview="True"
+                          ResizeDirection="Columns"
+                          ResizeBehavior="PreviousAndNext"
                           MouseDoubleClick="PluginSplitter_MouseDoubleClick"
                           DragCompleted="PluginSplitter_DragCompleted"
                           Visibility="Collapsed"
                           x:Name="PluginSplitter"/>
 
             <!-- Plugin Panel Container: supports single or split (top/bottom) plugin hosts -->
-            <Grid Grid.Column="2"
+            <Grid Grid.Column="3"
                   x:Name="PluginPanelContainer"
-                  Width="300"
                   MinWidth="200"
                   Visibility="Collapsed">
                 <Grid.RowDefinitions>
