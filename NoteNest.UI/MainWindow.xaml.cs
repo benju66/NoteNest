@@ -411,7 +411,7 @@ namespace NoteNest.UI
             MainPanel?.ViewModel?.NewCategoryCommand.Execute(null);
         }
 
-        private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+        public void OpenSettings()
         {
             var viewModel = MainPanel?.ViewModel;
             var configService = viewModel?.GetConfigService();
@@ -425,11 +425,12 @@ namespace NoteNest.UI
             
             var win = new SettingsWindow(configService);
             win.Owner = this;
-            if (win.ShowDialog() == true)
-            {
-                // Settings saved - user will restart if migration occurred
-                // No need to reload categories here
-            }
+            win.ShowDialog();
+        }
+
+        private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            OpenSettings();
         }
 
         private void ExitMenuItem_Click(object sender, RoutedEventArgs e)

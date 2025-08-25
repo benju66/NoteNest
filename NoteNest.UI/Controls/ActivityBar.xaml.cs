@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 
 namespace NoteNest.UI.Controls
@@ -7,6 +8,12 @@ namespace NoteNest.UI.Controls
 		public ActivityBar()
 		{
 			InitializeComponent();
+		}
+
+		private void SettingsButton_Click(object sender, RoutedEventArgs e)
+		{
+			var win = Window.GetWindow(this) as MainWindow;
+			win?.OpenSettings();
 		}
 	}
 }
