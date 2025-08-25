@@ -16,11 +16,13 @@ using NoteNest.Core.Services;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Plugins;
 using NoteNest.UI.ViewModels;
+using System.Windows.Input;
 
 namespace NoteNest.UI
 {
     public partial class MainWindow : Window
     {
+        public static readonly RoutedUICommand ToggleEditorCommand = new RoutedUICommand("ToggleEditor", nameof(ToggleEditorCommand), typeof(MainWindow));
         public MainWindow()
         {
             InitializeComponent();
@@ -42,10 +44,15 @@ namespace NoteNest.UI
                         ActivityBarControl.Visibility = config.Settings.ShowActivityBar
                             ? Visibility.Visible
                             : Visibility.Collapsed;
-                        // Restore plugin panel width and last active plugin
+                        // Restore plugin panel width and last active plugin(s)
                         if (config.Settings.PluginPanelWidth > 0)
                         {
-                            PluginPanelHost.Width = config.Settings.PluginPanelWidth;
+                            PluginPanelContainer.Width = config.Settings.PluginPanelWidth;
+                        }
+                        // Restore editor collapsed state
+                        if (config.Settings.IsEditorCollapsed)
+                        {
+                            EditorColumn.Width = new GridLength(0);
                         }
                         try
                         {
@@ -56,14 +63,31 @@ namespace NoteNest.UI
                                 abvm.PluginActivated += OnPluginActivated;
                                 ActivityBarControl.DataContext = abvm;
 
-                                // Restore last active plugin if any
+                                // Restore last active plugin if any, using preferred slot when available
                                 var lastId = config.Settings.LastActivePluginId;
                                 if (!string.IsNullOrWhiteSpace(lastId))
                                 {
                                     var plugin = pm.GetPlugin(lastId);
                                     if (plugin != null)
                                     {
-                                        OnPluginActivated(plugin);
+                                        var preferred = config.Settings.PluginPanelSlotByPluginId.TryGetValue(plugin.Id, out var slot) ? slot : "Primary";
+                                        OnPluginActivated(plugin, isSecondary: string.Equals(preferred, "Secondary", StringComparison.OrdinalIgnoreCase));
+                                    }
+                                }
+
+                                // Restore secondary plugin if split enabled
+                                if (config.Settings.RightPanelSplitEnabled)
+                                {
+                                    var secId = config.Settings.SecondaryActivePluginId;
+                                    if (!string.IsNullOrWhiteSpace(secId))
+                                    {
+                                        var splugin = pm.GetPlugin(secId);
+                                        if (splugin != null)
+                                        {
+                                            EnableRightPanelSplit(true);
+                                            OnPluginActivated(splugin, isSecondary:true);
+                                            SetRightPanelHeights(config.Settings.RightPanelTopHeight, config.Settings.RightPanelBottomHeight);
+                                        }
                                     }
                                 }
                             }
@@ -75,21 +99,36 @@ namespace NoteNest.UI
             };
         }
 
-        private void OnPluginActivated(IPlugin plugin)
+        private void OnPluginActivated(IPlugin plugin) => OnPluginActivated(plugin, false);
+
+        private void OnPluginActivated(IPlugin plugin, bool isSecondary)
         {
             if (plugin == null)
             {
                 // Hide panel when no plugin (Explorer) selected
-                PluginPanelHost.Content = null;
-                PluginPanelHost.Visibility = Visibility.Collapsed;
+                PluginPanelHostPrimary.Content = null;
+                PluginPanelHostPrimary.Visibility = Visibility.Collapsed;
+                PluginPanelHostSecondary.Content = null;
+                PluginPanelHostSecondary.Visibility = Visibility.Collapsed;
                 PluginSplitter.Visibility = Visibility.Collapsed;
+                PluginPanelContainer.Visibility = Visibility.Collapsed;
                 return;
             }
             var panel = plugin.GetPanel();
             if (panel != null)
             {
-                PluginPanelHost.Content = panel.Content;
-                PluginPanelHost.Visibility = Visibility.Visible;
+                if (isSecondary)
+                {
+                    PluginPanelHostSecondary.Content = panel.Content;
+                    PluginPanelHostSecondary.Visibility = Visibility.Visible;
+                    InnerPluginSplitter.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    PluginPanelHostPrimary.Content = panel.Content;
+                    PluginPanelHostPrimary.Visibility = Visibility.Visible;
+                }
+                PluginPanelContainer.Visibility = Visibility.Visible;
                 PluginSplitter.Visibility = Visibility.Visible;
 
                 // Persist active plugin id
@@ -98,7 +137,12 @@ namespace NoteNest.UI
                     var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                     if (config?.Settings != null)
                     {
-                        config.Settings.LastActivePluginId = plugin.Id;
+                        if (isSecondary)
+                            config.Settings.SecondaryActivePluginId = plugin.Id;
+                        else
+                            config.Settings.LastActivePluginId = plugin.Id;
+                        // Persist per-plugin preferred slot
+                        config.Settings.PluginPanelSlotByPluginId[plugin.Id] = isSecondary ? "Secondary" : "Primary";
                         config.RequestSaveDebounced();
                     }
                 }
@@ -113,11 +157,83 @@ namespace NoteNest.UI
                 var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                 if (config?.Settings != null)
                 {
-                    config.Settings.PluginPanelWidth = PluginPanelHost.ActualWidth > 0 ? PluginPanelHost.ActualWidth : PluginPanelHost.Width;
+                    var w = PluginPanelContainer.ActualWidth > 0 ? PluginPanelContainer.ActualWidth : PluginPanelContainer.Width;
+                    config.Settings.PluginPanelWidth = double.IsNaN(w) || w <= 0 ? 300 : w;
                     if (double.IsNaN(config.Settings.PluginPanelWidth) || config.Settings.PluginPanelWidth <= 0)
                     {
                         config.Settings.PluginPanelWidth = 300;
                     }
+                    config.RequestSaveDebounced();
+                }
+            }
+            catch { }
+        }
+
+        private void InnerPluginSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            SaveRightPanelHeights();
+        }
+
+        private void PluginSplitter_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            ToggleEditorCollapsed();
+        }
+
+        private void ToggleEditorCollapsed()
+        {
+            try
+            {
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                if (config?.Settings == null) return;
+                var collapsed = EditorColumn.Width.Value <= 0.1;
+                if (collapsed)
+                {
+                    // Expand to stored width or default
+                    EditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                    config.Settings.IsEditorCollapsed = false;
+                }
+                else
+                {
+                    EditorColumn.Width = new GridLength(0);
+                    config.Settings.IsEditorCollapsed = true;
+                }
+                config.RequestSaveDebounced();
+            }
+            catch { }
+        }
+
+        private void EnableRightPanelSplit(bool enable)
+        {
+            PluginPanelHostSecondary.Visibility = enable ? Visibility.Visible : Visibility.Collapsed;
+            InnerPluginSplitter.Visibility = enable ? Visibility.Visible : Visibility.Collapsed;
+            var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+            if (config?.Settings != null)
+            {
+                config.Settings.RightPanelSplitEnabled = enable;
+                config.RequestSaveDebounced();
+            }
+        }
+
+        private void SetRightPanelHeights(double top, double bottom)
+        {
+            if (top > 0 && bottom > 0)
+            {
+                PluginPanelContainer.RowDefinitions[0].Height = new GridLength(top, GridUnitType.Star);
+                PluginPanelContainer.RowDefinitions[2].Height = new GridLength(bottom, GridUnitType.Star);
+            }
+        }
+
+        private void SaveRightPanelHeights()
+        {
+            try
+            {
+                var top = PluginPanelContainer.RowDefinitions[0].ActualHeight;
+                var bottom = PluginPanelContainer.RowDefinitions[2].ActualHeight;
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                if (config?.Settings != null)
+                {
+                    config.Settings.RightPanelTopHeight = top;
+                    config.Settings.RightPanelBottomHeight = bottom;
                     config.RequestSaveDebounced();
                 }
             }
@@ -408,6 +524,16 @@ namespace NoteNest.UI
                 }
             }
             catch { }
+        }
+
+        private void ToggleEditorMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            ToggleEditorCollapsed();
+        }
+
+        private void ToggleEditorCommand_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            ToggleEditorCollapsed();
         }
 
         private void UpdateThemeMenuChecks()

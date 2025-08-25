@@ -10,6 +10,7 @@ namespace NoteNest.Core.Plugins
 	{
 		IReadOnlyList<IPlugin> LoadedPlugins { get; }
 		IPlugin ActivePlugin { get; }
+		event Action PluginsChanged;
 		Task<bool> LoadPluginAsync(Type pluginType);
 		Task<bool> LoadPluginAsync(IPlugin plugin);
 		Task UnloadPluginAsync(string pluginId);
@@ -29,6 +30,7 @@ namespace NoteNest.Core.Plugins
 
 		public IReadOnlyList<IPlugin> LoadedPlugins => _plugins.Values.ToList();
 		public IPlugin ActivePlugin => _activePlugin;
+		public event Action PluginsChanged;
 
 		public PluginManager(IPluginDataStore dataStore, IAppLogger logger = null)
 		{
@@ -80,6 +82,7 @@ namespace NoteNest.Core.Plugins
 				}
 
 				_logger?.Info($"Plugin loaded: {plugin.Name} v{plugin.Version}");
+				PluginsChanged?.Invoke();
 				return true;
 			}
 			catch (Exception ex)
@@ -113,6 +116,7 @@ namespace NoteNest.Core.Plugins
 
 				plugin.Dispose();
 				_logger?.Info($"Plugin unloaded: {plugin.Name}");
+				PluginsChanged?.Invoke();
 			}
 			catch (Exception ex)
 			{

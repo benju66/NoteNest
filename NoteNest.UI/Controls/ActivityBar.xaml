@@ -27,6 +27,14 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Button Padding="0" BorderThickness="0" Background="Transparent" Height="48" Command="{Binding DataContext.ActivatePluginCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}" ToolTip="{Binding Name}">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Open in Secondary" Command="{Binding DataContext.ActivatePluginSecondaryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"/>
+                                        <Separator/>
+                                        <MenuItem Header="Pin to Primary" Command="{Binding DataContext.PinPluginPrimaryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"/>
+                                        <MenuItem Header="Pin to Secondary" Command="{Binding DataContext.PinPluginSecondaryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"/>
+                                    </ContextMenu>
+                                </Button.ContextMenu>
                                 <TextBlock Text="{Binding Icon}" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Button>
                         </DataTemplate>

@@ -10,6 +10,7 @@ using NoteNest.Core.Services.Notes;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.Services.DragDrop;
 using NoteNest.Core.Plugins;
+using NoteNest.UI.Plugins.Todo.Services;
 
 namespace NoteNest.UI.Services
 {
@@ -90,6 +91,7 @@ namespace NoteNest.UI.Services
             // Plugin system services
             services.AddSingleton<IPluginDataStore, PluginDataStore>();
             services.AddSingleton<IPluginManager, PluginManager>();
+            services.AddSingleton<ITodoService, TodoService>();
 
             return services;
         }

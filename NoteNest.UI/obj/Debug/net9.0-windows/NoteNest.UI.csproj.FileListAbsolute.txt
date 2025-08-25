@@ -172,6 +172,7 @@ C:\NoteNest\NoteNest.UI\bin\Debug\net9.0-windows\NoteNest.Core.pdb
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.csproj.AssemblyReference.cache
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\ActivityBar.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Dialogs\InputDialog.baml
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Plugins\Todo\UI\TaskEditDialog.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Windows\FormatMigrationWindow.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Windows\MigrationWindow.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\App.baml
@@ -182,6 +183,8 @@ C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\SplitPaneView.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\SplitWorkspace.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Dialogs\InputDialog.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\MainWindow.g.cs
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Plugins\Todo\UI\TaskEditDialog.g.cs
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Plugins\Todo\UI\TodoPanel.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Windows\FormatMigrationWindow.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Windows\MigrationWindow.g.cs
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Windows\SettingsWindow.g.cs
@@ -194,6 +197,7 @@ C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\SplitContainer.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\SplitPaneView.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\SplitWorkspace.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\MainWindow.baml
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Plugins\Todo\UI\TodoPanel.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Windows\SettingsWindow.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.g.resources
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.GeneratedMSBuildEditorConfig.editorconfig

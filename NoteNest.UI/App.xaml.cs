@@ -82,13 +82,19 @@ namespace NoteNest.UI
                 }
                 catch { }
                 
-                // Load test plugin (Phase 2 validation)
+                // Load plugins
                 try
                 {
                     var pluginManager = ServiceProvider.GetService<IPluginManager>();
                     if (pluginManager != null)
                     {
                         await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.TestPlugin { IsEnabled = true });
+                        // Load Todo plugin via DI
+                        var todoService = ServiceProvider.GetService<NoteNest.UI.Plugins.Todo.Services.ITodoService>();
+                        if (todoService != null)
+                        {
+                            await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.Todo.TodoPlugin(todoService) { IsEnabled = true });
+                        }
                     }
                 }
                 catch { }

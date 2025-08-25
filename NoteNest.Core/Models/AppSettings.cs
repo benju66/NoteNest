@@ -63,6 +63,13 @@ namespace NoteNest.Core.Models
         public bool ShowActivityBar { get; set; } = true;
         public string LastActivePluginId { get; set; }
         public double PluginPanelWidth { get; set; } = 300;
+        public string SecondaryActivePluginId { get; set; }
+        public bool RightPanelSplitEnabled { get; set; } = false;
+        public double RightPanelTopHeight { get; set; } = 250;
+        public double RightPanelBottomHeight { get; set; } = 250;
+        public bool IsEditorCollapsed { get; set; } = false;
+        public double EditorColumnWidth { get; set; } = 1.0; // star size placeholder
+        public Dictionary<string, string> PluginPanelSlotByPluginId { get; set; } = new();
 
         // File watcher & caching configuration
         public int FileWatcherDebounceMs { get; set; } = 500;
