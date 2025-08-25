@@ -24,6 +24,11 @@
                         <ui:SymbolIcon Symbol="Setting"/>
                     </ui:NavigationViewItem.Icon>
                 </ui:NavigationViewItem>
+                <ui:NavigationViewItem Content="Activity Bar" Tag="ActivityBar">
+                    <ui:NavigationViewItem.Icon>
+                        <ui:SymbolIcon Symbol="ViewAll"/>
+                    </ui:NavigationViewItem.Icon>
+                </ui:NavigationViewItem>
                 <ui:NavigationViewItem Content="Editor" Tag="Editor">
                     <ui:NavigationViewItem.Icon>
                         <ui:SymbolIcon Symbol="Edit"/>
@@ -98,6 +103,63 @@
                             <Rectangle Width="40" Height="40" Fill="#E81123" RadiusX="4" RadiusY="4"/>
                             <Rectangle Width="40" Height="40" Fill="#0063B1" RadiusX="4" RadiusY="4"/>
                         </ui:GridView>
+
+                        <Separator Margin="0,16,0,8"/>
+                        <TextBlock Text="Activity Bar settings moved to the Activity Bar tab."/>
+                    </StackPanel>
+
+                    <!-- Activity Bar Settings Page -->
+                    <StackPanel x:Name="ActivityBarSettings" Visibility="Collapsed">
+                        <TextBlock Text="Activity Bar" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,16"/>
+
+                        <ui:ToggleSwitch Header="Show Activity Bar"
+                                         IsOn="{Binding ShowActivityBar}"/>
+
+                        <ui:NumberBox Header="Activity Bar width (px)"
+                                     Value="{Binding Settings.ActivityBarWidth}"
+                                     Minimum="36" Maximum="128"
+                                     Margin="0,8"/>
+
+                        <ui:ToggleSwitch Header="Collapse editor when a plugin opens"
+                                         IsOn="{Binding Settings.CollapseEditorWhenPluginOpens}"
+                                         Margin="0,8"/>
+
+                        <Separator Margin="16,16,0,12"/>
+                        <TextBlock Text="Plugins" Style="{StaticResource SubtitleTextBlockStyle}"/>
+
+                        <ItemsControl ItemsSource="{Binding PluginItems}" Margin="0,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="0,0,0,1" Padding="0,8,0,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Icon}" FontSize="16" Margin="0,0,8,0"/>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding Description}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                                            </StackPanel>
+                                            <CheckBox Grid.Column="2" Content="Enabled" IsChecked="{Binding IsEnabled, Mode=TwoWay}" Margin="8,0"/>
+                                            <CheckBox Grid.Column="3" Content="Visible" IsChecked="{Binding IsVisible, Mode=TwoWay}" Margin="8,0"/>
+                                            <ComboBox Grid.Column="4" SelectedItem="{Binding DefaultSlot, Mode=TwoWay}" Width="110" Margin="8,0">
+                                                <ComboBoxItem>Primary</ComboBoxItem>
+                                                <ComboBoxItem>Secondary</ComboBoxItem>
+                                            </ComboBox>
+                                            <StackPanel Grid.Column="5" Orientation="Horizontal" Margin="8,0,0,0">
+                                                <Button Content="▲" Width="28" Height="24" Command="{Binding DataContext.MovePluginUpCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"/>
+                                                <Button Content="▼" Width="28" Height="24" Margin="4,0,0,0" Command="{Binding DataContext.MovePluginDownCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}" CommandParameter="{Binding}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                     
                     <!-- Editor Settings Page -->

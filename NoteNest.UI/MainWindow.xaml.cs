@@ -14,23 +14,372 @@ using NoteNest.UI.Services.DragDrop;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.Core.Interfaces.Services;
+using NoteNest.Core.Plugins;
+using NoteNest.UI.ViewModels;
+using System.Windows.Input;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace NoteNest.UI
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, INotifyPropertyChanged
     {
+        public static readonly RoutedUICommand ToggleEditorCommand = new RoutedUICommand("ToggleEditor", nameof(ToggleEditorCommand), typeof(MainWindow));
+        public static readonly RoutedUICommand ToggleRightPanelCommand = new RoutedUICommand("ToggleRightPanel", nameof(ToggleRightPanelCommand), typeof(MainWindow));
+
+        private bool _isRightPanelVisible;
+        private double _lastRightPanelWidth = 320;
+
+        public bool IsRightPanelVisible
+        {
+            get => _isRightPanelVisible;
+            set
+            {
+                if (_isRightPanelVisible == value) return;
+                _isRightPanelVisible = value;
+                try
+                {
+                    UpdateRightPanelVisibility(_isRightPanelVisible);
+                }
+                catch { }
+                OnPropertyChanged(nameof(IsRightPanelVisible));
+            }
+        }
+
         public MainWindow()
         {
             InitializeComponent();
             UpdateThemeMenuChecks();
             AllowDrop = true;
+            try
+            {
+                // Ensure caption button area is not overlapped by our content
+                SourceInitialized += (_, __) => ApplyCaptionButtonsRightInset();
+                SizeChanged += (_, __) => ApplyCaptionButtonsRightInset();
+            }
+            catch { }
+            try
+            {
+                CommandBindings.Add(new CommandBinding(ToggleRightPanelCommand, (s, e) => IsRightPanelVisible = !IsRightPanelVisible));
+                InputBindings.Add(new KeyBinding(ToggleRightPanelCommand, new KeyGesture(Key.Oem3, ModifierKeys.Control))); // Ctrl+`
+            }
+            catch { }
 
             // Ensure NoteNestPanel uses the same DataContext as the window
             this.Loaded += (sender, e) =>
             {
                 if (MainPanel != null && DataContext != null)
                     MainPanel.DataContext = DataContext;
+
+                try
+                {
+                    var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    if (config?.Settings != null && FindName("ShowActivityBarMenuItem") is System.Windows.Controls.MenuItem mi)
+                    {
+                        mi.IsChecked = config.Settings.ShowActivityBar;
+                        ActivityBarControl.Visibility = config.Settings.ShowActivityBar
+                            ? Visibility.Visible
+                            : Visibility.Collapsed;
+                        try { ActivityBarControl.Width = Math.Max(36, config.Settings.ActivityBarWidth); } catch { }
+                        // Restore last known right panel width and visibility
+                        try
+                        {
+                            if (config.Settings.PluginPanelWidth > 0)
+                                _lastRightPanelWidth = config.Settings.PluginPanelWidth;
+                        }
+                        catch { }
+                        // Determine initial visibility based on plugin hosts/content
+                        IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && (_lastRightPanelWidth > 0);
+                        // Restore editor collapsed state
+                        if (config.Settings.IsEditorCollapsed)
+                        {
+                            EditorColumn.Width = new GridLength(0);
+                        }
+                        try
+                        {
+                            var pm = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IPluginManager)) as IPluginManager;
+                            if (pm != null)
+                            {
+                                var abvm = new ActivityBarViewModel(pm);
+                                abvm.PluginActivated += OnPluginActivated;
+                                ActivityBarControl.DataContext = abvm;
+
+                                // Restore last active plugin if any, using preferred slot when available
+                                var lastId = config.Settings.LastActivePluginId;
+                                if (!string.IsNullOrWhiteSpace(lastId))
+                                {
+                                    var plugin = pm.GetPlugin(lastId);
+                                    if (plugin != null)
+                                    {
+                                        var preferred = config.Settings.PluginPanelSlotByPluginId.TryGetValue(plugin.Id, out var slot) ? slot : "Primary";
+                                        OnPluginActivated(plugin, isSecondary: string.Equals(preferred, "Secondary", StringComparison.OrdinalIgnoreCase));
+                                    }
+                                }
+
+                                // Restore secondary plugin if split enabled
+                                if (config.Settings.RightPanelSplitEnabled)
+                                {
+                                    var secId = config.Settings.SecondaryActivePluginId;
+                                    if (!string.IsNullOrWhiteSpace(secId))
+                                    {
+                                        var splugin = pm.GetPlugin(secId);
+                                        if (splugin != null)
+                                        {
+                                            EnableRightPanelSplit(true);
+                                            OnPluginActivated(splugin, isSecondary:true);
+                                            SetRightPanelHeights(config.Settings.RightPanelTopHeight, config.Settings.RightPanelBottomHeight);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
             };
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged(string propertyName)
+        {
+            try { PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName)); } catch { }
+        }
+
+        private void ApplyCaptionButtonsRightInset()
+        {
+            try
+            {
+                if (PresentationSource.FromVisual(this) is HwndSource src && CustomTitleBar != null)
+                {
+                    var hwnd = src.Handle;
+                    if (GetCaptionButtonBounds(hwnd, out var bounds))
+                    {
+                        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX; // assume uniform
+                        double rightInset = bounds.Width / dpi + 6; // add small pad
+                        CustomTitleBar.Margin = new Thickness(0, 0, rightInset, 0);
+                        return;
+                    }
+                }
+            }
+            catch { }
+            // Fallback pad (~ caption buttons width)
+            CustomTitleBar.Margin = new Thickness(0, 0, 140, 0);
+        }
+
+        private static bool GetCaptionButtonBounds(IntPtr hwnd, out System.Drawing.Rectangle rect)
+        {
+            const int DWMWA_CAPTION_BUTTON_BOUNDS = 41;
+            int hr = DwmGetWindowAttribute(hwnd, DWMWA_CAPTION_BUTTON_BOUNDS, out rect, Marshal.SizeOf<System.Drawing.Rectangle>());
+            return hr == 0 && rect.Width > 0;
+        }
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out System.Drawing.Rectangle pvAttribute, int cbAttribute);
+
+        private void UpdateRightPanelVisibility(bool visible)
+        {
+            var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+            if (visible)
+            {
+                // Ensure container visible
+                PluginPanelContainer.Visibility = Visibility.Visible;
+                PluginSplitter.Visibility = Visibility.Visible;
+                // Restore width (from config or last cached)
+                var target = Math.Max(200, config?.Settings?.PluginPanelWidth ?? _lastRightPanelWidth);
+                if (double.IsNaN(target) || target <= 0) target = 320;
+                _lastRightPanelWidth = target;
+                PluginColumn.Width = new GridLength(target);
+            }
+            else
+            {
+                // Cache current width for restore
+                var w = PluginColumn.ActualWidth;
+                if (!double.IsNaN(w) && w > 0) _lastRightPanelWidth = w;
+                PluginSplitter.Visibility = Visibility.Collapsed;
+                PluginPanelContainer.Visibility = Visibility.Collapsed;
+                PluginColumn.Width = new GridLength(0);
+            }
+            try
+            {
+                if (config?.Settings != null)
+                {
+                    // Persist width when visible
+                    if (visible)
+                    {
+                        config.Settings.PluginPanelWidth = _lastRightPanelWidth;
+                    }
+                    config.RequestSaveDebounced();
+                }
+            }
+            catch { }
+        }
+
+        private void OnPluginActivated(IPlugin plugin) => OnPluginActivated(plugin, false);
+
+        private void OnPluginActivated(IPlugin plugin, bool isSecondary)
+        {
+            if (plugin == null)
+            {
+                // Hide panel when no plugin (Explorer) selected
+                PluginPanelHostPrimary.Content = null;
+                PluginPanelHostPrimary.Visibility = Visibility.Collapsed;
+                PluginPanelHostSecondary.Content = null;
+                PluginPanelHostSecondary.Visibility = Visibility.Collapsed;
+                PluginSplitter.Visibility = Visibility.Collapsed;
+                PluginPanelContainer.Visibility = Visibility.Collapsed;
+                // Collapse plugin column so editor uses full width
+                PluginColumn.Width = new GridLength(0);
+                IsRightPanelVisible = false; // sync toggle
+                return;
+            }
+            var panel = plugin.GetPanel();
+            if (panel != null)
+            {
+                if (isSecondary)
+                {
+                    PluginPanelHostSecondary.Content = panel.Content;
+                    PluginPanelHostSecondary.Visibility = Visibility.Visible;
+                    InnerPluginSplitter.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    PluginPanelHostPrimary.Content = panel.Content;
+                    PluginPanelHostPrimary.Visibility = Visibility.Visible;
+                }
+                PluginPanelContainer.Visibility = Visibility.Visible;
+                PluginSplitter.Visibility = Visibility.Visible;
+                // Ensure plugin column has visible width
+                try
+                {
+                    var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    var targetWidth = (config?.Settings?.PluginPanelWidth ?? 0) > 0 ? config.Settings.PluginPanelWidth : 300;
+                    if (PluginColumn.Width.Value <= 0.1)
+                    {
+                        PluginColumn.Width = new GridLength(targetWidth);
+                    }
+                    IsRightPanelVisible = true; // sync toggle
+                    if (config?.Settings?.CollapseEditorWhenPluginOpens == true)
+                    {
+                        EditorColumn.Width = new GridLength(0);
+                        config.Settings.IsEditorCollapsed = true;
+                        config.RequestSaveDebounced();
+                    }
+                }
+                catch { }
+
+                // Persist active plugin id
+                try
+                {
+                    var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    if (config?.Settings != null)
+                    {
+                        if (isSecondary)
+                            config.Settings.SecondaryActivePluginId = plugin.Id;
+                        else
+                            config.Settings.LastActivePluginId = plugin.Id;
+                        // Persist per-plugin preferred slot
+                        config.Settings.PluginPanelSlotByPluginId[plugin.Id] = isSecondary ? "Secondary" : "Primary";
+                        config.RequestSaveDebounced();
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private void PluginSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            try
+            {
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                if (config?.Settings != null)
+                {
+                    var w = PluginColumn.ActualWidth;
+                    if (double.IsNaN(w) || w <= 0) w = 300;
+                    config.Settings.PluginPanelWidth = w;
+                    _lastRightPanelWidth = w;
+                    config.RequestSaveDebounced();
+                }
+                // update visible flag based on actual width/visibility
+                IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && PluginColumn.Width.Value > 0.1;
+            }
+            catch { }
+        }
+
+        private void InnerPluginSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            SaveRightPanelHeights();
+        }
+
+        private void PluginSplitter_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            ToggleEditorCollapsed();
+        }
+
+        private void ToggleEditorCollapsed()
+        {
+            try
+            {
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                if (config?.Settings == null) return;
+                var collapsed = EditorColumn.Width.Value <= 0.1;
+                if (collapsed)
+                {
+                    // Expand to stored width or default
+                    EditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                    config.Settings.IsEditorCollapsed = false;
+                }
+                else
+                {
+                    EditorColumn.Width = new GridLength(0);
+                    config.Settings.IsEditorCollapsed = true;
+                }
+                config.RequestSaveDebounced();
+            }
+            catch { }
+        }
+
+        private void EnableRightPanelSplit(bool enable)
+        {
+            PluginPanelHostSecondary.Visibility = enable ? Visibility.Visible : Visibility.Collapsed;
+            InnerPluginSplitter.Visibility = enable ? Visibility.Visible : Visibility.Collapsed;
+            var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+            if (config?.Settings != null)
+            {
+                config.Settings.RightPanelSplitEnabled = enable;
+                config.RequestSaveDebounced();
+            }
+            // keep toggle in sync if container is visible
+            IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && PluginColumn.Width.Value > 0.1;
+        }
+
+        private void SetRightPanelHeights(double top, double bottom)
+        {
+            if (top > 0 && bottom > 0)
+            {
+                PluginPanelContainer.RowDefinitions[0].Height = new GridLength(top, GridUnitType.Star);
+                PluginPanelContainer.RowDefinitions[2].Height = new GridLength(bottom, GridUnitType.Star);
+            }
+            IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && PluginColumn.Width.Value > 0.1;
+        }
+
+        private void SaveRightPanelHeights()
+        {
+            try
+            {
+                var top = PluginPanelContainer.RowDefinitions[0].ActualHeight;
+                var bottom = PluginPanelContainer.RowDefinitions[2].ActualHeight;
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                if (config?.Settings != null)
+                {
+                    config.Settings.RightPanelTopHeight = top;
+                    config.Settings.RightPanelBottomHeight = bottom;
+                    config.RequestSaveDebounced();
+                }
+            }
+            catch { }
+            IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && PluginColumn.Width.Value > 0.1;
         }
 
         protected override void OnDragEnter(DragEventArgs e)
@@ -198,7 +547,7 @@ namespace NoteNest.UI
             MainPanel?.ViewModel?.NewCategoryCommand.Execute(null);
         }
 
-        private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+        public void OpenSettings()
         {
             var viewModel = MainPanel?.ViewModel;
             var configService = viewModel?.GetConfigService();
@@ -212,11 +561,12 @@ namespace NoteNest.UI
             
             var win = new SettingsWindow(configService);
             win.Owner = this;
-            if (win.ShowDialog() == true)
-            {
-                // Settings saved - user will restart if migration occurred
-                // No need to reload categories here
-            }
+            win.ShowDialog();
+        }
+
+        private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            OpenSettings();
         }
 
         private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
@@ -302,6 +652,31 @@ namespace NoteNest.UI
         {
             ThemeService.SetTheme(AppTheme.System);
             UpdateThemeMenuChecks();
+        }
+
+        private void ShowActivityBarMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                if (config?.Settings != null && sender is System.Windows.Controls.MenuItem mi)
+                {
+                    config.Settings.ShowActivityBar = mi.IsChecked;
+                    config.RequestSaveDebounced();
+                    ActivityBarControl.Visibility = mi.IsChecked ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+            catch { }
+        }
+
+        private void ToggleEditorMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            ToggleEditorCollapsed();
+        }
+
+        private void ToggleEditorCommand_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            ToggleEditorCollapsed();
         }
 
         private void UpdateThemeMenuChecks()

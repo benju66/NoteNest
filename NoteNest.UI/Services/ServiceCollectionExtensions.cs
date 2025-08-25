@@ -1,11 +1,16 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Windows;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Implementation;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Services.Safety;
+using NoteNest.Core.Services.Notes;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.Services.DragDrop;
+using NoteNest.Core.Plugins;
+using NoteNest.UI.Plugins.Todo.Services;
 
 namespace NoteNest.UI.Services
 {
@@ -36,8 +41,22 @@ namespace NoteNest.UI.Services
                 sp.GetRequiredService<ConfigurationService>(),
                 sp.GetRequiredService<IAppLogger>(),
                 sp.GetService<IEventBus>(),
-                sp.GetRequiredService<IMarkdownService>())); // Core functionality
+                sp.GetRequiredService<IMarkdownService>(),
+                sp.GetService<SafeFileService>(),
+                sp.GetService<INoteStorageService>(),
+                sp.GetService<IUserNotificationService>())); // Core functionality
             services.AddSingleton<IDialogService, DialogService>(); // UI interaction
+            services.AddSingleton<IUserNotificationService>(sp =>
+            {
+                var logger = sp.GetService<IAppLogger>();
+                // MainWindow may not be created yet; service tolerates null
+                return new UserNotificationService(Application.Current?.MainWindow, logger);
+            });
+            services.AddSingleton<SafeFileService>();
+            services.AddSingleton<INoteStorageService>(sp => new NoteStorageService(
+                sp.GetRequiredService<IFileSystemProvider>(),
+                sp.GetService<SafeFileService>(),
+                sp.GetService<IAppLogger>()));
 
             // Workspace Services (Singleton for performance)
             services.AddSingleton<ContentCache>(sp =>
@@ -68,6 +87,11 @@ namespace NoteNest.UI.Services
 
             // NOTE: WorkspaceViewModel is created lazily in MainViewModel
             // This maintains the performance optimization while ensuring proper DI
+
+            // Plugin system services
+            services.AddSingleton<IPluginDataStore, PluginDataStore>();
+            services.AddSingleton<IPluginManager, PluginManager>();
+            services.AddSingleton<ITodoService, TodoService>();
 
             return services;
         }

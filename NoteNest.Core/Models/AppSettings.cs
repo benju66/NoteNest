@@ -60,6 +60,23 @@ namespace NoteNest.Core.Models
         public bool AutoSaveOnFocusLost { get; set; } = true;
         public int AutoSaveIdleMs { get; set; } = 2000;
         public bool ShowTreeDirtyDot { get; set; } = true;
+        public bool ShowActivityBar { get; set; } = true;
+        public string LastActivePluginId { get; set; }
+        public double PluginPanelWidth { get; set; } = 300;
+        public string SecondaryActivePluginId { get; set; }
+        public bool RightPanelSplitEnabled { get; set; } = false;
+        public double RightPanelTopHeight { get; set; } = 250;
+        public double RightPanelBottomHeight { get; set; } = 250;
+        public bool IsEditorCollapsed { get; set; } = false;
+        public double EditorColumnWidth { get; set; } = 1.0; // star size placeholder
+        public Dictionary<string, string> PluginPanelSlotByPluginId { get; set; } = new();
+
+        // Activity Bar settings and plugin management
+        public double ActivityBarWidth { get; set; } = 48;
+        public List<string> EnabledPluginIds { get; set; } = new();
+        public List<string> VisiblePluginIds { get; set; } = new();
+        public List<string> PluginOrder { get; set; } = new();
+        public bool CollapseEditorWhenPluginOpens { get; set; } = false;
 
         // File watcher & caching configuration
         public int FileWatcherDebounceMs { get; set; } = 500;
@@ -79,6 +96,9 @@ namespace NoteNest.Core.Models
             // Initialize collections/objects to prevent null reference issues.
             RecentFiles = new List<string>();
             WindowSettings = new WindowSettings();
+            EnabledPluginIds = new List<string>();
+            VisiblePluginIds = new List<string>();
+            PluginOrder = new List<string>();
             // Do not set paths or other defaults here.
         }
     }

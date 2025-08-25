@@ -2,22 +2,49 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.modernwpf.com/2019"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:conv="clr-namespace:NoteNest.UI.Converters"
+        xmlns:local="clr-namespace:NoteNest.UI"
         xmlns:controls="clr-namespace:NoteNest.UI.Controls"
         ui:WindowHelper.UseModernWindowStyle="True"
-        Title="NoteNest" Height="700" Width="1200"
+        ui:TitleBar.ExtendViewIntoTitleBar="True"
+        Title=" " Icon="pack://application:,,,/NoteNest.ico" Height="700" Width="1200"
         WindowStartupLocation="CenterScreen"
         MinHeight="500" MinWidth="800"
         Closing="Window_Closing">
     
-    <!-- Option 1: Remove ExtendViewIntoTitleBar for standard menu behavior -->
+    <Window.CommandBindings>
+        <CommandBinding Command="{x:Static local:MainWindow.ToggleEditorCommand}"
+                        Executed="ToggleEditorCommand_Executed"/>
+    </Window.CommandBindings>
+    <Window.InputBindings>
+        <KeyBinding Command="{x:Static local:MainWindow.ToggleEditorCommand}" Gesture="Ctrl+Alt+E"/>
+    </Window.InputBindings>
+
     <Grid>
+        <Grid.Resources>
+            <conv:BoolToStringConverter x:Key="BoolToStringConverter"/>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        
-        <!-- Standard Menu Bar (not in title bar) -->
-        <Menu Grid.Row="0" VerticalAlignment="Top">
+
+        <!-- Custom Title Bar: icon + main menu placed in caption area -->
+        <Grid Grid.Row="0" x:Name="CustomTitleBar"
+              shell:WindowChrome.IsHitTestVisibleInChrome="False"
+              Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Image Source="pack://application:,,,/NoteNest.ico"
+                   Width="16" Height="16"
+                   Margin="6,4,8,4"
+                   VerticalAlignment="Center"/>
+            <Menu Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" shell:WindowChrome.IsHitTestVisibleInChrome="True">
             <MenuItem Header="_File">
                 <MenuItem Header="_New Note" InputGestureText="Ctrl+N" Click="NewNoteMenuItem_Click">
                     <MenuItem.Icon>
@@ -112,6 +139,9 @@
                     <MenuItem Header="_Dark" Name="DarkThemeMenuItem" Click="DarkTheme_Click" IsCheckable="True"/>
                     <MenuItem Header="_System" Name="SystemThemeMenuItem" Click="SystemTheme_Click" IsCheckable="True" IsChecked="True"/>
                 </MenuItem>
+                <Separator/>
+                <MenuItem Header="Show _Activity Bar" Name="ShowActivityBarMenuItem" IsCheckable="True" Click="ShowActivityBarMenuItem_Click"/>
+                <MenuItem Header="Toggle _Editor" InputGestureText="Ctrl+Alt+E" Click="ToggleEditorMenuItem_Click"/>
             </MenuItem>
             
             <MenuItem Header="_Help">
@@ -126,9 +156,106 @@
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
-        </Menu>
+            </Menu>
+
+            <!-- Right panel toggle just left of caption buttons -->
+            <ToggleButton x:Name="RightPanelToggle"
+                          Grid.Column="3"
+                          Width="28" Height="28"
+                          Margin="6,2,6,2"
+                          VerticalAlignment="Center"
+                          shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                          Background="Transparent"
+                          BorderBrush="Transparent"
+                          IsChecked="{Binding IsRightPanelVisible, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                          ToolTip="{Binding IsRightPanelVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToStringConverter}, ConverterParameter=Hide right panel|Show right panel}"
+                          AutomationProperties.Name="Toggle right panel"
+                          ToolTipService.ShowDuration="5000">
+                <TextBlock
+                           Text="{Binding IsRightPanelVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToStringConverter}, ConverterParameter=&#xE75F;|&#xE75F;}"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Value="False">
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </ToggleButton>
+            
+            <!-- Drag/double-click spacer region between menu and toggle -->
+            <Border Grid.Column="2"
+                    Background="Transparent"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="False"/>
+        </Grid>
         
-        <!-- Main Panel -->
-        <controls:NoteNestPanel Grid.Row="1" x:Name="MainPanel" />
+        <!-- Main Layout with optional Activity Bar -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition x:Name="EditorColumn" Width="*"/>
+                <ColumnDefinition Width="Auto"/> <!-- Splitter column -->
+                <ColumnDefinition x:Name="PluginColumn" Width="0"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Activity Bar: visibility bound in code-behind to settings -->
+            <controls:ActivityBar x:Name="ActivityBarControl"
+                                  Grid.Column="0"
+                                  Visibility="Collapsed"/>
+
+            <!-- Main Panel -->
+            <controls:NoteNestPanel Grid.Column="1" x:Name="MainPanel" />
+
+            <!-- Splitter between main content and plugin panel -->
+            <GridSplitter Grid.Column="2"
+                          HorizontalAlignment="Left"
+                          Width="4"
+                          Background="Transparent"
+                          ShowsPreview="True"
+                          ResizeDirection="Columns"
+                          ResizeBehavior="PreviousAndNext"
+                          MouseDoubleClick="PluginSplitter_MouseDoubleClick"
+                          DragCompleted="PluginSplitter_DragCompleted"
+                          Visibility="Collapsed"
+                          x:Name="PluginSplitter"/>
+
+            <!-- Plugin Panel Container: supports single or split (top/bottom) plugin hosts -->
+            <Grid Grid.Column="3"
+                  x:Name="PluginPanelContainer"
+                  MinWidth="200"
+                  Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Primary (top) plugin host -->
+                <ContentControl Grid.Row="0"
+                                x:Name="PluginPanelHostPrimary"/>
+
+                <!-- Inner splitter (collapsed when not split) -->
+                <GridSplitter Grid.Row="1"
+                              x:Name="InnerPluginSplitter"
+                              Height="4"
+                              HorizontalAlignment="Stretch"
+                              Background="Transparent"
+                              ShowsPreview="True"
+                              Visibility="Collapsed"
+                              DragCompleted="InnerPluginSplitter_DragCompleted"/>
+
+                <!-- Secondary (bottom) plugin host -->
+                <ContentControl Grid.Row="2"
+                                x:Name="PluginPanelHostSecondary"
+                                Visibility="Collapsed"/>
+            </Grid>
+        </Grid>
     </Grid>
 </Window>

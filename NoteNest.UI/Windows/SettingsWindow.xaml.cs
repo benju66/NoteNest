@@ -25,6 +25,7 @@ namespace NoteNest.UI.Windows
                 // Hide all pages
                 GeneralSettings.Visibility = Visibility.Collapsed;
                 AppearanceSettings.Visibility = Visibility.Collapsed;
+                ActivityBarSettings.Visibility = Visibility.Collapsed;
                 EditorSettings.Visibility = Visibility.Collapsed;
                 FilesSettings.Visibility = Visibility.Collapsed;
                 StorageSettings.Visibility = Visibility.Collapsed;
@@ -39,6 +40,9 @@ namespace NoteNest.UI.Windows
                         break;
                     case "Appearance":
                         AppearanceSettings.Visibility = Visibility.Visible;
+                        break;
+                    case "ActivityBar":
+                        ActivityBarSettings.Visibility = Visibility.Visible;
                         break;
                     case "Editor":
                         EditorSettings.Visibility = Visibility.Visible;

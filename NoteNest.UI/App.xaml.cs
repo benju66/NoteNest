@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Services;
 using NoteNest.UI.ViewModels;
+using NoteNest.Core.Plugins;
 
 namespace NoteNest.UI
 {
@@ -18,7 +19,7 @@ namespace NoteNest.UI
 
         public IServiceProvider ServiceProvider { get; private set; }
 
-        protected override void OnStartup(StartupEventArgs e)
+        protected override async void OnStartup(StartupEventArgs e)
         {
             _startupTimer = Stopwatch.StartNew();
             
@@ -74,6 +75,30 @@ namespace NoteNest.UI
                 _startupTimer.Stop();
                 _logger.Info($"App started in {_startupTimer.ElapsedMilliseconds}ms");
                 
+                try
+                {
+                    var metricsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup_metrics.txt");
+                    File.AppendAllText(metricsPath, $"{DateTime.Now}: {_startupTimer.ElapsedMilliseconds}ms{Environment.NewLine}");
+                }
+                catch { }
+                
+                // Load plugins
+                try
+                {
+                    var pluginManager = ServiceProvider.GetService<IPluginManager>();
+                    if (pluginManager != null)
+                    {
+                        await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.TestPlugin { IsEnabled = true });
+                        // Load Todo plugin via DI
+                        var todoService = ServiceProvider.GetService<NoteNest.UI.Plugins.Todo.Services.ITodoService>();
+                        if (todoService != null)
+                        {
+                            await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.Todo.TodoPlugin(todoService) { IsEnabled = true });
+                        }
+                    }
+                }
+                catch { }
+
                 // Setup exception handling after startup
                 SetupExceptionHandling();
             }

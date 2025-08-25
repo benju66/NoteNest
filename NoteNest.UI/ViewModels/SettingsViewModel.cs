@@ -6,6 +6,10 @@ using Microsoft.Win32;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.UI.Commands;
+using System.Collections.ObjectModel;
+using NoteNest.Core.Plugins;
+using NoteNest.Core.Events;
+using System.Linq;
 
 namespace NoteNest.UI.ViewModels
 {
@@ -17,6 +21,11 @@ namespace NoteNest.UI.ViewModels
         private bool _showLeftPanelOnStartup = true;
         private bool _showRightPanelOnStartup = false;
         private StorageLocationService _storageService;
+        private bool _showActivityBar;
+        public ObservableCollection<PluginItemViewModel> PluginItems { get; } = new ObservableCollection<PluginItemViewModel>();
+        private readonly IPluginManager _pluginManager;
+        public ICommand MovePluginUpCommand { get; }
+        public ICommand MovePluginDownCommand { get; }
 
         public AppSettings Settings
         {
@@ -46,10 +55,88 @@ namespace NoteNest.UI.ViewModels
             _originalSettings = configService.Settings ?? new AppSettings();
             _settings = CloneSettings(_originalSettings);
             _storageService = new StorageLocationService();
+            _showActivityBar = _settings.ShowActivityBar;
+            _pluginManager = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IPluginManager)) as IPluginManager;
+            try { LoadPluginsIntoVm(); } catch { }
+
+            MovePluginUpCommand = new RelayCommand<PluginItemViewModel>(p => MovePlugin(p, -1));
+            MovePluginDownCommand = new RelayCommand<PluginItemViewModel>(p => MovePlugin(p, +1));
 
             BrowseDefaultPathCommand = new RelayCommand(_ => BrowseDefaultPath());
             BrowseMetadataPathCommand = new RelayCommand(_ => BrowseMetadataPath());
             BrowseCustomPathCommand = new RelayCommand(_ => BrowseCustomPath());
+        }
+
+        private void LoadPluginsIntoVm()
+        {
+            PluginItems.Clear();
+            if (_pluginManager == null) return;
+            var list = new System.Collections.Generic.List<IPlugin>(_pluginManager.LoadedPlugins);
+            // Seed order if empty
+            if (_settings.PluginOrder == null) _settings.PluginOrder = new System.Collections.Generic.List<string>();
+            if (_settings.PluginOrder.Count == 0)
+            {
+                _settings.PluginOrder.AddRange(list.ConvertAll(p => p.Id));
+            }
+            else
+            {
+                list.Sort((a,b) =>
+                {
+                    int ia = _settings.PluginOrder.IndexOf(a.Id);
+                    int ib = _settings.PluginOrder.IndexOf(b.Id);
+                    if (ia < 0) ia = int.MaxValue;
+                    if (ib < 0) ib = int.MaxValue;
+                    return ia.CompareTo(ib);
+                });
+            }
+            foreach (var p in list)
+            {
+                var vm = new PluginItemViewModel(p, _settings);
+                vm.PropertyChanged += (s, e) =>
+                {
+                    if (e.PropertyName == nameof(PluginItemViewModel.IsEnabled))
+                    {
+                        try
+                        {
+                            if (vm.IsEnabled) _pluginManager.LoadPluginAsync(p.GetType());
+                            else _pluginManager.UnloadPluginAsync(p.Id);
+                        }
+                        catch { }
+                    }
+                };
+                PluginItems.Add(vm);
+            }
+        }
+
+        private void MovePlugin(PluginItemViewModel item, int delta)
+        {
+            if (item == null) return;
+            int index = PluginItems.IndexOf(item);
+            if (index < 0) return;
+            int newIndex = index + delta;
+            if (newIndex < 0 || newIndex >= PluginItems.Count) return;
+            PluginItems.Move(index, newIndex);
+            // Update settings order to match
+            if (_settings.PluginOrder == null) _settings.PluginOrder = new System.Collections.Generic.List<string>();
+            _settings.PluginOrder.Clear();
+            foreach (var vm in PluginItems)
+            {
+                _settings.PluginOrder.Add(vm.Id);
+            }
+            // Notify ActivityBar to refresh when saved via OK
+        }
+
+        public bool ShowActivityBar
+        {
+            get => _showActivityBar;
+            set
+            {
+                if (SetProperty(ref _showActivityBar, value))
+                {
+                    Settings.ShowActivityBar = value;
+                    OnPropertyChanged(nameof(Settings));
+                }
+            }
         }
 
         private void BrowseDefaultPath()
@@ -216,6 +303,17 @@ namespace NoteNest.UI.ViewModels
             NoteNest.Core.Services.PathService.RootPath = _settings.DefaultNotePath;
 
             OnPropertyChanged(nameof(CurrentStoragePath));
+
+            // Broadcast settings changed so ActivityBar can refresh ordering/visibility
+            try
+            {
+                var bus = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(Core.Services.IEventBus)) as Core.Services.IEventBus;
+                if (bus != null)
+                {
+                    await bus.PublishAsync(new AppSettingsChangedEvent());
+                }
+            }
+            catch { }
         }
 
         public void RefreshStorageProperties()
@@ -378,6 +476,100 @@ namespace NoteNest.UI.ViewModels
                 target.WindowSettings.Left = source.WindowSettings.Left;
                 target.WindowSettings.Top = source.WindowSettings.Top;
                 target.WindowSettings.IsMaximized = source.WindowSettings.IsMaximized;
+            }
+        }
+
+        public class PluginItemViewModel : ViewModelBase
+        {
+            private readonly IPlugin _plugin;
+            private readonly AppSettings _settings;
+
+            public PluginItemViewModel(IPlugin plugin, AppSettings settings)
+            {
+                _plugin = plugin;
+                _settings = settings;
+                _isEnabled = plugin.IsEnabled || (_settings.EnabledPluginIds?.Contains(plugin.Id) == true);
+                _isVisible = _settings.VisiblePluginIds?.Count == 0 || _settings.VisiblePluginIds.Contains(plugin.Id);
+                _defaultSlot = settings.PluginPanelSlotByPluginId != null && settings.PluginPanelSlotByPluginId.TryGetValue(plugin.Id, out var slot)
+                    ? (slot?.Equals("Secondary", StringComparison.OrdinalIgnoreCase) == true ? "Secondary" : "Primary")
+                    : "Primary";
+            }
+
+            public string Id => _plugin.Id;
+            public string Name => _plugin.Name;
+            public string Description => _plugin.Description;
+            public string Icon => _plugin.Icon;
+
+            private bool _isEnabled;
+            public bool IsEnabled
+            {
+                get => _isEnabled;
+                set
+                {
+                    if (SetProperty(ref _isEnabled, value))
+                    {
+                        if (value)
+                        {
+                            if (!_settings.EnabledPluginIds.Contains(_plugin.Id))
+                                _settings.EnabledPluginIds.Add(_plugin.Id);
+                        }
+                        else
+                        {
+                            _settings.EnabledPluginIds.Remove(_plugin.Id);
+                        }
+                    }
+                }
+            }
+
+            private bool _isVisible;
+            public bool IsVisible
+            {
+                get => _isVisible;
+                set
+                {
+                    if (SetProperty(ref _isVisible, value))
+                    {
+                        if (_settings.VisiblePluginIds == null)
+                            _settings.VisiblePluginIds = new System.Collections.Generic.List<string>();
+                        // If visibility list is empty, initialize to current loaded plugins (explicit mode)
+                        if (_settings.VisiblePluginIds.Count == 0)
+                        {
+                            var pm = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IPluginManager)) as IPluginManager;
+                            if (pm != null)
+                            {
+                                foreach (var pid in pm.LoadedPlugins.Select(p => p.Id))
+                                {
+                                    if (!_settings.VisiblePluginIds.Contains(pid))
+                                        _settings.VisiblePluginIds.Add(pid);
+                                }
+                            }
+                        }
+                        if (value)
+                        {
+                            if (!_settings.VisiblePluginIds.Contains(_plugin.Id))
+                                _settings.VisiblePluginIds.Add(_plugin.Id);
+                        }
+                        else
+                        {
+                            _settings.VisiblePluginIds.Remove(_plugin.Id);
+                        }
+                    }
+                }
+            }
+
+            private string _defaultSlot;
+            public string DefaultSlot
+            {
+                get => _defaultSlot;
+                set
+                {
+                    if (SetProperty(ref _defaultSlot, value))
+                    {
+                        if (_settings.PluginPanelSlotByPluginId == null)
+                            _settings.PluginPanelSlotByPluginId = new System.Collections.Generic.Dictionary<string, string>();
+                        _settings.PluginPanelSlotByPluginId[_plugin.Id] = value;
+                    }
+                }
             }
         }
     }
