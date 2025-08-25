@@ -23,11 +23,37 @@ namespace NoteNest.UI
     public partial class MainWindow : Window
     {
         public static readonly RoutedUICommand ToggleEditorCommand = new RoutedUICommand("ToggleEditor", nameof(ToggleEditorCommand), typeof(MainWindow));
+        public static readonly RoutedUICommand ToggleRightPanelCommand = new RoutedUICommand("ToggleRightPanel", nameof(ToggleRightPanelCommand), typeof(MainWindow));
+
+        private bool _isRightPanelVisible;
+        private double _lastRightPanelWidth = 320;
+
+        public bool IsRightPanelVisible
+        {
+            get => _isRightPanelVisible;
+            set
+            {
+                if (_isRightPanelVisible == value) return;
+                _isRightPanelVisible = value;
+                try
+                {
+                    UpdateRightPanelVisibility(_isRightPanelVisible);
+                }
+                catch { }
+            }
+        }
+
         public MainWindow()
         {
             InitializeComponent();
             UpdateThemeMenuChecks();
             AllowDrop = true;
+            try
+            {
+                CommandBindings.Add(new CommandBinding(ToggleRightPanelCommand, (s, e) => IsRightPanelVisible = !IsRightPanelVisible));
+                InputBindings.Add(new KeyBinding(ToggleRightPanelCommand, new KeyGesture(Key.Oem3, ModifierKeys.Control))); // Ctrl+`
+            }
+            catch { }
 
             // Ensure NoteNestPanel uses the same DataContext as the window
             this.Loaded += (sender, e) =>
@@ -45,7 +71,15 @@ namespace NoteNest.UI
                             ? Visibility.Visible
                             : Visibility.Collapsed;
                         try { ActivityBarControl.Width = Math.Max(36, config.Settings.ActivityBarWidth); } catch { }
-                        // Restore last active plugin(s); plugin column width will be applied when panel is shown
+                        // Restore last known right panel width and visibility
+                        try
+                        {
+                            if (config.Settings.PluginPanelWidth > 0)
+                                _lastRightPanelWidth = config.Settings.PluginPanelWidth;
+                        }
+                        catch { }
+                        // Determine initial visibility based on plugin hosts/content
+                        IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && (_lastRightPanelWidth > 0);
                         // Restore editor collapsed state
                         if (config.Settings.IsEditorCollapsed)
                         {
@@ -96,6 +130,44 @@ namespace NoteNest.UI
             };
         }
 
+        private void UpdateRightPanelVisibility(bool visible)
+        {
+            var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+            if (visible)
+            {
+                // Ensure container visible
+                PluginPanelContainer.Visibility = Visibility.Visible;
+                PluginSplitter.Visibility = Visibility.Visible;
+                // Restore width (from config or last cached)
+                var target = Math.Max(200, config?.Settings?.PluginPanelWidth ?? _lastRightPanelWidth);
+                if (double.IsNaN(target) || target <= 0) target = 320;
+                _lastRightPanelWidth = target;
+                PluginColumn.Width = new GridLength(target);
+            }
+            else
+            {
+                // Cache current width for restore
+                var w = PluginColumn.ActualWidth;
+                if (!double.IsNaN(w) && w > 0) _lastRightPanelWidth = w;
+                PluginSplitter.Visibility = Visibility.Collapsed;
+                PluginPanelContainer.Visibility = Visibility.Collapsed;
+                PluginColumn.Width = new GridLength(0);
+            }
+            try
+            {
+                if (config?.Settings != null)
+                {
+                    // Persist width when visible
+                    if (visible)
+                    {
+                        config.Settings.PluginPanelWidth = _lastRightPanelWidth;
+                    }
+                    config.RequestSaveDebounced();
+                }
+            }
+            catch { }
+        }
+
         private void OnPluginActivated(IPlugin plugin) => OnPluginActivated(plugin, false);
 
         private void OnPluginActivated(IPlugin plugin, bool isSecondary)
@@ -111,6 +183,7 @@ namespace NoteNest.UI
                 PluginPanelContainer.Visibility = Visibility.Collapsed;
                 // Collapse plugin column so editor uses full width
                 PluginColumn.Width = new GridLength(0);
+                IsRightPanelVisible = false; // sync toggle
                 return;
             }
             var panel = plugin.GetPanel();
@@ -138,6 +211,7 @@ namespace NoteNest.UI
                     {
                         PluginColumn.Width = new GridLength(targetWidth);
                     }
+                    IsRightPanelVisible = true; // sync toggle
                     if (config?.Settings?.CollapseEditorWhenPluginOpens == true)
                     {
                         EditorColumn.Width = new GridLength(0);
@@ -176,6 +250,7 @@ namespace NoteNest.UI
                     var w = PluginColumn.ActualWidth;
                     if (double.IsNaN(w) || w <= 0) w = 300;
                     config.Settings.PluginPanelWidth = w;
+                    _lastRightPanelWidth = w;
                     config.RequestSaveDebounced();
                 }
             }

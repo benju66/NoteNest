@@ -32,13 +32,15 @@
               Background="Transparent">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Image Source="pack://application:,,,/NoteNest.ico"
                    Width="16" Height="16"
                    Margin="6,4,8,4"
                    VerticalAlignment="Center"/>
-            <Menu Grid.Column="1" VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+            <Menu Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" shell:WindowChrome.IsHitTestVisibleInChrome="True">
             <MenuItem Header="_File">
                 <MenuItem Header="_New Note" InputGestureText="Ctrl+N" Click="NewNoteMenuItem_Click">
                     <MenuItem.Icon>
@@ -151,6 +153,30 @@
                 </MenuItem>
             </MenuItem>
             </Menu>
+
+            <!-- Right panel toggle just left of caption buttons -->
+            <ToggleButton x:Name="RightPanelToggle"
+                          Grid.Column="2"
+                          Width="28" Height="28"
+                          Margin="6,2,6,2"
+                          VerticalAlignment="Center"
+                          shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                          Background="Transparent"
+                          BorderBrush="Transparent"
+                          IsChecked="{Binding IsRightPanelVisible, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                          ToolTipService.ShowDuration="5000">
+                <TextBlock Text="&#xE75F;"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+            </ToggleButton>
+
+            <!-- Drag/double-click spacer region to the right of the menu and toggle -->
+            <Border Grid.Column="3"
+                    Background="Transparent"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="False"/>
         </Grid>
         
         <!-- Main Layout with optional Activity Bar -->
