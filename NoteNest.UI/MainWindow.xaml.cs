@@ -17,10 +17,13 @@ using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Plugins;
 using NoteNest.UI.ViewModels;
 using System.Windows.Input;
+using System.Runtime.InteropServices;
+using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace NoteNest.UI
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, INotifyPropertyChanged
     {
         public static readonly RoutedUICommand ToggleEditorCommand = new RoutedUICommand("ToggleEditor", nameof(ToggleEditorCommand), typeof(MainWindow));
         public static readonly RoutedUICommand ToggleRightPanelCommand = new RoutedUICommand("ToggleRightPanel", nameof(ToggleRightPanelCommand), typeof(MainWindow));
@@ -40,6 +43,7 @@ namespace NoteNest.UI
                     UpdateRightPanelVisibility(_isRightPanelVisible);
                 }
                 catch { }
+                OnPropertyChanged(nameof(IsRightPanelVisible));
             }
         }
 
@@ -48,6 +52,13 @@ namespace NoteNest.UI
             InitializeComponent();
             UpdateThemeMenuChecks();
             AllowDrop = true;
+            try
+            {
+                // Ensure caption button area is not overlapped by our content
+                SourceInitialized += (_, __) => ApplyCaptionButtonsRightInset();
+                SizeChanged += (_, __) => ApplyCaptionButtonsRightInset();
+            }
+            catch { }
             try
             {
                 CommandBindings.Add(new CommandBinding(ToggleRightPanelCommand, (s, e) => IsRightPanelVisible = !IsRightPanelVisible));
@@ -129,6 +140,43 @@ namespace NoteNest.UI
                 catch { }
             };
         }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void OnPropertyChanged(string propertyName)
+        {
+            try { PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName)); } catch { }
+        }
+
+        private void ApplyCaptionButtonsRightInset()
+        {
+            try
+            {
+                if (PresentationSource.FromVisual(this) is HwndSource src && CustomTitleBar != null)
+                {
+                    var hwnd = src.Handle;
+                    if (GetCaptionButtonBounds(hwnd, out var bounds))
+                    {
+                        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX; // assume uniform
+                        double rightInset = bounds.Width / dpi + 6; // add small pad
+                        CustomTitleBar.Margin = new Thickness(0, 0, rightInset, 0);
+                        return;
+                    }
+                }
+            }
+            catch { }
+            // Fallback pad (~ caption buttons width)
+            CustomTitleBar.Margin = new Thickness(0, 0, 140, 0);
+        }
+
+        private static bool GetCaptionButtonBounds(IntPtr hwnd, out System.Drawing.Rectangle rect)
+        {
+            const int DWMWA_CAPTION_BUTTON_BOUNDS = 41;
+            int hr = DwmGetWindowAttribute(hwnd, DWMWA_CAPTION_BUTTON_BOUNDS, out rect, Marshal.SizeOf<System.Drawing.Rectangle>());
+            return hr == 0 && rect.Width > 0;
+        }
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out System.Drawing.Rectangle pvAttribute, int cbAttribute);
 
         private void UpdateRightPanelVisibility(bool visible)
         {
@@ -253,6 +301,8 @@ namespace NoteNest.UI
                     _lastRightPanelWidth = w;
                     config.RequestSaveDebounced();
                 }
+                // update visible flag based on actual width/visibility
+                IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && PluginColumn.Width.Value > 0.1;
             }
             catch { }
         }
@@ -300,6 +350,8 @@ namespace NoteNest.UI
                 config.Settings.RightPanelSplitEnabled = enable;
                 config.RequestSaveDebounced();
             }
+            // keep toggle in sync if container is visible
+            IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && PluginColumn.Width.Value > 0.1;
         }
 
         private void SetRightPanelHeights(double top, double bottom)
@@ -309,6 +361,7 @@ namespace NoteNest.UI
                 PluginPanelContainer.RowDefinitions[0].Height = new GridLength(top, GridUnitType.Star);
                 PluginPanelContainer.RowDefinitions[2].Height = new GridLength(bottom, GridUnitType.Star);
             }
+            IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && PluginColumn.Width.Value > 0.1;
         }
 
         private void SaveRightPanelHeights()
@@ -326,6 +379,7 @@ namespace NoteNest.UI
                 }
             }
             catch { }
+            IsRightPanelVisible = PluginPanelContainer.Visibility == Visibility.Visible && PluginColumn.Width.Value > 0.1;
         }
 
         protected override void OnDragEnter(DragEventArgs e)

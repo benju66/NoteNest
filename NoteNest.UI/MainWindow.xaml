@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.modernwpf.com/2019"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:conv="clr-namespace:NoteNest.UI.Converters"
         xmlns:local="clr-namespace:NoteNest.UI"
         xmlns:controls="clr-namespace:NoteNest.UI.Controls"
         ui:WindowHelper.UseModernWindowStyle="True"
@@ -21,20 +22,23 @@
     </Window.InputBindings>
 
     <Grid>
+        <Grid.Resources>
+            <conv:BoolToStringConverter x:Key="BoolToStringConverter"/>
+        </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
         <!-- Custom Title Bar: icon + main menu placed in caption area -->
-        <Grid Grid.Row="0"
+        <Grid Grid.Row="0" x:Name="CustomTitleBar"
               shell:WindowChrome.IsHitTestVisibleInChrome="False"
               Background="Transparent">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Image Source="pack://application:,,,/NoteNest.ico"
                    Width="16" Height="16"
@@ -156,7 +160,7 @@
 
             <!-- Right panel toggle just left of caption buttons -->
             <ToggleButton x:Name="RightPanelToggle"
-                          Grid.Column="2"
+                          Grid.Column="3"
                           Width="28" Height="28"
                           Margin="6,2,6,2"
                           VerticalAlignment="Center"
@@ -164,17 +168,30 @@
                           Background="Transparent"
                           BorderBrush="Transparent"
                           IsChecked="{Binding IsRightPanelVisible, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay}"
+                          ToolTip="{Binding IsRightPanelVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToStringConverter}, ConverterParameter=Hide right panel|Show right panel}"
+                          AutomationProperties.Name="Toggle right panel"
                           ToolTipService.ShowDuration="5000">
-                <TextBlock Text="&#xE75F;"
+                <TextBlock
+                           Text="{Binding IsRightPanelVisible, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToStringConverter}, ConverterParameter=&#xE75F;|&#xE75F;}"
                            FontFamily="Segoe MDL2 Assets"
                            FontSize="12"
                            VerticalAlignment="Center"
-                           HorizontalAlignment="Center"
-                           Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                           HorizontalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Value="False">
+                                    <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </ToggleButton>
-
-            <!-- Drag/double-click spacer region to the right of the menu and toggle -->
-            <Border Grid.Column="3"
+            
+            <!-- Drag/double-click spacer region between menu and toggle -->
+            <Border Grid.Column="2"
                     Background="Transparent"
                     shell:WindowChrome.IsHitTestVisibleInChrome="False"/>
         </Grid>
