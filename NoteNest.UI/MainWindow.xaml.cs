@@ -42,6 +42,11 @@ namespace NoteNest.UI
                         ActivityBarControl.Visibility = config.Settings.ShowActivityBar
                             ? Visibility.Visible
                             : Visibility.Collapsed;
+                        // Restore plugin panel width and last active plugin
+                        if (config.Settings.PluginPanelWidth > 0)
+                        {
+                            PluginPanelHost.Width = config.Settings.PluginPanelWidth;
+                        }
                         try
                         {
                             var pm = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IPluginManager)) as IPluginManager;
@@ -50,6 +55,17 @@ namespace NoteNest.UI
                                 var abvm = new ActivityBarViewModel(pm);
                                 abvm.PluginActivated += OnPluginActivated;
                                 ActivityBarControl.DataContext = abvm;
+
+                                // Restore last active plugin if any
+                                var lastId = config.Settings.LastActivePluginId;
+                                if (!string.IsNullOrWhiteSpace(lastId))
+                                {
+                                    var plugin = pm.GetPlugin(lastId);
+                                    if (plugin != null)
+                                    {
+                                        OnPluginActivated(plugin);
+                                    }
+                                }
                             }
                         }
                         catch { }
@@ -61,14 +77,51 @@ namespace NoteNest.UI
 
         private void OnPluginActivated(IPlugin plugin)
         {
-            if (plugin == null) return;
+            if (plugin == null)
+            {
+                // Hide panel when no plugin (Explorer) selected
+                PluginPanelHost.Content = null;
+                PluginPanelHost.Visibility = Visibility.Collapsed;
+                PluginSplitter.Visibility = Visibility.Collapsed;
+                return;
+            }
             var panel = plugin.GetPanel();
             if (panel != null)
             {
                 PluginPanelHost.Content = panel.Content;
                 PluginPanelHost.Visibility = Visibility.Visible;
                 PluginSplitter.Visibility = Visibility.Visible;
+
+                // Persist active plugin id
+                try
+                {
+                    var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    if (config?.Settings != null)
+                    {
+                        config.Settings.LastActivePluginId = plugin.Id;
+                        config.RequestSaveDebounced();
+                    }
+                }
+                catch { }
             }
+        }
+
+        private void PluginSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            try
+            {
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                if (config?.Settings != null)
+                {
+                    config.Settings.PluginPanelWidth = PluginPanelHost.ActualWidth > 0 ? PluginPanelHost.ActualWidth : PluginPanelHost.Width;
+                    if (double.IsNaN(config.Settings.PluginPanelWidth) || config.Settings.PluginPanelWidth <= 0)
+                    {
+                        config.Settings.PluginPanelWidth = 300;
+                    }
+                    config.RequestSaveDebounced();
+                }
+            }
+            catch { }
         }
 
         protected override void OnDragEnter(DragEventArgs e)

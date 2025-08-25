@@ -61,6 +61,8 @@ namespace NoteNest.Core.Models
         public int AutoSaveIdleMs { get; set; } = 2000;
         public bool ShowTreeDirtyDot { get; set; } = true;
         public bool ShowActivityBar { get; set; } = true;
+        public string LastActivePluginId { get; set; }
+        public double PluginPanelWidth { get; set; } = 300;
 
         // File watcher & caching configuration
         public int FileWatcherDebounceMs { get; set; } = 500;

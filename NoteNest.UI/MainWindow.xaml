@@ -149,8 +149,10 @@
             <!-- Splitter between main content and plugin panel -->
             <GridSplitter Grid.Column="2"
                           HorizontalAlignment="Left"
-                          Width="3"
+                          Width="4"
                           Background="Transparent"
+                          ShowsPreview="True"
+                          DragCompleted="PluginSplitter_DragCompleted"
                           Visibility="Collapsed"
                           x:Name="PluginSplitter"/>
 
@@ -158,6 +160,7 @@
             <ContentControl Grid.Column="2"
                             x:Name="PluginPanelHost"
                             Width="300"
+                            MinWidth="200"
                             Visibility="Collapsed"/>
         </Grid>
     </Grid>
