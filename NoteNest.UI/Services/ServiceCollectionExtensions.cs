@@ -6,6 +6,7 @@ using NoteNest.Core.Services;
 using NoteNest.Core.Services.Implementation;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Services.Safety;
+using NoteNest.Core.Services.Notes;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.Services.DragDrop;
 
@@ -39,7 +40,9 @@ namespace NoteNest.UI.Services
                 sp.GetRequiredService<IAppLogger>(),
                 sp.GetService<IEventBus>(),
                 sp.GetRequiredService<IMarkdownService>(),
-                sp.GetService<SafeFileService>())); // Core functionality
+                sp.GetService<SafeFileService>(),
+                sp.GetService<INoteStorageService>(),
+                sp.GetService<IUserNotificationService>())); // Core functionality
             services.AddSingleton<IDialogService, DialogService>(); // UI interaction
             services.AddSingleton<IUserNotificationService>(sp =>
             {
@@ -48,6 +51,10 @@ namespace NoteNest.UI.Services
                 return new UserNotificationService(Application.Current?.MainWindow, logger);
             });
             services.AddSingleton<SafeFileService>();
+            services.AddSingleton<INoteStorageService>(sp => new NoteStorageService(
+                sp.GetRequiredService<IFileSystemProvider>(),
+                sp.GetService<SafeFileService>(),
+                sp.GetService<IAppLogger>()));
 
             // Workspace Services (Singleton for performance)
             services.AddSingleton<ContentCache>(sp =>

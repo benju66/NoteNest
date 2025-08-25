@@ -82,6 +82,30 @@ namespace NoteNest.Core.Services
 				await _fileSystem.WriteTextAsync(filePath, content ?? string.Empty);
 			}
 		}
+
+		public async Task DeleteNoteAsync(NoteModel note)
+		{
+			if (note == null)
+				throw new ArgumentNullException(nameof(note));
+
+			try
+			{
+				if (await _fileSystem.ExistsAsync(note.FilePath))
+				{
+					await _fileSystem.DeleteAsync(note.FilePath);
+					_logger.Info($"Deleted note: {note.Title} from {note.FilePath}");
+				}
+				else
+				{
+					_logger.Warning($"Attempted to delete non-existent note: {note.FilePath}");
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.Error(ex, $"Failed to delete note: {note.Title}");
+				throw new InvalidOperationException($"Failed to delete note: {ex.Message}", ex);
+			}
+		}
 	}
 }
 
