@@ -74,12 +74,10 @@
 										CanContentScroll="False"
 										PanningMode="HorizontalOnly"
 										Focusable="False">
-								<!-- Use a non-wrapping panel so headers can overflow for scrolling -->
-								<StackPanel x:Name="HeaderPanel"
-									Orientation="Horizontal"
-									IsItemsHost="True"
-									Margin="2,2,2,0"
-									KeyboardNavigation.TabNavigation="Local"/>
+									<TabPanel x:Name="HeaderPanel"
+										IsItemsHost="True"
+										Margin="2,2,2,0"
+										KeyboardNavigation.TabNavigation="Local"/>
 							</ScrollViewer>
 
 							<!-- Right Scroll Button with Accessibility -->
