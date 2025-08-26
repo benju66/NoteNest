@@ -10,11 +10,11 @@ none
 false
 TRACE;DEBUG;NET;NET9_0;NETCOREAPP
 C:\NoteNest\NoteNest.UI\App.xaml
-14-834201995
+141354528792
 
 66533324765
 2351547867247
-Controls\ActivityBar.xaml;Controls\NoteNestPanel.xaml;Controls\NotificationHost.xaml;Controls\SplitContainer.xaml;Controls\SplitPaneView.xaml;Controls\SplitWorkspace.xaml;Dialogs\InputDialog.xaml;MainWindow.xaml;Plugins\Todo\UI\TaskEditDialog.xaml;Plugins\Todo\UI\TodoPanel.xaml;Resources\TabControlTemplates.xaml;Windows\FormatMigrationWindow.xaml;Windows\MigrationWindow.xaml;Windows\SettingsWindow.xaml;
+Controls\ActivityBar.xaml;Controls\NoteNestPanel.xaml;Controls\NotificationHost.xaml;Controls\SplitContainer.xaml;Controls\SplitPaneView.xaml;Controls\SplitWorkspace.xaml;Dialogs\InputDialog.xaml;MainWindow.xaml;Plugins\Todo\UI\TaskEditDialog.xaml;Plugins\Todo\UI\TodoPanel.xaml;Themes\Generic.xaml;Windows\FormatMigrationWindow.xaml;Windows\MigrationWindow.xaml;Windows\SettingsWindow.xaml;
 
 False
 

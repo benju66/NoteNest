@@ -27,6 +27,13 @@ namespace NoteNest.UI.Controls
     }
     public class DraggableTabControl : TabControl
     {
+        // Ensure our custom template from Themes/Generic.xaml is used
+        static DraggableTabControl()
+        {
+            DefaultStyleKeyProperty.OverrideMetadata(
+                typeof(DraggableTabControl),
+                new FrameworkPropertyMetadata(typeof(DraggableTabControl)));
+        }
         private Point _dragStartPoint;
         private DragState _dragState = DragState.Idle;
         private readonly TabDragManager _dragManager;
@@ -90,6 +97,27 @@ namespace NoteNest.UI.Controls
                 }
             };
         }
+
+#if DEBUG
+        public override void OnApplyTemplate()
+        {
+            base.OnApplyTemplate();
+
+            var scrollViewer = GetTemplateChild("PART_ScrollViewer") as ScrollViewer;
+            var leftButton = GetTemplateChild("PART_LeftButton") as Button;
+            var rightButton = GetTemplateChild("PART_RightButton") as Button;
+            var dropdownButton = GetTemplateChild("PART_DropdownButton") as Button;
+
+            if (scrollViewer == null || leftButton == null || rightButton == null || dropdownButton == null)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"WARNING: DraggableTabControl template is missing parts. " +
+                    $"ScrollViewer={scrollViewer != null}, LeftButton={leftButton != null}, " +
+                    $"RightButton={rightButton != null}, DropdownButton={dropdownButton != null}. " +
+                    $"Tab overflow feature will not work. Check Themes/Generic.xaml");
+            }
+        }
+#endif
 
         protected override void OnPreviewMouseLeftButtonDown(MouseButtonEventArgs e)
         {
