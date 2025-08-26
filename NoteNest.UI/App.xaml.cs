@@ -145,15 +145,37 @@ namespace NoteNest.UI
         {
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
-                _logger?.Fatal(e.ExceptionObject as Exception, "Unhandled exception");
+                try
+                {
+                    _logger?.Fatal(e.ExceptionObject as Exception, "Unhandled exception");
+                    var err = ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IServiceErrorHandler)) as NoteNest.Core.Interfaces.Services.IServiceErrorHandler;
+                    err?.LogError(e.ExceptionObject as Exception ?? new Exception("Unknown error"), "AppDomain");
+                }
+                catch { }
             };
             
             Current.DispatcherUnhandledException += (s, e) =>
             {
-                _logger?.Error(e.Exception, "UI thread exception");
+                try
+                {
+                    _logger?.Error(e.Exception, "UI thread exception");
+                    var toast = ServiceProvider?.GetService(typeof(ToastNotificationService)) as ToastNotificationService;
+                    var err = ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IServiceErrorHandler)) as NoteNest.Core.Interfaces.Services.IServiceErrorHandler;
+                    err?.LogError(e.Exception, "UI Thread");
+                    // Throttle toasts to at most one every 5 seconds
+                    var now = DateTime.UtcNow;
+                    if (_lastToastAt == DateTime.MinValue || (now - _lastToastAt).TotalSeconds > 5)
+                    {
+                        _lastToastAt = now;
+                        toast?.Error(string.IsNullOrWhiteSpace(e.Exception?.Message) ? "An unexpected error occurred" : e.Exception.Message);
+                    }
+                }
+                catch { }
                 e.Handled = true; // Keep app running
             };
         }
+
+        private static DateTime _lastToastAt = DateTime.MinValue;
 
         private void ShowStartupError(Exception ex)
         {

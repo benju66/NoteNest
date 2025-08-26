@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using NoteNest.Core.Services;
+using NoteNest.UI.Services;
 
 namespace NoteNest.UI.Windows
 {
@@ -71,24 +72,17 @@ namespace NoteNest.UI.Windows
 
         private async void Start_Click(object sender, RoutedEventArgs e)
         {
+            var dlg = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
             // Validate paths first
             if (!Directory.Exists(_sourcePath))
             {
-                MessageBox.Show(
-                    $"Source directory does not exist:\n{_sourcePath}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                dlg?.ShowError($"Source directory does not exist:\n{_sourcePath}", "Error");
                 return;
             }
 
             if (_sourcePath.Equals(_destinationPath, StringComparison.OrdinalIgnoreCase))
             {
-                MessageBox.Show(
-                    "Source and destination paths are the same.",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                dlg?.ShowInfo("Source and destination paths are the same.", "Error");
                 return;
             }
 
@@ -114,11 +108,7 @@ namespace NoteNest.UI.Windows
                     
                     await Task.Delay(1000); // Let user see the completion
                     
-                    MessageBox.Show(
-                        "Migration completed successfully!\n\nYour notes have been moved to the new location.",
-                        "Success",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    dlg?.ShowInfo("Migration completed successfully!\n\nYour notes have been moved to the new location.", "Success");
                     
                     _cleanupAvailable = true;
                     CleanupButton.IsEnabled = true;
@@ -135,13 +125,7 @@ namespace NoteNest.UI.Windows
             catch (Exception ex)
             {
                 AddLogMessage($"ERROR: {ex.Message}");
-                
-                MessageBox.Show(
-                    $"Migration failed:\n{ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-                
+                dlg?.ShowError($"Migration failed:\n{ex.Message}", "Error");
                 StartButton.IsEnabled = true;
                 CancelButton.Content = "Cancel";
             }
@@ -167,13 +151,11 @@ namespace NoteNest.UI.Windows
             if (!_cleanupAvailable)
                 return;
 
-            var result = MessageBox.Show(
+            var dlg = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
+            var ok = await dlg!.ShowConfirmationDialogAsync(
                 $"This will delete the old location and all its contents:\n\n{_sourcePath}\n\nAre you sure?",
-                "Confirm Cleanup",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-
-            if (result != MessageBoxResult.Yes)
+                "Confirm Cleanup");
+            if (!ok)
                 return;
 
             try
@@ -188,12 +170,12 @@ namespace NoteNest.UI.Windows
                 AddLogMessage("Old location deleted successfully.");
                 CleanupButton.IsEnabled = false;
                 _cleanupAvailable = false;
-                MessageBox.Show("Old location cleaned up.", "Cleanup Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                dlg?.ShowInfo("Old location cleaned up.", "Cleanup Complete");
             }
             catch (Exception ex)
             {
                 AddLogMessage($"Cleanup failed: {ex.Message}");
-                MessageBox.Show($"Cleanup failed:\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                dlg?.ShowError($"Cleanup failed:\n{ex.Message}", "Error");
             }
         }
 

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Services.Safety;
 using NoteNest.Core.Services;
+using System.Linq;
 
 namespace NoteNest.Core.Plugins
 {
@@ -125,12 +126,15 @@ namespace NoteNest.Core.Plugins
 			try
 			{
 				var filePath = GetDataFilePath(pluginId, key);
-				if (File.Exists(filePath))
+				await Task.Run(() =>
 				{
-					File.Delete(filePath);
-					_logger?.Debug($"Plugin data deleted: {pluginId}/{key}");
-				}
-				return await Task.FromResult(true);
+					if (File.Exists(filePath))
+					{
+						File.Delete(filePath);
+					}
+				});
+				_logger?.Debug($"Plugin data deleted: {pluginId}/{key}");
+				return true;
 			}
 			catch (Exception ex)
 			{
@@ -146,11 +150,15 @@ namespace NoteNest.Core.Plugins
 				var sourceDir = GetPluginDirectory(pluginId);
 				var backupDir = Path.Combine(_pluginDataRoot, ".backups", pluginId, DateTime.Now.ToString("yyyyMMdd_HHmmss"));
 				Directory.CreateDirectory(backupDir);
-				foreach (var file in Directory.GetFiles(sourceDir))
+
+				var files = Directory.GetFiles(sourceDir);
+				foreach (var file in files)
 				{
 					var fileName = Path.GetFileName(file);
 					var destFile = Path.Combine(backupDir, fileName);
-					File.Copy(file, destFile);
+					await using var src = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+					await using var dst = new FileStream(destFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+					await src.CopyToAsync(dst).ConfigureAwait(false);
 				}
 				_logger?.Info($"Plugin data backed up: {pluginId}");
 				return true;
@@ -173,16 +181,22 @@ namespace NoteNest.Core.Plugins
 					return false;
 				}
 				var targetDir = GetPluginDirectory(pluginId);
+				// Create a safety backup of current data
 				await BackupPluginDataAsync(pluginId);
-				foreach (var file in Directory.GetFiles(targetDir))
-				{
-					File.Delete(file);
-				}
-				foreach (var file in Directory.GetFiles(backupDir))
+
+				// Delete existing files asynchronously
+				var existing = Directory.GetFiles(targetDir);
+				await Task.WhenAll(existing.Select(path => Task.Run(() => { try { File.Delete(path); } catch { } })));
+
+				// Copy backup files back asynchronously
+				var files = Directory.GetFiles(backupDir);
+				foreach (var file in files)
 				{
 					var fileName = Path.GetFileName(file);
 					var destFile = Path.Combine(targetDir, fileName);
-					File.Copy(file, destFile);
+					await using var src = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+					await using var dst = new FileStream(destFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+					await src.CopyToAsync(dst).ConfigureAwait(false);
 				}
 				_logger?.Info($"Plugin data restored: {pluginId} from {backupDate}");
 				return true;

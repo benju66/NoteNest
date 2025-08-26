@@ -57,6 +57,12 @@ namespace NoteNest.UI
                 // Ensure caption button area is not overlapped by our content
                 SourceInitialized += (_, __) => ApplyCaptionButtonsRightInset();
                 SizeChanged += (_, __) => ApplyCaptionButtonsRightInset();
+                // Recompute on DPI change
+                this.DpiChanged += (_, __) => ApplyCaptionButtonsRightInset();
+                // Recompute when theme toggles
+                ModernWpf.ThemeManager.Current.ActualApplicationThemeChanged += (_, __) => ApplyCaptionButtonsRightInset();
+                // Recompute when window state changes (normal/maximized)
+                this.StateChanged += (_, __) => ApplyCaptionButtonsRightInset();
             }
             catch { }
             try
@@ -203,6 +209,10 @@ namespace NoteNest.UI
                         // Position titlebar exactly over the caption band
                         CustomTitleBar.Margin = new Thickness(0, topInset, rightInset, 0);
                         CustomTitleBar.Height = captionHeight;
+
+                        // Apply a tiny DPI-aware nudge to visually match DWM hover art
+                        double visualNudge = Math.Round(1.0 * dpiY) / dpiY; // ~1 DIP adjusted per DPI
+                        CustomTitleBar.Margin = new Thickness(CustomTitleBar.Margin.Left, CustomTitleBar.Margin.Top - visualNudge, CustomTitleBar.Margin.Right, CustomTitleBar.Margin.Bottom);
 
                         // Vertically center children inside the caption band
                         try

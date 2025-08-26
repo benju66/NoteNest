@@ -4,6 +4,7 @@ using ModernWpf.Controls;
 using NoteNest.UI.ViewModels;
 using NoteNest.Core.Services;
 using NoteNest.Core.Events;
+using NoteNest.UI.Services;
 
 namespace NoteNest.UI.Windows
 {
@@ -100,42 +101,33 @@ namespace NoteNest.UI.Windows
                 var storageService = new Core.Services.StorageLocationService();
                 var currentPath = _viewModel.GetCurrentSavedPath();
                 var newPath = _viewModel.GetSelectedDestinationPath();
-                
+
+                var dlg = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
+
                 if (string.IsNullOrEmpty(currentPath) || string.IsNullOrEmpty(newPath))
                 {
-                    MessageBox.Show(
-                        "Invalid path configuration. Please check your settings.",
-                        "Error",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Error);
+                    dlg?.ShowError("Invalid path configuration. Please check your settings.", "Error");
                     return;
                 }
-                
+
                 string Normalize(string p) => string.IsNullOrWhiteSpace(p) ? string.Empty : System.IO.Path.GetFullPath(p).TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
                 if (string.Equals(Normalize(currentPath), Normalize(newPath), StringComparison.OrdinalIgnoreCase))
                 {
-                    MessageBox.Show(
-                        "Source and destination are the same. Please select a different storage location first.",
-                        "No Change Required",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    dlg?.ShowInfo("Source and destination are the same. Please select a different storage location first.", "No Change Required");
                     return;
                 }
-                
-                var result = MessageBox.Show(
+
+                var ok = await dlg!.ShowConfirmationDialogAsync(
                     $"This will move all your notes from:\n\n{currentPath}\n\nTo:\n\n{newPath}\n\nDo you want to continue?",
-                    "Confirm Migration",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-                
-                if (result != MessageBoxResult.Yes)
+                    "Confirm Migration");
+                if (!ok)
                     return;
-                
+
                 var migrationWindow = new MigrationWindow(currentPath, newPath)
                 {
                     Owner = this
                 };
-                
+
                 if (migrationWindow.ShowDialog() == true && migrationWindow.MigrationSuccessful)
                 {
                     // Update paths
@@ -164,20 +156,13 @@ namespace NoteNest.UI.Windows
                     await _viewModel.CommitSettings();
                     _viewModel.RefreshStorageProperties();
 
-                    MessageBox.Show(
-                        "Migration completed successfully!\n\nPlease restart NoteNest for the changes to take full effect.",
-                        "Migration Complete",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    dlg?.ShowInfo("Migration completed successfully!\n\nPlease restart NoteNest for the changes to take full effect.", "Migration Complete");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    $"An error occurred: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                var dlg = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
+                dlg?.ShowError($"An error occurred: {ex.Message}", "Error");
             }
         }
     }

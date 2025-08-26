@@ -373,7 +373,8 @@ namespace NoteNest.UI.ViewModels
                 _logger.Error(ex, "Error during initialization");
                 if (!cancellationToken.IsCancellationRequested)
                 {
-                    MessageBox.Show($"Error initializing: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    _errorHandler?.LogError(ex, "Initialization");
+                    _dialogService?.ShowError($"Error initializing: {ex.Message}", "Error");
                 }
                 StatusMessage = "Initialization error";
             }
@@ -934,11 +935,10 @@ namespace NoteNest.UI.ViewModels
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed operation: {operationName}");
-                MessageBox.Show(
+                _errorHandler?.LogError(ex, operationName);
+                _dialogService?.ShowError(
                     $"Operation failed: {operationName}\n\nError: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                    "Error");
                 StatusMessage = $"Error: {operationName}";
             }
         }
@@ -954,11 +954,10 @@ namespace NoteNest.UI.ViewModels
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed operation: {operationName}");
-                MessageBox.Show(
+                _errorHandler?.LogError(ex, operationName);
+                _dialogService?.ShowError(
                     $"Operation failed: {operationName}\n\nError: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                    "Error");
                 StatusMessage = $"Error: {operationName}";
             }
         }
