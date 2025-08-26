@@ -5,6 +5,8 @@
 
 # dotenv files
 .env
+.env.local
+.env.*.local
 
 # User-specific files
 *.rsuser
@@ -152,6 +154,10 @@ _TeamCity*
 coverage*.json
 coverage*.xml
 coverage*.info
+coverage.cobertura.xml
+coverage/
+codecov/
+*.lcov
 
 # Visual Studio code coverage results
 *.coverage
@@ -482,6 +488,84 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
-b i n /  
- o b j /  
- 
+
+##
+## Additional entries for modern .NET development
+##
+
+# Common build directories
+bin/
+obj/
+out/
+dist/
+build/
+
+# Verify snapshot testing
+*.received.*
+
+# Docker
+docker-compose.override.yml
+.dockerignore
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# SonarQube
+.sonar/
+.sonarqube/
+
+# User secrets (for development)
+secrets.json
+appsettings.Development.json
+appsettings.Local.json
+
+# Playwright
+playwright-report/
+test-results/
+playwright/.cache/
+
+# Stryker mutation testing
+StrykerOutput/
+
+# dotnet tools
+.config/dotnet-tools.json
+
+# Hot Reload
+*.hot_update*
+.dotnet/
+
+# GitHub Codespaces
+.devcontainer/devcontainer.json
+
+# Fleet
+.fleet/
+
+# AWS
+.aws-sam/
+
+# Azure Functions
+local.settings.json
+
+# MinVer
+MinVer/
+
+# BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
+# PublishProfiles (sometimes excluded)
+Properties/PublishProfiles/
+Properties/launchSettings.json
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Swagger generated files
+swagger.json
+swagger.yaml
