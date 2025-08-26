@@ -191,21 +191,68 @@ namespace NoteNest.UI
                     var hwnd = src.Handle;
                     if (GetCaptionButtonBounds(hwnd, out var bounds))
                     {
-                        double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX; // assume uniform
-                        double rightInset = bounds.Width / dpi + 6; // add small pad
-                        CustomTitleBar.Margin = new Thickness(0, 0, rightInset, 0);
-                        // Set title bar height to match caption buttons for perfect vertical alignment
-                        double captionHeight = bounds.Height / dpi;
-                        if (captionHeight > 0)
+                        var dpi = VisualTreeHelper.GetDpi(this);
+                        double dpiX = dpi.DpiScaleX;
+                        double dpiY = dpi.DpiScaleY;
+
+                        // DWM-aligned insets (device-independent)
+                        double rightInset = bounds.Width / dpiX + 6; // small pad from system buttons
+                        double topInset = bounds.Top / dpiY;         // caption band top relative to window
+                        double captionHeight = Math.Max(0, bounds.Height / dpiY);
+
+                        // Position titlebar exactly over the caption band
+                        CustomTitleBar.Margin = new Thickness(0, topInset, rightInset, 0);
+                        CustomTitleBar.Height = captionHeight;
+
+                        // Vertically center children inside the caption band
+                        try
                         {
-                            CustomTitleBar.Height = captionHeight;
+                            if (MainMenu != null)
+                            {
+                                MainMenu.ClearValue(FrameworkElement.HeightProperty);
+                                MainMenu.VerticalAlignment = VerticalAlignment.Center;
+                                MainMenu.Margin = new Thickness(MainMenu.Margin.Left, 0, MainMenu.Margin.Right, 0);
+
+                                var style = new Style(typeof(System.Windows.Controls.MenuItem));
+                                style.Setters.Add(new Setter(System.Windows.Controls.MenuItem.PaddingProperty, new Thickness(10, 0, 10, 0)));
+                                style.Setters.Add(new Setter(System.Windows.Controls.MenuItem.MarginProperty, new Thickness(0)));
+                                style.Setters.Add(new Setter(System.Windows.Controls.MenuItem.HeightProperty, captionHeight));
+                                style.Setters.Add(new Setter(System.Windows.Controls.MenuItem.VerticalContentAlignmentProperty, VerticalAlignment.Center));
+                                MainMenu.ItemContainerStyle = style;
+
+                                // Force normalization for explicitly declared MenuItems as well
+                                NormalizeMenuItemHeights(MainMenu, captionHeight);
+                            }
                         }
+                        catch { }
+                        try
+                        {
+                            if (RightPanelToggle != null)
+                            {
+                                RightPanelToggle.Height = captionHeight;
+                                RightPanelToggle.VerticalAlignment = VerticalAlignment.Center;
+                                RightPanelToggle.Padding = new Thickness(0);
+                                RightPanelToggle.Margin = new Thickness(RightPanelToggle.Margin.Left, 0, RightPanelToggle.Margin.Right, 0);
+                            }
+                        }
+                        catch { }
+                        try
+                        {
+                            if (AppIcon != null)
+                            {
+                                AppIcon.VerticalAlignment = VerticalAlignment.Center;
+                                // Keep the icon's own size; center it within the caption band
+                                AppIcon.Margin = new Thickness(AppIcon.Margin.Left, 0, AppIcon.Margin.Right, 0);
+                            }
+                        }
+                        catch { }
+
                         return;
                     }
                 }
             }
             catch { }
-            // Fallback pad (~ caption buttons width)
+            // Fallback pad (~caption buttons width)
             CustomTitleBar.Margin = new Thickness(0, 0, 140, 0);
         }
 
@@ -841,6 +888,26 @@ namespace NoteNest.UI
                     System.Diagnostics.Debug.WriteLine($"Error during ViewModel disposal: {ex.Message}");
                 }
             });
+        }
+
+        private static void NormalizeMenuItemHeights(System.Windows.Controls.ItemsControl itemsRoot, double captionHeight)
+        {
+            if (itemsRoot == null) return;
+
+            foreach (var obj in itemsRoot.Items)
+            {
+                if (obj is System.Windows.Controls.MenuItem mi)
+                {
+                    mi.Height = captionHeight;
+                    mi.Padding = new Thickness(10, 0, 10, 0);
+                    mi.VerticalContentAlignment = VerticalAlignment.Center;
+
+                    if (mi.HasItems)
+                    {
+                        NormalizeMenuItemHeights(mi, captionHeight);
+                    }
+                }
+            }
         }
     }
 }

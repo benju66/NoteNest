@@ -11,6 +11,8 @@
         Title=" " Icon="pack://application:,,,/NoteNest.ico" Height="700" Width="1200"
         WindowStartupLocation="CenterScreen"
         MinHeight="500" MinWidth="800"
+        SnapsToDevicePixels="True"
+        UseLayoutRounding="True"
         Closing="Window_Closing">
     
     <Window.CommandBindings>
@@ -21,7 +23,7 @@
         <KeyBinding Command="{x:Static local:MainWindow.ToggleEditorCommand}" Gesture="Ctrl+Alt+E"/>
     </Window.InputBindings>
 
-    <Grid>
+    <Grid SnapsToDevicePixels="True">
         <Grid.Resources>
             <conv:BoolToStringConverter x:Key="BoolToStringConverter"/>
         </Grid.Resources>
@@ -33,18 +35,35 @@
         <!-- Custom Title Bar: icon + main menu placed in caption area -->
         <Grid Grid.Row="0" x:Name="CustomTitleBar"
               shell:WindowChrome.IsHitTestVisibleInChrome="False"
-              Background="Transparent">
+              Background="Transparent"
+              Height="{x:Static SystemParameters.WindowCaptionHeight}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Image Source="pack://application:,,,/NoteNest.ico"
+            <Image x:Name="AppIcon" Source="pack://application:,,,/NoteNest.ico"
                    Width="16" Height="16"
-                   Margin="6,4,8,4"
+                   Margin="6,0,8,0"
                    VerticalAlignment="Center"/>
-            <Menu Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Left" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+            <Menu x:Name="MainMenu" Grid.Column="1"
+                  VerticalAlignment="Stretch"
+                  HorizontalAlignment="Left"
+                  Height="{x:Static SystemParameters.WindowCaptionHeight}"
+                  Background="Transparent"
+                  Padding="0"
+                  Margin="0"
+                  SnapsToDevicePixels="True"
+                  shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Menu.ItemContainerStyle>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Padding" Value="10,0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="Height" Value="{x:Static SystemParameters.WindowCaptionHeight}"/>
+                        <Setter Property="VerticalContentAlignment" Value="Center"/>
+                    </Style>
+                </Menu.ItemContainerStyle>
             <MenuItem Header="_File">
                 <MenuItem Header="_New Note" InputGestureText="Ctrl+N" Click="NewNoteMenuItem_Click">
                     <MenuItem.Icon>
@@ -161,8 +180,9 @@
             <!-- Right panel toggle just left of caption buttons -->
             <ToggleButton x:Name="RightPanelToggle"
                           Grid.Column="3"
-                          Width="28" Height="28"
-                          Margin="6,2,6,2"
+                          Width="28"
+                          Height="{x:Static SystemParameters.WindowCaptionHeight}"
+                          Margin="6,0,6,0"
                           VerticalAlignment="Center"
                           shell:WindowChrome.IsHitTestVisibleInChrome="True"
                           Background="Transparent"
@@ -176,18 +196,7 @@
                            FontFamily="Segoe MDL2 Assets"
                            FontSize="12"
                            VerticalAlignment="Center"
-                           HorizontalAlignment="Center">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsChecked, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Value="False">
-                                    <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                           HorizontalAlignment="Center"/>
             </ToggleButton>
             
             <!-- Drag/double-click spacer region between menu and toggle -->
