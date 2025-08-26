@@ -16,7 +16,7 @@ namespace NoteNest.UI.Controls
             var savedCaret = CaretIndex;
             var savedSelStart = SelectionStart;
             var savedSelLength = SelectionLength;
-            var firstVisible = GetFirstVisibleLineIndex();
+            var firstVisible = GetFirstVisibleLogicalLineIndex();
 
             foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
@@ -35,7 +35,7 @@ namespace NoteNest.UI.Controls
             SelectionStart = Math.Min(savedSelStart, Text.Length);
             SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
             CaretIndex = Math.Min(savedCaret, Text.Length);
-            if (firstVisible >= 0 && firstVisible < LineCount) ScrollToLine(firstVisible);
+            if (firstVisible >= 0 && firstVisible < LogicalLineCount) ScrollToLogicalLine(firstVisible);
         }
 
         public void ConvertSelectionToNumbers()
@@ -46,7 +46,7 @@ namespace NoteNest.UI.Controls
             var savedCaret = CaretIndex;
             var savedSelStart = SelectionStart;
             var savedSelLength = SelectionLength;
-            var firstVisible = GetFirstVisibleLineIndex();
+            var firstVisible = GetFirstVisibleLogicalLineIndex();
 
             int number = 1;
             foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
@@ -67,7 +67,7 @@ namespace NoteNest.UI.Controls
             SelectionStart = Math.Min(savedSelStart, Text.Length);
             SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
             CaretIndex = Math.Min(savedCaret, Text.Length);
-            if (firstVisible >= 0 && firstVisible < LineCount) ScrollToLine(firstVisible);
+            if (firstVisible >= 0 && firstVisible < LogicalLineCount) ScrollToLogicalLine(firstVisible);
         }
 
         public void ConvertSelectionToTasks()
@@ -78,7 +78,7 @@ namespace NoteNest.UI.Controls
             var savedCaret = CaretIndex;
             var savedSelStart = SelectionStart;
             var savedSelLength = SelectionLength;
-            var firstVisible = GetFirstVisibleLineIndex();
+            var firstVisible = GetFirstVisibleLogicalLineIndex();
 
             foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
@@ -99,7 +99,7 @@ namespace NoteNest.UI.Controls
             SelectionStart = Math.Min(savedSelStart, Text.Length);
             SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
             CaretIndex = Math.Min(savedCaret, Text.Length);
-            if (firstVisible >= 0 && firstVisible < LineCount) ScrollToLine(firstVisible);
+            if (firstVisible >= 0 && firstVisible < LogicalLineCount) ScrollToLogicalLine(firstVisible);
         }
 
         public void RemoveListFormatting()
@@ -110,7 +110,7 @@ namespace NoteNest.UI.Controls
             var savedCaret = CaretIndex;
             var savedSelStart = SelectionStart;
             var savedSelLength = SelectionLength;
-            var firstVisible = GetFirstVisibleLineIndex();
+            var firstVisible = GetFirstVisibleLogicalLineIndex();
 
             foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
@@ -129,7 +129,7 @@ namespace NoteNest.UI.Controls
             SelectionStart = Math.Min(savedSelStart, Text.Length);
             SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
             CaretIndex = Math.Min(savedCaret, Text.Length);
-            if (firstVisible >= 0 && firstVisible < LineCount) ScrollToLine(firstVisible);
+            if (firstVisible >= 0 && firstVisible < LogicalLineCount) ScrollToLogicalLine(firstVisible);
         }
 
         private string RemoveListMarkers(string line)

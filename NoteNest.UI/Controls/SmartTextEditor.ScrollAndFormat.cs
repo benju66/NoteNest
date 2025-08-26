@@ -23,9 +23,9 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        public new int LineCount 
+        private int LogicalLineCount
         {
-            get 
+            get
             {
                 if (_lineCount == 0 && !string.IsNullOrEmpty(Text))
                     _lineCount = Text.Split('\n').Length;
@@ -33,7 +33,7 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        private new int GetFirstVisibleLineIndex()
+        private int GetFirstVisibleLogicalLineIndex()
         {
             try
             {
@@ -50,7 +50,7 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        private new void ScrollToLine(int lineIndex)
+        private void ScrollToLogicalLine(int lineIndex)
         {
             if (lineIndex < 0) return;
             
