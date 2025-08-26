@@ -1,0 +1,210 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:local="clr-namespace:NoteNest.UI.Controls">
+
+	<!-- Lightweight Template for DraggableTabControl with overflow handling -->
+	<Style TargetType="{x:Type local:DraggableTabControl}">
+		<Setter Property="SnapsToDevicePixels" Value="True"/>
+		<Setter Property="UseLayoutRounding" Value="True"/>
+		<Setter Property="Template">
+			<Setter.Value>
+				<ControlTemplate TargetType="{x:Type local:DraggableTabControl}">
+					<Grid>
+						<Grid.RowDefinitions>
+							<RowDefinition Height="Auto"/>
+							<RowDefinition Height="*"/>
+						</Grid.RowDefinitions>
+
+						<!-- Tab Header Area -->
+						<Grid Grid.Row="0" Background="{TemplateBinding Background}">
+							<Grid.ColumnDefinitions>
+								<ColumnDefinition Width="Auto"/>
+								<ColumnDefinition Width="*" MinWidth="50"/>
+								<ColumnDefinition Width="Auto"/>
+								<ColumnDefinition Width="Auto"/>
+							</Grid.ColumnDefinitions>
+
+							<!-- Left Scroll Button with Accessibility -->
+							<Button x:Name="PART_LeftButton"
+									Grid.Column="0"
+									Width="20"
+									Height="24"
+									Padding="0"
+									Background="Transparent"
+									BorderThickness="0"
+									Visibility="Collapsed"
+									ToolTip="Scroll left (Mouse wheel also works)"
+									Focusable="False"
+									VerticalAlignment="Center"
+									AutomationProperties.Name="Scroll Tabs Left"
+									AutomationProperties.HelpText="Scrolls the tab list to show tabs on the left">
+								<Button.Template>
+									<ControlTemplate TargetType="Button">
+										<Border x:Name="Border"
+												Background="{TemplateBinding Background}"
+												BorderBrush="{TemplateBinding BorderBrush}"
+												BorderThickness="{TemplateBinding BorderThickness}"
+												CornerRadius="2">
+											<Path x:Name="Arrow"
+													Data="M 7,10 L 3,6 L 7,2"
+													Stroke="#606060"
+													StrokeThickness="2"
+													HorizontalAlignment="Center"
+													VerticalAlignment="Center"
+													SnapsToDevicePixels="True"/>
+										</Border>
+										<ControlTemplate.Triggers>
+											<Trigger Property="IsMouseOver" Value="True">
+												<Setter TargetName="Border" Property="Background" Value="#10000000"/>
+												<Setter TargetName="Arrow" Property="Stroke" Value="#000000"/>
+											</Trigger>
+											<Trigger Property="IsPressed" Value="True">
+												<Setter TargetName="Border" Property="Background" Value="#20000000"/>
+											</Trigger>
+										</ControlTemplate.Triggers>
+									</ControlTemplate>
+								</Button.Template>
+							</Button>
+
+							<!-- Scrollable Tab Headers (Virtualized) -->
+							<ScrollViewer x:Name="PART_ScrollViewer"
+										Grid.Column="1"
+										HorizontalScrollBarVisibility="Hidden"
+										VerticalScrollBarVisibility="Disabled"
+										CanContentScroll="False"
+										PanningMode="HorizontalOnly"
+										Focusable="False">
+								<!-- Use a non-wrapping panel so headers can overflow for scrolling -->
+								<StackPanel x:Name="HeaderPanel"
+									Orientation="Horizontal"
+									IsItemsHost="True"
+									Margin="2,2,2,0"
+									KeyboardNavigation.TabNavigation="Local"/>
+							</ScrollViewer>
+
+							<!-- Right Scroll Button with Accessibility -->
+							<Button x:Name="PART_RightButton"
+									Grid.Column="2"
+									Width="20"
+									Height="24"
+									Padding="0"
+									Background="Transparent"
+									BorderThickness="0"
+									Visibility="Collapsed"
+									ToolTip="Scroll right (Mouse wheel also works)"
+									Focusable="False"
+									VerticalAlignment="Center"
+									AutomationProperties.Name="Scroll Tabs Right"
+									AutomationProperties.HelpText="Scrolls the tab list to show tabs on the right">
+								<Button.Template>
+									<ControlTemplate TargetType="Button">
+										<Border x:Name="Border"
+												Background="{TemplateBinding Background}"
+												BorderBrush="{TemplateBinding BorderBrush}"
+												BorderThickness="{TemplateBinding BorderThickness}"
+												CornerRadius="2">
+											<Path x:Name="Arrow"
+													Data="M 3,10 L 7,6 L 3,2"
+													Stroke="#606060"
+													StrokeThickness="2"
+													HorizontalAlignment="Center"
+													VerticalAlignment="Center"
+													SnapsToDevicePixels="True"/>
+										</Border>
+										<ControlTemplate.Triggers>
+											<Trigger Property="IsMouseOver" Value="True">
+												<Setter TargetName="Border" Property="Background" Value="#10000000"/>
+												<Setter TargetName="Arrow" Property="Stroke" Value="#000000"/>
+											</Trigger>
+											<Trigger Property="IsPressed" Value="True">
+												<Setter TargetName="Border" Property="Background" Value="#20000000"/>
+											</Trigger>
+										</ControlTemplate.Triggers>
+									</ControlTemplate>
+								</Button.Template>
+							</Button>
+
+							<!-- Dropdown Button with Accessibility -->
+							<Button x:Name="PART_DropdownButton"
+									Grid.Column="3"
+									Width="24"
+									Height="24"
+									Padding="0"
+									Margin="2,0,4,0"
+									Background="Transparent"
+									BorderThickness="0"
+									Visibility="Collapsed"
+									ToolTip="All tabs (Alt+T)"
+									Focusable="False"
+									VerticalAlignment="Center"
+									AutomationProperties.Name="Show All Tabs"
+									AutomationProperties.HelpText="Opens a dropdown menu showing all open tabs"
+									AutomationProperties.AccessKey="Alt+T">
+								<Button.Template>
+									<ControlTemplate TargetType="Button">
+										<Border x:Name="Border"
+												Background="{TemplateBinding Background}"
+												BorderBrush="{TemplateBinding BorderBrush}"
+												BorderThickness="{TemplateBinding BorderThickness}"
+												CornerRadius="2">
+											<Path x:Name="Arrow"
+													Data="M 2,3 L 8,3 L 5,7 Z"
+													Fill="#606060"
+													HorizontalAlignment="Center"
+													VerticalAlignment="Center"
+													SnapsToDevicePixels="True"/>
+										</Border>
+										<ControlTemplate.Triggers>
+											<Trigger Property="IsMouseOver" Value="True">
+												<Setter TargetName="Border" Property="Background" Value="#10000000"/>
+												<Setter TargetName="Arrow" Property="Fill" Value="#000000"/>
+											</Trigger>
+											<Trigger Property="IsPressed" Value="True">
+												<Setter TargetName="Border" Property="Background" Value="#20000000"/>
+											</Trigger>
+										</ControlTemplate.Triggers>
+									</ControlTemplate>
+								</Button.Template>
+							</Button>
+						</Grid>
+
+						<!-- Tab Content Area -->
+						<Border Grid.Row="1"
+								BorderThickness="1,0,1,1"
+								BorderBrush="{TemplateBinding BorderBrush}"
+								Background="{TemplateBinding Background}">
+							<ContentPresenter x:Name="PART_SelectedContentHost"
+												ContentSource="SelectedContent"
+												Margin="{TemplateBinding Padding}"
+												SnapsToDevicePixels="True"/>
+						</Border>
+					</Grid>
+				</ControlTemplate>
+			</Setter.Value>
+		</Setter>
+
+		<!-- Optimized Tab Item Style -->
+		<Setter Property="ItemContainerStyle">
+			<Setter.Value>
+				<Style TargetType="TabItem">
+					<Setter Property="MinWidth" Value="80"/>
+					<Setter Property="MaxWidth" Value="200"/>
+					<Setter Property="Height" Value="28"/>
+					<Setter Property="Padding" Value="8,2,20,2"/>
+					<Setter Property="SnapsToDevicePixels" Value="True"/>
+					<Setter Property="UseLayoutRounding" Value="True"/>
+					<Setter Property="ToolTip" Value="{Binding Title}"/>
+					<Setter Property="Panel.ZIndex" Value="1"/>
+					<Style.Triggers>
+						<Trigger Property="IsSelected" Value="True">
+							<Setter Property="Panel.ZIndex" Value="100"/>
+						</Trigger>
+					</Style.Triggers>
+				</Style>
+			</Setter.Value>
+		</Setter>
+	</Style>
+
+</ResourceDictionary>
+
+

@@ -200,6 +200,7 @@ C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\SplitPaneView.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Controls\SplitWorkspace.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\MainWindow.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Plugins\Todo\UI\TodoPanel.baml
+C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Resources\TabControlTemplates.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\Windows\SettingsWindow.baml
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.g.resources
 C:\NoteNest\NoteNest.UI\obj\Debug\net9.0-windows\NoteNest.UI.GeneratedMSBuildEditorConfig.editorconfig

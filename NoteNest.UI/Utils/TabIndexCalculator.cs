@@ -15,10 +15,16 @@ namespace NoteNest.UI.Utils
         /// <param name="headerPanel">The panel containing tab headers</param>
         /// <param name="localPoint">Mouse position in local coordinates of the panel</param>
         /// <returns>Zero-based index where the tab should be inserted</returns>
-        public static int CalculateInsertionIndex(Panel headerPanel, Point localPoint)
+        public static int CalculateInsertionIndex(Panel headerPanel, Point localPoint, ScrollViewer scrollViewer = null)
         {
             if (headerPanel == null)
                 return 0;
+
+            double adjustedX = localPoint.X;
+            if (scrollViewer != null)
+            {
+                adjustedX += scrollViewer.HorizontalOffset;
+            }
 
             double accumulator = 0;
             for (int i = 0; i < headerPanel.Children.Count; i++)
@@ -26,7 +32,7 @@ namespace NoteNest.UI.Utils
                 if (headerPanel.Children[i] is FrameworkElement child && child.IsVisible)
                 {
                     accumulator += child.ActualWidth;
-                    if (localPoint.X < accumulator)
+                    if (adjustedX < accumulator)
                         return i;
                 }
             }
@@ -42,13 +48,19 @@ namespace NoteNest.UI.Utils
         /// <param name="localPoint">Mouse position in local coordinates</param>
         /// <param name="excludeIndex">Index to exclude from calculation (for reordering within same panel)</param>
         /// <returns>Validated insertion index</returns>
-        public static int CalculateInsertionIndexSafe(Panel headerPanel, Point localPoint, int excludeIndex = -1)
+        public static int CalculateInsertionIndexSafe(Panel headerPanel, Point localPoint, int excludeIndex = -1, ScrollViewer scrollViewer = null)
         {
             if (headerPanel == null)
                 return 0;
 
             try
             {
+                double adjustedX = localPoint.X;
+                if (scrollViewer != null)
+                {
+                    adjustedX += scrollViewer.HorizontalOffset;
+                }
+
                 double accumulator = 0;
                 int adjustedIndex = 0;
 
@@ -61,7 +73,7 @@ namespace NoteNest.UI.Utils
                     if (headerPanel.Children[i] is FrameworkElement child && child.IsVisible)
                     {
                         accumulator += child.ActualWidth;
-                        if (localPoint.X < accumulator)
+                        if (adjustedX < accumulator)
                             return adjustedIndex;
                         adjustedIndex++;
                     }

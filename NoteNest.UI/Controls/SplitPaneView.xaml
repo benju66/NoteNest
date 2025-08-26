@@ -5,12 +5,14 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:ui="http://schemas.modernwpf.com/2019"
              xmlns:local="clr-namespace:NoteNest.UI.Controls"
+             xmlns:behaviors="clr-namespace:NoteNest.UI.Behaviors"
              mc:Ignorable="d">
     <Border x:Name="PaneBorder" 
             BorderThickness="2" 
             BorderBrush="Transparent">
         <Grid>
             <local:DraggableTabControl x:Name="PaneTabControl"
+                        behaviors:TabOverflowBehavior.EnableOverflow="True"
                         SelectionChanged="TabControl_SelectionChanged"
                         GotFocus="TabControl_GotFocus">
                 <local:DraggableTabControl.Resources>

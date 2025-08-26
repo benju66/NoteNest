@@ -245,7 +245,8 @@ namespace NoteNest.UI.Controls
                         if (headerPanel != null)
                         {
                             var local = GetLocalPoint(headerPanel, screenPoint);
-                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
+                            var scrollViewer = GetTabScrollViewer();
+                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local, scrollViewer);
                             ReorderWithinPane(draggedTab, idx);
                         }
                     }
@@ -301,7 +302,8 @@ namespace NoteNest.UI.Controls
                 var headerPanel = GetHeaderPanel();
                 if (headerPanel != null)
                 {
-                    var index = TabIndexCalculator.CalculateInsertionIndex(headerPanel, e.GetPosition(headerPanel));
+                    var scrollViewer = GetTabScrollViewer();
+                    var index = TabIndexCalculator.CalculateInsertionIndex(headerPanel, e.GetPosition(headerPanel), scrollViewer);
                     _dropZoneManager.ShowInsertionLine(headerPanel, index);
                 }
                 e.Effects = DragDropEffects.Move;
@@ -325,7 +327,8 @@ namespace NoteNest.UI.Controls
                     var headerPanel = GetHeaderPanel();
                     if (headerPanel != null)
                     {
-                        var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, e.GetPosition(headerPanel));
+                        var scrollViewer = GetTabScrollViewer();
+                        var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, e.GetPosition(headerPanel), scrollViewer);
                         var list = ItemsSource as System.Collections.IList;
                         if (list != null && list.Contains(tab))
                         {
@@ -377,6 +380,12 @@ namespace NoteNest.UI.Controls
             return sp;
         }
 
+        // Fix 2: Expose ScrollViewer from template for scroll-aware calculations
+        public ScrollViewer GetTabScrollViewer()
+        {
+            return Template?.FindName("PART_ScrollViewer", this) as ScrollViewer;
+        }
+
         private TabItem FindTabItemFromPoint(Point point)
         {
             var element = InputHitTest(point) as DependencyObject;
@@ -398,7 +407,8 @@ namespace NoteNest.UI.Controls
                 {
                     var headerPanel = targetControl.GetHeaderPanel();
                     var local = headerPanel.PointFromScreen(screenPoint);
-                    var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
+                    var scrollViewer = targetControl.GetTabScrollViewer();
+                    var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local, scrollViewer);
                     _ = workspace.MoveTabToPaneAsync(tab, targetPane, idx);
                 }
             }
@@ -791,7 +801,8 @@ namespace NoteNest.UI.Controls
                         if (headerPanel != null)
                         {
                             var local = GetLocalPoint(headerPanel, screenPoint);
-                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
+                            var scrollViewer = targetControl.GetTabScrollViewer();
+                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local, scrollViewer);
                             _dropZoneManager.ShowInsertionLine(headerPanel, idx);
                         }
 
@@ -814,7 +825,8 @@ namespace NoteNest.UI.Controls
                         if (headerPanel != null)
                         {
                             var local = GetLocalPoint(headerPanel, screenPoint);
-                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local);
+                            var scrollViewer = GetTabScrollViewer();
+                            var idx = TabIndexCalculator.CalculateInsertionIndex(headerPanel, local, scrollViewer);
                             _dropZoneManager.ShowInsertionLine(headerPanel, idx);
                         }
                     }
