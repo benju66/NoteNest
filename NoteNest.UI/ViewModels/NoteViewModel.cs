@@ -4,7 +4,7 @@ using NoteNest.Core.Services;
 namespace NoteNest.UI.ViewModels
 {
     // Compatibility: implements ITab-like surface via properties (not formally implementing ITabItem to avoid ripple changes yet)
-    public class NoteViewModel : ViewModelBase
+    public class NoteViewModel : ViewModelBase, IDisposable
     {
         private readonly IWorkspaceStateService _workspace;
         private readonly WorkspaceNote _note;
@@ -52,9 +52,14 @@ namespace NoteNest.UI.ViewModels
             await _workspace.SaveNoteAsync(NoteId);
         }
 
+        private bool _disposed;
+
         public void Dispose()
         {
-            _workspace.NoteStateChanged -= WorkspaceOnNoteStateChanged;
+            if (_disposed) return;
+            try { _workspace.NoteStateChanged -= WorkspaceOnNoteStateChanged; } catch { }
+            _disposed = true;
+            GC.SuppressFinalize(this);
         }
     }
 }

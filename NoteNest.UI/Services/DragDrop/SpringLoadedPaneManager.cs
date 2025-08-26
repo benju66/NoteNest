@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Windows;
 using NoteNest.UI.Config;
+using System.Windows.Threading;
 
 namespace NoteNest.UI.Services.DragDrop
 {
@@ -10,6 +11,7 @@ namespace NoteNest.UI.Services.DragDrop
         private Timer? _timer;
         private WeakReference<FrameworkElement>? _hoveredPane;
         private int DelayMs => DragConfig.Instance.SpringLoadDelayMs;
+        private readonly Dispatcher _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
         public event EventHandler<FrameworkElement>? PaneActivated;
 
@@ -29,18 +31,21 @@ namespace NoteNest.UI.Services.DragDrop
 
         private void Trigger()
         {
-            if (_hoveredPane?.TryGetTarget(out var pane) == true)
+            if (_hoveredPane?.TryGetTarget(out var _) == true)
             {
-                Application.Current?.Dispatcher?.BeginInvoke(new Action(() =>
+                _dispatcher.BeginInvoke(new Action(() =>
                 {
-                    PaneActivated?.Invoke(this, pane);
+                    if (_hoveredPane?.TryGetTarget(out var validPane) == true)
+                    {
+                        PaneActivated?.Invoke(this, validPane);
+                    }
                 }));
             }
         }
 
         public void Dispose()
         {
-            _timer?.Dispose();
+            EndHover();
         }
     }
 }

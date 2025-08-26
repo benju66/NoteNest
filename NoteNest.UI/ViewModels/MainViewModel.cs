@@ -235,13 +235,7 @@ namespace NoteNest.UI.ViewModels
             try
             {
                 // Wire up state management (fast)
-                _stateManager.PropertyChanged += (s, e) =>
-                {
-                    if (e.PropertyName == nameof(IStateManager.IsLoading))
-                        OnPropertyChanged(nameof(IsLoading));
-                    if (e.PropertyName == nameof(IStateManager.StatusMessage))
-                        OnPropertyChanged(nameof(StatusMessage));
-                };
+                _stateManager.PropertyChanged += OnStateManagerPropertyChanged;
 
                 // Initialize collections (fast)
                 Categories = new ObservableCollection<CategoryTreeItem>();
@@ -392,6 +386,15 @@ namespace NoteNest.UI.ViewModels
                     _stateManager.EndOperation("Ready");
                 }
             }
+        }
+
+        // Centralized handler to allow proper unsubscription on dispose
+        private void OnStateManagerPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e?.PropertyName == nameof(IStateManager.IsLoading))
+                OnPropertyChanged(nameof(IsLoading));
+            if (e?.PropertyName == nameof(IStateManager.StatusMessage))
+                OnPropertyChanged(nameof(StatusMessage));
         }
 
         private async Task LoadCategoriesAsync()
@@ -1144,13 +1147,23 @@ namespace NoteNest.UI.ViewModels
                 {
                     // Cancel operations quickly
                     _cancellationTokenSource?.Cancel();
-                    
+
+                    // Unsubscribe events
+                    if (_workspaceService != null)
+                    {
+                        _workspaceService.TabSelectionChanged -= OnServiceTabSelectionChanged;
+                    }
+                    if (_stateManager != null)
+                    {
+                        _stateManager.PropertyChanged -= OnStateManagerPropertyChanged;
+                    }
+
                     // Dispose only what was actually created
                     _searchIndex = null;
                     _fileWatcher?.Dispose();
                     (_workspaceViewModel as IDisposable)?.Dispose();
                     (_workspaceService as IDisposable)?.Dispose();
-                    
+
                     _cancellationTokenSource?.Dispose();
                     _autoSaveTimer?.Stop();
                 }

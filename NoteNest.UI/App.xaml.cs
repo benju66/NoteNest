@@ -64,13 +64,23 @@ namespace NoteNest.UI
                     _logger?.Warning($"Theme init failed: {themeEx.Message}");
                 }
 
-                // Create and show window immediately
+                // Create window, wire services, then show
                 var mainWindow = new MainWindow();
                 var mainViewModel = ServiceProvider.GetRequiredService<MainViewModel>();
                 mainWindow.DataContext = mainViewModel;
                 
-                mainWindow.Show();
+                try
+                {
+                    var dlg = ServiceProvider.GetService<IDialogService>();
+                    if (dlg != null)
+                    {
+                        dlg.OwnerWindow = mainWindow;
+                    }
+                }
+                catch { }
+                
                 MainWindow = mainWindow;
+                mainWindow.Show();
                 
                 _startupTimer.Stop();
                 _logger.Info($"App started in {_startupTimer.ElapsedMilliseconds}ms");

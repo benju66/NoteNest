@@ -12,6 +12,8 @@ namespace NoteNest.Core.Services
         private readonly Timer? _cleanupTimer;
         private readonly int _maxCacheSize;
         private readonly TimeSpan _defaultExpiration;
+        private readonly IEventBus? _eventBus;
+        private Delegate? _noteSavedHandler;
         private long _currentSize;
         private bool _disposed;
 
@@ -35,15 +37,18 @@ namespace NoteNest.Core.Services
 
         public ContentCache(IEventBus eventBus, int maxCacheSizeMB = 50, int expirationMinutes = 10, int cleanupMinutes = 5) : this(maxCacheSizeMB, expirationMinutes, cleanupMinutes)
         {
-            if (eventBus != null)
+            _eventBus = eventBus;
+            if (_eventBus != null)
             {
-                eventBus.Subscribe<NoteNest.Core.Events.NoteSavedEvent>(e =>
+                Action<NoteNest.Core.Events.NoteSavedEvent> handler = e =>
                 {
                     if (e?.FilePath != null)
                     {
                         InvalidateEntry(e.FilePath);
                     }
-                });
+                };
+                _noteSavedHandler = handler;
+                _eventBus.Subscribe(handler);
             }
         }
 
@@ -159,7 +164,13 @@ namespace NoteNest.Core.Services
             if (_disposed) return;
             
             _disposed = true;
+            try { _cleanupTimer?.Change(Timeout.Infinite, Timeout.Infinite); } catch { }
             _cleanupTimer?.Dispose();
+            if (_eventBus != null && _noteSavedHandler != null)
+            {
+                try { _eventBus.Unsubscribe<NoteNest.Core.Events.NoteSavedEvent>(_noteSavedHandler); } catch { }
+                _noteSavedHandler = null;
+            }
             Clear();
         }
     }

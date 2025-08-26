@@ -196,7 +196,7 @@ namespace NoteNest.UI.Plugins.Todo.UI
 			}
 		}
 
-		private void EditTask_Click(object sender, RoutedEventArgs e)
+		private async void EditTask_Click(object sender, RoutedEventArgs e)
 		{
 			if (sender is MenuItem mi && mi.DataContext is TodoItem task)
 			{
@@ -209,24 +209,22 @@ namespace NoteNest.UI.Plugins.Todo.UI
 					Notes = task.Notes,
 					Categories = TaskCategories.Select(c => c.Name).ToList()
 				};
-				var _ = dialog.ShowAsync().ContinueWith(async t =>
+				try
 				{
-					if (t.Result == ModernWpf.Controls.ContentDialogResult.Primary)
+					var result = await dialog.ShowAsync();
+					if (result == ModernWpf.Controls.ContentDialogResult.Primary)
 					{
-						try
-						{
-							// Pull updated values back from dialog
-							task.Text = ((dynamic)dialog.DataContext).Text;
-							task.Category = ((dynamic)dialog.DataContext).Category;
-							task.Priority = ((dynamic)dialog.DataContext).Priority;
-							task.DueDate = ((dynamic)dialog.DataContext).DueDate;
-							task.Notes = ((dynamic)dialog.DataContext).Notes;
-							await _todoService.UpdateTaskAsync(task);
-							Application.Current.Dispatcher.Invoke(LoadTasks);
-						}
-						catch { }
+						// Pull updated values back from dialog
+						task.Text = ((dynamic)dialog.DataContext).Text;
+						task.Category = ((dynamic)dialog.DataContext).Category;
+						task.Priority = ((dynamic)dialog.DataContext).Priority;
+						task.DueDate = ((dynamic)dialog.DataContext).DueDate;
+						task.Notes = ((dynamic)dialog.DataContext).Notes;
+						await _todoService.UpdateTaskAsync(task);
+						LoadTasks();
 					}
-				});
+				}
+				catch { }
 			}
 		}
 
