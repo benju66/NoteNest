@@ -66,10 +66,15 @@ namespace NoteNest.UI.Behaviors
 
 		private static void OnEnableOverflowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
 		{
-			if (GloballyDisabled) return;
+			if (GloballyDisabled)
+			{
+				System.Diagnostics.Debug.WriteLine("WARNING: TabOverflowBehavior.GloballyDisabled is TRUE - overflow will not work!");
+				return;
+			}
 
 			if (d is DraggableTabControl tabControl)
 			{
+				System.Diagnostics.Debug.WriteLine($"TabOverflowBehavior: EnableOverflow changed to {e.NewValue} for {tabControl.Name ?? "unnamed"} TabControl");
 				if ((bool)e.NewValue)
 					AttachBehavior(tabControl);
 				else
@@ -102,6 +107,13 @@ namespace NoteNest.UI.Behaviors
 
 		private static void SetupOverflowHandling(DraggableTabControl tabControl)
 		{
+			// Force template application if not already applied
+			if (!tabControl.IsArrangeValid || tabControl.Template == null)
+			{
+				tabControl.ApplyTemplate();
+				tabControl.UpdateLayout();
+			}
+
 			// Find template parts
 			var scrollViewer = tabControl.Template?.FindName("PART_ScrollViewer", tabControl) as ScrollViewer;
 			var leftButton = tabControl.Template?.FindName("PART_LeftButton", tabControl) as Button;
@@ -110,7 +122,16 @@ namespace NoteNest.UI.Behaviors
 
 			if (scrollViewer == null)
 			{
-				System.Diagnostics.Debug.WriteLine("TabOverflowBehavior: PART_ScrollViewer not found; template may not be applied.");
+				System.Diagnostics.Debug.WriteLine("TabOverflowBehavior: PART_ScrollViewer not found after template application");
+				// Schedule a retry after layout completes
+				tabControl.Dispatcher.BeginInvoke(new Action(() =>
+				{
+					var sv = tabControl.Template?.FindName("PART_ScrollViewer", tabControl) as ScrollViewer;
+					if (sv != null)
+					{
+						SetupOverflowHandling(tabControl);
+					}
+				}), DispatcherPriority.Loaded);
 				return;
 			}
 
@@ -126,18 +147,7 @@ namespace NoteNest.UI.Behaviors
 				handlers.VisibilityTimer.Stop();
 			};
 
-			// Mouse wheel scrolling with DPI awareness
-			handlers.MouseWheel = (s, e) =>
-			{
-				if (tabControl.IsMouseOver && scrollViewer != null)
-				{
-					var scrollAmount = GetDpiAwareScrollAmount(tabControl);
-					scrollViewer.ScrollToHorizontalOffset(
-						scrollViewer.HorizontalOffset + (e.Delta > 0 ? -scrollAmount : scrollAmount));
-					e.Handled = true;
-				}
-			};
-			tabControl.PreviewMouseWheel += handlers.MouseWheel;
+			// Mouse wheel scrolling removed to avoid interfering with vertical note scrolling
 
 			// Left button
 			if (leftButton != null)
@@ -164,20 +174,7 @@ namespace NoteNest.UI.Behaviors
 				rightButton.Click += handlers.RightClick;
 			}
 
-			// Dropdown button and Alt+T binding (Fix 1 tracking)
-			if (dropdownButton != null)
-			{
-				handlers.DropdownClick = (s, e) => ShowDropdownMenu(tabControl, dropdownButton);
-				dropdownButton.Click += handlers.DropdownClick;
-
-				var altTCommand = new RoutedCommand();
-				var altTBinding = new KeyBinding(altTCommand, new KeyGesture(Key.T, ModifierKeys.Alt))
-				{
-					Command = new RelayCommand(() => ShowDropdownMenu(tabControl, dropdownButton))
-				};
-				tabControl.InputBindings.Add(altTBinding);
-				_altTBindings[tabControl] = altTBinding; // track for cleanup
-			}
+			// Dropdown button and Alt+T removed per requirements
 
 			// Overflow detection with debounce
 			handlers.ScrollChanged = (s, e) =>
@@ -247,9 +244,6 @@ namespace NoteNest.UI.Behaviors
 
 			if (rightButton != null)
 				rightButton.Visibility = isOverflowing && canScrollRight ? Visibility.Visible : Visibility.Collapsed;
-
-			if (dropdownButton != null)
-				dropdownButton.Visibility = isOverflowing ? Visibility.Visible : Visibility.Collapsed;
 		}
 
 		private static void EnsureSelectedTabVisible(DraggableTabControl tabControl, ScrollViewer scrollViewer)
@@ -279,95 +273,16 @@ namespace NoteNest.UI.Behaviors
 			catch { }
 		}
 
-		private static void ShowDropdownMenu(DraggableTabControl tabControl, Button dropdownButton)
-		{
-			var menu = new ContextMenu
-			{
-				PlacementTarget = dropdownButton,
-				Placement = PlacementMode.Bottom,
-				StaysOpen = false
-			};
-
-			// Fix 4: Theme-aware resources for highlight
-			try
-			{
-				var accentBrush = Application.Current.FindResource("SystemControlHighlightAccentBrush") as Brush;
-				if (accentBrush != null)
-				{
-					menu.Resources[SystemColors.HighlightBrushKey] = accentBrush;
-				}
-			}
-			catch { }
-
-			int index = 0;
-			foreach (var item in tabControl.Items)
-			{
-				if (item is ITabItem tab)
-				{
-					var menuItem = new MenuItem
-					{
-						Header = tab.Title,
-						Tag = index++,
-						MaxWidth = 300
-					};
-
-					// Selection indicator with theme support
-					if (tab == tabControl.SelectedItem)
-					{
-						menuItem.FontWeight = FontWeights.Bold;
-						try
-						{
-							menuItem.Background = Application.Current.FindResource("SystemControlHighlightListLowBrush") as Brush;
-						}
-						catch { }
-					}
-
-					// Dirty indicator with theme-aware colors
-					if (tab.IsDirty)
-					{
-						var stack = new StackPanel { Orientation = Orientation.Horizontal };
-						var dirtyIndicator = new TextBlock { Text = "● ", FontSize = 8, VerticalAlignment = VerticalAlignment.Center };
-						try
-						{
-							dirtyIndicator.Foreground = Application.Current.FindResource("SystemControlForegroundBaseHighBrush") as Brush;
-						}
-						catch { }
-						var titleText = new TextBlock { Text = tab.Title, VerticalAlignment = VerticalAlignment.Center };
-						stack.Children.Add(dirtyIndicator);
-						stack.Children.Add(titleText);
-						menuItem.Header = stack;
-					}
-
-					menuItem.Click += (s, e) =>
-					{
-						tabControl.SelectedItem = tab;
-						var sv = tabControl.Template?.FindName("PART_ScrollViewer", tabControl) as ScrollViewer;
-						if (sv != null)
-							EnsureSelectedTabVisible(tabControl, sv);
-					};
-
-					menu.Items.Add(menuItem);
-				}
-			}
-
-			menu.IsOpen = true;
-		}
+		// Dropdown menu removed per requirements
 
 		private static void DetachBehavior(DraggableTabControl tabControl)
 		{
 			if (!_handlers.TryGetValue(tabControl, out var handlers))
 			{
-				// Remove only our Alt+T binding even if handlers were not created
-				if (_altTBindings.TryGetValue(tabControl, out var bindingOnly))
-				{
-					tabControl.InputBindings.Remove(bindingOnly);
-					_altTBindings.Remove(tabControl);
-				}
 				return;
 			}
 
-			if (handlers.MouseWheel != null)
-				tabControl.PreviewMouseWheel -= handlers.MouseWheel;
+			// Mouse wheel detach removed (not attached)
 
 			var scrollViewer = tabControl.Template?.FindName("PART_ScrollViewer", tabControl) as ScrollViewer;
 			if (scrollViewer != null && handlers.ScrollChanged != null)
@@ -387,16 +302,9 @@ namespace NoteNest.UI.Behaviors
 			if (rightButton != null && handlers.RightClick != null)
 				rightButton.Click -= handlers.RightClick;
 
-			var dropdownButton = tabControl.Template?.FindName("PART_DropdownButton", tabControl) as Button;
-			if (dropdownButton != null && handlers.DropdownClick != null)
-				dropdownButton.Click -= handlers.DropdownClick;
+			// Dropdown detach removed (feature disabled)
 
-			// Fix 1: Remove only our Alt+T binding
-			if (_altTBindings.TryGetValue(tabControl, out var altTBinding))
-			{
-				tabControl.InputBindings.Remove(altTBinding);
-				_altTBindings.Remove(tabControl);
-			}
+			// Alt+T binding removal not needed (feature disabled)
 
 			handlers.VisibilityTimer?.Stop();
 

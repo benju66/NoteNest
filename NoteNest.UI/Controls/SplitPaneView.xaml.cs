@@ -56,6 +56,22 @@ namespace NoteNest.UI.Controls
             
             Pane = pane;
             PaneTabControl.ItemsSource = pane.Tabs;
+
+            // Ensure overflow behavior works after dynamic creation
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    PaneTabControl.ApplyTemplate();
+                    PaneTabControl.UpdateLayout();
+                    if (NoteNest.UI.Behaviors.TabOverflowBehavior.GetEnableOverflow(PaneTabControl))
+                    {
+                        NoteNest.UI.Behaviors.TabOverflowBehavior.SetEnableOverflow(PaneTabControl, false);
+                        NoteNest.UI.Behaviors.TabOverflowBehavior.SetEnableOverflow(PaneTabControl, true);
+                    }
+                }
+                catch { }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
             
             // Subscribe to collection changes
             if (pane.Tabs is INotifyCollectionChanged newCollection)

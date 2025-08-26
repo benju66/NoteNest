@@ -33,7 +33,7 @@
 									Background="Transparent"
 									BorderThickness="0"
 									Visibility="Collapsed"
-									ToolTip="Scroll left (Mouse wheel also works)"
+									ToolTip="Scroll tabs left"
 									Focusable="False"
 									VerticalAlignment="Center"
 									AutomationProperties.Name="Scroll Tabs Left"
@@ -89,7 +89,7 @@
 									Background="Transparent"
 									BorderThickness="0"
 									Visibility="Collapsed"
-									ToolTip="Scroll right (Mouse wheel also works)"
+									ToolTip="Scroll tabs right"
 									Focusable="False"
 									VerticalAlignment="Center"
 									AutomationProperties.Name="Scroll Tabs Right"
@@ -122,7 +122,7 @@
 								</Button.Template>
 							</Button>
 
-							<!-- Dropdown Button with Accessibility -->
+							<!-- Dropdown Button - PERMANENTLY HIDDEN -->
 							<Button x:Name="PART_DropdownButton"
 									Grid.Column="3"
 									Width="24"
@@ -132,12 +132,9 @@
 									Background="Transparent"
 									BorderThickness="0"
 									Visibility="Collapsed"
-									ToolTip="All tabs (Alt+T)"
 									Focusable="False"
 									VerticalAlignment="Center"
-									AutomationProperties.Name="Show All Tabs"
-									AutomationProperties.HelpText="Opens a dropdown menu showing all open tabs"
-									AutomationProperties.AccessKey="Alt+T">
+									>
 								<Button.Template>
 									<ControlTemplate TargetType="Button">
 										<Border x:Name="Border"
