@@ -1,0 +1,42 @@
+<UserControl x:Class="NoteNest.UI.Controls.NotificationHost"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <ItemsControl ItemsSource="{Binding Messages}"
+                      VerticalAlignment="Top"
+                      HorizontalAlignment="Right"
+                      Margin="0,60,20,0">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Margin="0,4"
+                            MinWidth="250"
+                            MaxWidth="400">
+                        <Grid Margin="12,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Message}"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                            <Button Grid.Column="1"
+                                    Content="&#xE711;"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="4"
+                                    VerticalAlignment="Center"
+                                    Click="CloseToast_Click"
+                                    Tag="{Binding Id}"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+</UserControl>

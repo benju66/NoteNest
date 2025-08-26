@@ -405,7 +405,6 @@ namespace NoteNest.UI.ViewModels
                 Categories.Clear();
 
                 var flatCategories = await GetCategoryService().LoadCategoriesAsync();
-                
                 if (!flatCategories.Any())
                 {
                     _logger.Info("No categories loaded");
@@ -415,13 +414,27 @@ namespace NoteNest.UI.ViewModels
                 var watcher = GetFileWatcher();
                 watcher.StopAllWatchers();
 
-                // Build tree structure
+                // Build tree structure off the UI thread, then apply to UI in one batch
                 var rootCategories = flatCategories.Where(c => string.IsNullOrEmpty(c.ParentId)).ToList();
-                foreach (var root in rootCategories.OrderByDescending(c => c.Pinned).ThenBy(c => c.Name))
+                var built = await Task.Run(async () =>
                 {
-                    var rootItem = await BuildCategoryTreeAsync(root, flatCategories, 0);
-                    Categories.Add(rootItem);
-                }
+                    var list = new List<CategoryTreeItem>();
+                    foreach (var root in rootCategories.OrderByDescending(c => c.Pinned).ThenBy(c => c.Name))
+                    {
+                        var rootItem = await BuildCategoryTreeAsync(root, flatCategories, 0);
+                        list.Add(rootItem);
+                    }
+                    return list;
+                });
+
+                // Apply to UI
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var item in built)
+                    {
+                        Categories.Add(item);
+                    }
+                });
 
                 // Set up file watcher
                 watcher.StartWatching(PathService.ProjectsPath, "*.*", includeSubdirectories: true);

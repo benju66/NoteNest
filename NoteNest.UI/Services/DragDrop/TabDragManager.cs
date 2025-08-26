@@ -69,8 +69,28 @@ namespace NoteNest.UI.Services.DragDrop
 
             GhostPopup.Child = ghost;
             GhostPopup.IsOpen = true;
-            GhostPopup.HorizontalOffset = startScreenPoint.X;
-            GhostPopup.VerticalOffset = startScreenPoint.Y;
+
+            // Ensure ghost is measured to compute size
+            ghost.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var size = ghost.DesiredSize;
+
+            // Convert screen pixels to device-independent units for Popup offsets
+            double dpiScaleX = 1.0, dpiScaleY = 1.0;
+            try
+            {
+                if (_sourceWindow != null)
+                {
+                    var dpi = VisualTreeHelper.GetDpi(_sourceWindow);
+                    dpiScaleX = dpi.DpiScaleX;
+                    dpiScaleY = dpi.DpiScaleY;
+                }
+            }
+            catch { }
+
+            // Center ghost under cursor
+            _dragOffset = new Point(size.Width / 2.0, size.Height / 2.0);
+            GhostPopup.HorizontalOffset = startScreenPoint.X / dpiScaleX - _dragOffset.X;
+            GhostPopup.VerticalOffset = startScreenPoint.Y / dpiScaleY - _dragOffset.Y;
         }
 
         public void UpdateManualDrag(Point screenPoint)
@@ -78,8 +98,21 @@ namespace NoteNest.UI.Services.DragDrop
             if (!_isManualDragging)
                 return;
 
-            GhostPopup.HorizontalOffset = screenPoint.X - _dragOffset.X;
-            GhostPopup.VerticalOffset = screenPoint.Y - _dragOffset.Y;
+            // Convert to DIPs for Popup; keep cursor anchored at same relative point
+            double dpiScaleX = 1.0, dpiScaleY = 1.0;
+            try
+            {
+                if (_sourceWindow != null)
+                {
+                    var dpi = VisualTreeHelper.GetDpi(_sourceWindow);
+                    dpiScaleX = dpi.DpiScaleX;
+                    dpiScaleY = dpi.DpiScaleY;
+                }
+            }
+            catch { }
+
+            GhostPopup.HorizontalOffset = screenPoint.X / dpiScaleX - _dragOffset.X;
+            GhostPopup.VerticalOffset = screenPoint.Y / dpiScaleY - _dragOffset.Y;
         }
 
         public bool IsOutsideDetachThreshold(Point screenPoint, double threshold = 50)

@@ -198,6 +198,18 @@ namespace NoteNest.Core.Services
                 .ToList();
         }
 
+        public async Task<List<SearchResult>> SearchAsync(string query, int maxResults = 50, System.Threading.CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return new List<SearchResult>();
+            return await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var results = Search(query, maxResults);
+                cancellationToken.ThrowIfCancellationRequested();
+                return results;
+            }, cancellationToken);
+        }
+
         private void UpdateResultScore(Dictionary<string, (SearchResult, float)> scores, 
             SearchResult result, float weight)
         {

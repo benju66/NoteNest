@@ -34,6 +34,7 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IStateManager, StateManager>();
             services.AddSingleton<IServiceErrorHandler, ServiceErrorHandler>();
             services.AddSingleton<IMarkdownService, MarkdownService>();
+            services.AddSingleton<ToastNotificationService>();
             
             // Essential Services Only
             services.AddSingleton<NoteService>(sp => new NoteService(

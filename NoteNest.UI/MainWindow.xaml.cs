@@ -138,6 +138,41 @@ namespace NoteNest.UI
                     }
                 }
                 catch { }
+
+                // Wire up toast host to service
+                try
+                {
+                    var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ToastNotificationService)) as ToastNotificationService;
+                    if (toast != null && ToastHost != null)
+                    {
+                        ToastHost.DataContext = toast;
+                    }
+                }
+                catch { }
+
+                // Hook errors to toasts with light throttling (5s)
+                try
+                {
+                    var err = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IServiceErrorHandler)) as IServiceErrorHandler;
+                    var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ToastNotificationService)) as ToastNotificationService;
+                    if (err != null && toast != null)
+                    {
+                        DateTime lastShown = DateTime.MinValue;
+                        err.ErrorOccurred += (s2, args) =>
+                        {
+                            try
+                            {
+                                var now = DateTime.UtcNow;
+                                if ((now - lastShown).TotalSeconds < 5) return;
+                                lastShown = now;
+                                var msg = string.IsNullOrWhiteSpace(args?.Context) ? "An error occurred" : args.Context;
+                                toast.Error(msg);
+                            }
+                            catch { }
+                        };
+                    }
+                }
+                catch { }
             };
         }
 
@@ -159,6 +194,12 @@ namespace NoteNest.UI
                         double dpi = VisualTreeHelper.GetDpi(this).DpiScaleX; // assume uniform
                         double rightInset = bounds.Width / dpi + 6; // add small pad
                         CustomTitleBar.Margin = new Thickness(0, 0, rightInset, 0);
+                        // Set title bar height to match caption buttons for perfect vertical alignment
+                        double captionHeight = bounds.Height / dpi;
+                        if (captionHeight > 0)
+                        {
+                            CustomTitleBar.Height = captionHeight;
+                        }
                         return;
                     }
                 }
