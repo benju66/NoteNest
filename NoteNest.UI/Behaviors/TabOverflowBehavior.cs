@@ -243,30 +243,50 @@ namespace NoteNest.UI.Behaviors
 		private static void SmoothScrollTo(ScrollViewer scrollViewer, double targetOffset)
 		{
 			if (scrollViewer == null) return;
+
 			var currentOffset = scrollViewer.HorizontalOffset;
 			var distance = targetOffset - currentOffset;
+
+			// Skip animation for tiny movements
 			if (Math.Abs(distance) < 1)
 			{
 				scrollViewer.ScrollToHorizontalOffset(targetOffset);
 				return;
 			}
 
-			var animation = new DoubleAnimation
+			// Timer-based smooth scrolling with easing
+			var animationTimer = new DispatcherTimer
 			{
-				From = currentOffset,
-				To = targetOffset,
-				Duration = TimeSpan.FromMilliseconds(200),
-				EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+				Interval = TimeSpan.FromMilliseconds(10)
 			};
 
-			var storyboard = new Storyboard();
-			storyboard.Children.Add(animation);
-			PropertyPath path = new PropertyPath("(ScrollViewer.HorizontalOffset)");
-			Storyboard.SetTarget(animation, scrollViewer);
-			Storyboard.SetTargetProperty(animation, path);
+			var startOffset = currentOffset;
+			var startTime = DateTime.Now;
+			var duration = TimeSpan.FromMilliseconds(180);
 
-			// Begin animation – if storyboard is not effective on read-only DP, fall back to immediate set at completion
-			scrollViewer.BeginAnimation(ScrollViewer.HorizontalOffsetProperty, animation);
+			animationTimer.Tick += (sender, e) =>
+			{
+				var elapsed = DateTime.Now - startTime;
+				if (elapsed >= duration)
+				{
+					// Animation complete - ensure exact target
+					scrollViewer.ScrollToHorizontalOffset(targetOffset);
+					animationTimer.Stop();
+					animationTimer = null;
+				}
+				else
+				{
+					var progress = elapsed.TotalMilliseconds / duration.TotalMilliseconds;
+					// Cubic ease-in-out
+					var easedProgress = progress < 0.5
+						? 4 * progress * progress * progress
+						: 1 - Math.Pow(-2 * progress + 2, 3) / 2;
+					var newOffset = startOffset + (distance * easedProgress);
+					scrollViewer.ScrollToHorizontalOffset(newOffset);
+				}
+			};
+
+			animationTimer.Start();
 		}
 
 		private static void UpdateButtonVisibility(ScrollViewer scrollViewer, Button leftButton, Button rightButton, Button dropdownButton)
@@ -321,11 +341,13 @@ namespace NoteNest.UI.Behaviors
 				{
 					// Too far left
 					targetOffset = scrollViewer.HorizontalOffset + position.X - padding;
+					targetOffset = Math.Max(0, targetOffset);
 				}
 				else if (position.X + width > scrollViewer.ViewportWidth - padding)
 				{
 					// Too far right
 					targetOffset = scrollViewer.HorizontalOffset + (position.X + width - scrollViewer.ViewportWidth + padding);
+					targetOffset = Math.Min(scrollViewer.ScrollableWidth, targetOffset);
 				}
 				else
 				{
