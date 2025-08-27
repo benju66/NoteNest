@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using NoteNest.UI.Controls;
 using NoteNest.Core.Interfaces.Services;
+using System.Windows.Media.Animation;
 
 namespace NoteNest.UI.Behaviors
 {
@@ -54,6 +55,7 @@ namespace NoteNest.UI.Behaviors
 			public RoutedEventHandler DropdownClick { get; set; }
 			public DispatcherTimer VisibilityTimer { get; set; }
 			public SizeChangedEventHandler SizeChanged { get; set; }
+			public double CachedScrollAmount { get; set; } = -1;
 		}
 
 		private static readonly Dictionary<DraggableTabControl, EventHandlers> _handlers = new();
@@ -137,7 +139,7 @@ namespace NoteNest.UI.Behaviors
 
 			var handlers = new EventHandlers
 			{
-				VisibilityTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) }
+				VisibilityTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) }
 			};
 
 			// Debounced visibility updater: attach once
@@ -149,27 +151,26 @@ namespace NoteNest.UI.Behaviors
 
 			// Mouse wheel scrolling removed to avoid interfering with vertical note scrolling
 
-			// Left button
+			// Left button - smooth scroll
 			if (leftButton != null)
 			{
 				handlers.LeftClick = (s, e) =>
 				{
-					var amount = GetDpiAwareScrollAmount(tabControl);
-					scrollViewer.ScrollToHorizontalOffset(
-						Math.Max(0, scrollViewer.HorizontalOffset - amount));
+					var amount = GetDpiAwareScrollAmount(tabControl, handlers) * 0.8;
+					var target = Math.Max(0, scrollViewer.HorizontalOffset - amount);
+					SmoothScrollTo(scrollViewer, target);
 				};
 				leftButton.Click += handlers.LeftClick;
 			}
 
-			// Right button
+			// Right button - smooth scroll
 			if (rightButton != null)
 			{
 				handlers.RightClick = (s, e) =>
 				{
-					var amount = GetDpiAwareScrollAmount(tabControl);
-					scrollViewer.ScrollToHorizontalOffset(
-						Math.Min(scrollViewer.ScrollableWidth,
-							scrollViewer.HorizontalOffset + amount));
+					var amount = GetDpiAwareScrollAmount(tabControl, handlers) * 0.8;
+					var target = Math.Min(scrollViewer.ScrollableWidth, scrollViewer.HorizontalOffset + amount);
+					SmoothScrollTo(scrollViewer, target);
 				};
 				rightButton.Click += handlers.RightClick;
 			}
@@ -205,11 +206,13 @@ namespace NoteNest.UI.Behaviors
 
 			_handlers[tabControl] = handlers;
 
-			UpdateButtonVisibility(scrollViewer, leftButton, rightButton, dropdownButton);
-			// Ensure one more update after layout completes
+			// Batch initial updates in a single layout pass
 			tabControl.Dispatcher.BeginInvoke(new Action(() =>
-				UpdateButtonVisibility(scrollViewer, leftButton, rightButton, dropdownButton)),
-				DispatcherPriority.Loaded);
+			{
+				UpdateButtonVisibility(scrollViewer, leftButton, rightButton, dropdownButton);
+				// Cache scroll amount after DPI is stable
+				GetDpiAwareScrollAmount(tabControl, handlers);
+			}), DispatcherPriority.Loaded);
 
 			WeakEventManager<FrameworkElement, RoutedEventArgs>.AddHandler(tabControl, "Unloaded", OnTabControlUnloaded);
 		}
@@ -220,30 +223,83 @@ namespace NoteNest.UI.Behaviors
 			DetachBehavior(tabControl);
 		}
 
-		private static double GetDpiAwareScrollAmount(Visual visual)
+		private static double GetDpiAwareScrollAmount(Visual visual, EventHandlers handlers = null)
 		{
+			// Use cached amount if available
+			if (handlers?.CachedScrollAmount > 0)
+				return handlers.CachedScrollAmount;
+
 			var source = PresentationSource.FromVisual(visual);
 			if (source?.CompositionTarget != null)
 			{
 				var dpiX = source.CompositionTarget.TransformToDevice.M11;
-				return 100 * dpiX; // 100 logical pixels
+				var amount = 80 * dpiX; // slightly smaller base for smoother feel
+				if (handlers != null) handlers.CachedScrollAmount = amount;
+				return amount;
 			}
-			return 100; // Fallback
+			return 80; // Fallback
+		}
+
+		private static void SmoothScrollTo(ScrollViewer scrollViewer, double targetOffset)
+		{
+			if (scrollViewer == null) return;
+			var currentOffset = scrollViewer.HorizontalOffset;
+			var distance = targetOffset - currentOffset;
+			if (Math.Abs(distance) < 1)
+			{
+				scrollViewer.ScrollToHorizontalOffset(targetOffset);
+				return;
+			}
+
+			var animation = new DoubleAnimation
+			{
+				From = currentOffset,
+				To = targetOffset,
+				Duration = TimeSpan.FromMilliseconds(200),
+				EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+			};
+
+			var storyboard = new Storyboard();
+			storyboard.Children.Add(animation);
+			PropertyPath path = new PropertyPath("(ScrollViewer.HorizontalOffset)");
+			Storyboard.SetTarget(animation, scrollViewer);
+			Storyboard.SetTargetProperty(animation, path);
+
+			// Begin animation – if storyboard is not effective on read-only DP, fall back to immediate set at completion
+			scrollViewer.BeginAnimation(ScrollViewer.HorizontalOffsetProperty, animation);
 		}
 
 		private static void UpdateButtonVisibility(ScrollViewer scrollViewer, Button leftButton, Button rightButton, Button dropdownButton)
 		{
 			if (scrollViewer == null) return;
 
-			bool isOverflowing = scrollViewer.ExtentWidth > scrollViewer.ViewportWidth;
-			bool canScrollLeft = scrollViewer.HorizontalOffset > 0.1;
-			bool canScrollRight = scrollViewer.HorizontalOffset < (scrollViewer.ScrollableWidth - 0.1);
+			var extentWidth = scrollViewer.ExtentWidth;
+			var viewportWidth = scrollViewer.ViewportWidth;
+			if (extentWidth <= viewportWidth)
+			{
+				if (leftButton?.Visibility == Visibility.Visible)
+					leftButton.Visibility = Visibility.Collapsed;
+				if (rightButton?.Visibility == Visibility.Visible)
+					rightButton.Visibility = Visibility.Collapsed;
+				return;
+			}
 
-			if (leftButton != null)
-				leftButton.Visibility = isOverflowing && canScrollLeft ? Visibility.Visible : Visibility.Collapsed;
+			var offset = scrollViewer.HorizontalOffset;
+			var scrollableWidth = scrollViewer.ScrollableWidth;
+			const double epsilon = 0.1;
+			bool canScrollLeft = offset > epsilon;
+			bool canScrollRight = offset < (scrollableWidth - epsilon);
 
-			if (rightButton != null)
-				rightButton.Visibility = isOverflowing && canScrollRight ? Visibility.Visible : Visibility.Collapsed;
+			UpdateButtonIfChanged(leftButton, canScrollLeft);
+			UpdateButtonIfChanged(rightButton, canScrollRight);
+		}
+
+		private static void UpdateButtonIfChanged(Button button, bool shouldShow)
+		{
+			if (button == null) return;
+			var target = shouldShow ? Visibility.Visible : Visibility.Collapsed;
+			if (button.Visibility != target)
+				button.Visibility = target;
 		}
 
 		private static void EnsureSelectedTabVisible(DraggableTabControl tabControl, ScrollViewer scrollViewer)
@@ -259,16 +315,23 @@ namespace NoteNest.UI.Behaviors
 				var transform = container.TransformToAncestor(scrollViewer);
 				var position = transform.Transform(new Point(0, 0));
 				var width = container.ActualWidth;
-
-				if (position.X < 0)
+				double targetOffset = scrollViewer.HorizontalOffset;
+				const double padding = 10;
+				if (position.X < padding)
 				{
-					scrollViewer.ScrollToHorizontalOffset(scrollViewer.HorizontalOffset + position.X - 10);
+					// Too far left
+					targetOffset = scrollViewer.HorizontalOffset + position.X - padding;
 				}
-				else if (position.X + width > scrollViewer.ViewportWidth)
+				else if (position.X + width > scrollViewer.ViewportWidth - padding)
 				{
-					scrollViewer.ScrollToHorizontalOffset(
-						scrollViewer.HorizontalOffset + (position.X + width - scrollViewer.ViewportWidth + 10));
+					// Too far right
+					targetOffset = scrollViewer.HorizontalOffset + (position.X + width - scrollViewer.ViewportWidth + padding);
 				}
+				else
+				{
+					return; // already visible
+				}
+				SmoothScrollTo(scrollViewer, targetOffset);
 			}
 			catch { }
 		}
