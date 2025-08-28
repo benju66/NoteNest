@@ -81,6 +81,7 @@ namespace NoteNest.Tests.Services
                 Note = note;
                 Id = System.Guid.NewGuid().ToString();
                 Content = note.Content ?? string.Empty;
+                IsRichViewEnabled = false;
             }
 
             public string Id { get; }
@@ -88,6 +89,7 @@ namespace NoteNest.Tests.Services
             public NoteModel Note { get; }
             public bool IsDirty { get; set; }
             public string Content { get; set; }
+            public bool IsRichViewEnabled { get; set; }
         }
 
         private class NoteOperationsServiceMock : INoteOperationsService

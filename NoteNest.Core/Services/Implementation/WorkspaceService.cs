@@ -471,6 +471,7 @@ namespace NoteNest.Core.Services.Implementation
     {
         private bool _isDirty;
         private string _content;
+        private bool _isRichViewEnabled;
         
         public string Id { get; }
         public string Title => Note?.Title ?? "Untitled";
@@ -500,6 +501,12 @@ namespace NoteNest.Core.Services.Implementation
                 }
             }
         }
+
+        public bool IsRichViewEnabled
+        {
+            get => _isRichViewEnabled;
+            set => _isRichViewEnabled = value;
+        }
         
         public WorkspaceTabItem(NoteModel note)
         {
@@ -507,6 +514,7 @@ namespace NoteNest.Core.Services.Implementation
             Id = Guid.NewGuid().ToString();
             _content = note.Content;
             _isDirty = false;
+            _isRichViewEnabled = false;
         }
     }
 }

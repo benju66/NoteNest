@@ -87,15 +87,8 @@
                                 <ui:AppBarButton Icon="Underline" Label="Underline" Click="Toolbar_Underline_Click"/>
                                 <ui:AppBarSeparator/>
                                 <ui:AppBarToggleButton Icon="View"
-                                                       Label="Rich View">
-                                    <ui:AppBarToggleButton.IsChecked>
-                                        <Binding ElementName="EditorContainer" Path="ViewMode">
-                                            <Binding.Converter>
-                                                <conv:EditorViewModeToBoolConverter/>
-                                            </Binding.Converter>
-                                        </Binding>
-                                    </ui:AppBarToggleButton.IsChecked>
-                                </ui:AppBarToggleButton>
+                                                       Label="Rich View"
+                                                       IsChecked="{Binding IsRichViewEnabled, Mode=TwoWay}"/>
                             </ui:CommandBar>
 
                             <!-- Note content viewer -->
@@ -104,7 +97,15 @@
                                                      Format="{Binding Note.Format}"
                                                      NoteId="{Binding Note.Id}"
                                                      Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                     ContentChanged="Editor_ContentChanged"/>
+                                                     ContentChanged="Editor_ContentChanged">
+                                <editors:EditorContainer.ViewMode>
+                                    <Binding Path="IsRichViewEnabled" Mode="TwoWay">
+                                        <Binding.Converter>
+                                            <conv:EditorViewModeToBoolConverter/>
+                                        </Binding.Converter>
+                                    </Binding>
+                                </editors:EditorContainer.ViewMode>
+                            </editors:EditorContainer>
                         </Grid>
                     </DataTemplate>
                 </local:DraggableTabControl.ContentTemplate>

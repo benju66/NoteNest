@@ -94,18 +94,14 @@ namespace NoteNest.UI.Controls
                 {
                     var containerTab = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
                     var presenter = FindVisualChild<ContentPresenter>(containerTab);
-                    var editorContainer = FindVisualChild<EditorContainer>(presenter) ?? FindVisualChild<EditorContainer>(this);
+                    var editorContainer = FindVisualChild<EditorContainer>(presenter) ?? FindVisualChild<EditorContainer>(containerTab);
                     if (editorContainer != null && Pane?.SelectedTab?.Note != null)
                     {
                         var noteId = Pane.SelectedTab.Note.Id;
                         var mode = EditorViewModeStore.GetForNote(noteId, NoteNest.UI.Interfaces.EditorViewMode.PlainText);
                         editorContainer.ViewMode = mode;
                         // update the toggle (ModernWpf AppBarToggleButton lives in this visual tree)
-                        var toggle = FindVisualChild<System.Windows.Controls.Primitives.ToggleButton>(this);
-                        if (toggle != null)
-                        {
-                            toggle.IsChecked = mode == NoteNest.UI.Interfaces.EditorViewMode.RichText;
-                        }
+                        // No manual toggle sync; XAML binding to EditorContainer.ViewMode handles it per tab
                     }
                 }
                 catch { }
@@ -597,7 +593,7 @@ namespace NoteNest.UI.Controls
         private void Toolbar_BulletList_Click(object sender, RoutedEventArgs e)
         {
             var dep = sender as DependencyObject;
-            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? FindVisualChild<ContentPresenter>(PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as DependencyObject);
             var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
             ste?.Focus();
             ste?.InsertBulletList();
@@ -605,7 +601,7 @@ namespace NoteNest.UI.Controls
         private void Toolbar_NumberedList_Click(object sender, RoutedEventArgs e)
         {
             var dep = sender as DependencyObject;
-            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? FindVisualChild<ContentPresenter>(PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as DependencyObject);
             var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
             ste?.Focus();
             ste?.InsertNumberedList();
@@ -613,7 +609,7 @@ namespace NoteNest.UI.Controls
         private void Toolbar_TaskList_Click(object sender, RoutedEventArgs e)
         {
             var dep = sender as DependencyObject;
-            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? FindVisualChild<ContentPresenter>(PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as DependencyObject);
             var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
             ste?.Focus();
             ste?.InsertTaskList();
@@ -621,7 +617,7 @@ namespace NoteNest.UI.Controls
         private void Toolbar_Indent_Click(object sender, RoutedEventArgs e)
         {
             var dep = sender as DependencyObject;
-            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? FindVisualChild<ContentPresenter>(PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as DependencyObject);
             var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
             ste?.Focus();
             ste?.IndentSelection();
@@ -629,7 +625,7 @@ namespace NoteNest.UI.Controls
         private void Toolbar_Outdent_Click(object sender, RoutedEventArgs e)
         {
             var dep = sender as DependencyObject;
-            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? FindVisualChild<ContentPresenter>(PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as DependencyObject);
             var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
             ste?.Focus();
             ste?.OutdentSelection();

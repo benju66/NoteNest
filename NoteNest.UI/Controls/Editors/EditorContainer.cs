@@ -91,7 +91,8 @@ namespace NoteNest.UI.Controls.Editors
 					if (config?.Settings != null)
 					{
 						config.Settings.LastEditorViewModeByNoteId[container.NoteId] = container.ViewMode == EditorViewMode.RichText ? "RichText" : "PlainText";
-						// Fire-and-forget save debounce is handled by ConfigurationService
+						// Persist settings with debounce
+						try { config.RequestSaveDebounced(); } catch { }
 					}
 				}
 				catch { }
@@ -163,7 +164,7 @@ namespace NoteNest.UI.Controls.Editors
 			var id = e.NewValue as string ?? string.Empty;
 			if (!string.IsNullOrEmpty(id))
 			{
-				var mode = EditorViewModeStore.GetForNote(id, container.ViewMode);
+				var mode = EditorViewModeStore.GetForNote(id, EditorViewMode.PlainText);
 				try
 				{
 					var app = Application.Current as UI.App;

@@ -11,6 +11,7 @@ namespace NoteNest.UI.ViewModels
         private string _content;
         private string _wordCount;
         private string _lastSaved;
+        private bool _isRichViewEnabled;
 
         public NoteModel Note => _note;
         public string Id => _note?.Id ?? string.Empty;
@@ -61,6 +62,30 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        public bool IsRichViewEnabled
+        {
+            get => _isRichViewEnabled;
+            set
+            {
+                if (SetProperty(ref _isRichViewEnabled, value))
+                {
+                    try
+                    {
+                        var mode = value ? NoteNest.UI.Interfaces.EditorViewMode.RichText : NoteNest.UI.Interfaces.EditorViewMode.PlainText;
+                        NoteNest.UI.Services.EditorViewModeStore.SetForNote(Id, mode);
+                        var app = System.Windows.Application.Current as UI.App;
+                        var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+                        if (config?.Settings != null)
+                        {
+                            config.Settings.LastEditorViewModeByNoteId[Id] = value ? "RichText" : "PlainText";
+                            try { config.RequestSaveDebounced(); } catch { }
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
+
         public bool IsDirty
         {
             get => _isDirty;
@@ -93,6 +118,21 @@ namespace NoteNest.UI.ViewModels
             _isDirty = false;
             UpdateWordCount();
             UpdateLastSaved();
+
+            // Initialize IsRichViewEnabled from store/settings
+            try
+            {
+                var mode = NoteNest.UI.Services.EditorViewModeStore.GetForNote(Id, NoteNest.UI.Interfaces.EditorViewMode.PlainText);
+                var app = System.Windows.Application.Current as UI.App;
+                var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+                var s = config?.Settings;
+                if (s != null && s.LastEditorViewModeByNoteId != null && s.LastEditorViewModeByNoteId.TryGetValue(Id, out var stored))
+                {
+                    mode = string.Equals(stored, "RichText", StringComparison.OrdinalIgnoreCase) ? NoteNest.UI.Interfaces.EditorViewMode.RichText : NoteNest.UI.Interfaces.EditorViewMode.PlainText;
+                }
+                _isRichViewEnabled = mode == NoteNest.UI.Interfaces.EditorViewMode.RichText;
+            }
+            catch { _isRichViewEnabled = false; }
         }
 
         public new void OnPropertyChanged(string propertyName)
