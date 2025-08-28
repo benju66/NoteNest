@@ -19,10 +19,11 @@ namespace NoteNest.UI.Controls.Editors
 
 			_innerEditor.TextChanged += (s, e) =>
 			{
+				var normalized = NormalizeOut(_innerEditor.Text);
 				ContentChanged?.Invoke(this, new NoteNest.UI.Interfaces.TextChangedEventArgs
 				{
 					OldContent = null,
-					NewContent = _innerEditor.Text
+					NewContent = normalized
 				});
 			};
 		}
@@ -71,20 +72,26 @@ namespace NoteNest.UI.Controls.Editors
 			SetContentPreserveCaret(content ?? string.Empty);
 		}
 
+		private static string NormalizeOut(string s) => s?.Replace("\r\n", "\n") ?? string.Empty;
+
+		private static string NormalizeIn(string s) => (s ?? string.Empty).Replace("\n", Environment.NewLine);
+
 		private void SetContentPreserveCaret(string newText)
 		{
-			var oldText = _innerEditor.Text ?? string.Empty;
-			if (string.Equals(oldText, newText, StringComparison.Ordinal)) return;
+			var oldUiText = _innerEditor.Text ?? string.Empty;
+			// Compare using normalized (model) newlines to avoid CRLF/\n churn
+			if (string.Equals(NormalizeOut(oldUiText), newText, StringComparison.Ordinal)) return;
 			var oldCaret = _innerEditor.CaretIndex;
-			// Compute old line and column
-			var prefix = oldText.AsSpan(0, Math.Min(oldCaret, oldText.Length));
+			// Compute old line and column using UI text (has \r\n; scanning for \n is fine)
+			var prefix = oldUiText.AsSpan(0, Math.Min(oldCaret, oldUiText.Length));
 			int oldLine = 0;
 			for (int i = 0; i < prefix.Length; i++) if (prefix[i] == '\n') oldLine++;
 			int oldLineStart = prefix.LastIndexOf('\n');
 			if (oldLineStart < 0) oldLineStart = 0; else oldLineStart += 1;
 			int oldColumn = oldCaret - oldLineStart;
 
-			_innerEditor.Text = newText;
+			var newUiText = NormalizeIn(newText);
+			_innerEditor.Text = newUiText;
 
 			// Find start of same line number in new text
 			int lineStart = 0;
@@ -103,7 +110,7 @@ namespace NoteNest.UI.Controls.Editors
 			_innerEditor.CaretIndex = Math.Min(target, _innerEditor.Text.Length);
 		}
 
-		public string GetContent() => PlainTextContent;
+		public string GetContent() => NormalizeOut(PlainTextContent);
 
 		public void Cut() => _innerEditor.Cut();
 		public void Copy() => _innerEditor.Copy();

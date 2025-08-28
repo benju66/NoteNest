@@ -273,23 +273,39 @@ namespace NoteNest.UI.Controls
 					// Store the relative position in the line
 					var relativePosition = CaretIndex - lineStart;
 					
-					// If current line is empty, just add bullet
+					// If current line is empty, just add bullet using SelectedText to avoid full text reset
 					if (string.IsNullOrWhiteSpace(currentLine))
 					{
-						Text = Text.Insert(CaretIndex, "• ");
-						CaretIndex = CaretIndex + 2;
+						var caret = CaretIndex;
+						SelectionStart = caret;
+						SelectionLength = 0;
+						SelectedText = "• ";
+						CaretIndex = caret + 2;
 					}
 					else
 					{
-						// Add bullet at beginning of line
-						Text = Text.Insert(lineStart, "• ");
+						// Add bullet at beginning of line using SelectedText to minimize layout churn
+						SelectionStart = lineStart;
+						SelectionLength = 0;
+						SelectedText = "• ";
 						// Position cursor after the bullet, maintaining relative position
 						CaretIndex = lineStart + 2 + relativePosition;
 					}
 				}
 			}
 			
+			var finalCaretBullet = Math.Min(CaretIndex, Text.Length);
 			_isProcessingKey = false;
+			Dispatcher.BeginInvoke(new Action(() =>
+			{
+				CaretIndex = Math.Min(finalCaretBullet, Text.Length);
+				Focus();
+				Dispatcher.BeginInvoke(new Action(() =>
+				{
+					CaretIndex = Math.Min(finalCaretBullet, Text.Length);
+					Focus();
+				}), System.Windows.Threading.DispatcherPriority.ContextIdle);
+			}), System.Windows.Threading.DispatcherPriority.Render);
         }
 
         public void InsertNumberedList()
@@ -314,17 +330,23 @@ namespace NoteNest.UI.Controls
 					// Store the relative position in the line
 					var relativePosition = CaretIndex - lineStart;
 					
-					// If current line is empty, just add number
+					// If current line is empty, just add number using SelectedText
 					if (string.IsNullOrWhiteSpace(currentLine))
 					{
-						Text = Text.Insert(CaretIndex, $"{nextNumber}. ");
-						CaretIndex = CaretIndex + nextNumber.ToString().Length + 2;
+						var caret = CaretIndex;
+						var numberPrefix = $"{nextNumber}. ";
+						SelectionStart = caret;
+						SelectionLength = 0;
+						SelectedText = numberPrefix;
+						CaretIndex = caret + numberPrefix.Length;
 					}
 					else
 					{
-						// Add number at beginning of line
+						// Add number at beginning of line using SelectedText
 						var numberPrefix = $"{nextNumber}. ";
-						Text = Text.Insert(lineStart, numberPrefix);
+						SelectionStart = lineStart;
+						SelectionLength = 0;
+						SelectedText = numberPrefix;
 						// Position cursor after the number, maintaining relative position
 						CaretIndex = lineStart + numberPrefix.Length + relativePosition;
 					}
@@ -334,7 +356,18 @@ namespace NoteNest.UI.Controls
 				}
 			}
 			
+			var finalCaretNumber = Math.Min(CaretIndex, Text.Length);
 			_isProcessingKey = false;
+			Dispatcher.BeginInvoke(new Action(() =>
+			{
+				CaretIndex = Math.Min(finalCaretNumber, Text.Length);
+				Focus();
+				Dispatcher.BeginInvoke(new Action(() =>
+				{
+					CaretIndex = Math.Min(finalCaretNumber, Text.Length);
+					Focus();
+				}), System.Windows.Threading.DispatcherPriority.ContextIdle);
+			}), System.Windows.Threading.DispatcherPriority.Render);
         }
 
 		// Add helper to find next number for current position
@@ -382,7 +415,18 @@ namespace NoteNest.UI.Controls
                     Text = Text.Insert(lineStart, "- [ ] ");
                     CaretIndex = lineStart + 6;
                 }
+                var finalCaretTask = Math.Min(CaretIndex, Text.Length);
                 _isProcessingKey = false;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    CaretIndex = Math.Min(finalCaretTask, Text.Length);
+                    Focus();
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        CaretIndex = Math.Min(finalCaretTask, Text.Length);
+                        Focus();
+                    }), System.Windows.Threading.DispatcherPriority.ContextIdle);
+                }), System.Windows.Threading.DispatcherPriority.Render);
             }
         }
 
@@ -605,8 +649,9 @@ namespace NoteNest.UI.Controls
             
             if (modified)
             {
+                // Rebuild text only; do not change caret here to avoid overriding callers
+                // Callers handle caret/selection restoration.
                 Text = string.Join("\n", lines);
-                CaretIndex = Math.Min(savedCaret, Text.Length);
             }
         }
         

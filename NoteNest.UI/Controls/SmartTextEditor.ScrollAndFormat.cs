@@ -33,38 +33,16 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        private int GetFirstVisibleLogicalLineIndex()
-        {
-            try
-            {
-                var scrollViewer = GetScrollViewer();
-                if (scrollViewer == null) return -1;
-                
-                var verticalOffset = scrollViewer.VerticalOffset;
-                var lineHeight = FontSize * 1.3;
-                return Math.Max(0, (int)(verticalOffset / lineHeight));
-            }
-            catch
-            {
-                return -1;
-            }
-        }
+        // private int GetFirstVisibleLogicalLineIndex()
+        // {
+        //     // Not reliable with TextBox; prefer caret/selection restore only
+        //     return -1;
+        // }
 
-        private void ScrollToLogicalLine(int lineIndex)
-        {
-            if (lineIndex < 0) return;
-            
-            try
-            {
-                var scrollViewer = GetScrollViewer();
-                if (scrollViewer == null) return;
-                
-                var lineHeight = FontSize * 1.3;
-                var offset = lineIndex * lineHeight;
-                scrollViewer.ScrollToVerticalOffset(offset);
-            }
-            catch { }
-        }
+        // private void ScrollToLogicalLine(int lineIndex)
+        // {
+        //     // Not used; removing to avoid scroll jitter
+        // }
 
         private ScrollViewer GetScrollViewer()
         {

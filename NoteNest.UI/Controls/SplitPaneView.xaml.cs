@@ -596,27 +596,42 @@ namespace NoteNest.UI.Controls
         // Per-tab toolbar handlers
         private void Toolbar_BulletList_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
+            var dep = sender as DependencyObject;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
+            ste?.Focus();
             ste?.InsertBulletList();
         }
         private void Toolbar_NumberedList_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
+            var dep = sender as DependencyObject;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
+            ste?.Focus();
             ste?.InsertNumberedList();
         }
         private void Toolbar_TaskList_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
+            var dep = sender as DependencyObject;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
+            ste?.Focus();
             ste?.InsertTaskList();
         }
         private void Toolbar_Indent_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
+            var dep = sender as DependencyObject;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
+            ste?.Focus();
             ste?.IndentSelection();
         }
         private void Toolbar_Outdent_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
+            var dep = sender as DependencyObject;
+            var presenter = FindVisualParent<ContentPresenter>(dep) ?? PaneTabControl?.ItemContainerGenerator?.ContainerFromItem(PaneTabControl?.SelectedItem) as ContentPresenter;
+            var ste = presenter != null ? FindVisualChild<SmartTextEditor>(presenter) : FindVisualChild<SmartTextEditor>(this);
+            ste?.Focus();
             ste?.OutdentSelection();
         }
         private void Toolbar_Bold_Click(object sender, RoutedEventArgs e)

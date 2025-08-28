@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Windows.Threading;
 
 namespace NoteNest.UI.Controls
 {
@@ -16,7 +17,6 @@ namespace NoteNest.UI.Controls
             var savedCaret = CaretIndex;
             var savedSelStart = SelectionStart;
             var savedSelLength = SelectionLength;
-            var firstVisible = GetFirstVisibleLogicalLineIndex();
 
             foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
@@ -31,11 +31,24 @@ namespace NoteNest.UI.Controls
             _isProcessingKey = false;
             RenumberEntireList();
 
-            // Restore caret/selection/scroll
+            // Restore caret/selection
             SelectionStart = Math.Min(savedSelStart, Text.Length);
             SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
             CaretIndex = Math.Min(savedCaret, Text.Length);
-            if (firstVisible >= 0 && firstVisible < LogicalLineCount) ScrollToLogicalLine(firstVisible);
+            Focus();
+
+            // Defer a second restore so WPF layout can't override it
+            var targetCaretBullets = Math.Min(savedCaret, Text.Length);
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                CaretIndex = Math.Min(targetCaretBullets, Text.Length);
+                Focus();
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    CaretIndex = Math.Min(targetCaretBullets, Text.Length);
+                    Focus();
+                }), DispatcherPriority.ContextIdle);
+            }), DispatcherPriority.Render);
         }
 
         public void ConvertSelectionToNumbers()
@@ -46,7 +59,6 @@ namespace NoteNest.UI.Controls
             var savedCaret = CaretIndex;
             var savedSelStart = SelectionStart;
             var savedSelLength = SelectionLength;
-            var firstVisible = GetFirstVisibleLogicalLineIndex();
 
             int number = 1;
             foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
@@ -67,7 +79,20 @@ namespace NoteNest.UI.Controls
             SelectionStart = Math.Min(savedSelStart, Text.Length);
             SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
             CaretIndex = Math.Min(savedCaret, Text.Length);
-            if (firstVisible >= 0 && firstVisible < LogicalLineCount) ScrollToLogicalLine(firstVisible);
+            Focus();
+
+            // Defer a second restore so WPF layout can't override it
+            var targetCaretNumbers = Math.Min(savedCaret, Text.Length);
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                CaretIndex = Math.Min(targetCaretNumbers, Text.Length);
+                Focus();
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    CaretIndex = Math.Min(targetCaretNumbers, Text.Length);
+                    Focus();
+                }), DispatcherPriority.ContextIdle);
+            }), DispatcherPriority.Render);
         }
 
         public void ConvertSelectionToTasks()
@@ -78,7 +103,6 @@ namespace NoteNest.UI.Controls
             var savedCaret = CaretIndex;
             var savedSelStart = SelectionStart;
             var savedSelLength = SelectionLength;
-            var firstVisible = GetFirstVisibleLogicalLineIndex();
 
             foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
@@ -99,7 +123,20 @@ namespace NoteNest.UI.Controls
             SelectionStart = Math.Min(savedSelStart, Text.Length);
             SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
             CaretIndex = Math.Min(savedCaret, Text.Length);
-            if (firstVisible >= 0 && firstVisible < LogicalLineCount) ScrollToLogicalLine(firstVisible);
+            Focus();
+
+            // Defer a second restore so WPF layout can't override it
+            var targetCaretTasks = Math.Min(savedCaret, Text.Length);
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                CaretIndex = Math.Min(targetCaretTasks, Text.Length);
+                Focus();
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    CaretIndex = Math.Min(targetCaretTasks, Text.Length);
+                    Focus();
+                }), DispatcherPriority.ContextIdle);
+            }), DispatcherPriority.Render);
         }
 
         public void RemoveListFormatting()
@@ -110,7 +147,6 @@ namespace NoteNest.UI.Controls
             var savedCaret = CaretIndex;
             var savedSelStart = SelectionStart;
             var savedSelLength = SelectionLength;
-            var firstVisible = GetFirstVisibleLogicalLineIndex();
 
             foreach (var lineInfo in lines.OrderByDescending(l => l.StartIndex))
             {
@@ -129,7 +165,20 @@ namespace NoteNest.UI.Controls
             SelectionStart = Math.Min(savedSelStart, Text.Length);
             SelectionLength = Math.Min(savedSelLength, Math.Max(0, Text.Length - SelectionStart));
             CaretIndex = Math.Min(savedCaret, Text.Length);
-            if (firstVisible >= 0 && firstVisible < LogicalLineCount) ScrollToLogicalLine(firstVisible);
+            Focus();
+
+            // Defer a second restore so WPF layout can't override it
+            var targetCaretRemove = Math.Min(savedCaret, Text.Length);
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                CaretIndex = Math.Min(targetCaretRemove, Text.Length);
+                Focus();
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    CaretIndex = Math.Min(targetCaretRemove, Text.Length);
+                    Focus();
+                }), DispatcherPriority.ContextIdle);
+            }), DispatcherPriority.Render);
         }
 
         private string RemoveListMarkers(string line)
