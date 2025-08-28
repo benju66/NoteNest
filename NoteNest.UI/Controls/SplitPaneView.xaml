@@ -5,6 +5,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:ui="http://schemas.modernwpf.com/2019"
              xmlns:local="clr-namespace:NoteNest.UI.Controls"
+             xmlns:editors="clr-namespace:NoteNest.UI.Controls.Editors"
              xmlns:behaviors="clr-namespace:NoteNest.UI.Behaviors"
              mc:Ignorable="d">
     <Border x:Name="PaneBorder" 
@@ -83,15 +84,20 @@
                                 <ui:AppBarButton Icon="Bold" Label="Bold" Click="Toolbar_Bold_Click"/>
                                 <ui:AppBarButton Icon="Italic" Label="Italic" Click="Toolbar_Italic_Click"/>
                                 <ui:AppBarButton Icon="Underline" Label="Underline" Click="Toolbar_Underline_Click"/>
+                                <ui:AppBarSeparator/>
+                                <ui:AppBarToggleButton x:Name="MarkdownViewToggle"
+                                                       Icon="View"
+                                                       Label="Rich View"
+                                                       Checked="MarkdownViewToggle_Checked"
+                                                       Unchecked="MarkdownViewToggle_Unchecked"/>
                             </ui:CommandBar>
 
                             <!-- Note content viewer -->
-                            <local:SmartTextEditor x:Name="SmartEditor"
-                                                   Grid.Row="1"
-                                                   VerticalScrollBarVisibility="Auto"
-                                                   HorizontalScrollBarVisibility="Disabled"
-                                                   Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                   TextChanged="SmartEditor_TextChanged"/>
+                            <editors:EditorContainer x:Name="EditorContainer"
+                                                     Grid.Row="1"
+                                                     Format="{Binding Note.Format}"
+                                                     Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                     ContentChanged="Editor_ContentChanged"/>
                         </Grid>
                     </DataTemplate>
                 </local:DraggableTabControl.ContentTemplate>

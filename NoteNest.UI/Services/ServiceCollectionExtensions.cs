@@ -77,6 +77,9 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IWorkspaceService, WorkspaceService>();
             services.AddSingleton<ITabCloseService, TabCloseService>();
 
+            // Editors
+            services.AddSingleton<IEditorFactory, EditorFactory>();
+
             // Drag & Drop services
             services.AddSingleton<TabDragManager>();
             services.AddSingleton<DropZoneManager>();

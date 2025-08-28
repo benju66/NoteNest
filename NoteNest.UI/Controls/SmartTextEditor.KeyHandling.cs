@@ -39,11 +39,7 @@ namespace NoteNest.UI.Controls
 
         private void HandleEnterKey(KeyEventArgs e)
         {
-            if (EditingFormat == NoteFormat.Markdown)
-            {
-                // In markdown mode, preserve raw syntax; let default behavior handle Enter
-                return;
-            }
+            // Support smart list continuation regardless of format
 
             var caretIndex = CaretIndex;
             var currentLine = GetCurrentLine();
@@ -139,15 +135,7 @@ namespace NoteNest.UI.Controls
 
         private void HandleTabKey(KeyEventArgs e)
         {
-            if (EditingFormat == NoteFormat.Markdown)
-            {
-                // In markdown mode, just insert a tab character
-                e.Handled = true;
-                var caret = CaretIndex;
-                Text = Text.Insert(caret, "\t");
-                CaretIndex = caret + 1;
-                return;
-            }
+            // Support indent/outdent regardless of format
 
             if (SelectionLength > 0)
             {

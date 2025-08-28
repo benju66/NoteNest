@@ -9,6 +9,9 @@ using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Controls;
 using NoteNest.Core.Events;
 using NoteNest.Core.Services;
+using NoteNest.UI.Controls.Editors;
+using System.Windows.Controls.Primitives;
+using NoteNest.UI.Services;
 
 namespace NoteNest.UI.Controls
 {
@@ -85,6 +88,27 @@ namespace NoteNest.UI.Controls
                 PaneTabControl.SelectedItem = pane.SelectedTab;
                 SelectedTabChanged?.Invoke(this, pane.SelectedTab);
                 TryApplyEditorSettingsToActiveEditor();
+
+                // Apply per-tab view mode and reflect in toggle
+                try
+                {
+                    var containerTab = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
+                    var presenter = FindVisualChild<ContentPresenter>(containerTab);
+                    var editorContainer = FindVisualChild<EditorContainer>(presenter) ?? FindVisualChild<EditorContainer>(this);
+                    if (editorContainer != null && Pane?.SelectedTab?.Note != null)
+                    {
+                        var noteId = Pane.SelectedTab.Note.Id;
+                        var mode = EditorViewModeStore.GetForNote(noteId, NoteNest.UI.Interfaces.EditorViewMode.PlainText);
+                        editorContainer.ViewMode = mode;
+                        // update the toggle (ModernWpf AppBarToggleButton lives in this visual tree)
+                        var toggle = FindVisualChild<System.Windows.Controls.Primitives.ToggleButton>(this);
+                        if (toggle != null)
+                        {
+                            toggle.IsChecked = mode == NoteNest.UI.Interfaces.EditorViewMode.RichText;
+                        }
+                    }
+                }
+                catch { }
             }
             else if (pane.Tabs.Count > 0)
             {
@@ -354,6 +378,61 @@ namespace NoteNest.UI.Controls
             {
                 try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"TextChanged inspection failed: {ex.Message}"); } catch { }
             }
+        }
+
+        private async void Editor_ContentChanged(object sender, NoteNest.UI.Interfaces.TextChangedEventArgs e)
+        {
+            // Reuse idle-save logic triggered by content changes
+            SmartEditor_TextChanged(sender, new System.Windows.Controls.TextChangedEventArgs(System.Windows.Controls.TextBox.TextChangedEvent, UndoAction.None));
+        }
+
+        private void MarkdownViewToggle_Checked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dep = sender as DependencyObject;
+                var container = FindVisualParent<EditorContainer>(dep) ?? FindVisualChild<EditorContainer>(this);
+                if (container != null)
+                {
+                    container.ViewMode = NoteNest.UI.Interfaces.EditorViewMode.RichText;
+                    if (PaneTabControl?.SelectedItem is ITabItem tab && tab.Note != null)
+                    {
+                        EditorViewModeStore.SetForNote(tab.Note.Id, NoteNest.UI.Interfaces.EditorViewMode.RichText);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void MarkdownViewToggle_Unchecked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dep = sender as DependencyObject;
+                var container = FindVisualParent<EditorContainer>(dep) ?? FindVisualChild<EditorContainer>(this);
+                if (container != null)
+                {
+                    container.ViewMode = NoteNest.UI.Interfaces.EditorViewMode.PlainText;
+                    if (PaneTabControl?.SelectedItem is ITabItem tab && tab.Note != null)
+                    {
+                        EditorViewModeStore.SetForNote(tab.Note.Id, NoteNest.UI.Interfaces.EditorViewMode.PlainText);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            var current = child;
+            while (current != null)
+            {
+                var parent = VisualTreeHelper.GetParent(current);
+                if (parent is T typed)
+                    return typed;
+                current = parent;
+            }
+            return null;
         }
 
         private async void IdleSaveTimer_Tick(object? sender, EventArgs e)
