@@ -68,7 +68,39 @@ namespace NoteNest.UI.Controls.Editors
 		public void SetContent(string content, NoteFormat format)
 		{
 			Format = format;
-			PlainTextContent = content ?? string.Empty;
+			SetContentPreserveCaret(content ?? string.Empty);
+		}
+
+		private void SetContentPreserveCaret(string newText)
+		{
+			var oldText = _innerEditor.Text ?? string.Empty;
+			if (string.Equals(oldText, newText, StringComparison.Ordinal)) return;
+			var oldCaret = _innerEditor.CaretIndex;
+			// Compute old line and column
+			var prefix = oldText.AsSpan(0, Math.Min(oldCaret, oldText.Length));
+			int oldLine = 0;
+			for (int i = 0; i < prefix.Length; i++) if (prefix[i] == '\n') oldLine++;
+			int oldLineStart = prefix.LastIndexOf('\n');
+			if (oldLineStart < 0) oldLineStart = 0; else oldLineStart += 1;
+			int oldColumn = oldCaret - oldLineStart;
+
+			_innerEditor.Text = newText;
+
+			// Find start of same line number in new text
+			int lineStart = 0;
+			int lineCount = 0;
+			for (int i = 0; i < _innerEditor.Text.Length && lineCount < oldLine; i++)
+			{
+				if (_innerEditor.Text[i] == '\n')
+				{
+					lineStart = i + 1;
+					lineCount++;
+				}
+			}
+			int lineEnd = _innerEditor.Text.IndexOf('\n', lineStart);
+			if (lineEnd < 0) lineEnd = _innerEditor.Text.Length;
+			int target = Math.Min(lineStart + Math.Max(0, oldColumn), lineEnd);
+			_innerEditor.CaretIndex = Math.Min(target, _innerEditor.Text.Length);
 		}
 
 		public string GetContent() => PlainTextContent;

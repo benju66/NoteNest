@@ -36,6 +36,13 @@ namespace NoteNest.UI.Controls.Editors
 				ownerType: typeof(EditorContainer),
 				typeMetadata: new PropertyMetadata(string.Empty, OnTextChanged));
 
+		public static readonly DependencyProperty NoteIdProperty =
+			DependencyProperty.Register(
+				name: nameof(NoteId),
+				propertyType: typeof(string),
+				ownerType: typeof(EditorContainer),
+				typeMetadata: new PropertyMetadata(string.Empty, OnNoteIdChanged));
+
 		public EditorViewMode ViewMode
 		{
 			get => (EditorViewMode)GetValue(ViewModeProperty);
@@ -49,6 +56,12 @@ namespace NoteNest.UI.Controls.Editors
 		}
 
 		public ITextEditor CurrentEditor => _currentEditor;
+
+		public string NoteId
+		{
+			get => (string)GetValue(NoteIdProperty) ?? string.Empty;
+			set => SetValue(NoteIdProperty, value ?? string.Empty);
+		}
 
 		public string Text
 		{
@@ -67,6 +80,22 @@ namespace NoteNest.UI.Controls.Editors
 		{
 			var container = (EditorContainer)d;
 			container.SwitchEditor();
+			// Persist per-note preference
+			if (!string.IsNullOrEmpty(container.NoteId))
+			{
+				EditorViewModeStore.SetForNote(container.NoteId, container.ViewMode);
+				try
+				{
+					var app = Application.Current as UI.App;
+					var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+					if (config?.Settings != null)
+					{
+						config.Settings.LastEditorViewModeByNoteId[container.NoteId] = container.ViewMode == EditorViewMode.RichText ? "RichText" : "PlainText";
+						// Fire-and-forget save debounce is handled by ConfigurationService
+					}
+				}
+				catch { }
+			}
 		}
 
 		private static void OnFormatChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -118,8 +147,36 @@ namespace NoteNest.UI.Controls.Editors
 		{
 			var container = (EditorContainer)d;
 			if (container._isUpdatingText) return;
-			container._currentContent = e.NewValue as string ?? string.Empty;
-			container._currentEditor?.SetContent(container._currentContent, container._currentFormat);
+			var newText = e.NewValue as string ?? string.Empty;
+			if (container._currentEditor != null)
+			{
+				var existing = container._currentEditor.GetContent() ?? string.Empty;
+				if (string.Equals(existing, newText, StringComparison.Ordinal)) return;
+			}
+			container._currentContent = newText;
+			container._currentEditor?.SetContent(newText, container._currentFormat);
+		}
+
+		private static void OnNoteIdChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+		{
+			var container = (EditorContainer)d;
+			var id = e.NewValue as string ?? string.Empty;
+			if (!string.IsNullOrEmpty(id))
+			{
+				var mode = EditorViewModeStore.GetForNote(id, container.ViewMode);
+				try
+				{
+					var app = Application.Current as UI.App;
+					var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+					var s = config?.Settings;
+					if (s != null && s.LastEditorViewModeByNoteId != null && s.LastEditorViewModeByNoteId.TryGetValue(id, out var stored))
+					{
+						mode = string.Equals(stored, "RichText", StringComparison.OrdinalIgnoreCase) ? EditorViewMode.RichText : EditorViewMode.PlainText;
+					}
+				}
+				catch { }
+				container.ViewMode = mode;
+			}
 		}
 
 		public event EventHandler<Interfaces.TextChangedEventArgs> ContentChanged;

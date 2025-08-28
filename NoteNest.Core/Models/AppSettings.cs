@@ -78,6 +78,9 @@ namespace NoteNest.Core.Models
         public List<string> PluginOrder { get; set; } = new();
         public bool CollapseEditorWhenPluginOpens { get; set; } = false;
 
+        // Editor preferences
+        public Dictionary<string, string> LastEditorViewModeByNoteId { get; set; } = new();
+
         // File watcher & caching configuration
         public int FileWatcherDebounceMs { get; set; } = 500;
         public int FileWatcherBufferKB { get; set; } = 64;

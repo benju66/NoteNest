@@ -7,6 +7,7 @@
              xmlns:local="clr-namespace:NoteNest.UI.Controls"
              xmlns:editors="clr-namespace:NoteNest.UI.Controls.Editors"
              xmlns:behaviors="clr-namespace:NoteNest.UI.Behaviors"
+             xmlns:conv="clr-namespace:NoteNest.UI.Converters"
              mc:Ignorable="d">
     <Border x:Name="PaneBorder" 
             BorderThickness="2" 
@@ -85,17 +86,23 @@
                                 <ui:AppBarButton Icon="Italic" Label="Italic" Click="Toolbar_Italic_Click"/>
                                 <ui:AppBarButton Icon="Underline" Label="Underline" Click="Toolbar_Underline_Click"/>
                                 <ui:AppBarSeparator/>
-                                <ui:AppBarToggleButton x:Name="MarkdownViewToggle"
-                                                       Icon="View"
-                                                       Label="Rich View"
-                                                       Checked="MarkdownViewToggle_Checked"
-                                                       Unchecked="MarkdownViewToggle_Unchecked"/>
+                                <ui:AppBarToggleButton Icon="View"
+                                                       Label="Rich View">
+                                    <ui:AppBarToggleButton.IsChecked>
+                                        <Binding ElementName="EditorContainer" Path="ViewMode">
+                                            <Binding.Converter>
+                                                <conv:EditorViewModeToBoolConverter/>
+                                            </Binding.Converter>
+                                        </Binding>
+                                    </ui:AppBarToggleButton.IsChecked>
+                                </ui:AppBarToggleButton>
                             </ui:CommandBar>
 
                             <!-- Note content viewer -->
                             <editors:EditorContainer x:Name="EditorContainer"
                                                      Grid.Row="1"
                                                      Format="{Binding Note.Format}"
+                                                     NoteId="{Binding Note.Id}"
                                                      Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                      ContentChanged="Editor_ContentChanged"/>
                         </Grid>
