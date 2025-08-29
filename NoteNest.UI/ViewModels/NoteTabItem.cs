@@ -1,6 +1,7 @@
 using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces.Services;
 using System;
+using System.IO;
 
 namespace NoteNest.UI.ViewModels
 {
@@ -77,8 +78,25 @@ namespace NoteNest.UI.ViewModels
                         var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
                         if (config?.Settings != null)
                         {
-                            config.Settings.LastEditorViewModeByNoteId[Id] = value ? "RichText" : "PlainText";
-                            try { config.RequestSaveDebounced(); } catch { }
+                            var persisted = value ? "RichText" : "PlainText";
+                            // Write under both transient Id and stable FilePath for compatibility
+                            if (!string.IsNullOrEmpty(Id))
+                            {
+                                config.Settings.LastEditorViewModeByNoteId[Id] = persisted;
+                            }
+                            var originalPathKey = _note?.FilePath;
+                            var normalizedPathKey = NormalizePath(originalPathKey);
+                            if (!string.IsNullOrWhiteSpace(originalPathKey))
+                            {
+                                config.Settings.LastEditorViewModeByNoteId[originalPathKey] = persisted;
+                            }
+                            if (!string.IsNullOrWhiteSpace(normalizedPathKey))
+                            {
+                                config.Settings.LastEditorViewModeByNoteId[normalizedPathKey] = persisted;
+                            }
+                            try { config.RequestSaveDebounced(250); } catch { }
+                            // Also force an immediate save to avoid losing state on quick exit
+                            try { _ = config.FlushPendingAsync(); } catch { }
                         }
                     }
                     catch { }
@@ -130,9 +148,34 @@ namespace NoteNest.UI.ViewModels
                 {
                     mode = string.Equals(stored, "RichText", StringComparison.OrdinalIgnoreCase) ? NoteNest.UI.Interfaces.EditorViewMode.RichText : NoteNest.UI.Interfaces.EditorViewMode.PlainText;
                 }
+                else
+                {
+                    var originalPathKey = _note?.FilePath;
+                    var normalizedPathKey = NormalizePath(originalPathKey);
+                    if (!string.IsNullOrWhiteSpace(originalPathKey) && s != null && s.LastEditorViewModeByNoteId != null && s.LastEditorViewModeByNoteId.TryGetValue(originalPathKey, out var storedByPath))
+                    {
+                        mode = string.Equals(storedByPath, "RichText", StringComparison.OrdinalIgnoreCase) ? NoteNest.UI.Interfaces.EditorViewMode.RichText : NoteNest.UI.Interfaces.EditorViewMode.PlainText;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(normalizedPathKey) && s != null && s.LastEditorViewModeByNoteId != null && s.LastEditorViewModeByNoteId.TryGetValue(normalizedPathKey, out var storedByNormPath))
+                    {
+                        mode = string.Equals(storedByNormPath, "RichText", StringComparison.OrdinalIgnoreCase) ? NoteNest.UI.Interfaces.EditorViewMode.RichText : NoteNest.UI.Interfaces.EditorViewMode.PlainText;
+                    }
+                }
                 _isRichViewEnabled = mode == NoteNest.UI.Interfaces.EditorViewMode.RichText;
             }
             catch { _isRichViewEnabled = false; }
+        }
+
+        private static string NormalizePath(string? path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+                var full = Path.GetFullPath(path);
+                // Remove trailing separators and normalize case for consistent dictionary keys on Windows
+                return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).ToLowerInvariant();
+            }
+            catch { return path ?? string.Empty; }
         }
 
         public new void OnPropertyChanged(string propertyName)

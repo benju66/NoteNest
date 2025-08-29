@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Models;
 using System.Linq;
+using System.Collections.Generic;
 
 namespace NoteNest.Core.Services
 {
@@ -117,6 +118,26 @@ namespace NoteNest.Core.Services
             if (_settings.WindowSettings == null)
             {
                 _settings.WindowSettings = new WindowSettings();
+            }
+
+            // Ensure editor view mode map exists and is case-insensitive (paths vary by case on Windows)
+            if (_settings.LastEditorViewModeByNoteId == null)
+            {
+                _settings.LastEditorViewModeByNoteId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+            else if (!(_settings.LastEditorViewModeByNoteId is Dictionary<string, string> dict && dict.Comparer == StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    _settings.LastEditorViewModeByNoteId = new Dictionary<string, string>(_settings.LastEditorViewModeByNoteId, StringComparer.OrdinalIgnoreCase);
+                }
+                catch
+                {
+                    var copy = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var kv in _settings.LastEditorViewModeByNoteId)
+                        copy[kv.Key] = kv.Value;
+                    _settings.LastEditorViewModeByNoteId = copy;
+                }
             }
 
             if (string.IsNullOrEmpty(_settings.DefaultNotePath))

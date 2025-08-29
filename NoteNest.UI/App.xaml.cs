@@ -54,6 +54,14 @@ namespace NoteNest.UI
                 ValidateCriticalServices();
                 #endif
 
+                // Ensure settings are loaded early so UI can read persisted values (e.g., Rich View)
+                try
+                {
+                    var configEarly = ServiceProvider.GetRequiredService<NoteNest.Core.Services.ConfigurationService>();
+                    await configEarly.LoadSettingsAsync();
+                }
+                catch { }
+
                 // Initialize theme (fast)
                 try
                 {

@@ -89,22 +89,7 @@ namespace NoteNest.UI.Controls
                 SelectedTabChanged?.Invoke(this, pane.SelectedTab);
                 TryApplyEditorSettingsToActiveEditor();
 
-                // Apply per-tab view mode and reflect in toggle
-                try
-                {
-                    var containerTab = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
-                    var presenter = FindVisualChild<ContentPresenter>(containerTab);
-                    var editorContainer = FindVisualChild<EditorContainer>(presenter) ?? FindVisualChild<EditorContainer>(containerTab);
-                    if (editorContainer != null && Pane?.SelectedTab?.Note != null)
-                    {
-                        var noteId = Pane.SelectedTab.Note.Id;
-                        var mode = EditorViewModeStore.GetForNote(noteId, NoteNest.UI.Interfaces.EditorViewMode.PlainText);
-                        editorContainer.ViewMode = mode;
-                        // update the toggle (ModernWpf AppBarToggleButton lives in this visual tree)
-                        // No manual toggle sync; XAML binding to EditorContainer.ViewMode handles it per tab
-                    }
-                }
-                catch { }
+                // Do not force editor ViewMode here; binding to the tab VM controls it per-tab
             }
             else if (pane.Tabs.Count > 0)
             {

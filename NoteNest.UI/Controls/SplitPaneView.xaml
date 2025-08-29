@@ -24,6 +24,21 @@
                 <local:DraggableTabControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
+                            <!-- Per-tab Rich View indicator bound to tab VM -->
+                            <Border Width="8" Height="8" Margin="4,0,2,0">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Setter Property="Background" Value="Red"/>
+                                        <Setter Property="CornerRadius" Value="2"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsRichViewEnabled}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                            </Border>
                             <TextBlock Margin="5,2" VerticalAlignment="Center" Text="{Binding Title}"/>
                             <TextBlock Text="·" Margin="2,2,0,2" Foreground="Black" VerticalAlignment="Center">
                                 <TextBlock.Style>

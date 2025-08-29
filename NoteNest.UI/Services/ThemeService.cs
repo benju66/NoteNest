@@ -19,17 +19,27 @@ namespace NoteNest.UI.Services
 
         public static void Initialize()
         {
-            _configurationService = new ConfigurationService();
+            // Use the DI-managed ConfigurationService to avoid parallel writers clobbering settings
+            try
+            {
+                var app = System.Windows.Application.Current as UI.App;
+                _configurationService = app?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService
+                    ?? new ConfigurationService();
+            }
+            catch
+            {
+                _configurationService = new ConfigurationService();
+            }
 
-            // Apply quickly using current in-memory settings (defaults on first run)
+            // Apply current theme immediately from loaded (or default) settings
             ApplyTheme(GetSavedTheme());
 
-            // Load settings in background, then re-apply theme from loaded config on UI context
+            // Ensure settings are loaded; then re-apply theme on UI thread
             _ = _configurationService
                 .LoadSettingsAsync()
                 .ContinueWith(t =>
                 {
-                    try { ApplyTheme(GetSavedTheme()); } catch { /* ignore */ }
+                    try { ApplyTheme(GetSavedTheme()); } catch { }
                 }, TaskScheduler.FromCurrentSynchronizationContext());
         }
 

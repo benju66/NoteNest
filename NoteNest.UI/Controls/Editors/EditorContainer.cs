@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using NoteNest.Core.Models;
+using System.IO;
 using NoteNest.UI.Interfaces;
 using NoteNest.UI.Services;
 
@@ -90,13 +91,44 @@ namespace NoteNest.UI.Controls.Editors
 					var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
 					if (config?.Settings != null)
 					{
-						config.Settings.LastEditorViewModeByNoteId[container.NoteId] = container.ViewMode == EditorViewMode.RichText ? "RichText" : "PlainText";
-						// Persist settings with debounce
-						try { config.RequestSaveDebounced(); } catch { }
+						var persisted = container.ViewMode == EditorViewMode.RichText ? "RichText" : "PlainText";
+						config.Settings.LastEditorViewModeByNoteId[container.NoteId] = persisted;
+						var path = TryGetNotePath(container.NoteId);
+						var norm = NormalizePath(path);
+						if (!string.IsNullOrWhiteSpace(path)) config.Settings.LastEditorViewModeByNoteId[path] = persisted;
+						if (!string.IsNullOrWhiteSpace(norm)) config.Settings.LastEditorViewModeByNoteId[norm] = persisted;
+						// Persist settings with debounce and immediate flush safeguard
+						try { config.RequestSaveDebounced(250); } catch { }
+						try { _ = config.FlushPendingAsync(); } catch { }
 					}
 				}
 				catch { }
 			}
+		}
+
+		private static string TryGetNotePath(string noteId)
+		{
+			try
+			{
+				var state = (Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+				if (state != null && state.OpenNotes.TryGetValue(noteId, out var wn))
+				{
+					return wn?.Model?.FilePath ?? string.Empty;
+				}
+			}
+			catch { }
+			return string.Empty;
+		}
+
+		private static string NormalizePath(string? path)
+		{
+			try
+			{
+				if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+				var full = Path.GetFullPath(path);
+				return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).ToLowerInvariant();
+			}
+			catch { return path ?? string.Empty; }
 		}
 
 		private static void OnFormatChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -164,19 +196,8 @@ namespace NoteNest.UI.Controls.Editors
 			var id = e.NewValue as string ?? string.Empty;
 			if (!string.IsNullOrEmpty(id))
 			{
-				var mode = EditorViewModeStore.GetForNote(id, EditorViewMode.PlainText);
-				try
-				{
-					var app = Application.Current as UI.App;
-					var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
-					var s = config?.Settings;
-					if (s != null && s.LastEditorViewModeByNoteId != null && s.LastEditorViewModeByNoteId.TryGetValue(id, out var stored))
-					{
-						mode = string.Equals(stored, "RichText", StringComparison.OrdinalIgnoreCase) ? EditorViewMode.RichText : EditorViewMode.PlainText;
-					}
-				}
-				catch { }
-				container.ViewMode = mode;
+				// Do not force ViewMode here. The ViewMode is bound TwoWay to the tab VM
+				// via SplitPaneView.xaml and will be set from ITabItem.IsRichViewEnabled.
 			}
 		}
 
