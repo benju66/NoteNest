@@ -91,6 +91,9 @@ namespace NoteNest.Core.Models
         public bool AdaptiveAutoSaveEnabled { get; set; } = true;
         public string AdaptiveAutoSavePreset { get; set; } = "Balanced"; // Conservative | Balanced | Aggressive
 
+        // Editor UI
+        public bool ShowFormattingToolbar { get; set; } = true;
+
         public AppSettings()
         {
             // Initialize collections/objects to prevent null reference issues.

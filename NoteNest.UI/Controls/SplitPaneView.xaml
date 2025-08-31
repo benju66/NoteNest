@@ -58,12 +58,21 @@
                             </Grid.RowDefinitions>
 
                             <!-- Per-tab toolbar -->
-                            <ui:CommandBar Grid.Row="0" DefaultLabelPosition="Right">
+                            <ui:CommandBar Grid.Row="0" DefaultLabelPosition="Right" Focusable="False">
                                 <ui:AppBarButton Icon="ViewAll"
                                                  Label="Split V"
                                                  ToolTip="Split Vertical (Ctrl+\)"
                                                  Command="{x:Static local:SplitWorkspace.SplitVerticalCommand}"
                                                  CommandTarget="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:SplitWorkspace}}}"/>
+                                <ui:AppBarSeparator/>
+                                <ui:AppBarButton Icon="Bold"
+                                                 Label="Bold"
+                                                 Command="{x:Static EditingCommands.ToggleBold}"
+                                                 CommandTarget="{Binding ElementName=FormattedEditor}"/>
+                                <ui:AppBarButton Icon="Italic"
+                                                 Label="Italic"
+                                                 Command="{x:Static EditingCommands.ToggleItalic}"
+                                                 CommandTarget="{Binding ElementName=FormattedEditor}"/>
                                 <ui:AppBarSeparator/>
                                 <ui:AppBarButton Icon="List" Label="Bullets" Click="Toolbar_BulletList_Click"/>
                                 <ui:AppBarButton Label="Numbers" Click="Toolbar_NumberedList_Click">
@@ -76,22 +85,17 @@
                                         <ui:FontIcon Glyph="&#xE9D5;"/>
                                     </ui:AppBarButton.Icon>
                                 </ui:AppBarButton>
-                                <ui:AppBarSeparator/>
-                                <ui:AppBarButton Label="Indent" Click="Toolbar_Indent_Click"/>
-                                <ui:AppBarButton Label="Outdent" Click="Toolbar_Outdent_Click"/>
-                                <ui:AppBarSeparator/>
-                                <ui:AppBarButton Icon="Bold" Label="Bold" Click="Toolbar_Bold_Click"/>
-                                <ui:AppBarButton Icon="Italic" Label="Italic" Click="Toolbar_Italic_Click"/>
-                                <ui:AppBarButton Icon="Underline" Label="Underline" Click="Toolbar_Underline_Click"/>
                             </ui:CommandBar>
 
-                            <!-- Note content viewer -->
-                            <local:SmartTextEditor x:Name="SmartEditor"
-                                                   Grid.Row="1"
-                                                   VerticalScrollBarVisibility="Auto"
-                                                   HorizontalScrollBarVisibility="Disabled"
-                                                   Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                   TextChanged="SmartEditor_TextChanged"/>
+                            <!-- Note content viewer: always-formatted editor -->
+                            <local:FormattedTextEditor x:Name="FormattedEditor"
+                                                      Grid.Row="1"
+                                                      VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled"
+                                                      Focusable="True"
+                                                      IsDocumentEnabled="True"
+                                                      MarkdownContent="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                      TextChanged="SmartEditor_TextChanged"/>
                         </Grid>
                     </DataTemplate>
                 </local:DraggableTabControl.ContentTemplate>

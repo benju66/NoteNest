@@ -85,6 +85,7 @@ namespace NoteNest.UI.Controls
                 PaneTabControl.SelectedItem = pane.SelectedTab;
                 SelectedTabChanged?.Invoke(this, pane.SelectedTab);
                 TryApplyEditorSettingsToActiveEditor();
+                TryFocusActiveEditor();
             }
             else if (pane.Tabs.Count > 0)
             {
@@ -92,6 +93,7 @@ namespace NoteNest.UI.Controls
                 pane.SelectedTab = pane.Tabs[0];
                 SelectedTabChanged?.Invoke(this, pane.SelectedTab);
                 TryApplyEditorSettingsToActiveEditor();
+                TryFocusActiveEditor();
             }
             
             IsActive = pane.IsActive;
@@ -194,8 +196,8 @@ namespace NoteNest.UI.Controls
                         {
                             var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(oldTab) as TabItem;
                             var presenter = FindVisualChild<ContentPresenter>(container);
-                            var editor = FindVisualChild<SmartTextEditor>(presenter);
-                            var binding = editor?.GetBindingExpression(TextBox.TextProperty);
+                            var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                            var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
                             binding?.UpdateSource();
                         }
                         catch (Exception ex)
@@ -223,6 +225,7 @@ namespace NoteNest.UI.Controls
                 }
                 try { SelectedTabChanged?.Invoke(this, newTab); } catch { }
                 TryApplyEditorSettingsToActiveEditor();
+                TryFocusActiveEditor();
                 
                 // Sync note dirty flag with tab (for tree view indicator)
                 try
@@ -233,8 +236,8 @@ namespace NoteNest.UI.Controls
                         try
                         {
                             var presenterNew = FindVisualChild<ContentPresenter>(PaneTabControl.ItemContainerGenerator.ContainerFromItem(newTab) as TabItem);
-                            var editorNew = FindVisualChild<SmartTextEditor>(presenterNew);
-                            var shownLen = editorNew?.Text?.Length ?? -1;
+                            var editorNew = FindVisualChild<FormattedTextEditor>(presenterNew);
+                            var shownLen = editorNew?.MarkdownContent?.Length ?? -1;
                             var stateNew = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
                             var stateLen = (stateNew != null && stateNew.OpenNotes.TryGetValue(newTab.Note.Id, out var wn2)) ? (wn2.CurrentContent?.Length ?? 0) : -1;
                             System.Diagnostics.Debug.WriteLine($"[UI] Switched TO tab id={newTab.Note.Id} shownLen={shownLen} stateLen={stateLen}");
@@ -257,13 +260,12 @@ namespace NoteNest.UI.Controls
                 var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
                 var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
                 var presenter = FindVisualChild<ContentPresenter>(container);
-                var editor = FindVisualChild<SmartTextEditor>(presenter);
+                var editor = FindVisualChild<FormattedTextEditor>(presenter);
                 if (editor != null && config?.Settings != null)
                 {
-                    editor.SetSpellCheckEnabled(config.Settings.EnableSpellCheck);
-                    editor.SetSpellCheckLanguage("en-US");
-                    var format = Pane?.SelectedTab?.Note?.Format ?? config.Settings.DefaultNoteFormat;
-                    editor.UpdateFormatSettings(format);
+                    try { SpellCheck.SetIsEnabled(editor, config.Settings.EnableSpellCheck); } catch { }
+                    try { editor.Document.FontFamily = new System.Windows.Media.FontFamily(config.Settings.FontFamily); } catch { }
+                    try { editor.Document.FontSize = config.Settings.FontSize > 0 ? config.Settings.FontSize : editor.Document.FontSize; } catch { }
                 }
             }
             catch { }
@@ -282,6 +284,18 @@ namespace NoteNest.UI.Controls
                     splitWorkspace?.SetActivePane(Pane);
                 }
             }
+        }
+
+        private void TryFocusActiveEditor()
+        {
+            try
+            {
+                var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
+                var presenter = FindVisualChild<ContentPresenter>(container);
+                var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                editor?.Focus();
+            }
+            catch { }
         }
 
         private async void SmartEditor_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
@@ -376,8 +390,8 @@ namespace NoteNest.UI.Controls
                         {
                             var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
                             var presenter = FindVisualChild<ContentPresenter>(container);
-                            var editor = FindVisualChild<SmartTextEditor>(presenter);
-                            var binding = editor?.GetBindingExpression(TextBox.TextProperty);
+                            var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                            var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
                             binding?.UpdateSource();
                         }
                         catch (Exception ex)
@@ -434,8 +448,8 @@ namespace NoteNest.UI.Controls
                     if (container != null)
                     {
                         var presenter = FindVisualChild<ContentPresenter>(container);
-                        var editor = FindVisualChild<SmartTextEditor>(presenter);
-                        var binding = editor?.GetBindingExpression(TextBox.TextProperty);
+                        var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                        var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
                         binding?.UpdateSource();
                         System.Diagnostics.Debug.WriteLine($"[UI] CloseTab flush binding for noteId={tab?.Note?.Id} at={DateTime.Now:HH:mm:ss.fff}");
                     }
@@ -451,7 +465,7 @@ namespace NoteNest.UI.Controls
                     {
                         var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
                         var presenter = FindVisualChild<ContentPresenter>(container);
-                        var editor = FindVisualChild<SmartTextEditor>(presenter);
+                        var editor = FindVisualChild<FormattedTextEditor>(presenter);
                         if (editor != null)
                         {
                             editor.TextChanged -= SmartEditor_TextChanged;
@@ -485,14 +499,19 @@ namespace NoteNest.UI.Controls
         private T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
         {
             if (parent == null) return null;
-            
+            // Only Visual/Visual3D are valid for VisualTreeHelper
+            if (parent is not Visual && parent is not System.Windows.Media.Media3D.Visual3D)
+            {
+                return null;
+            }
+
             int childCount = VisualTreeHelper.GetChildrenCount(parent);
             for (int i = 0; i < childCount; i++)
             {
                 var child = VisualTreeHelper.GetChild(parent, i);
                 if (child is T typedChild)
                     return typedChild;
-                    
+
                 var result = FindVisualChild<T>(child);
                 if (result != null)
                     return result;
@@ -517,52 +536,37 @@ namespace NoteNest.UI.Controls
         // Per-tab toolbar handlers
         private void Toolbar_BulletList_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
-            ste?.InsertBulletList();
+            var fe = FindVisualChild<FormattedTextEditor>(this);
+            fe?.InsertBulletList();
         }
         private void Toolbar_NumberedList_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
-            ste?.InsertNumberedList();
+            var fe = FindVisualChild<FormattedTextEditor>(this);
+            fe?.InsertNumberedList();
         }
         private void Toolbar_TaskList_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
-            ste?.InsertTaskList();
+            // Task list support not yet implemented for formatted editor
         }
         private void Toolbar_Indent_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
-            ste?.IndentSelection();
+            // Indent handled by list structure; no-op for now
         }
         private void Toolbar_Outdent_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
-            ste?.OutdentSelection();
+            // Outdent handled by list structure; no-op for now
         }
         private void Toolbar_Bold_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
-            if (ste == null || string.IsNullOrEmpty(ste.SelectedText)) return;
-            var start = ste.SelectionStart;
-            ste.SelectedText = $"**{ste.SelectedText}**";
-            ste.CaretIndex = start + ste.SelectedText.Length;
+            // Not used in formatted mode; bound through EditingCommands in XAML
         }
         private void Toolbar_Italic_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
-            if (ste == null || string.IsNullOrEmpty(ste.SelectedText)) return;
-            var start = ste.SelectionStart;
-            ste.SelectedText = $"*{ste.SelectedText}*";
-            ste.CaretIndex = start + ste.SelectedText.Length;
+            // Not used in formatted mode; bound through EditingCommands in XAML
         }
         private void Toolbar_Underline_Click(object sender, RoutedEventArgs e)
         {
-            var ste = FindVisualChild<SmartTextEditor>(this);
-            if (ste == null || string.IsNullOrEmpty(ste.SelectedText)) return;
-            var start = ste.SelectionStart;
-            ste.SelectedText = $"__{ste.SelectedText}__";
-            ste.CaretIndex = start + ste.SelectedText.Length;
+            // Not used in formatted mode
         }
     }
 }
