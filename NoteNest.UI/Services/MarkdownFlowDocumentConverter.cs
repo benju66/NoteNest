@@ -33,14 +33,8 @@ namespace NoteNest.UI.Services
                 FontSize = fontSize.HasValue && fontSize.Value > 0 ? fontSize.Value : 14,
                 LineHeight = (fontSize.HasValue && fontSize.Value > 0 ? fontSize.Value : 14) * 1.4
             };
-            try
-            {
-                // Ensure FlowDocument participates in visual settings for clear text
-                TextOptions.SetTextFormattingMode(document, TextFormattingMode.Display);
-                TextOptions.SetTextRenderingMode(document, TextRenderingMode.ClearType);
-                TextOptions.SetTextHintingMode(document, TextHintingMode.Fixed);
-            }
-            catch { }
+            // Avoid setting TextOptions on FlowDocument (not a Visual). Host control (RichTextBox)
+            // will supply rendering settings.
 
             if (string.IsNullOrWhiteSpace(markdown))
             {

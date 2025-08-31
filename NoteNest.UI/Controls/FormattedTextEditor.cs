@@ -32,7 +32,6 @@ namespace NoteNest.UI.Controls
         public FormattedTextEditor()
         {
             _converter = new MarkdownFlowDocumentConverter();
-            Document = new FlowDocument();
             IsReadOnly = false;
             IsReadOnlyCaretVisible = true;
             Focusable = true;
@@ -315,10 +314,19 @@ namespace NoteNest.UI.Controls
                 var fontFamily = config?.Settings?.FontFamily;
                 double? fontSize = config?.Settings?.FontSize;
 
-                // Preserve caret and avoid replacing Document if possible
+                // Preserve caret and avoid replacing the Document instance
                 var caret = CaretPosition;
                 var flow = _converter.ConvertToFlowDocument(markdown, fontFamily, fontSize);
-                Document = flow;
+                try
+                {
+                    Document.Blocks.Clear();
+                    foreach (var block in flow.Blocks.ToList())
+                    {
+                        flow.Blocks.Remove(block);
+                        Document.Blocks.Add(block);
+                    }
+                }
+                catch { /* ignore copy failures */ }
                 try { CaretPosition = Document?.ContentEnd ?? caret; } catch { }
             }
             finally
