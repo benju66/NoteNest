@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Documents;
 using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Controls;
@@ -426,7 +427,9 @@ namespace NoteNest.UI.Controls
         {
             if (obj == null) return null;
             if (obj is NoteNestPanel panel) return panel;
-            
+            // Guard: only traverse visuals
+            if (obj is not Visual && obj is not System.Windows.Media.Media3D.Visual3D)
+                return null;
             int childCount = VisualTreeHelper.GetChildrenCount(obj);
             for (int i = 0; i < childCount; i++)
             {
@@ -505,16 +508,28 @@ namespace NoteNest.UI.Controls
                 return null;
             }
 
-            int childCount = VisualTreeHelper.GetChildrenCount(parent);
-            for (int i = 0; i < childCount; i++)
+            try
             {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                if (child is T typedChild)
-                    return typedChild;
+                int childCount = VisualTreeHelper.GetChildrenCount(parent);
+                for (int i = 0; i < childCount; i++)
+                {
+                    var child = VisualTreeHelper.GetChild(parent, i);
 
-                var result = FindVisualChild<T>(child);
-                if (result != null)
-                    return result;
+                    // Skip document model elements which are not visuals
+                    if (child is FlowDocument || child is Block || child is Inline)
+                        continue;
+
+                    if (child is T typedChild)
+                        return typedChild;
+
+                    var result = FindVisualChild<T>(child);
+                    if (result != null)
+                        return result;
+                }
+            }
+            catch
+            {
+                return null;
             }
             return null;
         }

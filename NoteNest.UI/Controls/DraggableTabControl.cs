@@ -452,6 +452,11 @@ namespace NoteNest.UI.Controls
         private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
         {
             if (parent == null) return null;
+            // Only Visual/Visual3D can be traversed via VisualTreeHelper
+            if (parent is not Visual && parent is not System.Windows.Media.Media3D.Visual3D)
+            {
+                return null;
+            }
             int count = VisualTreeHelper.GetChildrenCount(parent);
             for (int i = 0; i < count; i++)
             {

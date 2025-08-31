@@ -564,6 +564,10 @@ namespace NoteNest.UI
             // Walk visual tree for SplitPaneView and reset
             void ResetHighlights(DependencyObject parent)
             {
+                if (parent is not System.Windows.Media.Visual && parent is not System.Windows.Media.Media3D.Visual3D)
+                {
+                    return;
+                }
                 int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
                 for (int i = 0; i < count; i++)
                 {

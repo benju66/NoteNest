@@ -94,6 +94,8 @@
                                                       HorizontalScrollBarVisibility="Disabled"
                                                       Focusable="True"
                                                       IsDocumentEnabled="True"
+                                                      IsHitTestVisible="True"
+                                                      Background="Transparent"
                                                       MarkdownContent="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                       TextChanged="SmartEditor_TextChanged"/>
                         </Grid>

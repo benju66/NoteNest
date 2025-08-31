@@ -36,6 +36,8 @@ namespace NoteNest.UI.Controls
             IsReadOnly = false;
             IsReadOnlyCaretVisible = true;
             Focusable = true;
+            IsHitTestVisible = true;
+            Background = System.Windows.Media.Brushes.Transparent;
             AcceptsReturn = true;
             AcceptsTab = true;
             FocusVisualStyle = null;
