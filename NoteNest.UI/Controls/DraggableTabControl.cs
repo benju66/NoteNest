@@ -304,11 +304,44 @@ namespace NoteNest.UI.Controls
 
         private void OnDragKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape && _dragState == DragState.Dragging)
+            if (_dragState == DragState.Dragging)
             {
-                _dragState = DragState.Cancelling;
-                EndDragOperation(false);
-                e.Handled = true;
+                if (e.Key == Key.Escape)
+                {
+                    _dragState = DragState.Cancelling;
+                    EndDragOperation(false);
+                    e.Handled = true;
+                    return;
+                }
+
+                // Allow detaching while dragging with Ctrl+D
+                if (e.Key == Key.D && Keyboard.Modifiers == ModifierKeys.Control)
+                {
+                    var draggedTab = _dragManager.GetDraggedTab();
+                    if (draggedTab != null)
+                    {
+                        // Use last known screen point; fall back to current mouse
+                        Point screenPoint;
+                        try
+                        {
+                            if (_screenPointValid)
+                            {
+                                screenPoint = _cachedScreenPoint;
+                            }
+                            else
+                            {
+                                var pos = Mouse.GetPosition(this);
+                                screenPoint = PointToScreen(pos);
+                            }
+                        }
+                        catch { screenPoint = new Point(SystemParameters.WorkArea.Width / 2, SystemParameters.WorkArea.Height / 2); }
+
+                        try { DetachToNewWindow(draggedTab, screenPoint); } catch { }
+                        EndDragOperation(true);
+                        e.Handled = true;
+                        return;
+                    }
+                }
             }
         }
 
