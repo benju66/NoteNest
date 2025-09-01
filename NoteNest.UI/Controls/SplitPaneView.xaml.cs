@@ -551,13 +551,48 @@ namespace NoteNest.UI.Controls
         // Per-tab toolbar handlers
         private void Toolbar_BulletList_Click(object sender, RoutedEventArgs e)
         {
-            var fe = FindVisualChild<FormattedTextEditor>(this);
-            fe?.InsertBulletList();
+            var editor = ResolveEditorFromSender(sender as DependencyObject)
+                         ?? ResolveEditorFromSelectedTab()
+                         ?? FindVisualChild<FormattedTextEditor>(this);
+            editor?.Focus();
+            editor?.InsertBulletList();
         }
         private void Toolbar_NumberedList_Click(object sender, RoutedEventArgs e)
         {
-            var fe = FindVisualChild<FormattedTextEditor>(this);
-            fe?.InsertNumberedList();
+            var editor = ResolveEditorFromSender(sender as DependencyObject)
+                         ?? ResolveEditorFromSelectedTab()
+                         ?? FindVisualChild<FormattedTextEditor>(this);
+            editor?.Focus();
+            editor?.InsertNumberedList();
+        }
+
+        private FormattedTextEditor? ResolveEditorFromSender(DependencyObject? sender)
+        {
+            if (sender == null) return null;
+            var current = sender;
+            // Walk up until we find the FormattedTextEditor within the same tab content
+            while (current != null)
+            {
+                if (current is FormattedTextEditor fe) return fe;
+                // If we hit the content presenter of the tab content, try to find editor within
+                if (current is ContentPresenter cp)
+                {
+                    var fe2 = FindVisualChild<FormattedTextEditor>(cp);
+                    if (fe2 != null) return fe2;
+                }
+                try { current = System.Windows.Media.VisualTreeHelper.GetParent(current); }
+                catch { break; }
+            }
+            return null;
+        }
+
+        private FormattedTextEditor? ResolveEditorFromSelectedTab()
+        {
+            var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
+            var presenter = FindVisualChild<ContentPresenter>(container);
+            var editor = FindVisualChild<FormattedTextEditor>(presenter)
+                         ?? FindVisualChild<FormattedTextEditor>(container);
+            return editor;
         }
         private void Toolbar_TaskList_Click(object sender, RoutedEventArgs e)
         {

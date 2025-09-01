@@ -74,8 +74,15 @@
                                                  Command="{x:Static EditingCommands.ToggleItalic}"
                                                  CommandTarget="{Binding ElementName=FormattedEditor}"/>
                                 <ui:AppBarSeparator/>
-                                <ui:AppBarButton Icon="List" Label="Bullets" Click="Toolbar_BulletList_Click"/>
-                                <ui:AppBarButton Label="Numbers" Click="Toolbar_NumberedList_Click">
+                                <ui:AppBarButton Icon="List"
+                                                 Label="Bullets"
+                                                 Command="{x:Static EditingCommands.ToggleBullets}"
+                                                 CommandTarget="{Binding ElementName=FormattedEditor}"
+                                                 Click="Toolbar_BulletList_Click"/>
+                                <ui:AppBarButton Label="Numbers"
+                                                 Command="{x:Static EditingCommands.ToggleNumbering}"
+                                                 CommandTarget="{Binding ElementName=FormattedEditor}"
+                                                 Click="Toolbar_NumberedList_Click">
                                     <ui:AppBarButton.Icon>
                                         <ui:FontIcon Glyph="&#xE8BE;"/>
                                     </ui:AppBarButton.Icon>

@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using NoteNest.UI.Services;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 
 namespace NoteNest.UI.Controls
 {
@@ -114,9 +115,40 @@ namespace NoteNest.UI.Controls
                 _isUpdating = true;
                 try
                 {
+                    var caret = CaretPosition ?? currentPara.ContentEnd;
+
+                    // Create the new list item/paragraph first so we can paste content into it
                     var newPara = new Paragraph();
                     var newLi = new ListItem();
                     newLi.Blocks.Add(newPara);
+
+                    // If caret is not at end, move trailing content (preserve formatting)
+                    if (caret.CompareTo(currentPara.ContentEnd) < 0)
+                    {
+                        var trailing = new TextRange(caret, currentPara.ContentEnd);
+                        if (!string.IsNullOrEmpty(trailing.Text))
+                        {
+                            using (var ms = new MemoryStream())
+                            {
+                                try
+                                {
+                                    trailing.Save(ms, DataFormats.XamlPackage);
+                                    ms.Position = 0;
+                                    var dest = new TextRange(newPara.ContentStart, newPara.ContentEnd);
+                                    dest.Load(ms, DataFormats.XamlPackage);
+                                }
+                                catch
+                                {
+                                    // Fallback: plain text copy if rich copy fails
+                                    newPara.Inlines.Add(new Run(trailing.Text));
+                                }
+                            }
+                            // Remove trailing content from the current paragraph
+                            try { trailing.Text = string.Empty; } catch { }
+                        }
+                    }
+
+                    // Insert the new list item after the current one
                     int index = GetListItemIndex(list, li);
                     InsertListItemAt(list, index + 1, newLi);
                     CaretPosition = newPara.ContentStart;

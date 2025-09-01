@@ -23,8 +23,10 @@ namespace NoteNest.UI.Controls
                 var line = lineInfo.Text;
                 var start = lineInfo.StartIndex;
 
+                // Preserve original indentation while normalizing list marker
+                var indent = System.Text.RegularExpressions.Regex.Match(line, @"^(\s*)").Groups[1].Value;
                 var cleanLine = RemoveListMarkers(line);
-                var newLine = "• " + cleanLine.TrimStart();
+                var newLine = $"{indent}• {cleanLine.TrimStart()}";
                 ReplaceLineAt(start, line.Length, newLine);
             }
 
