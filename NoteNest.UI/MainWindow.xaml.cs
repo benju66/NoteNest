@@ -588,6 +588,10 @@ namespace NoteNest.UI
             var element = InputHitTest(point) as DependencyObject;
             while (element != null && element is not DraggableTabControl)
             {
+                if (element is not System.Windows.Media.Visual && element is not System.Windows.Media.Media3D.Visual3D)
+                {
+                    return null;
+                }
                 element = System.Windows.Media.VisualTreeHelper.GetParent(element);
             }
             if (element is DraggableTabControl dtc)
@@ -603,6 +607,10 @@ namespace NoteNest.UI
             var element = InputHitTest(point) as DependencyObject;
             while (element != null && element is not DraggableTabControl)
             {
+                if (element is not System.Windows.Media.Visual && element is not System.Windows.Media.Media3D.Visual3D)
+                {
+                    return null;
+                }
                 element = System.Windows.Media.VisualTreeHelper.GetParent(element);
             }
             return element as FrameworkElement;
@@ -624,6 +632,8 @@ namespace NoteNest.UI
             while (current != null)
             {
                 if (current is T t) return t;
+                if (current is not System.Windows.Media.Visual && current is not System.Windows.Media.Media3D.Visual3D)
+                    return null;
                 current = System.Windows.Media.VisualTreeHelper.GetParent(current);
             }
             return null;

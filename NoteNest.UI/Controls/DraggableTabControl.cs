@@ -419,6 +419,10 @@ namespace NoteNest.UI.Controls
             var element = InputHitTest(point) as DependencyObject;
             while (element != null && element is not TabItem)
             {
+                if (element is not Visual && element is not System.Windows.Media.Media3D.Visual3D)
+                {
+                    return null;
+                }
                 element = VisualTreeHelper.GetParent(element);
             }
             return element as TabItem;
@@ -474,6 +478,8 @@ namespace NoteNest.UI.Controls
             while (current != null)
             {
                 if (current is T t) return t;
+                if (current is not Visual && current is not System.Windows.Media.Media3D.Visual3D)
+                    return null;
                 current = VisualTreeHelper.GetParent(current);
             }
             return null;
