@@ -41,6 +41,19 @@ namespace NoteNest.UI.Controls
             AcceptsTab = true;
             FocusVisualStyle = null;
 
+            // Normalize default paragraph spacing: small bottom margin, no extra top
+            try
+            {
+                if (Document != null)
+                {
+                    Document.PagePadding = new Thickness(0);
+                    var pStyle = new Style(typeof(Paragraph));
+                    pStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0, 0, 0, 1)));
+                    Document.Resources[typeof(Paragraph)] = pStyle;
+                }
+            }
+            catch { }
+
             _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
             _debounceTimer.Tick += (s, e) =>
             {
@@ -196,11 +209,16 @@ namespace NoteNest.UI.Controls
                         }
                         else
                         {
-                            nested = new List { MarkerStyle = parentList.MarkerStyle };
+                            nested = new List { MarkerStyle = parentList.MarkerStyle, Margin = new Thickness(0, 1, 0, 1) };
                             prev.Blocks.Add(nested);
                         }
                         RemoveListItemAt(parentList, index);
                         AddListItem(nested, li);
+                        // Ensure paragraph inside list item has zero margins to avoid extra gaps
+                        if (li.Blocks.FirstBlock is Paragraph firstP)
+                        {
+                            firstP.Margin = new Thickness(0);
+                        }
                         CaretPosition = (li.Blocks.FirstBlock as Paragraph)?.ContentStart ?? CaretPosition;
                         return true;
                     }
@@ -388,7 +406,7 @@ namespace NoteNest.UI.Controls
                     ?? (firstPara.Parent as ListItem)?.Blocks
                     ?? Document.Blocks;
 
-                var list = new List { MarkerStyle = markerStyle };
+                var list = new List { MarkerStyle = markerStyle, Margin = new Thickness(0, 1, 0, 1) };
 
                 // Insert the list BEFORE we detach paragraphs, so the reference is valid
                 try { parentCollection.InsertBefore(firstPara, list); }
@@ -404,6 +422,8 @@ namespace NoteNest.UI.Controls
                     try { pParentBlocks.Remove(p); } catch { }
 
                     var li = new ListItem();
+                    // Normalize paragraph margin inside list items to eliminate unexpected spacing
+                    try { p.Margin = new Thickness(0); } catch { }
                     li.Blocks.Add(p);
                     list.ListItems.Add(li);
                 }

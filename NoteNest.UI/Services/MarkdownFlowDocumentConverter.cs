@@ -277,10 +277,20 @@ namespace NoteNest.UI.Services
                     {
                         foreach (var b in item.Blocks)
                         {
-                            sb.Append(l.MarkerStyle == TextMarkerStyle.Decimal ? $"{i}. " : "- ");
-                            // Preserve inner whitespace; only trim end so we don't break inline markers
-                            sb.Append(ConvertBlockToMarkdown(b).TrimEnd());
-                            sb.AppendLine();
+                            if (b is List nested)
+                            {
+                                // Nested list: do not create an extra parent marker; indent child list
+                                var nestedText = ConvertBlockToMarkdown(nested).TrimEnd();
+                                var indented = IndentLines(nestedText, 2);
+                                sb.AppendLine(indented);
+                            }
+                            else
+                            {
+                                sb.Append(l.MarkerStyle == TextMarkerStyle.Decimal ? $"{i}. " : "- ");
+                                // Preserve inner whitespace; only trim end so we don't break inline markers
+                                sb.Append(ConvertBlockToMarkdown(b).TrimEnd());
+                                sb.AppendLine();
+                            }
                         }
                         i++;
                     }
@@ -288,6 +298,20 @@ namespace NoteNest.UI.Services
                     break;
             }
             return sb.ToString();
+        }
+
+        private static string IndentLines(string text, int spaces)
+        {
+            var prefix = new string(' ', Math.Max(0, spaces));
+            var lines = text.Replace("\r\n", "\n").Split('\n');
+            for (int idx = 0; idx < lines.Length; idx++)
+            {
+                if (lines[idx].Length > 0)
+                {
+                    lines[idx] = prefix + lines[idx];
+                }
+            }
+            return string.Join(Environment.NewLine, lines);
         }
 
         private string ConvertInlineToMarkdown(System.Windows.Documents.Inline inline)
