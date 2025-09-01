@@ -389,6 +389,11 @@ namespace NoteNest.UI.Controls
                     ?? Document.Blocks;
 
                 var list = new List { MarkerStyle = markerStyle };
+
+                // Insert the list BEFORE we detach paragraphs, so the reference is valid
+                try { parentCollection.InsertBefore(firstPara, list); }
+                catch { Document.Blocks.Add(list); }
+
                 foreach (var p in paragraphs)
                 {
                     // Remove from its current parent collection
@@ -396,14 +401,12 @@ namespace NoteNest.UI.Controls
                         ?? (p.Parent as Section)?.Blocks
                         ?? (p.Parent as ListItem)?.Blocks
                         ?? Document.Blocks;
-                    pParentBlocks.Remove(p);
+                    try { pParentBlocks.Remove(p); } catch { }
 
                     var li = new ListItem();
                     li.Blocks.Add(p);
                     list.ListItems.Add(li);
                 }
-
-                parentCollection.InsertBefore(firstPara, list);
             }
             finally
             {

@@ -278,7 +278,8 @@ namespace NoteNest.UI.Services
                         foreach (var b in item.Blocks)
                         {
                             sb.Append(l.MarkerStyle == TextMarkerStyle.Decimal ? $"{i}. " : "- ");
-                            sb.Append(ConvertBlockToMarkdown(b).Trim());
+                            // Preserve inner whitespace; only trim end so we don't break inline markers
+                            sb.Append(ConvertBlockToMarkdown(b).TrimEnd());
                             sb.AppendLine();
                         }
                         i++;
@@ -293,13 +294,23 @@ namespace NoteNest.UI.Services
         {
             switch (inline)
             {
+                case Bold boldSpan:
+                    {
+                        var inner = ConvertSpanChildrenToMarkdown(boldSpan);
+                        return WrapWithMarkers(inner, "**", "**");
+                    }
+                case Italic italicSpan:
+                    {
+                        var inner = ConvertSpanChildrenToMarkdown(italicSpan);
+                        return WrapWithMarkers(inner, "*", "*");
+                    }
                 case Run run:
                     var text = run.Text;
                     var bold = run.FontWeight == FontWeights.Bold;
                     var ital = run.FontStyle == FontStyles.Italic;
-                    if (bold && ital) return $"***{text}***";
-                    if (bold) return $"**{text}**";
-                    if (ital) return $"*{text}*";
+                    if (bold && ital) return WrapWithMarkers(text, "***", "***");
+                    if (bold) return WrapWithMarkers(text, "**", "**");
+                    if (ital) return WrapWithMarkers(text, "*", "*");
                     return text;
                 case InlineUIContainer ui:
                     if (ui.Child is CheckBox cb)
@@ -315,6 +326,30 @@ namespace NoteNest.UI.Services
                 default:
                     return new TextRange(inline.ContentStart, inline.ContentEnd).Text;
             }
+        }
+
+        private static string ConvertSpanChildrenToMarkdown(Span span)
+        {
+            var sb = new StringBuilder();
+            foreach (var child in span.Inlines)
+            {
+                sb.Append(new MarkdownFlowDocumentConverter().ConvertInlineToMarkdown(child));
+            }
+            return sb.ToString();
+        }
+
+        private static string WrapWithMarkers(string text, string open, string close)
+        {
+            if (string.IsNullOrEmpty(text)) return text ?? string.Empty;
+            int start = 0;
+            while (start < text.Length && char.IsWhiteSpace(text[start])) start++;
+            int end = text.Length - 1;
+            while (end >= 0 && char.IsWhiteSpace(text[end])) end--;
+            if (end < start) return text; // all whitespace
+            string prefix = text.Substring(0, start);
+            string core = text.Substring(start, end - start + 1);
+            string suffix = text.Substring(end + 1);
+            return prefix + open + core + close + suffix;
         }
     }
 }
