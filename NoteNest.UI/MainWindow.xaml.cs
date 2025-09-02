@@ -847,33 +847,33 @@ namespace NoteNest.UI
             var viewModel = MainPanel.DataContext as MainViewModel;
             if (viewModel == null) return;
 
+            // Branch close behavior based on settings
+            bool forceSave = true;
             try
             {
-                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.ITabCloseService)) as NoteNest.Core.Interfaces.Services.ITabCloseService;
-                if (closeService != null)
+                var cfg = viewModel.GetConfigService();
+                forceSave = cfg?.Settings?.ForceSaveOnExit != false; // default true
+            }
+            catch { }
+
+            if (!forceSave)
+            {
+                try
                 {
-                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
-                    if (workspace?.HasUnsavedChanges == true)
+                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                    var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                    if (workspace?.HasUnsavedChanges == true && closeService != null)
                     {
                         e.Cancel = true;
-                        var result = await closeService.CloseAllTabsWithPromptAsync();
-                        if (result)
+                        var ok = await closeService.CloseAllTabsWithPromptAsync();
+                        if (!ok)
                         {
-                            // After closing all, resume shutdown
-                            Close();
-                            return;
+                            return; // user cancelled
                         }
-                        else
-                        {
-                            // User cancelled
-                            return;
-                        }
+                        e.Cancel = false; // proceed to shutdown
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error during close-all prompt: {ex.Message}");
+                catch { }
             }
 
             // Save window settings - use fire-and-forget to avoid blocking
@@ -897,6 +897,69 @@ namespace NoteNest.UI
                 System.Diagnostics.Debug.WriteLine($"Error preparing settings save during shutdown: {ex.Message}");
             }
 
+            // Force-save all editors and notes without prompting
+            try
+            {
+                // Flush editors' bindings so latest content is pushed to state
+                try
+                {
+                    // Walk all pane views and flush
+                    void FlushSplitPanes(DependencyObject parent)
+                    {
+                        if (parent is not System.Windows.Media.Visual && parent is not System.Windows.Media.Media3D.Visual3D)
+                            return;
+                        int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);
+                        for (int i = 0; i < count; i++)
+                        {
+                            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                            if (child is Controls.SplitPaneView spv)
+                            {
+                                spv.FlushAllEditors();
+                            }
+                            FlushSplitPanes(child);
+                        }
+                    }
+                    FlushSplitPanes(this);
+                }
+                catch { }
+
+                try
+                {
+                    var state = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
+                    // Explicitly push all tabs' content into state before bulk save
+                    try
+                    {
+                        foreach (var tab in workspace?.OpenTabs ?? System.Linq.Enumerable.Empty<NoteNest.Core.Interfaces.Services.ITabItem>())
+                        {
+                            try { state?.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty); } catch { }
+                        }
+                    }
+                    catch { }
+                    // Save all dirty notes via state service synchronously up to a budget
+                    var task = state?.SaveAllDirtyNotesAsync();
+                    task?.Wait(TimeSpan.FromSeconds(2));
+                }
+                catch { }
+
+                try
+                {
+                    // Persist session tabs best-effort
+                    var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ITabPersistenceService)) as NoteNest.Core.Services.ITabPersistenceService;
+                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
+                    if (persistence != null && workspace != null)
+                    {
+                        var activeId = workspace.SelectedTab?.Note?.Id;
+                        var embedded = workspace.SelectedTab?.Content;
+                        var tabs = workspace.OpenTabs;
+                        var task = persistence.SaveAsync(tabs, activeId, embedded);
+                        task.Wait(TimeSpan.FromMilliseconds(500));
+                    }
+                }
+                catch { }
+            }
+            catch { }
+
             _ = Task.Run(() =>
             {
                 try
@@ -908,6 +971,22 @@ namespace NoteNest.UI
                     System.Diagnostics.Debug.WriteLine($"Error during ViewModel disposal: {ex.Message}");
                 }
             });
+
+            try
+            {
+                // Quick synchronous session save on shutdown (best-effort)
+                var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ITabPersistenceService)) as NoteNest.Core.Services.ITabPersistenceService;
+                var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
+                if (persistence != null && workspace != null)
+                {
+                    var activeId = workspace.SelectedTab?.Note?.Id;
+                    var embedded = workspace.SelectedTab?.Content;
+                    var tabs = workspace.OpenTabs;
+                    var task = persistence.SaveAsync(tabs, activeId, embedded);
+                    task.Wait(TimeSpan.FromMilliseconds(500));
+                }
+            }
+            catch { }
         }
 
         private static void NormalizeMenuItemHeights(System.Windows.Controls.ItemsControl itemsRoot, double captionHeight)

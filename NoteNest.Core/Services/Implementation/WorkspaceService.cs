@@ -168,6 +168,30 @@ namespace NoteNest.Core.Services.Implementation
                 // This method returns a placeholder that will be replaced
                 var tab = new WorkspaceTabItem(note);
                 
+                // Centralize: register tab in service collections and panes
+                if (!OpenTabs.Contains(tab))
+                {
+                    OpenTabs.Add(tab);
+                }
+                // Ensure an active pane exists
+                if (ActivePane == null)
+                {
+                    var initial = _panes.FirstOrDefault();
+                    if (initial == null)
+                    {
+                        initial = new SplitPane();
+                        _panes.Add(initial);
+                    }
+                    ActivePane = initial;
+                }
+                // Add to active pane if not already present
+                if (ActivePane != null && !ActivePane.Tabs.Contains(tab))
+                {
+                    ActivePane.Tabs.Add(tab);
+                }
+                // Select the newly opened tab
+                SelectedTab = tab;
+                
                 _logger.Info($"Opened note: {note.Title}");
                 System.Diagnostics.Debug.WriteLine($"[WS] Opened note id={note.Id} title={note.Title}");
                 

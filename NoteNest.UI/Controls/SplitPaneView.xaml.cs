@@ -32,6 +32,11 @@ namespace NoteNest.UI.Controls
             set => SetValue(IsActiveProperty, value);
         }
         
+        private readonly IWorkspaceService? _workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+        private readonly NoteNest.Core.Services.IWorkspaceStateService? _stateService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+        private readonly NoteNest.Core.Services.ConfigurationService? _configService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+        private readonly NoteNest.Core.Services.Logging.IAppLogger? _logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
+
         public SplitPaneView()
         {
             InitializeComponent();
@@ -176,8 +181,8 @@ namespace NoteNest.UI.Controls
             if (Pane != null && PaneTabControl.SelectedItem is ITabItem newTab)
             {
                 // Auto-save previous tab if it was dirty
-                var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
-                var state = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                var workspaceService = _workspaceService;
+                var state = _stateService;
                 
                 // Find the previously selected tab from the old selection
                 ITabItem? oldTab = null;
@@ -203,15 +208,16 @@ namespace NoteNest.UI.Controls
                         }
                         catch (Exception ex)
                         {
-                            try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"Failed to flush binding on tab switch: {ex.Message}"); } catch { }
+                            try { _logger?.Warning($"Failed to flush binding on tab switch: {ex.Message}"); } catch { }
                         }
+                        // Push latest content from ITabItem into state before saving
+                        try { state.UpdateNoteContent(oldTab.Note.Id, oldTab.Content ?? string.Empty); } catch { }
                         // Save using state service
                         var result = await state.SaveNoteAsync(oldTab.Note.Id);
                         System.Diagnostics.Debug.WriteLine($"[UI] Tab switch auto-save END noteId={oldTab?.Note?.Id} success={result?.Success} at={DateTime.Now:HH:mm:ss.fff}");
                         try
                         {
-                            var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
-                            logger?.Info($"Tab switch auto-saved: {oldTab?.Title}");
+                            _logger?.Info($"Tab switch auto-saved: {oldTab?.Title}");
                         }
                         catch { }
                     }
@@ -239,13 +245,13 @@ namespace NoteNest.UI.Controls
                             var presenterNew = FindVisualChild<ContentPresenter>(PaneTabControl.ItemContainerGenerator.ContainerFromItem(newTab) as TabItem);
                             var editorNew = FindVisualChild<FormattedTextEditor>(presenterNew);
                             var shownLen = editorNew?.MarkdownContent?.Length ?? -1;
-                            var stateNew = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                            var stateNew = _stateService;
                             var stateLen = (stateNew != null && stateNew.OpenNotes.TryGetValue(newTab.Note.Id, out var wn2)) ? (wn2.CurrentContent?.Length ?? 0) : -1;
                             System.Diagnostics.Debug.WriteLine($"[UI] Switched TO tab id={newTab.Note.Id} shownLen={shownLen} stateLen={stateLen}");
                         }
                         catch (Exception ex)
                         {
-                            try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"Failed to inspect editor on tab switch: {ex.Message}"); } catch { }
+                            try { _logger?.Warning($"Failed to inspect editor on tab switch: {ex.Message}"); } catch { }
                         }
                     }
                 }
@@ -257,8 +263,7 @@ namespace NoteNest.UI.Controls
         {
             try
             {
-                var app = Application.Current as App;
-                var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+                var config = _configService;
                 var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
                 var presenter = FindVisualChild<ContentPresenter>(container);
                 var editor = FindVisualChild<FormattedTextEditor>(presenter);
@@ -301,8 +306,7 @@ namespace NoteNest.UI.Controls
 
         private async void SmartEditor_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
-            var app = Application.Current as App;
-            var configService = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+            var configService = _configService;
             if (configService?.Settings?.AutoSaveIdleMs > 0)
             {
                 _idleSaveTimer ??= new System.Windows.Threading.DispatcherTimer();
@@ -357,9 +361,9 @@ namespace NoteNest.UI.Controls
             // Do not push content here; rely on binding to NoteTabItem.Content to update state.
             try
             {
-                var workspaceService = app?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                var workspaceService = _workspaceService;
                 var tab = Pane?.SelectedTab ?? workspaceService?.SelectedTab;
-                var state = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                var state = _stateService;
                 if (tab?.Note != null && state != null && !state.OpenNotes.ContainsKey(tab.Note.Id))
                 {
                     System.Diagnostics.Debug.WriteLine($"[UI] TextChanged ignored for untracked noteId={tab.Note.Id}");
@@ -376,9 +380,8 @@ namespace NoteNest.UI.Controls
             _idleSaveTimer?.Stop();
             try
             {
-                var app = Application.Current as App;
-                var workspaceService = app?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
-                var state = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                var workspaceService = _workspaceService;
+                var state = _stateService;
                 var tab = Pane?.SelectedTab ?? workspaceService?.SelectedTab;
                 
                 if (tab != null && tab.IsDirty && state != null)
@@ -397,15 +400,16 @@ namespace NoteNest.UI.Controls
                         }
                         catch (Exception ex)
                         {
-                            try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"Failed to flush binding on idle save: {ex.Message}"); } catch { }
+                            try { _logger?.Warning($"Failed to flush binding on idle save: {ex.Message}"); } catch { }
                         }
+                        // Push latest content from ITabItem into state before saving
+                        try { state.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty); } catch { }
                         // Save
                         var result = await state.SaveNoteAsync(tab.Note.Id);
                         System.Diagnostics.Debug.WriteLine($"[UI] IdleSave END noteId={tab?.Note?.Id} success={result?.Success} at={DateTime.Now:HH:mm:ss.fff}");
                         try
                         {
-                            var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
-                            if (result?.Success == true) logger?.Info($"Idle auto-saved: {tab?.Title}");
+                            if (result?.Success == true) _logger?.Info($"Idle auto-saved: {tab?.Title}");
                         }
                         catch { }
                     }
@@ -485,7 +489,7 @@ namespace NoteNest.UI.Controls
                         System.Diagnostics.Debug.WriteLine($"[UI] CloseTab REMOVED id={tab?.Note?.Id}");
 
                         // If this was the last tab, optionally close empty pane
-                        var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                        var workspaceService = _workspaceService;
                         if (Pane?.Tabs.Count == 0 && workspaceService != null && workspaceService.Panes.Count > 1)
                         {
                             _ = workspaceService.ClosePaneAsync(Pane);
@@ -617,6 +621,27 @@ namespace NoteNest.UI.Controls
         private void Toolbar_Underline_Click(object sender, RoutedEventArgs e)
         {
             // Not used in formatted mode
+        }
+
+        // Exposed for shutdown: flush editor bindings for all tabs in this pane
+        public void FlushAllEditors()
+        {
+            try
+            {
+                foreach (var tab in Pane?.Tabs ?? System.Linq.Enumerable.Empty<ITabItem>())
+                {
+                    try
+                    {
+                        var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
+                        var presenter = FindVisualChild<ContentPresenter>(container);
+                        var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                        var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
+                        binding?.UpdateSource();
+                    }
+                    catch { }
+                }
+            }
+            catch { }
         }
     }
 }

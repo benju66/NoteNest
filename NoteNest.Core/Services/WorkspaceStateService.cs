@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Models;
+using System.Threading;
 
 namespace NoteNest.Core.Services
 {
@@ -67,6 +68,7 @@ namespace NoteNest.Core.Services
     {
         private readonly NoteService _noteService;
         private readonly Dictionary<string, WorkspaceNote> _openNotes = new();
+        private readonly object _noteLock = new object();
         private string? _activeNoteId;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _saveLocks = new();
 
@@ -83,7 +85,16 @@ namespace NoteNest.Core.Services
         public event EventHandler<NoteStateChangedEventArgs>? NoteStateChanged;
 
         public IReadOnlyDictionary<string, WorkspaceNote> OpenNotes => _openNotes;
-        public WorkspaceNote? ActiveNote => _activeNoteId != null && _openNotes.TryGetValue(_activeNoteId, out var n) ? n : null;
+        public WorkspaceNote? ActiveNote
+        {
+            get
+            {
+                lock (_noteLock)
+                {
+                    return _activeNoteId != null && _openNotes.TryGetValue(_activeNoteId, out var n) ? n : null;
+                }
+            }
+        }
 
         public WorkspaceStateService(NoteService noteService)
         {
@@ -92,10 +103,13 @@ namespace NoteNest.Core.Services
 
         public async Task<WorkspaceNote> OpenNoteAsync(NoteModel note)
         {
-            if (_openNotes.TryGetValue(note.Id, out var existing))
+            lock (_noteLock)
             {
-                _activeNoteId = note.Id;
-                return existing;
+                if (_openNotes.TryGetValue(note.Id, out var existing))
+                {
+                    _activeNoteId = note.Id;
+                    return existing;
+                }
             }
 
             var wn = new WorkspaceNote
@@ -106,39 +120,61 @@ namespace NoteNest.Core.Services
                 CurrentContent = note.Content ?? string.Empty,
                 OpenedAt = DateTime.Now
             };
-            _openNotes[note.Id] = wn;
-            _activeNoteId = note.Id;
+            lock (_noteLock)
+            {
+                _openNotes[note.Id] = wn;
+                _activeNoteId = note.Id;
+            }
             return await Task.FromResult(wn);
         }
 
         public Task<bool> CloseNoteAsync(string noteId)
         {
-            var removed = _openNotes.Remove(noteId);
-            if (_activeNoteId == noteId) _activeNoteId = null;
+            bool removed;
+            lock (_noteLock)
+            {
+                removed = _openNotes.Remove(noteId);
+                if (_activeNoteId == noteId) _activeNoteId = null;
+            }
             return Task.FromResult(removed);
         }
 
         public void UpdateNoteContent(string noteId, string content)
         {
-            if (_openNotes.TryGetValue(noteId, out var note))
+            lock (_noteLock)
             {
-                var wasDirty = note.IsDirty;
-                note.CurrentContent = content;
-                System.Diagnostics.Debug.WriteLine($"[State] UpdateNoteContent noteId={noteId} len={content?.Length ?? 0} wasDirty={wasDirty} nowDirty={note.IsDirty} at={DateTime.Now:HH:mm:ss.fff}");
-                if (wasDirty != note.IsDirty)
+                if (_openNotes.TryGetValue(noteId, out var note))
                 {
-                    NoteStateChanged?.Invoke(this, new NoteStateChangedEventArgs { NoteId = noteId, IsDirty = note.IsDirty });
+                    var wasDirty = note.IsDirty;
+                    note.CurrentContent = content;
+                    System.Diagnostics.Debug.WriteLine($"[State] UpdateNoteContent noteId={noteId} len={content?.Length ?? 0} wasDirty={wasDirty} nowDirty={note.IsDirty} at={DateTime.Now:HH:mm:ss.fff}");
+                    if (wasDirty != note.IsDirty)
+                    {
+                        NoteStateChanged?.Invoke(this, new NoteStateChangedEventArgs { NoteId = noteId, IsDirty = note.IsDirty });
+                    }
                 }
-            }
-            else
-            {
-                // This should not happen if WorkspaceService properly registers notes
-                System.Diagnostics.Debug.WriteLine($"[State][WARN] Attempted to update content for untracked note: {noteId} at={DateTime.Now:HH:mm:ss.fff}");
+                else
+                {
+                    // This should not happen if WorkspaceService properly registers notes
+                    System.Diagnostics.Debug.WriteLine($"[State][WARN] Attempted to update content for untracked note: {noteId} at={DateTime.Now:HH:mm:ss.fff}");
+                }
             }
         }
 
-        public bool IsNoteDirty(string noteId) => _openNotes.TryGetValue(noteId, out var n) && n.IsDirty;
-        public IEnumerable<WorkspaceNote> GetDirtyNotes() => _openNotes.Values.Where(v => v.IsDirty);
+        public bool IsNoteDirty(string noteId)
+        {
+            lock (_noteLock)
+            {
+                return _openNotes.TryGetValue(noteId, out var n) && n.IsDirty;
+            }
+        }
+        public IEnumerable<WorkspaceNote> GetDirtyNotes()
+        {
+            lock (_noteLock)
+            {
+                return _openNotes.Values.Where(v => v.IsDirty).ToList();
+            }
+        }
 
         public async Task<SaveResult> SaveNoteAsync(string noteId)
         {
@@ -146,11 +182,15 @@ namespace NoteNest.Core.Services
 
             var saveLock = _saveLocks.GetOrAdd(noteId, _ => new SemaphoreSlim(1, 1));
             await saveLock.WaitAsync();
-            if (!_openNotes.TryGetValue(noteId, out var note))
+            WorkspaceNote note;
+            lock (_noteLock)
             {
-                System.Diagnostics.Debug.WriteLine($"[State][ERROR] SaveNoteAsync noteId={noteId} failed: not open at={DateTime.Now:HH:mm:ss.fff}");
-                saveLock.Release();
-                return new SaveResult { Success = false, NoteId = noteId, ErrorMessage = "Note not open" };
+                if (!_openNotes.TryGetValue(noteId, out note))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[State][ERROR] SaveNoteAsync noteId={noteId} failed: not open at={DateTime.Now:HH:mm:ss.fff}");
+                    saveLock.Release();
+                    return new SaveResult { Success = false, NoteId = noteId, ErrorMessage = "Note not open" };
+                }
             }
             if (!note.IsDirty)
             {
@@ -171,8 +211,11 @@ namespace NoteNest.Core.Services
                 saveLock.Release();
                 return new SaveResult { Success = false, NoteId = noteId, ErrorMessage = ex.Message };
             }
-            note.OriginalContent = note.CurrentContent;
-            note.LastSavedAt = note.Model.LastModified;
+            lock (_noteLock)
+            {
+                note.OriginalContent = note.CurrentContent;
+                note.LastSavedAt = note.Model.LastModified;
+            }
             NoteStateChanged?.Invoke(this, new NoteStateChangedEventArgs { NoteId = noteId, IsDirty = false });
             System.Diagnostics.Debug.WriteLine($"[State] SaveNoteAsync OK noteId={noteId} savedAt={note.Model.LastModified:HH:mm:ss.fff} len={note.OriginalContent?.Length ?? 0}");
             saveLock.Release();

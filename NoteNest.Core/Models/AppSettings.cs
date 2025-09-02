@@ -58,6 +58,7 @@ namespace NoteNest.Core.Models
         public bool AutoSaveOnTabSwitch { get; set; } = true;
         public bool AutoSaveOnClose { get; set; } = true;
         public bool AutoSaveOnFocusLost { get; set; } = true;
+        public bool ForceSaveOnExit { get; set; } = true;
         public int AutoSaveIdleMs { get; set; } = 2000;
         public bool ShowTreeDirtyDot { get; set; } = true;
         public bool ShowActivityBar { get; set; } = true;
@@ -93,6 +94,9 @@ namespace NoteNest.Core.Models
 
         // Editor UI
         public bool ShowFormattingToolbar { get; set; } = true;
+
+        // Session persistence
+        public bool RestoreTabs { get; set; } = true;
 
         public AppSettings()
         {

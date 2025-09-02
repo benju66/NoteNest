@@ -31,6 +31,7 @@ namespace NoteNest.UI.ViewModels
         private readonly IFileSystemProvider _fileSystem;
         private readonly ContentCache _contentCache;
         private readonly IWorkspaceStateService _workspaceStateService;
+        private readonly ITabPersistenceService _tabPersistence;
 
         // Lazy Services (created only when needed)
         private SearchIndexService _searchIndex;
@@ -215,7 +216,8 @@ namespace NoteNest.UI.ViewModels
             IFileSystemProvider fileSystem,
             IWorkspaceService workspaceService,
             ContentCache contentCache,
-            IWorkspaceStateService workspaceStateService)
+            IWorkspaceStateService workspaceStateService,
+            ITabPersistenceService tabPersistence)
         {
             // Assign essential services only (fast)
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -228,6 +230,7 @@ namespace NoteNest.UI.ViewModels
             _workspaceService = workspaceService ?? throw new ArgumentNullException(nameof(workspaceService));
             _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
             _workspaceStateService = workspaceStateService ?? throw new ArgumentNullException(nameof(workspaceStateService));
+            _tabPersistence = tabPersistence ?? throw new ArgumentNullException(nameof(tabPersistence));
 
             _logger.Info("MainViewModel fast startup initiated");
             _cancellationTokenSource = new CancellationTokenSource();
@@ -248,6 +251,11 @@ namespace NoteNest.UI.ViewModels
 
                 // Start async initialization (doesn't block startup)
                 _initializationTask = InitializeAsync(_cancellationTokenSource.Token);
+
+                // Hook workspace events to persist session state
+                _workspaceService.TabOpened += OnWorkspaceTabOpened;
+                _workspaceService.TabClosed += OnWorkspaceTabClosed;
+                _workspaceService.TabSelectionChanged += OnWorkspaceTabSelectionChangedForPersistence;
                 
                 _logger.Info("MainViewModel ready - total time < 50ms");
             }
@@ -257,6 +265,21 @@ namespace NoteNest.UI.ViewModels
                 _dialogService?.ShowError("Startup failed", "Error");
                 throw;
             }
+        }
+
+        private void OnWorkspaceTabOpened(object sender, TabEventArgs e)
+        {
+            try { _tabPersistence.MarkChanged(); } catch { }
+        }
+
+        private void OnWorkspaceTabClosed(object sender, TabEventArgs e)
+        {
+            try { _tabPersistence.MarkChanged(); } catch { }
+        }
+
+        private void OnWorkspaceTabSelectionChangedForPersistence(object sender, TabChangedEventArgs e)
+        {
+            try { _tabPersistence.MarkChanged(); } catch { }
         }
 
         public List<string> GetSearchSuggestions(string query)
@@ -295,34 +318,12 @@ namespace NoteNest.UI.ViewModels
                 try
                 {
                     _logger.Info("ExitCommand triggered - initiating shutdown");
-                    
-                    // Fire-and-forget save with timeout to avoid blocking UI thread
-                    if (OpenTabs?.Any(t => t.IsDirty) == true)
-                    {
-                        var saveTask = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                                await SaveAllNotesAsync(cts.Token);
-                            }
-                            catch (OperationCanceledException)
-                            {
-                                _logger.Info("Exit save cancelled or timed out");
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.Warning("Exit save failed: {0}", ex.Message);
-                            }
-                        });
-                    }
-                    
+                    // Directly shutdown; Window_Closing will force-save
                     Application.Current.Shutdown();
                 }
                 catch (Exception ex)
                 {
                     _logger.Error(ex, "Error during exit command");
-                    // Force shutdown even if there's an error
                     System.Environment.Exit(0);
                 }
             });
@@ -345,12 +346,20 @@ namespace NoteNest.UI.ViewModels
                 await _configService.EnsureDefaultDirectoriesAsync();
                 cancellationToken.ThrowIfCancellationRequested();
 
+                // Validate notes root and guide the user if misconfigured
+                await ValidateNotesRootAsync(cancellationToken);
+
                 // Initialize auto-save after settings are loaded
                 InitializeAutoSave();
 
                 try
                 {
                     await LoadCategoriesAsync();
+                    if (Categories.Count == 0)
+                    {
+                        _logger.Warning("No categories loaded. Check notes folder configuration.");
+                        _dialogService.ShowInfo("No categories found in the configured notes folder. You can change the folder in Settings.", "No Categories");
+                    }
                 }
                 catch (Exception catEx)
                 {
@@ -359,6 +368,12 @@ namespace NoteNest.UI.ViewModels
                 }
                 
                 cancellationToken.ThrowIfCancellationRequested();
+
+                // Ensure workspace view model is created and subscribed before restoration
+                _ = GetWorkspaceViewModel();
+
+                // Restore previous tabs
+                await RestoreTabsAsync();
 
                 StatusMessage = "Ready";
                 _logger.Info("Application initialized successfully");
@@ -386,6 +401,98 @@ namespace NoteNest.UI.ViewModels
                     _stateManager.IsLoading = false;
                     _stateManager.EndOperation("Ready");
                 }
+            }
+        }
+
+        private async Task ValidateNotesRootAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                var root = _configService?.Settings?.DefaultNotePath;
+                var meta = _configService?.Settings?.MetadataPath;
+                var categoriesPath = NoteNest.Core.Services.PathService.CategoriesPath;
+                var validRoot = !string.IsNullOrWhiteSpace(root) && Directory.Exists(root);
+                var hasCategories = File.Exists(categoriesPath);
+
+                if (!validRoot || !hasCategories)
+                {
+                    _logger.Warning($"Notes root validation failed. RootExists={validRoot} HasCategories={hasCategories}");
+                    var pick = await _dialogService.ShowYesNoCancelAsync(
+                        "Your notes folder isn't configured or looks empty. Do you want to select your existing notes folder now?",
+                        "Configure Notes Folder");
+                    if (pick == true)
+                    {
+                        var selected = await _dialogService.ShowInputDialogAsync(
+                            "Select Notes Folder",
+                            "Enter the full path to your notes root (contains Projects and .metadata):",
+                            _configService?.Settings?.DefaultNotePath ?? "",
+                            path =>
+                            {
+                                try { return Directory.Exists(path) ? null : "Folder does not exist."; } catch { return "Invalid path."; }
+                            });
+
+                        if (!string.IsNullOrWhiteSpace(selected) && Directory.Exists(selected))
+                        {
+                            _configService.Settings.DefaultNotePath = selected;
+                            _configService.Settings.MetadataPath = System.IO.Path.Combine(selected, ".metadata");
+                            NoteNest.Core.Services.PathService.RootPath = selected;
+                            await _configService.SaveSettingsAsync();
+                            await _configService.EnsureDefaultDirectoriesAsync();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"ValidateNotesRoot failed: {ex.Message}");
+            }
+        }
+
+        private async Task RestoreTabsAsync()
+        {
+            try
+            {
+                if (_configService?.Settings?.RestoreTabs != true) return;
+                var state = await _tabPersistence.LoadAsync();
+                if (state?.Tabs == null || state.Tabs.Count == 0) return;
+
+                // Determine active tab
+                var active = !string.IsNullOrEmpty(state.ActiveTabId)
+                    ? state.Tabs.FirstOrDefault(t => t.Id == state.ActiveTabId)
+                    : state.Tabs.FirstOrDefault();
+                if (active == null) return;
+
+                // Open active first with embedded content (no disk read) and select it
+                var activeNote = new NoteModel { Id = active.Id, FilePath = active.Path, Title = active.Title, Content = state.ActiveTabContent ?? string.Empty };
+                var opened = await _workspaceService.OpenNoteAsync(activeNote);
+                try { _workspaceService.SelectedTab = opened; } catch { }
+
+                // Queue other tabs lazily
+                var others = state.Tabs.Where(t => t.Id != active.Id).ToList();
+                if (others.Count > 0)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(300);
+                        foreach (var t in others)
+                        {
+                            try
+                            {
+                                var note = new NoteModel { Id = t.Id, FilePath = t.Path, Title = t.Title, Content = null };
+                                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                                {
+                                    try { await _workspaceService.OpenNoteAsync(note); } catch { }
+                                });
+                                await Task.Delay(30);
+                            }
+                            catch { }
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"RestoreTabs failed: {ex.Message}");
             }
         }
 
@@ -1164,6 +1271,9 @@ namespace NoteNest.UI.ViewModels
                     if (_workspaceService != null)
                     {
                         _workspaceService.TabSelectionChanged -= OnServiceTabSelectionChanged;
+                        _workspaceService.TabOpened -= OnWorkspaceTabOpened;
+                        _workspaceService.TabClosed -= OnWorkspaceTabClosed;
+                        _workspaceService.TabSelectionChanged -= OnWorkspaceTabSelectionChangedForPersistence;
                     }
                     if (_stateManager != null)
                     {

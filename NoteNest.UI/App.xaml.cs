@@ -64,8 +64,8 @@ namespace NoteNest.UI
                     _logger?.Warning($"Theme init failed: {themeEx.Message}");
                 }
 
-                // Create window, wire services, then show
-                var mainWindow = new MainWindow();
+                // Create window via DI, wire services, then show
+                var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
                 var mainViewModel = ServiceProvider.GetRequiredService<MainViewModel>();
                 mainWindow.DataContext = mainViewModel;
                 

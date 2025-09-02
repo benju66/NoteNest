@@ -28,6 +28,12 @@ namespace NoteNest.UI.Services
                 sp.GetRequiredService<IFileSystemProvider>(),
                 sp.GetService<IEventBus>()));
             services.AddSingleton<IWorkspaceStateService, WorkspaceStateService>();
+            services.AddSingleton<ITabPersistenceService>(sp => new TabPersistenceService(
+                sp.GetRequiredService<ConfigurationService>(),
+                sp.GetRequiredService<IAppLogger>(),
+                sp.GetRequiredService<IWorkspaceService>()));
+            // UI
+            services.AddSingleton<MainWindow>();
             // EventBus planned for future integration; placeholder left out to avoid large changes
             
             // State Management (Lightweight Singletons)
