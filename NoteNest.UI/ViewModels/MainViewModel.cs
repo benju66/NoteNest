@@ -564,11 +564,21 @@ namespace NoteNest.UI.ViewModels
                         Categories.Add(item);
                     }
                     // Build pinned categories quick-access (non-destructive)
+                    PinnedCategories.Clear();
                     foreach (var cat in Categories)
                     {
                         CollectPinnedCategories(cat, PinnedCategories);
-                        CollectPinnedNotes(cat, PinnedNotes);
                     }
+                    // Build pinned notes quick-access from pin service
+                    try
+                    {
+                        PinnedNotes.Clear();
+                        foreach (var cat in Categories)
+                        {
+                            CollectPinnedNotes(cat, PinnedNotes);
+                        }
+                    }
+                    catch { }
                 });
 
                 // Set up file watcher
