@@ -221,6 +221,17 @@ namespace NoteNest.UI.Controls
                     if (container?.Parent is List grandParentList)
                     {
                         parentList.ListItems.Remove(li);
+
+                        // If the nested list became empty, remove it to avoid a stray bullet marker
+                        try
+                        {
+                            if (GetListItemCount(parentList) == 0)
+                            {
+                                container.Blocks.Remove(parentList);
+                            }
+                        }
+                        catch { }
+
                         int insertIndex = GetListItemIndex(grandParentList, container) + 1;
                         InsertListItemAt(grandParentList, insertIndex, li);
                         CaretPosition = (li.Blocks.FirstBlock as Paragraph)?.ContentStart ?? CaretPosition;
