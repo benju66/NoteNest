@@ -41,11 +41,14 @@ namespace NoteNest.UI.ViewModels
         private readonly IWorkspaceService _workspaceService;
         private WorkspaceViewModel _workspaceViewModel;
         private DispatcherTimer _autoSaveTimer;
+        private readonly NoteNest.Core.Services.NotePinService _notePinService;
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Task _initializationTask;
         
         private ObservableCollection<CategoryTreeItem> _categories;
+        private ObservableCollection<CategoryTreeItem> _pinnedCategories;
+        private ObservableCollection<PinnedNoteItem> _pinnedNotes;
         private CategoryTreeItem _selectedCategory;
         private NoteTreeItem _selectedNote;
         private string _searchText;
@@ -62,6 +65,18 @@ namespace NoteNest.UI.ViewModels
         {
             get => _categories ??= new ObservableCollection<CategoryTreeItem>();
             set => SetProperty(ref _categories, value);
+        }
+
+        public ObservableCollection<CategoryTreeItem> PinnedCategories
+        {
+            get => _pinnedCategories ??= new ObservableCollection<CategoryTreeItem>();
+            set => SetProperty(ref _pinnedCategories, value);
+        }
+
+        public ObservableCollection<PinnedNoteItem> PinnedNotes
+        {
+            get => _pinnedNotes ??= new ObservableCollection<PinnedNoteItem>();
+            set => SetProperty(ref _pinnedNotes, value);
         }
 
         // Raised to request opening a note in the active split pane (handled by NoteNestPanel)
@@ -217,7 +232,8 @@ namespace NoteNest.UI.ViewModels
             IWorkspaceService workspaceService,
             ContentCache contentCache,
             IWorkspaceStateService workspaceStateService,
-            ITabPersistenceService tabPersistence)
+            ITabPersistenceService tabPersistence,
+            NoteNest.Core.Services.NotePinService notePinService)
         {
             // Assign essential services only (fast)
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -231,6 +247,7 @@ namespace NoteNest.UI.ViewModels
             _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
             _workspaceStateService = workspaceStateService ?? throw new ArgumentNullException(nameof(workspaceStateService));
             _tabPersistence = tabPersistence ?? throw new ArgumentNullException(nameof(tabPersistence));
+            _notePinService = notePinService ?? throw new ArgumentNullException(nameof(notePinService));
 
             _logger.Info("MainViewModel fast startup initiated");
             _cancellationTokenSource = new CancellationTokenSource();
@@ -242,6 +259,8 @@ namespace NoteNest.UI.ViewModels
 
                 // Initialize collections (fast)
                 Categories = new ObservableCollection<CategoryTreeItem>();
+                PinnedCategories = new ObservableCollection<CategoryTreeItem>();
+                PinnedNotes = new ObservableCollection<PinnedNoteItem>();
                 
                 // Initialize commands (fast)
                 InitializeCommands();
@@ -511,6 +530,8 @@ namespace NoteNest.UI.ViewModels
             {
                 _stateManager.BeginOperation("Loading categories...");
                 Categories.Clear();
+                PinnedCategories.Clear();
+                PinnedNotes.Clear();
 
                 var flatCategories = await GetCategoryService().LoadCategoriesAsync();
                 if (!flatCategories.Any())
@@ -542,6 +563,12 @@ namespace NoteNest.UI.ViewModels
                     {
                         Categories.Add(item);
                     }
+                    // Build pinned categories quick-access (non-destructive)
+                    foreach (var cat in Categories)
+                    {
+                        CollectPinnedCategories(cat, PinnedCategories);
+                        CollectPinnedNotes(cat, PinnedNotes);
+                    }
                 });
 
                 // Set up file watcher
@@ -563,8 +590,12 @@ namespace NoteNest.UI.ViewModels
             // Pass the NoteService to enable lazy loading handled within CategoryTreeItem
             var parentItem = new CategoryTreeItem(parent, _noteService);
 
-            // Build subcategories
-            var children = all.Where(c => c.ParentId == parent.Id).OrderBy(c => c.Name).ToList();
+            // Build subcategories (pinned first, then by name for consistency with roots)
+            var children = all
+                .Where(c => c.ParentId == parent.Id)
+                .OrderByDescending(c => c.Pinned)
+                .ThenBy(c => c.Name)
+                .ToList();
             foreach (var child in children)
             {
                 var childItem = await BuildCategoryTreeAsync(child, all, level + 1);
@@ -1114,6 +1145,48 @@ namespace NoteNest.UI.ViewModels
             }
             Walk(Categories);
             return list;
+        }
+
+        private void CollectPinnedCategories(CategoryTreeItem category, ObservableCollection<CategoryTreeItem> pinned)
+        {
+            if (category?.Model?.Pinned == true)
+            {
+                pinned.Add(category);
+            }
+            foreach (var sub in category.SubCategories)
+            {
+                CollectPinnedCategories(sub, pinned);
+            }
+        }
+
+        public class PinnedNoteItem
+        {
+            public NoteTreeItem Note { get; }
+            public string CategoryName { get; }
+            public PinnedNoteItem(NoteTreeItem note, string categoryName)
+            {
+                Note = note;
+                CategoryName = categoryName;
+            }
+        }
+
+        private void CollectPinnedNotes(CategoryTreeItem category, ObservableCollection<PinnedNoteItem> pinned)
+        {
+            foreach (var note in category.Notes)
+            {
+                try
+                {
+                    if (_notePinService.IsPinned(note.Model.FilePath))
+                    {
+                        pinned.Add(new PinnedNoteItem(note, category.Name));
+                    }
+                }
+                catch { }
+            }
+            foreach (var sub in category.SubCategories)
+            {
+                CollectPinnedNotes(sub, pinned);
+            }
         }
 
         #endregion

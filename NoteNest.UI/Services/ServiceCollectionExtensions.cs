@@ -64,6 +64,8 @@ namespace NoteNest.UI.Services
                 sp.GetRequiredService<IFileSystemProvider>(),
                 sp.GetService<SafeFileService>(),
                 sp.GetService<IAppLogger>()));
+            services.AddSingleton<NotePinService>(sp => new NotePinService(
+                sp.GetRequiredService<IFileSystemProvider>()));
 
             // Workspace Services (Singleton for performance)
             services.AddSingleton<ContentCache>(sp =>
