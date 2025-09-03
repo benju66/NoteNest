@@ -90,6 +90,14 @@ namespace NoteNest.UI.ViewModels
         public void RemoveTab(NoteTabItem noteTab)
         {
             _uiTabs.Remove(noteTab);
+            try
+            {
+                if (noteTab is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+            catch { }
             
             if (_workspaceService.OpenTabs.Contains(noteTab))
             {

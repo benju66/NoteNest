@@ -1,16 +1,18 @@
 using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces.Services;
 using System;
+using System.ComponentModel;
 
 namespace NoteNest.UI.ViewModels
 {
-    public class NoteTabItem : ViewModelBase, ITabItem
+    public class NoteTabItem : ViewModelBase, ITabItem, IDisposable
     {
         private readonly NoteModel _note;
         private bool _isDirty;
         private string _content;
         private string _wordCount;
         private string _lastSaved;
+        private bool _disposed;
 
         public NoteModel Note => _note;
         public string Id => _note?.Id ?? string.Empty;
@@ -93,11 +95,46 @@ namespace NoteNest.UI.ViewModels
             _isDirty = false;
             UpdateWordCount();
             UpdateLastSaved();
+
+            try
+            {
+                if (_note is INotifyPropertyChanged inpc)
+                {
+                    inpc.PropertyChanged += OnNoteModelPropertyChanged;
+                }
+            }
+            catch { }
         }
 
         public new void OnPropertyChanged(string propertyName)
         {
             base.OnPropertyChanged(propertyName);
+        }
+
+        private void OnNoteModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            try
+            {
+                if (e.PropertyName == nameof(NoteModel.Title))
+                {
+                    OnPropertyChanged(nameof(Title));
+                }
+                else if (e.PropertyName == nameof(NoteModel.IsDirty))
+                {
+                    // Mirror model dirty state to tab
+                    IsDirty = _note.IsDirty;
+                }
+                else if (e.PropertyName == nameof(NoteModel.Content))
+                {
+                    if (!string.Equals(_content, _note.Content, StringComparison.Ordinal))
+                    {
+                        _content = _note.Content ?? string.Empty;
+                        OnPropertyChanged(nameof(Content));
+                        UpdateWordCount();
+                    }
+                }
+            }
+            catch { }
         }
 
         public void UpdateWordCount()
@@ -116,6 +153,29 @@ namespace NoteNest.UI.ViewModels
         public void UpdateLastSaved()
         {
             LastSaved = IsDirty ? "Unsaved changes" : $"Saved {DateTime.Now:HH:mm}";
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed) return;
+            if (disposing)
+            {
+                try
+                {
+                    if (_note is INotifyPropertyChanged inpc)
+                    {
+                        inpc.PropertyChanged -= OnNoteModelPropertyChanged;
+                    }
+                }
+                catch { }
+            }
+            _disposed = true;
         }
     }
 }

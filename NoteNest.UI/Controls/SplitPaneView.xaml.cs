@@ -10,6 +10,8 @@ using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Controls;
 using NoteNest.Core.Events;
 using NoteNest.Core.Services;
+using System.Windows.Input;
+using NoteNest.UI.ViewModels;
 
 namespace NoteNest.UI.Controls
 {
@@ -32,10 +34,15 @@ namespace NoteNest.UI.Controls
             set => SetValue(IsActiveProperty, value);
         }
         
-        private readonly IWorkspaceService? _workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+         private readonly IWorkspaceService? _workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
         private readonly NoteNest.Core.Services.IWorkspaceStateService? _stateService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
         private readonly NoteNest.Core.Services.ConfigurationService? _configService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
         private readonly NoteNest.Core.Services.Logging.IAppLogger? _logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
+        private bool _isDragging;
+
+        // Expose commands for input bindings
+        public ICommand RenameSelectedTabCommand => new NoteNest.UI.Commands.AsyncRelayCommand(async _ => await RenameSelectedTabAsync());
+        public ICommand CloseSelectedTabCommand => new NoteNest.UI.Commands.AsyncRelayCommand(async _ => await CloseSelectedTabAsync());
 
         public SplitPaneView()
         {
@@ -48,6 +55,24 @@ namespace NoteNest.UI.Controls
                     // Apply to current active editor when settings change
                     Dispatcher.Invoke(() => TryApplyEditorSettingsToActiveEditor());
                 });
+            }
+            catch { }
+
+            // Drag tracking to avoid middle-click during drag
+            try
+            {
+                PaneTabControl.PreviewMouseMove += (s, e) =>
+                {
+                    if (e.LeftButton == MouseButtonState.Pressed) _isDragging = true;
+                };
+                PaneTabControl.PreviewMouseUp += (s, e) =>
+                {
+                    if (e.LeftButton == MouseButtonState.Released)
+                    {
+                        Dispatcher.BeginInvoke(new Action(() => _isDragging = false), System.Windows.Threading.DispatcherPriority.Background);
+                    }
+                };
+                PaneTabControl.Drop += (s, e) => { _isDragging = false; };
             }
             catch { }
         }
@@ -299,7 +324,199 @@ namespace NoteNest.UI.Controls
                 var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
                 var presenter = FindVisualChild<ContentPresenter>(container);
                 var editor = FindVisualChild<FormattedTextEditor>(presenter);
-                editor?.Focus();
+                // Try immediate focus
+                if (editor != null)
+                {
+                    Keyboard.Focus(editor);
+                }
+                // Also schedule focus after current input/close events complete
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        var container2 = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
+                        var presenter2 = FindVisualChild<ContentPresenter>(container2);
+                        var editor2 = FindVisualChild<FormattedTextEditor>(presenter2);
+                        if (editor2 != null) Keyboard.Focus(editor2);
+                    }
+                    catch { }
+                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
+            catch { }
+        }
+
+        // Header interactions and commands
+        private async System.Threading.Tasks.Task RenameSelectedTabAsync()
+        {
+            var selected = Pane?.SelectedTab;
+            if (selected == null) return;
+            await RenameTabAsync(selected);
+        }
+
+        private async System.Threading.Tasks.Task CloseSelectedTabAsync()
+        {
+            var selected = Pane?.SelectedTab;
+            if (selected == null) return;
+            try
+            {
+                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                if (closeService != null)
+                {
+                    await closeService.CloseTabWithPromptAsync(selected);
+                }
+            }
+            catch (Exception ex) { try { _logger?.Error(ex, "Failed to close selected tab"); } catch { } }
+        }
+
+        private async System.Threading.Tasks.Task RenameTabAsync(ITabItem tab)
+        {
+            if (tab?.Note == null) return;
+            try
+            {
+                var dialog = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.IDialogService)) as NoteNest.UI.Services.IDialogService;
+                var ops = (Application.Current as App)?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
+                if (dialog == null || ops == null) return;
+
+                var currentName = tab.Note.Title;
+                var newName = await dialog.ShowInputDialogAsync("Rename Note", "Enter new name:", currentName, text =>
+                {
+                    if (string.IsNullOrWhiteSpace(text)) return "Name cannot be empty";
+                    if (text.Equals(currentName, StringComparison.OrdinalIgnoreCase)) return null;
+                    return null;
+                });
+                if (string.IsNullOrWhiteSpace(newName) || newName == currentName) return;
+
+                var success = await ops.RenameNoteAsync(tab.Note, newName);
+                if (!success)
+                {
+                    dialog.ShowError("A note with this name already exists in the same folder.", "Name Conflict");
+                }
+                else
+                {
+                    try { _logger?.Info($"Renamed note from '{currentName}' to '{newName}'"); } catch { }
+                    try { NotifyTreeOfRename(tab.Note); } catch { }
+                }
+            }
+            catch (Exception ex) { try { _logger?.Error(ex, "Failed to rename tab"); } catch { } }
+            finally
+            {
+                // Always restore focus to the active editor so toolbar buttons don't retain keyboard focus
+                TryFocusActiveEditor();
+            }
+        }
+
+        private async void RenameTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem mi && mi.Tag is ITabItem tab)
+            {
+                await RenameTabAsync(tab);
+            }
+        }
+
+        private async void CloseAllTabs_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                if (closeService != null)
+                {
+                    await closeService.CloseAllTabsWithPromptAsync();
+                }
+            }
+            catch (Exception ex) { try { _logger?.Error(ex, "Failed to close all tabs"); } catch { } }
+        }
+
+        private async void CloseOthers_Click(object sender, RoutedEventArgs e)
+        {
+            if (Pane == null) return;
+            if (sender is not MenuItem mi || mi.Tag is not ITabItem keepTab) return;
+            try
+            {
+                var dialog = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.IDialogService)) as NoteNest.UI.Services.IDialogService;
+                var state = _stateService;
+                if (dialog == null || state == null) return;
+
+                var others = Pane.Tabs.Where(t => !ReferenceEquals(t, keepTab)).ToList();
+                var dirty = others.Where(t => t.IsDirty).ToList();
+                if (dirty.Any())
+                {
+                    var result = await dialog.ShowYesNoCancelAsync($"Do you want to save changes to {dirty.Count} modified file(s)?", "Save Changes");
+                    if (result == null) return;
+                    if (result == true)
+                    {
+                        foreach (var t in dirty)
+                        {
+                            try
+                            {
+                                if (t is NoteNest.UI.ViewModels.NoteTabItem nti)
+                                {
+                                    var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(nti) as TabItem;
+                                    var presenter = FindVisualChild<ContentPresenter>(container);
+                                    var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                                    var content = editor?.MarkdownContent ?? nti.Content ?? string.Empty;
+                                    nti.Content = content;
+                                    state.UpdateNoteContent(t.Note.Id, content);
+                                }
+                                await state.SaveNoteAsync(t.Note.Id);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                foreach (var t in others)
+                {
+                    Pane.Tabs.Remove(t);
+                }
+            }
+            catch (Exception ex) { try { _logger?.Error(ex, "Failed to close other tabs"); } catch { } }
+        }
+
+        private async void SaveTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuItem mi || mi.Tag is not ITabItem tab) return;
+            await SaveTabAsync(tab);
+        }
+
+        private async System.Threading.Tasks.Task SaveTabAsync(ITabItem tab)
+        {
+            if (tab?.Note == null || _stateService == null) return;
+            try
+            {
+                if (tab is NoteNest.UI.ViewModels.NoteTabItem nti)
+                {
+                    var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(nti) as TabItem;
+                    var presenter = FindVisualChild<ContentPresenter>(container);
+                    var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                    var content = editor?.MarkdownContent ?? nti.Content ?? string.Empty;
+                    nti.Content = content;
+                    _stateService.UpdateNoteContent(tab.Note.Id, content);
+                }
+                var result = await _stateService.SaveNoteAsync(tab.Note.Id);
+                if (result?.Success == true)
+                {
+                    tab.IsDirty = false;
+                    tab.Note.IsDirty = false;
+                    try { _logger?.Info($"Saved note: {tab.Title}"); } catch { }
+                }
+            }
+            catch (Exception ex) { try { _logger?.Error(ex, $"Failed to save tab: {tab?.Title}"); } catch { } }
+        }
+
+        private void TabHeader_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton != MouseButton.Middle) return;
+            if (_isDragging) return;
+            if (sender is not FrameworkElement fe) return;
+            var tab = fe.DataContext as ITabItem;
+            if (tab == null) return;
+            e.Handled = true;
+            try
+            {
+                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                if (closeService != null)
+                {
+                    _ = closeService.CloseTabWithPromptAsync(tab);
+                }
             }
             catch { }
         }
@@ -444,6 +661,36 @@ namespace NoteNest.UI.Controls
             return null;
         }
         
+        private void NotifyTreeOfRename(NoteModel renamedNote)
+        {
+            if (renamedNote == null) return;
+            var mainWindow = Application.Current?.MainWindow as MainWindow;
+            if (mainWindow?.DataContext is not MainViewModel vm) return;
+            foreach (var category in vm.Categories)
+            {
+                var item = FindNoteInTree(category, renamedNote.Id);
+                if (item != null)
+                {
+                    item.OnPropertyChanged(nameof(NoteTreeItem.Title));
+                    item.OnPropertyChanged(nameof(NoteTreeItem.FilePath));
+                    break;
+                }
+            }
+        }
+
+        private NoteTreeItem? FindNoteInTree(CategoryTreeItem category, string noteId)
+        {
+            if (category == null || string.IsNullOrEmpty(noteId)) return null;
+            var found = category.Notes.FirstOrDefault(n => n.Model?.Id == noteId);
+            if (found != null) return found;
+            foreach (var sub in category.SubCategories)
+            {
+                var r = FindNoteInTree(sub, noteId);
+                if (r != null) return r;
+            }
+            return null;
+        }
+
         private async void CloseTab_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is ITabItem tab)
