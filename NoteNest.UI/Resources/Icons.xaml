@@ -35,6 +35,10 @@
     <SolidColorBrush x:Key="NoteIconBrush" Color="#519ABA"/>
     <SolidColorBrush x:Key="UnsavedIndicatorBrush" Color="{StaticResource UnsavedIndicatorColor}"/>
 
+    <!-- Drag/Drop visuals -->
+    <SolidColorBrush x:Key="DragInsertBrush" Color="#0078D4"/>
+    <SolidColorBrush x:Key="DragRowHighlightBrush" Color="#220078D4"/>
+
 </ResourceDictionary>
 
 
