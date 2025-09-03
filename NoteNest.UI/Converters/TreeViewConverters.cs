@@ -32,15 +32,8 @@ namespace NoteNest.UI.Converters
         {
             try
             {
-                if (value is NoteFormat format)
-                {
-                    return format switch
-                    {
-                        NoteFormat.Markdown => "\uE943",
-                        NoteFormat.PlainText => "\uE8A4",
-                        _ => "\uE7C3"
-                    };
-                }
+                // Use a single generic document icon for all notes
+                return "\uE7C3";
             }
             catch { }
             return "\uE7C3";
@@ -58,15 +51,8 @@ namespace NoteNest.UI.Converters
         {
             try
             {
-                if (value is NoteFormat format)
-                {
-                    return format switch
-                    {
-                        NoteFormat.Markdown => Application.Current.FindResource("MarkdownIconBrush"),
-                        NoteFormat.PlainText => Application.Current.FindResource("TextFileIconBrush"),
-                        _ => Application.Current.FindResource("GenericFileIconBrush")
-                    };
-                }
+                // Use a single brush for all note icons
+                return Application.Current.FindResource("NoteIconBrush");
             }
             catch { }
             return Application.Current.FindResource("GenericFileIconBrush");

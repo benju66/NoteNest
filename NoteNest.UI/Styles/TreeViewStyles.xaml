@@ -50,7 +50,9 @@
 
     <DataTemplate DataType="{x:Type vm:NoteTreeItem}">
         <StackPanel Orientation="Horizontal">
-            <TextBlock Style="{StaticResource IconStyle}" FontSize="14" Text="{Binding Model.Format, Converter={StaticResource NoteFormatToIcon}}" Foreground="{Binding Model.Format, Converter={StaticResource NoteFormatToBrush}}"/>
+            <TextBlock Style="{StaticResource IconStyle}" FontSize="14"
+                       Text="{Binding Model.Format, Converter={StaticResource NoteFormatToIcon}}"
+                       Foreground="{StaticResource NoteIconBrush}"/>
             <TextBlock Text="{Binding Title}" VerticalAlignment="Center">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">

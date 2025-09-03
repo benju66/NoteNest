@@ -32,6 +32,7 @@
     <SolidColorBrush x:Key="MarkdownIconBrush" Color="{StaticResource MarkdownIconColor}"/>
     <SolidColorBrush x:Key="TextFileIconBrush" Color="{StaticResource TextFileIconColor}"/>
     <SolidColorBrush x:Key="GenericFileIconBrush" Color="{StaticResource GenericFileIconColor}"/>
+    <SolidColorBrush x:Key="NoteIconBrush" Color="#519ABA"/>
     <SolidColorBrush x:Key="UnsavedIndicatorBrush" Color="{StaticResource UnsavedIndicatorColor}"/>
 
 </ResourceDictionary>
