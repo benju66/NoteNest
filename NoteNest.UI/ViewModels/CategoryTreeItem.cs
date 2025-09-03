@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
@@ -20,6 +21,7 @@ namespace NoteNest.UI.ViewModels
         private bool _isVisible = true;
         private bool _isLoaded = false;
         private bool _isLoading = false;
+        private readonly System.Threading.SemaphoreSlim _loadLock = new System.Threading.SemaphoreSlim(1, 1);
 
         public CategoryModel Model => _model;
 
@@ -74,6 +76,12 @@ namespace NoteNest.UI.ViewModels
             set => SetProperty(ref _isLoading, value);
         }
 
+        public bool IsLoaded
+        {
+            get => _isLoaded;
+            set => SetProperty(ref _isLoaded, value);
+        }
+
         public CategoryTreeItem(CategoryModel model, NoteService noteService = null)
         {
             _model = model;
@@ -104,12 +112,14 @@ namespace NoteNest.UI.ViewModels
             base.OnPropertyChanged(propertyName);
         }
 
-        private async Task LoadChildrenAsync()
+        public async Task LoadChildrenAsync()
         {
             if (_isLoaded || _isLoading || _noteService == null) return;
 
+            await _loadLock.WaitAsync();
             try
             {
+                if (_isLoaded || _isLoading || _noteService == null) return;
                 IsLoading = true;
 
                 // Load notes for this category
@@ -128,12 +138,19 @@ namespace NoteNest.UI.ViewModels
                 }
                 catch { }
 
+                // Defensive: ensure we don't add duplicates
+                var existingById = new HashSet<string>(Notes.Select(n => n.Model.Id), StringComparer.OrdinalIgnoreCase);
+                var existingByPath = new HashSet<string>(Notes.Select(n => n.Model.FilePath ?? string.Empty), StringComparer.OrdinalIgnoreCase);
+
                 foreach (var note in notes)
                 {
+                    if (existingById.Contains(note.Id) || existingByPath.Contains(note.FilePath ?? string.Empty))
+                        continue;
                     Notes.Add(new NoteTreeItem(note));
                 }
 
                 _isLoaded = true;
+                OnPropertyChanged(nameof(IsLoaded));
             }
             catch (Exception ex)
             {
@@ -143,7 +160,24 @@ namespace NoteNest.UI.ViewModels
             finally
             {
                 IsLoading = false;
+                _loadLock.Release();
             }
+        }
+
+        public async Task ReloadNotesAsync()
+        {
+            await _loadLock.WaitAsync();
+            try
+            {
+                _isLoaded = false;
+                OnPropertyChanged(nameof(IsLoaded));
+                Notes.Clear();
+            }
+            finally
+            {
+                _loadLock.Release();
+            }
+            await LoadChildrenAsync();
         }
 
         private void UpdateChildren()

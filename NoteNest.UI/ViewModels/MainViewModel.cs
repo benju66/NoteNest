@@ -632,8 +632,22 @@ namespace NoteNest.UI.ViewModels
             
             if (note != null)
             {
-                var noteItem = new NoteTreeItem(note);
-                SelectedCategory.Notes.Add(noteItem);
+                // If the category is expanded but not yet loaded, load to avoid duplicate when lazy load triggers
+                if (SelectedCategory.IsExpanded && !SelectedCategory.IsLoaded)
+                {
+                    await SelectedCategory.LoadChildrenAsync();
+                }
+
+                // Prevent duplicate additions (by Id or FilePath)
+                var existingNote = SelectedCategory.Notes.FirstOrDefault(n =>
+                    string.Equals(n.Model.FilePath, note.FilePath, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(n.Model.Id, note.Id, StringComparison.OrdinalIgnoreCase));
+
+                NoteTreeItem noteItem = existingNote ?? new NoteTreeItem(note);
+                if (existingNote == null)
+                {
+                    SelectedCategory.Notes.Add(noteItem);
+                }
                 SelectedCategory.IsExpanded = true;
                 
                 SelectedNote = noteItem;
