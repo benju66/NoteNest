@@ -16,7 +16,7 @@
         <Setter Property="Margin" Value="0,0,8,0"/>
     </Style>
 
-    <HierarchicalDataTemplate x:Key="CategoryTemplate" DataType="{x:Type vm:CategoryTreeItem}" ItemsSource="{Binding Children}">
+    <HierarchicalDataTemplate DataType="{x:Type vm:CategoryTreeItem}" ItemsSource="{Binding Children}">
         <StackPanel Orientation="Horizontal">
             <TextBlock>
                 <TextBlock.Style>
@@ -48,7 +48,7 @@
         </StackPanel>
     </HierarchicalDataTemplate>
 
-    <DataTemplate x:Key="NoteTemplate" DataType="{x:Type vm:NoteTreeItem}">
+    <DataTemplate DataType="{x:Type vm:NoteTreeItem}">
         <StackPanel Orientation="Horizontal">
             <TextBlock Style="{StaticResource IconStyle}" FontSize="14" Text="{Binding Model.Format, Converter={StaticResource NoteFormatToIcon}}" Foreground="{Binding Model.Format, Converter={StaticResource NoteFormatToBrush}}"/>
             <TextBlock Text="{Binding Title}" VerticalAlignment="Center">
