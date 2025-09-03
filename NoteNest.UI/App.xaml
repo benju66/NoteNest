@@ -5,6 +5,8 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/Icons.xaml"/>
+                <ResourceDictionary Source="Styles/TreeViewStyles.xaml"/>
                 <ui:ThemeResources />
                 <ui:XamlControlsResources />
                 <ResourceDictionary Source="Themes/Generic.xaml"/>
