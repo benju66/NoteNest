@@ -10,69 +10,91 @@ namespace NoteNest.UI.Converters
     {
         public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
         {
-            if (values.Length >= 2 && values[0] is bool isExpanded && values[1] is bool isPinned)
+            try
             {
-                if (isPinned) return "\uE840";
-                return isExpanded ? "\uE838" : "\uE8B7";
+                bool isExpanded = values.Length > 0 && values[0] is bool b1 && b1;
+                bool isPinned = values.Length > 1 && values[1] is bool b2 && b2;
+                if (isPinned) return "\uE840"; // Pinned
+                return isExpanded ? "\uE838" : "\uE8B7"; // Open : Closed
             }
-            return "\uE8B7";
+            catch { return "\uE8B7"; }
         }
 
         public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
-            => throw new NotImplementedException();
+        {
+            throw new NotImplementedException();
+        }
     }
 
     public class NoteFormatToIconConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is NoteFormat format)
+            try
             {
-                return format switch
+                if (value is NoteFormat format)
                 {
-                    NoteFormat.Markdown => "\uE943",
-                    NoteFormat.PlainText => "\uE8A4",
-                    _ => "\uE7C3"
-                };
+                    return format switch
+                    {
+                        NoteFormat.Markdown => "\uE943",
+                        NoteFormat.PlainText => "\uE8A4",
+                        _ => "\uE7C3"
+                    };
+                }
             }
+            catch { }
             return "\uE7C3";
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            => throw new NotImplementedException();
+        {
+            throw new NotImplementedException();
+        }
     }
 
     public class NoteFormatToBrushConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is NoteFormat format)
+            try
             {
-                return format switch
+                if (value is NoteFormat format)
                 {
-                    NoteFormat.Markdown => Application.Current.FindResource("MarkdownIconBrush"),
-                    NoteFormat.PlainText => Application.Current.FindResource("TextFileIconBrush"),
-                    _ => Application.Current.FindResource("GenericFileIconBrush")
-                };
+                    return format switch
+                    {
+                        NoteFormat.Markdown => Application.Current.FindResource("MarkdownIconBrush"),
+                        NoteFormat.PlainText => Application.Current.FindResource("TextFileIconBrush"),
+                        _ => Application.Current.FindResource("GenericFileIconBrush")
+                    };
+                }
             }
+            catch { }
             return Application.Current.FindResource("GenericFileIconBrush");
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            => throw new NotImplementedException();
+        {
+            throw new NotImplementedException();
+        }
     }
 
     public class CountToVisibilityConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is int count)
-                return count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            try
+            {
+                if (value is int count)
+                    return count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch { }
             return Visibility.Collapsed;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            => throw new NotImplementedException();
+        {
+            throw new NotImplementedException();
+        }
     }
 }
 
