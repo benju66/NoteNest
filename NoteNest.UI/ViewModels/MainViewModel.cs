@@ -648,6 +648,10 @@ namespace NoteNest.UI.ViewModels
                 {
                     SelectedCategory.Notes.Add(noteItem);
                 }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"Prevented duplicate add in CreateNewNoteAsync: id={note.Id} path={note.FilePath}");
+                }
                 SelectedCategory.IsExpanded = true;
                 
                 SelectedNote = noteItem;

@@ -144,8 +144,11 @@ namespace NoteNest.UI.ViewModels
 
                 foreach (var note in notes)
                 {
-                    if (existingById.Contains(note.Id) || existingByPath.Contains(note.FilePath ?? string.Empty))
+                    if (IsNoteDuplicate(note, existingById, existingByPath))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Prevented duplicate: id={note?.Id} path={note?.FilePath}");
                         continue;
+                    }
                     Notes.Add(new NoteTreeItem(note));
                 }
 
@@ -178,6 +181,13 @@ namespace NoteNest.UI.ViewModels
                 _loadLock.Release();
             }
             await LoadChildrenAsync();
+        }
+
+        private static bool IsNoteDuplicate(NoteNest.Core.Models.NoteModel note, ISet<string> existingIds, ISet<string> existingPaths)
+        {
+            if (note == null) return false;
+            var path = note.FilePath ?? string.Empty;
+            return existingIds.Contains(note.Id) || existingPaths.Contains(path);
         }
 
         private void UpdateChildren()
