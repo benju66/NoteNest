@@ -22,6 +22,7 @@ namespace NoteNest.UI.ViewModels
         private bool _isLoaded = false;
         private bool _isLoading = false;
         private readonly System.Threading.SemaphoreSlim _loadLock = new System.Threading.SemaphoreSlim(1, 1);
+        private bool _disposed;
 
         public CategoryModel Model => _model;
 
@@ -216,10 +217,38 @@ namespace NoteNest.UI.ViewModels
 
         public void Dispose()
         {
+            if (_disposed) return;
+
+            // Unsubscribe from collection events to avoid memory leaks
             if (_subCategories != null)
                 _subCategories.CollectionChanged -= OnChildrenCollectionChanged;
             if (_notes != null)
                 _notes.CollectionChanged -= OnChildrenCollectionChanged;
+
+            // Dispose synchronization primitive
+            try { _loadLock?.Dispose(); } catch { }
+
+            // Dispose child items
+            try
+            {
+                if (_subCategories != null)
+                {
+                    foreach (var sub in _subCategories)
+                    {
+                        try { sub?.Dispose(); } catch { }
+                    }
+                }
+                if (_notes != null)
+                {
+                    foreach (var n in _notes)
+                    {
+                        try { n?.Dispose(); } catch { }
+                    }
+                }
+            }
+            catch { }
+
+            _disposed = true;
         }
     }
 

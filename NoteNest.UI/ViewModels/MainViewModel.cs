@@ -41,6 +41,8 @@ namespace NoteNest.UI.ViewModels
         private readonly IWorkspaceService _workspaceService;
         private WorkspaceViewModel _workspaceViewModel;
         private DispatcherTimer _autoSaveTimer;
+        private DispatcherTimer _searchDebounceTimer;
+        private string _pendingSearchText;
         private readonly NoteNest.Core.Services.NotePinService _notePinService;
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -58,6 +60,7 @@ namespace NoteNest.UI.ViewModels
         private bool _isLoading;
         private string _statusMessage;
         private List<string> _recentSearches = new List<string>();
+        private ITreeStateService _treeStateService;
 
         #region Properties
 
@@ -136,8 +139,30 @@ namespace NoteNest.UI.ViewModels
             {
                 if (SetProperty(ref _searchText, value))
                 {
-                    FilterNotes();
-                    IsSearchActive = !string.IsNullOrWhiteSpace(_searchText);
+                    _pendingSearchText = value;
+
+                    _searchDebounceTimer?.Stop();
+
+                    if (string.IsNullOrWhiteSpace(value))
+                    {
+                        ClearSearch();
+                    }
+                    else
+                    {
+                        if (_searchDebounceTimer == null)
+                        {
+                            _searchDebounceTimer = new DispatcherTimer
+                            {
+                                Interval = TimeSpan.FromMilliseconds(300)
+                            };
+                            _searchDebounceTimer.Tick += (s, e) =>
+                            {
+                                _searchDebounceTimer.Stop();
+                                PerformDebouncedSearch();
+                            };
+                        }
+                        _searchDebounceTimer.Start();
+                    }
                 }
             }
         }
@@ -171,6 +196,11 @@ namespace NoteNest.UI.ViewModels
         private FileWatcherService GetFileWatcher()
         {
             return _fileWatcher ??= new FileWatcherService(_logger, _configService);
+        }
+
+        private ITreeStateService GetTreeStateService()
+        {
+            return _treeStateService ??= new TreeStateService(_configService, _logger);
         }
 
         private ICategoryManagementService GetCategoryService()
@@ -581,6 +611,33 @@ namespace NoteNest.UI.ViewModels
                     catch { }
                 });
 
+                // Restore expansion state via TreeStateService
+                try
+                {
+                    // First collapse everything so restore is authoritative
+                    void CollapseAll(System.Collections.ObjectModel.ObservableCollection<CategoryTreeItem> items)
+                    {
+                        foreach (var i in items)
+                        {
+                            i.IsExpanded = false;
+                            CollapseAll(i.SubCategories);
+                        }
+                    }
+                    CollapseAll(Categories);
+
+                    var treeState = GetTreeStateService();
+                    var expandedIds = await treeState.LoadExpansionStateAsync();
+                    if (expandedIds.Any())
+                    {
+                        treeState.RestoreExpansionState(Categories, expandedIds);
+                        _logger.Debug($"Restored expansion state for {expandedIds.Count} categories");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning($"Expansion state restore failed: {ex.Message}");
+                }
+
                 // Set up file watcher
                 watcher.StartWatching(PathService.ProjectsPath, "*.*", includeSubdirectories: true);
 
@@ -836,6 +893,43 @@ namespace NoteNest.UI.ViewModels
                 
                 _searchSelectionIndex = -1;
             }
+        }
+
+        private void PerformDebouncedSearch()
+        {
+            if (string.IsNullOrWhiteSpace(_pendingSearchText))
+            {
+                ClearSearch();
+                return;
+            }
+            
+            IsSearchActive = true;
+            _searchResults.Clear();
+            _searchSelectionIndex = -1;
+            
+            foreach (var category in Categories)
+            {
+                FilterCategory(category, _pendingSearchText.ToLower());
+            }
+            
+            StatusMessage = _searchResults.Count > 0 
+                ? $"Found {_searchResults.Count} notes" 
+                : "No notes found";
+        }
+
+        private void ClearSearch()
+        {
+            IsSearchActive = false;
+            _searchResults.Clear();
+            foreach (var category in Categories)
+            {
+                ResetCategoryVisibility(category);
+            }
+        }
+
+        private void ResetCategoryVisibility(CategoryTreeItem category)
+        {
+            SetCategoryVisibility(category, true);
         }
 
         private void SetAllVisible(bool visible)
@@ -1303,6 +1397,23 @@ namespace NoteNest.UI.ViewModels
             _stateManager.StatusMessage = $"Deleted '{noteItem.Title}'";
         }
 
+        public async Task SaveExpansionStateAsync()
+        {
+            try
+            {
+                var expandedIds = new List<string>();
+                GetTreeStateService().CollectExpandedCategories(Categories, expandedIds);
+                var expandedCategories = expandedIds
+                    .Select(id => GetAllCategoriesFlat().FirstOrDefault(c => c.Id == id))
+                    .Where(c => c != null);
+                await GetTreeStateService().SaveExpansionStateAsync(expandedCategories);
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to save expansion state");
+            }
+        }
+
         // Removed: OnOpenTabsChanged tracking; tracking handled by workspace service
 
         public ConfigurationService GetConfigService()
@@ -1367,6 +1478,10 @@ namespace NoteNest.UI.ViewModels
                 {
                     // Cancel operations quickly
                     _cancellationTokenSource?.Cancel();
+                    // Stop search debounce timer
+                    try { _searchDebounceTimer?.Stop(); } catch { }
+                    _searchDebounceTimer = null;
+                    _treeStateService = null;
 
                     // Unsubscribe events
                     if (_workspaceService != null)

@@ -226,6 +226,19 @@ namespace NoteNest.Core.Services
             await SaveSettingsAsync();
         }
 
+        // Tree expansion persistence helpers
+        public async Task SaveExpandedCategoriesAsync(System.Collections.Generic.IEnumerable<string> expandedIds)
+        {
+            _settings.ExpandedCategoryIds = expandedIds?.ToList() ?? new System.Collections.Generic.List<string>();
+            await SaveSettingsAsync();
+        }
+
+        public async Task<System.Collections.Generic.HashSet<string>> LoadExpandedCategoriesAsync()
+        {
+            await Task.CompletedTask;
+            return new System.Collections.Generic.HashSet<string>(_settings?.ExpandedCategoryIds ?? new System.Collections.Generic.List<string>());
+        }
+
         // Debounced save requester for callers who may call frequently
         public void RequestSaveDebounced(int debounceMs = 0)
         {

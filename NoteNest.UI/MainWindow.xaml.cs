@@ -180,6 +180,10 @@ namespace NoteNest.UI
                 }
                 catch { }
             };
+            this.Loaded += async (_, __) =>
+            {
+                try { await RestoreTreeExpansionOnceAsync(); } catch { }
+            };
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -842,6 +846,31 @@ namespace NoteNest.UI
             await dialog.ShowAsync();
         }
 
+        private async Task RestoreTreeExpansionOnceAsync()
+        {
+            var vm = MainPanel?.ViewModel;
+            if (vm == null) return;
+
+            for (int i = 0; i < 30; i++)
+            {
+                if (vm.Categories != null && vm.Categories.Count > 0) break;
+                await Task.Delay(100);
+            }
+
+            try
+            {
+                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
+                var treeState = new TreeStateService(config, logger);
+                var expandedIds = await treeState.LoadExpansionStateAsync();
+                if (expandedIds != null && expandedIds.Count > 0)
+                {
+                    treeState.RestoreExpansionState(vm.Categories, expandedIds);
+                }
+            }
+            catch { }
+        }
+
         private async void Window_Closing(object sender, CancelEventArgs e)
         {
             var viewModel = MainPanel.DataContext as MainViewModel;
@@ -896,6 +925,13 @@ namespace NoteNest.UI
             {
                 System.Diagnostics.Debug.WriteLine($"Error preparing settings save during shutdown: {ex.Message}");
             }
+
+            // Persist tree expansion state
+            try
+            {
+                await viewModel.SaveExpansionStateAsync();
+            }
+            catch { }
 
             // Force-save all editors and notes without prompting
             try

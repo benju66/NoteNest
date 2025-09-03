@@ -97,6 +97,7 @@ namespace NoteNest.Core.Models
 
         // Session persistence
         public bool RestoreTabs { get; set; } = true;
+        public List<string> ExpandedCategoryIds { get; set; } = new();
 
         public AppSettings()
         {
