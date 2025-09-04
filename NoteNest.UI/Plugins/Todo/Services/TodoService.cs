@@ -56,6 +56,11 @@ namespace NoteNest.UI.Plugins.Todo.Services
 					_storage = new TodoStorage();
 					_storage.AddCategory("General");
 				}
+				// Migrate storage version if needed
+				if (_storage.Version < 2)
+				{
+					_storage.Version = 2;
+				}
 				await ProcessRecurringTasksInternalAsync();
 				if (_storage.Settings.AutoDeleteCompleted)
 				{
@@ -354,6 +359,11 @@ namespace NoteNest.UI.Plugins.Todo.Services
 
 		private void RefreshSnapshot()
 		{
+			// Ensure Version bump and forward-compat fields remain serialized
+			if (_storage != null && _storage.Version < 2)
+			{
+				_storage.Version = 2; // Link fields introduced
+			}
 			_snapshot = _storage?.GetAllTasks().ToList() ?? new List<TodoItem>();
 			_snapshotTime = DateTime.UtcNow;
 		}

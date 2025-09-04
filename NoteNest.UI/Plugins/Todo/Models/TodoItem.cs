@@ -17,6 +17,11 @@ namespace NoteNest.UI.Plugins.Todo.Models
 		private DateTime _createdDate;
 		private DateTime? _completedDate;
 		private string _notes;
+		private string _linkedNoteId;
+		private string _linkedNoteFilePath;
+		private string _sourceText;
+		private int? _sourceLine;
+		private string _noteTitle;
 
 		public string Id
 		{
@@ -97,10 +102,42 @@ namespace NoteNest.UI.Plugins.Todo.Models
 			set { _notes = value; OnPropertyChanged(); }
 		}
 
+		// Link metadata (nullable for backward compatibility)
+		public string LinkedNoteId
+		{
+			get => _linkedNoteId;
+			set { _linkedNoteId = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsLinkedToNote)); }
+		}
+
+		public string LinkedNoteFilePath
+		{
+			get => _linkedNoteFilePath;
+			set { _linkedNoteFilePath = value; OnPropertyChanged(); }
+		}
+
+		public string SourceText
+		{
+			get => _sourceText;
+			set { _sourceText = value; OnPropertyChanged(); }
+		}
+
+		public int? SourceLine
+		{
+			get => _sourceLine;
+			set { _sourceLine = value; OnPropertyChanged(); }
+		}
+
+		public string NoteTitle
+		{
+			get => _noteTitle;
+			set { _noteTitle = value; OnPropertyChanged(); }
+		}
+
 		public bool IsOverdue => !IsCompleted && DueDate.HasValue && DueDate.Value.Date < DateTime.Today;
 		public bool IsDueToday => !IsCompleted && DueDate?.Date == DateTime.Today;
 		public bool IsDueTomorrow => !IsCompleted && DueDate?.Date == DateTime.Today.AddDays(1);
 		public bool IsRecurring => Recurrence != null && Recurrence.IsEnabled;
+		public bool IsLinkedToNote => !string.IsNullOrEmpty(LinkedNoteId);
 
 		public TodoItem()
 		{
@@ -119,6 +156,11 @@ namespace NoteNest.UI.Plugins.Todo.Models
 				Priority = Priority,
 				Category = Category,
 				Notes = Notes,
+				LinkedNoteId = LinkedNoteId,
+				LinkedNoteFilePath = LinkedNoteFilePath,
+				SourceText = SourceText,
+				SourceLine = SourceLine,
+				NoteTitle = NoteTitle,
 				CreatedDate = DateTime.Now
 			};
 		}

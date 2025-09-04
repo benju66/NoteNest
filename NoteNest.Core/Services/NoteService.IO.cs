@@ -94,6 +94,20 @@ namespace NoteNest.Core.Services
 				{
 					await _fileSystem.DeleteAsync(note.FilePath);
 					_logger.Info($"Deleted note: {note.Title} from {note.FilePath}");
+					// Publish delete event
+					if (_eventBus != null)
+					{
+						try
+						{
+							await _eventBus.PublishAsync(new NoteNest.Core.Events.NoteDeletedEvent
+							{
+								NoteId = note.Id,
+								FilePath = note.FilePath,
+								DeletedAt = DateTime.UtcNow
+							});
+						}
+						catch { }
+					}
 				}
 				else
 				{
