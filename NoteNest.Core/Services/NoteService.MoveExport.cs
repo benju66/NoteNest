@@ -8,6 +8,81 @@ namespace NoteNest.Core.Services
 {
 	public partial class NoteService
 	{
+		public async Task<bool> RenameNoteAsync(NoteModel note, string newName)
+		{
+			if (note == null)
+				throw new ArgumentNullException(nameof(note));
+			if (string.IsNullOrWhiteSpace(newName))
+				throw new ArgumentException("New name cannot be empty.", nameof(newName));
+
+			try
+			{
+				var oldPath = note.FilePath;
+				var directory = Path.GetDirectoryName(oldPath);
+				var currentExt = Path.GetExtension(oldPath);
+				if (string.IsNullOrEmpty(currentExt))
+				{
+					currentExt = note.Format == NoteFormat.Markdown ? ".md" : ".txt";
+				}
+				var newFileName = PathService.SanitizeName(newName) + currentExt;
+				var newPath = Path.Combine(directory ?? string.Empty, newFileName);
+
+				// Prevent renaming outside workspace root
+				var normalized = PathService.NormalizeAbsolutePath(newPath) ?? newPath;
+				if (!PathService.IsUnderRoot(normalized))
+				{
+					_logger.Warning($"Attempt to rename note outside root: {normalized}");
+					return false;
+				}
+
+				// Check collision
+				if (await _fileSystem.ExistsAsync(newPath) && !string.Equals(newPath, oldPath, StringComparison.OrdinalIgnoreCase))
+				{
+					_logger.Warning($"Cannot rename - file already exists: {newPath}");
+					return false;
+				}
+
+				// Rename physical file
+				if (await _fileSystem.ExistsAsync(oldPath))
+				{
+					await _fileSystem.MoveAsync(oldPath, newPath, overwrite: false);
+				}
+
+				var oldTitle = note.Title;
+				// Update model
+				note.Title = newName;
+				note.FilePath = newPath;
+
+				// Move metadata sidecar
+				try { if (_metadataManager != null) await _metadataManager.MoveMetadataAsync(oldPath, newPath); } catch { }
+
+				// Publish rename event
+				if (_eventBus != null)
+				{
+					try
+					{
+						await _eventBus.PublishAsync(new NoteNest.Core.Events.NoteRenamedEvent
+						{
+							NoteId = note.Id,
+							OldPath = oldPath,
+							NewPath = newPath,
+							OldTitle = oldTitle,
+							NewTitle = newName,
+							RenamedAt = DateTime.UtcNow
+						});
+					}
+					catch { }
+				}
+
+				_logger.Info($"Renamed note from '{oldTitle}' to '{newName}'");
+				return true;
+			}
+			catch (Exception ex)
+			{
+				_logger.Error(ex, $"Failed to rename note from '{note.Title}' to '{newName}'");
+				return false;
+			}
+		}
 		public async Task<bool> MoveNoteAsync(NoteModel note, CategoryModel targetCategory)
 		{
 			if (note == null || targetCategory == null)

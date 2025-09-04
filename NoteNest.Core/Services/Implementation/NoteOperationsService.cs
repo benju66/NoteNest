@@ -96,50 +96,12 @@ namespace NoteNest.Core.Services.Implementation
             
             return await _errorHandler.SafeExecuteAsync(async () =>
             {
-                var oldPath = note.FilePath;
-                var directory = Path.GetDirectoryName(oldPath);
-                var currentExt = Path.GetExtension(oldPath);
-                if (string.IsNullOrEmpty(currentExt))
+                var result = await _noteService.RenameNoteAsync(note, newName);
+                if (result)
                 {
-                    currentExt = note.Format == NoteFormat.Markdown ? ".md" : ".txt";
+                    _logger.Info($"Renamed note to '{newName}'");
                 }
-                var newFileName = PathService.SanitizeName(newName) + currentExt;
-                var newPath = Path.Combine(directory, newFileName);
-                // Prevent renaming outside workspace root
-                var normalized = PathService.NormalizeAbsolutePath(newPath) ?? newPath;
-                if (!PathService.IsUnderRoot(normalized))
-                {
-                    _logger.Warning($"Attempt to rename note outside root: {normalized}");
-                    return false;
-                }
-                
-                // Check if file already exists
-                if (await _fileSystem.ExistsAsync(newPath) && newPath != oldPath)
-                {
-                    _logger.Warning($"Cannot rename - file already exists: {newPath}");
-                    return false;
-                }
-                
-                var oldTitle = note.Title;
-                // Rename physical file using provider
-                if (await _fileSystem.ExistsAsync(oldPath))
-                {
-                    await _fileSystem.MoveAsync(oldPath, newPath, overwrite: false);
-                }
-                
-                // Update note model
-                note.Title = newName;
-                note.FilePath = newPath;
-                // Move metadata sidecar as well (best-effort)
-                try
-                {
-                    var metadataManager = new NoteMetadataManager(_fileSystem, _logger);
-                    await metadataManager.MoveMetadataAsync(oldPath, newPath);
-                }
-                catch { }
-                
-                _logger.Info($"Renamed note from '{Path.GetFileName(oldPath)}' to '{newFileName}'");
-                return true;
+                return result;
             }, "Rename Note");
         }
         
