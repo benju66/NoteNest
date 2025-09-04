@@ -33,6 +33,7 @@ namespace NoteNest.UI.Plugins.Todo.Services
 		Task OnNoteMovedAsync(string noteId, string oldPath, string newPath);
 		Task OnNoteRenamedAsync(string noteId, string oldPath, string newPath, string oldTitle, string newTitle);
 		Task OnNoteDeletedAsync(string noteId, string filePath);
+		Task OnCategoryRenamedAsync(string oldName, string newName);
 	}
 
 	public class TodoService : ITodoService
@@ -364,6 +365,47 @@ namespace NoteNest.UI.Plugins.Todo.Services
 					await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
 					RefreshSnapshot();
 				}
+			}
+			finally
+			{
+				_lock.Release();
+			}
+		}
+
+		public async Task OnCategoryRenamedAsync(string oldName, string newName)
+		{
+			if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName)) return;
+			await _lock.WaitAsync();
+			try
+			{
+				await EnsureLoadedInternalAsync();
+				// Find bucket with case-insensitive match
+				var match = _storage.Categories.Keys.FirstOrDefault(k => string.Equals(k, oldName, StringComparison.OrdinalIgnoreCase));
+				if (match == null) return;
+				if (string.Equals(match, newName, StringComparison.OrdinalIgnoreCase)) return;
+				// If new bucket exists, merge into it; else rename key
+				if (_storage.Categories.ContainsKey(newName))
+				{
+					// Move tasks into existing bucket and update their Category field
+					foreach (var task in _storage.Categories[match])
+					{
+						task.Category = newName;
+						_storage.Categories[newName].Add(task);
+					}
+					_storage.Categories.Remove(match);
+				}
+				else
+				{
+					var items = _storage.Categories[match];
+					foreach (var task in items)
+					{
+						task.Category = newName;
+					}
+					_storage.Categories.Remove(match);
+					_storage.Categories[newName] = items;
+				}
+				await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+				RefreshSnapshot();
 			}
 			finally
 			{

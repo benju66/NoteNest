@@ -304,7 +304,36 @@ namespace NoteNest.UI.Plugins.Todo.UI
 				var sp = (Application.Current as App)?.ServiceProvider;
 				var nav = sp?.GetService(typeof(NoteNest.UI.Services.LinkedNoteNavigator)) as NoteNest.UI.Services.LinkedNoteNavigator;
 				if (nav == null) return;
-				await nav.OpenByIdOrPathAsync(item.LinkedNoteId, item.LinkedNoteFilePath, item.SourceLine);
+				var ok = await nav.OpenByIdOrPathAsync(item.LinkedNoteId, item.LinkedNoteFilePath, item.SourceLine);
+				if (!ok)
+				{
+					try
+					{
+						var pluginMgr = sp?.GetService(typeof(NoteNest.Core.Plugins.IPluginManager)) as NoteNest.Core.Plugins.IPluginManager;
+						var plugin = pluginMgr?.GetPlugin("todo-plugin") as NoteNest.UI.Plugins.Todo.TodoPlugin;
+						var settings = plugin?.GetSettings() as NoteNest.UI.Plugins.Todo.TodoPluginSettings;
+						if (settings?.ShowLinkErrorToasts == true)
+						{
+							var toast = sp?.GetService(typeof(NoteNest.UI.Services.ToastNotificationService)) as NoteNest.UI.Services.ToastNotificationService;
+							toast?.Error("Linked note could not be opened. It may have been moved or deleted.");
+						}
+					}
+					catch { }
+				}
+			}
+			catch { }
+		}
+
+		private void OpenDiagnostics_Click(object sender, RoutedEventArgs e)
+		{
+			try
+			{
+				var sp = (Application.Current as App)?.ServiceProvider;
+				var checker = sp?.GetService(typeof(NoteNest.UI.Services.IntegrityCheckerService)) as NoteNest.UI.Services.IntegrityCheckerService;
+				if (checker == null) return;
+				var wnd = new NoteNest.UI.Windows.IntegrityDiagnosticsWindow(checker);
+				wnd.Owner = Application.Current?.MainWindow;
+				wnd.Show();
 			}
 			catch { }
 		}

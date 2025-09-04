@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using NoteNest.Core.Plugins;
 using NoteNest.Core.Services;
+using System.Linq;
 using NoteNest.UI.Plugins.Todo.Services;
 using NoteNest.UI.Plugins.Todo.UI;
 
@@ -42,6 +43,10 @@ namespace NoteNest.UI.Plugins.Todo
 					_eventBus.Subscribe<NoteNest.Core.Events.NoteMovedEvent>(async e => { try { await _todoService.OnNoteMovedAsync(e.NoteId, e.OldPath, e.NewPath); } catch { } });
 					_eventBus.Subscribe<NoteNest.Core.Events.NoteRenamedEvent>(async e => { try { await _todoService.OnNoteRenamedAsync(e.NoteId, e.OldPath, e.NewPath, e.OldTitle, e.NewTitle); } catch { } });
 					_eventBus.Subscribe<NoteNest.Core.Events.NoteDeletedEvent>(async e => { try { await _todoService.OnNoteDeletedAsync(e.NoteId, e.FilePath); } catch { } });
+					_eventBus.Subscribe<NoteNest.Core.Events.CategoryRenamedEvent>(async e =>
+					{
+						try { await _todoService.OnCategoryRenamedAsync(e.OldName, e.NewName); } catch { }
+					});
 				}
 			}
 			catch { }
@@ -112,6 +117,8 @@ namespace NoteNest.UI.Plugins.Todo
 		public bool ShowCompletedTasks { get; set; } = true;
 		public bool AutoDeleteCompleted { get; set; } = false;
 		public int AutoDeleteAfterDays { get; set; } = 30;
+		public bool ShowLinkErrorToasts { get; set; } = true;
+		public System.Collections.Generic.List<string> IgnoredTaskIds { get; set; } = new System.Collections.Generic.List<string>();
 
 		public System.Collections.Generic.Dictionary<string, object> ToDictionary()
 		{
@@ -119,7 +126,9 @@ namespace NoteNest.UI.Plugins.Todo
 			{
 				[nameof(ShowCompletedTasks)] = ShowCompletedTasks,
 				[nameof(AutoDeleteCompleted)] = AutoDeleteCompleted,
-				[nameof(AutoDeleteAfterDays)] = AutoDeleteAfterDays
+				[nameof(AutoDeleteAfterDays)] = AutoDeleteAfterDays,
+				[nameof(ShowLinkErrorToasts)] = ShowLinkErrorToasts,
+				[nameof(IgnoredTaskIds)] = IgnoredTaskIds
 			};
 		}
 
@@ -129,6 +138,11 @@ namespace NoteNest.UI.Plugins.Todo
 			if (settings.TryGetValue(nameof(ShowCompletedTasks), out var sc)) ShowCompletedTasks = Convert.ToBoolean(sc);
 			if (settings.TryGetValue(nameof(AutoDeleteCompleted), out var ad)) AutoDeleteCompleted = Convert.ToBoolean(ad);
 			if (settings.TryGetValue(nameof(AutoDeleteAfterDays), out var days)) AutoDeleteAfterDays = Convert.ToInt32(days);
+			if (settings.TryGetValue(nameof(ShowLinkErrorToasts), out var sl)) ShowLinkErrorToasts = Convert.ToBoolean(sl);
+			if (settings.TryGetValue(nameof(IgnoredTaskIds), out var ig) && ig is System.Collections.Generic.IEnumerable<object> seq)
+			{
+				IgnoredTaskIds = seq.Select(x => x?.ToString()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+			}
 		}
 
 		public void ResetToDefaults()
@@ -136,6 +150,8 @@ namespace NoteNest.UI.Plugins.Todo
 			ShowCompletedTasks = true;
 			AutoDeleteCompleted = false;
 			AutoDeleteAfterDays = 30;
+			ShowLinkErrorToasts = true;
+			IgnoredTaskIds = new System.Collections.Generic.List<string>();
 		}
 
 		public bool Validate(out string errorMessage)

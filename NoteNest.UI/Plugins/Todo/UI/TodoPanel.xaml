@@ -182,6 +182,9 @@
                 <Button Content="Clear Completed"
                         Margin="4,0"
                         Click="ClearCompleted_Click"/>
+                <Button Content="Diagnostics"
+                        Margin="4,0"
+                        Click="OpenDiagnostics_Click"/>
             </StackPanel>
         </Border>
     </Grid>

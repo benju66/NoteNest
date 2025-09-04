@@ -104,6 +104,10 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IPluginDataStore, PluginDataStore>();
             services.AddSingleton<IPluginManager, PluginManager>();
             services.AddSingleton<ITodoService, TodoService>();
+            services.AddSingleton<IntegrityCheckerService>(sp => new IntegrityCheckerService(
+                sp.GetRequiredService<ITodoService>(),
+                sp.GetRequiredService<IPluginDataStore>()
+            ));
 
             // Linked note navigation helper
             services.AddSingleton<LinkedNoteNavigator>(sp => new LinkedNoteNavigator(

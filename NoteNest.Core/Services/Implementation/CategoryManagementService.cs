@@ -18,19 +18,22 @@ namespace NoteNest.Core.Services.Implementation
         private readonly IServiceErrorHandler _errorHandler;
         private readonly IAppLogger _logger;
         private readonly IFileSystemProvider _fileSystem;
+        private readonly IEventBus? _eventBus;
         
         public CategoryManagementService(
             NoteService noteService,
             ConfigurationService configService,
             IServiceErrorHandler errorHandler,
             IAppLogger logger,
-            IFileSystemProvider fileSystem)
+            IFileSystemProvider fileSystem,
+            IEventBus? eventBus = null)
         {
             _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
             _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            _eventBus = eventBus;
             
             _logger.Debug("CategoryManagementService initialized");
         }
@@ -131,6 +134,20 @@ namespace NoteNest.Core.Services.Implementation
                 }
 
                 _logger.Info($"Renamed category from '{oldName}' to '{newName}'");
+                if (_eventBus != null)
+                {
+                    try
+                    {
+                        await _eventBus.PublishAsync(new NoteNest.Core.Events.CategoryRenamedEvent
+                        {
+                            OldName = oldName,
+                            NewName = newName,
+                            CategoryId = category.Id,
+                            Timestamp = DateTime.UtcNow
+                        });
+                    }
+                    catch { }
+                }
                 return true;
             }, "Rename Category");
         }

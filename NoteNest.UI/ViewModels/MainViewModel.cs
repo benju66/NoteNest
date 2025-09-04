@@ -211,7 +211,8 @@ namespace NoteNest.UI.ViewModels
                 _configService,
                 _errorHandler,
                 _logger,
-                _fileSystem);
+                _fileSystem,
+                (Application.Current as NoteNest.UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IEventBus)) as NoteNest.Core.Services.IEventBus);
         }
 
         private INoteOperationsService GetNoteOperationsService()
