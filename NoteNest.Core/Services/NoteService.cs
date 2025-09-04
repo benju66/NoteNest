@@ -22,7 +22,7 @@ namespace NoteNest.Core.Services
         private readonly ConfigurationService _configService;
         private readonly IAppLogger _logger;
         private readonly FileFormatService _formatService;
-        private readonly IEventBus? _eventBus;
+        internal readonly IEventBus? _eventBus;
         private readonly IMarkdownService _markdownService;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();

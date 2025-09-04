@@ -120,6 +120,7 @@ namespace NoteNest.Core.Services.Implementation
                     return false;
                 }
                 
+                var oldTitle = note.Title;
                 // Rename physical file using provider
                 if (await _fileSystem.ExistsAsync(oldPath))
                 {

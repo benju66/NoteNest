@@ -56,6 +56,21 @@ namespace NoteNest.Core.Services
 					note.Title = Path.GetFileNameWithoutExtension(fileName);
 					// Move metadata sidecar
 					try { if (_metadataManager != null) await _metadataManager.MoveMetadataAsync(oldPath, newPath); } catch { }
+					// Publish move event
+					if (_eventBus != null)
+					{
+						try
+						{
+							await _eventBus.PublishAsync(new NoteNest.Core.Events.NoteMovedEvent
+							{
+								NoteId = note.Id,
+								OldPath = oldPath,
+								NewPath = newPath,
+								MovedAt = DateTime.UtcNow
+							});
+						}
+						catch { }
+					}
 					
 					_logger.Info($"Moved note from {oldPath} to {newPath}");
 					return true;
