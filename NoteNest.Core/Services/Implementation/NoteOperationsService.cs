@@ -129,6 +129,13 @@ namespace NoteNest.Core.Services.Implementation
                 // Update note model
                 note.Title = newName;
                 note.FilePath = newPath;
+                // Move metadata sidecar as well (best-effort)
+                try
+                {
+                    var metadataManager = new NoteMetadataManager(_fileSystem, _logger);
+                    await metadataManager.MoveMetadataAsync(oldPath, newPath);
+                }
+                catch { }
                 
                 _logger.Info($"Renamed note from '{Path.GetFileName(oldPath)}' to '{newFileName}'");
                 return true;

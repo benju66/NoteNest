@@ -139,7 +139,12 @@
 
         <!-- Category + Task List -->
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-            <TreeView x:Name="TaskTreeView" ItemsSource="{Binding TaskCategories}" AllowDrop="True">
+            <TreeView x:Name="TaskTreeView"
+                      ItemsSource="{Binding TaskCategories}"
+                      AllowDrop="True"
+                      VirtualizingStackPanel.IsVirtualizing="True"
+                      VirtualizingStackPanel.VirtualizationMode="Recycling"
+                      ScrollViewer.CanContentScroll="True">
                 <TreeView.ItemTemplate>
                     <HierarchicalDataTemplate ItemsSource="{Binding Tasks}">
                         <!-- Category Header -->

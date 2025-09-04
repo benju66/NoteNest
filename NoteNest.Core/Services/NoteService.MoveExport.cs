@@ -54,6 +54,8 @@ namespace NoteNest.Core.Services
 					note.FilePath = newPath;
 					note.CategoryId = targetCategory.Id;
 					note.Title = Path.GetFileNameWithoutExtension(fileName);
+					// Move metadata sidecar
+					try { if (_metadataManager != null) await _metadataManager.MoveMetadataAsync(oldPath, newPath); } catch { }
 					
 					_logger.Info($"Moved note from {oldPath} to {newPath}");
 					return true;

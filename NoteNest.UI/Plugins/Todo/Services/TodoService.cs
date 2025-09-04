@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using NoteNest.Core.Plugins;
 using NoteNest.UI.Plugins.Todo.Models;
@@ -20,6 +21,13 @@ namespace NoteNest.UI.Plugins.Todo.Services
 		Task CleanupCompletedTasksAsync();
 		List<string> GetCategories();
 		void SyncCategories(IEnumerable<string> noteCategories);
+
+		// New read APIs and safe operations
+		Task<List<TodoItem>> GetAllTasksAsync();
+		List<TodoItem> GetAllTasks();
+		Task<TodoItem> GetTaskByIdAsync(string id);
+		Task<List<TodoItem>> GetTasksByCategoryAsync(string category);
+		Task<TodoOperationResult<TodoItem>> AddTaskSafeAsync(string text, string category = "General");
 	}
 
 	public class TodoService : ITodoService
@@ -27,6 +35,9 @@ namespace NoteNest.UI.Plugins.Todo.Services
 		private readonly IPluginDataStore _dataStore;
 		private TodoStorage _storage;
 		private readonly string _pluginId = "todo-plugin";
+		private readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
+		private List<TodoItem> _snapshot = new List<TodoItem>();
+		private DateTime _snapshotTime = DateTime.MinValue;
 
 		public TodoService(IPluginDataStore dataStore)
 		{
@@ -35,125 +46,172 @@ namespace NoteNest.UI.Plugins.Todo.Services
 
 		public async Task<TodoStorage> LoadTasksAsync()
 		{
-			if (_storage != null) return _storage;
-			_storage = await _dataStore.LoadDataAsync<TodoStorage>(_pluginId, "tasks");
-			if (_storage == null)
+			await _lock.WaitAsync();
+			try
 			{
-				_storage = new TodoStorage();
-				_storage.AddCategory("General");
+				if (_storage != null) return _storage;
+				_storage = await _dataStore.LoadDataAsync<TodoStorage>(_pluginId, "tasks");
+				if (_storage == null)
+				{
+					_storage = new TodoStorage();
+					_storage.AddCategory("General");
+				}
+				await ProcessRecurringTasksInternalAsync();
+				if (_storage.Settings.AutoDeleteCompleted)
+				{
+					await CleanupCompletedTasksInternalAsync();
+				}
+				RefreshSnapshot();
+				return _storage;
 			}
-			await ProcessRecurringTasksAsync();
-			if (_storage.Settings.AutoDeleteCompleted)
+			finally
 			{
-				await CleanupCompletedTasksAsync();
+				_lock.Release();
 			}
-			return _storage;
 		}
 
 		public async Task SaveTasksAsync(TodoStorage storage = null)
 		{
-			if (storage != null) _storage = storage;
-			if (_storage == null) return;
-			_storage.LastModified = DateTime.Now;
-			await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+			await _lock.WaitAsync();
+			try
+			{
+				if (storage != null) _storage = storage;
+				if (_storage == null) return;
+				_storage.LastModified = DateTime.Now;
+				await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+				RefreshSnapshot();
+			}
+			finally
+			{
+				_lock.Release();
+			}
 		}
 
 		public async Task<TodoItem> AddTaskAsync(string text, string category = "General")
 		{
 			if (string.IsNullOrWhiteSpace(text)) return null;
-			await LoadTasksAsync();
-			var task = new TodoItem
+			await _lock.WaitAsync();
+			try
 			{
-				Text = text.Trim(),
-				Category = category,
-				Order = _storage.GetTasksByCategory(category).Count
-			};
-			_storage.AddTask(task);
-			await SaveTasksAsync();
-			return task;
+				await EnsureLoadedInternalAsync();
+				var task = new TodoItem
+				{
+					Text = text.Trim(),
+					Category = category,
+					Order = _storage.GetTasksByCategory(category).Count * 1000
+				};
+				_storage.AddTask(task);
+				await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+				RefreshSnapshot();
+				return task;
+			}
+			finally
+			{
+				_lock.Release();
+			}
 		}
 
 		public async Task<bool> UpdateTaskAsync(TodoItem task)
 		{
 			if (task == null) return false;
-			await LoadTasksAsync();
-			var existing = _storage.GetAllTasks().FirstOrDefault(t => t.Id == task.Id);
-			if (existing == null) return false;
-			existing.Text = task.Text;
-			existing.IsCompleted = task.IsCompleted;
-			existing.DueDate = task.DueDate;
-			existing.Priority = task.Priority;
-			existing.Recurrence = task.Recurrence;
-			existing.Notes = task.Notes;
-			if (existing.Category != task.Category)
+			await _lock.WaitAsync();
+			try
 			{
-				_storage.MoveTask(existing, task.Category);
+				await EnsureLoadedInternalAsync();
+				var existing = _storage.GetAllTasks().FirstOrDefault(t => t.Id == task.Id);
+				if (existing == null) return false;
+				existing.Text = task.Text;
+				existing.IsCompleted = task.IsCompleted;
+				existing.DueDate = task.DueDate;
+				existing.Priority = task.Priority;
+				existing.Recurrence = task.Recurrence;
+				existing.Notes = task.Notes;
+				if (existing.Category != task.Category)
+				{
+					_storage.MoveTask(existing, task.Category);
+				}
+				await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+				RefreshSnapshot();
+				return true;
 			}
-			await SaveTasksAsync();
-			return true;
+			finally
+			{
+				_lock.Release();
+			}
 		}
 
 		public async Task<bool> DeleteTaskAsync(string taskId)
 		{
-			await LoadTasksAsync();
-			var task = _storage.GetAllTasks().FirstOrDefault(t => t.Id == taskId);
-			if (task == null) return false;
-			_storage.RemoveTask(task);
-			await SaveTasksAsync();
-			return true;
+			await _lock.WaitAsync();
+			try
+			{
+				await EnsureLoadedInternalAsync();
+				var task = _storage.GetAllTasks().FirstOrDefault(t => t.Id == taskId);
+				if (task == null) return false;
+				_storage.RemoveTask(task);
+				await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+				RefreshSnapshot();
+				return true;
+			}
+			finally
+			{
+				_lock.Release();
+			}
 		}
 
 		public async Task<bool> CompleteTaskAsync(string taskId)
 		{
-			await LoadTasksAsync();
-			var task = _storage.GetAllTasks().FirstOrDefault(t => t.Id == taskId);
-			if (task == null) return false;
-			task.IsCompleted = !task.IsCompleted;
-			if (task.IsCompleted && task.IsRecurring && task.Recurrence.ShouldRecur())
+			await _lock.WaitAsync();
+			try
 			{
-				var nextTask = task.Clone();
-				nextTask.UpdateFromRecurrence();
-				_storage.AddTask(nextTask);
-				task.Recurrence.CurrentOccurrence++;
+				await EnsureLoadedInternalAsync();
+				var task = _storage.GetAllTasks().FirstOrDefault(t => t.Id == taskId);
+				if (task == null) return false;
+				task.IsCompleted = !task.IsCompleted;
+				if (task.IsCompleted && task.IsRecurring && task.Recurrence.ShouldRecur())
+				{
+					var nextTask = task.Clone();
+					nextTask.UpdateFromRecurrence();
+					_storage.AddTask(nextTask);
+					task.Recurrence.CurrentOccurrence++;
+				}
+				await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+				RefreshSnapshot();
+				return true;
 			}
-			await SaveTasksAsync();
-			return true;
+			finally
+			{
+				_lock.Release();
+			}
 		}
 
 		public async Task ProcessRecurringTasksAsync()
 		{
-			await LoadTasksAsync();
-			var recurring = _storage.GetAllTasks().Where(t => t.IsRecurring && t.IsCompleted).ToList();
-			var changed = false;
-			foreach (var t in recurring)
+			await _lock.WaitAsync();
+			try
 			{
-				if (t.Recurrence.ShouldRecur())
-				{
-					var nextDate = t.Recurrence.GetNextDate(t.DueDate ?? DateTime.Today);
-					if (nextDate <= DateTime.Today)
-					{
-						var nextTask = t.Clone();
-						nextTask.UpdateFromRecurrence();
-						_storage.AddTask(nextTask);
-						changed = true;
-					}
-				}
+				await EnsureLoadedInternalAsync();
+				await ProcessRecurringTasksInternalAsync();
+				RefreshSnapshot();
 			}
-			if (changed) await SaveTasksAsync();
+			finally
+			{
+				_lock.Release();
+			}
 		}
 
 		public async Task CleanupCompletedTasksAsync()
 		{
-			await LoadTasksAsync();
-			if (!_storage.Settings.AutoDeleteCompleted) return;
-			var cutoff = DateTime.Now.AddDays(-_storage.Settings.AutoDeleteAfterDays);
-			var toDelete = _storage.GetAllTasks()
-				.Where(t => t.IsCompleted && t.CompletedDate.HasValue && t.CompletedDate.Value < cutoff)
-				.ToList();
-			if (toDelete.Any())
+			await _lock.WaitAsync();
+			try
 			{
-				foreach (var t in toDelete) _storage.RemoveTask(t);
-				await SaveTasksAsync();
+				await EnsureLoadedInternalAsync();
+				await CleanupCompletedTasksInternalAsync();
+				RefreshSnapshot();
+			}
+			finally
+			{
+				_lock.Release();
 			}
 		}
 
@@ -175,6 +233,129 @@ namespace NoteNest.UI.Plugins.Todo.Services
 				.Select(kvp => kvp.Key)
 				.ToList();
 			foreach (var c in empty) _storage.RemoveCategory(c);
+			RefreshSnapshot();
+		}
+
+		// New read APIs and safe operations
+		public async Task<List<TodoItem>> GetAllTasksAsync()
+		{
+			await _lock.WaitAsync();
+			try
+			{
+				await EnsureLoadedInternalAsync();
+				return _storage.GetAllTasks().ToList();
+			}
+			finally
+			{
+				_lock.Release();
+			}
+		}
+
+		public List<TodoItem> GetAllTasks()
+		{
+			return _snapshot.ToList();
+		}
+
+		public async Task<TodoItem> GetTaskByIdAsync(string id)
+		{
+			await _lock.WaitAsync();
+			try
+			{
+				await EnsureLoadedInternalAsync();
+				return _storage.GetAllTasks().FirstOrDefault(t => t.Id == id);
+			}
+			finally
+			{
+				_lock.Release();
+			}
+		}
+
+		public async Task<List<TodoItem>> GetTasksByCategoryAsync(string category)
+		{
+			await _lock.WaitAsync();
+			try
+			{
+				await EnsureLoadedInternalAsync();
+				return _storage.GetTasksByCategory(category).ToList();
+			}
+			finally
+			{
+				_lock.Release();
+			}
+		}
+
+		public async Task<TodoOperationResult<TodoItem>> AddTaskSafeAsync(string text, string category = "General")
+		{
+			try
+			{
+				if (string.IsNullOrWhiteSpace(text))
+					return TodoOperationResult<TodoItem>.Fail("Task text is required");
+				if (text.Length > 500)
+					return TodoOperationResult<TodoItem>.Fail("Task text too long (max 500)");
+				var task = await AddTaskAsync(text, category);
+				return TodoOperationResult<TodoItem>.Ok(task);
+			}
+			catch (Exception)
+			{
+				return TodoOperationResult<TodoItem>.Fail("Failed to add task");
+			}
+		}
+
+		private async Task EnsureLoadedInternalAsync()
+		{
+			if (_storage == null)
+			{
+				_storage = await _dataStore.LoadDataAsync<TodoStorage>(_pluginId, "tasks");
+				if (_storage == null)
+				{
+					_storage = new TodoStorage();
+					_storage.AddCategory("General");
+				}
+			}
+		}
+
+		private async Task ProcessRecurringTasksInternalAsync()
+		{
+			var recurring = _storage.GetAllTasks().Where(t => t.IsRecurring && t.IsCompleted).ToList();
+			var changed = false;
+			foreach (var t in recurring)
+			{
+				if (t.Recurrence.ShouldRecur())
+				{
+					var nextDate = t.Recurrence.GetNextDate(t.DueDate ?? DateTime.Today);
+					if (nextDate <= DateTime.Today)
+					{
+						var nextTask = t.Clone();
+						nextTask.UpdateFromRecurrence();
+						_storage.AddTask(nextTask);
+						changed = true;
+					}
+				}
+			}
+			if (changed)
+			{
+				await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+			}
+		}
+
+		private async Task CleanupCompletedTasksInternalAsync()
+		{
+			if (!_storage.Settings.AutoDeleteCompleted) return;
+			var cutoff = DateTime.Now.AddDays(-_storage.Settings.AutoDeleteAfterDays);
+			var toDelete = _storage.GetAllTasks()
+				.Where(t => t.IsCompleted && t.CompletedDate.HasValue && t.CompletedDate.Value < cutoff)
+				.ToList();
+			if (toDelete.Any())
+			{
+				foreach (var t in toDelete) _storage.RemoveTask(t);
+				await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+			}
+		}
+
+		private void RefreshSnapshot()
+		{
+			_snapshot = _storage?.GetAllTasks().ToList() ?? new List<TodoItem>();
+			_snapshotTime = DateTime.UtcNow;
 		}
 	}
 }

@@ -51,7 +51,10 @@ namespace NoteNest.UI.Services
                 sp.GetRequiredService<IMarkdownService>(),
                 sp.GetService<SafeFileService>(),
                 sp.GetService<INoteStorageService>(),
-                sp.GetService<IUserNotificationService>())); // Core functionality
+                sp.GetService<IUserNotificationService>(),
+                new NoteNest.Core.Services.NoteMetadataManager(
+                    sp.GetRequiredService<IFileSystemProvider>(),
+                    sp.GetRequiredService<IAppLogger>()))); // Core functionality
             services.AddSingleton<IDialogService, DialogService>(); // UI interaction
             services.AddSingleton<IUserNotificationService>(sp =>
             {

@@ -127,18 +127,70 @@ namespace NoteNest.UI.Plugins.Todo.UI
 			if (!e.Data.GetDataPresent(typeof(TodoItem))) return;
 			var dropped = e.Data.GetData(typeof(TodoItem)) as TodoItem;
 			if (dropped == null) return;
-			// If dropping on category header, move to that category
-			if (sender is FrameworkElement fe && fe.DataContext is TaskCategoryViewModel cat)
+			// Drop on task item: compute before/after
+			if (sender is FrameworkElement fe)
 			{
-				dropped.Category = cat.Name;
-				dropped.Order = int.MaxValue;
+				if (fe.DataContext is TodoItem target)
+				{
+					var container = fe as IInputElement;
+					var pt = e.GetPosition(container);
+					var before = pt.Y < (fe as FrameworkElement).ActualHeight / 2;
+					var category = TaskCategories.FirstOrDefault(c => c.Tasks.Contains(target));
+					var ordered = category?.Tasks?.OrderBy(t => t.Order).ToList() ?? new System.Collections.Generic.List<TodoItem>();
+					// Remove dropped from list for calculation
+					ordered = ordered.Where(t => t.Id != dropped.Id).ToList();
+					int newOrder;
+					if (ordered.Count == 0)
+					{
+						newOrder = 1000;
+					}
+					else
+					{
+						var idx = ordered.IndexOf(target);
+						if (before)
+						{
+							if (idx <= 0) newOrder = ordered[0].Order / 2;
+							else newOrder = (ordered[idx - 1].Order + ordered[idx].Order) / 2;
+						}
+						else
+						{
+							if (idx >= ordered.Count - 1) newOrder = ordered.Last().Order + 1000;
+							else newOrder = (ordered[idx].Order + ordered[idx + 1].Order) / 2;
+						}
+					}
+					// Rebalance if too tight
+					if (category != null && ordered.Count > 0)
+					{
+						var minGap = ordered.Zip(ordered.Skip(1), (a,b) => b.Order - a.Order).DefaultIfEmpty(1000).Min();
+						if (minGap < 2)
+						{
+							for (int i = 0; i < ordered.Count; i++)
+							{
+								ordered[i].Order = (i + 1) * 1000;
+							}
+							// Recompute newOrder relative to rebalanced list
+							var idx2 = ordered.IndexOf(target);
+							newOrder = before ? (idx2 <= 0 ? 1000 : (ordered[idx2 - 1].Order + ordered[idx2].Order) / 2)
+								: (idx2 >= ordered.Count - 1 ? ordered.Last().Order + 1000 : (ordered[idx2].Order + ordered[idx2 + 1].Order) / 2);
+						}
+					}
+					dropped.Order = newOrder;
+					if (category != null)
+						dropped.Category = category.Name;
+					await _todoService.UpdateTaskAsync(dropped);
+					LoadTasks();
+					return;
+				}
+				// Drop on category header
+				if (fe.DataContext is TaskCategoryViewModel cat)
+				{
+					dropped.Category = cat.Name;
+					dropped.Order = int.MaxValue;
+					await _todoService.UpdateTaskAsync(dropped);
+					LoadTasks();
+					return;
+				}
 			}
-			else
-			{
-				dropped.Order = int.MaxValue;
-			}
-			await _todoService.UpdateTaskAsync(dropped);
-			LoadTasks();
 		}
 
 		private Point _dragStart;
@@ -240,7 +292,48 @@ namespace NoteNest.UI.Plugins.Todo.UI
 
 		private void ViewSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
 		{
-			// TODO: filter views
+			ApplyFilters();
+		}
+
+		private void ApplyFilters()
+		{
+			// Simple MVP: global filters flattening via service read APIs (sync snapshot)
+			var all = _todoService.GetAllTasks();
+			var idx = ViewSelector.SelectedIndex;
+			IEnumerable<TodoItem> filtered = all;
+			if (idx == 1) // Today
+			{
+				filtered = all.Where(t => !t.IsCompleted && (t.DueDate?.Date == DateTime.Today || !t.DueDate.HasValue));
+			}
+			else if (idx == 3) // Completed
+			{
+				filtered = all.Where(t => t.IsCompleted);
+			}
+			else
+			{
+				filtered = ShowCompleted ? all : all.Where(t => !t.IsCompleted);
+			}
+
+			// If filtering not active, show grouped view
+			var isFiltered = idx != 0;
+			if (!isFiltered)
+			{
+				LoadTasks();
+				return;
+			}
+
+			// Flattened view: rebuild categories with a single bucket
+			TaskCategories.Clear();
+			TaskCategories.Add(new TaskCategoryViewModel
+			{
+				Name = "Filtered",
+				Tasks = new ObservableCollection<TodoItem>(filtered
+					.OrderBy(t => t.IsCompleted)
+					.ThenByDescending(t => (int)t.Priority)
+					.ThenBy(t => t.DueDate ?? DateTime.MaxValue)
+					.ThenBy(t => t.Order))
+			});
+			OnPropertyChanged(nameof(ActiveTaskCount));
 		}
 
 		public event PropertyChangedEventHandler PropertyChanged;

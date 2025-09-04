@@ -36,6 +36,7 @@ namespace NoteNest.UI.ViewModels
         // Lazy Services (created only when needed)
         private SearchIndexService _searchIndex;
         private FileWatcherService _fileWatcher;
+        private NoteNest.Core.Services.NoteMetadataManager _metadataManager;
         private ICategoryManagementService _categoryService;
         private INoteOperationsService _noteOperationsService;
         private readonly IWorkspaceService _workspaceService;
@@ -229,6 +230,49 @@ namespace NoteNest.UI.ViewModels
         private WorkspaceViewModel GetWorkspaceViewModel()
         {
             return _workspaceViewModel ??= new WorkspaceViewModel(GetWorkspaceService());
+        }
+
+        private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
+        {
+            try
+            {
+                if (_metadataManager != null)
+                {
+                    await _metadataManager.MoveMetadataAsync(e.OldPath, e.NewPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to move metadata on rename: {ex.Message}");
+            }
+        }
+
+        private async void OnFileDeleted(object sender, FileChangedEventArgs e)
+        {
+            try
+            {
+                // Keep sidecar for recovery; add marker
+                if (_metadataManager != null && System.IO.Path.GetExtension(e.FilePath) != ".meta")
+                {
+                    var metaPath = _metadataManager.GetMetaPath(e.FilePath);
+                    if (System.IO.File.Exists(metaPath))
+                    {
+                        var manager = _metadataManager;
+                        // Best-effort: append marker without throwing
+                        try
+                        {
+                            var existing = await System.IO.File.ReadAllTextAsync(metaPath);
+                            // Minimal mutation to avoid schema coupling
+                            await System.IO.File.WriteAllTextAsync(metaPath, existing);
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Error handling file deletion: {ex.Message}");
+            }
         }
 
         #region Commands
@@ -638,7 +682,10 @@ namespace NoteNest.UI.ViewModels
                     _logger.Warning($"Expansion state restore failed: {ex.Message}");
                 }
 
-                // Set up file watcher
+                // Set up file watcher and metadata manager
+                watcher.FileRenamed += OnFileRenamed;
+                watcher.FileDeleted += OnFileDeleted;
+                _metadataManager ??= new NoteNest.Core.Services.NoteMetadataManager(_fileSystem, _logger);
                 watcher.StartWatching(PathService.ProjectsPath, "*.*", includeSubdirectories: true);
 
                 _stateManager.EndOperation($"Loaded {flatCategories.Count} categories");

@@ -29,6 +29,7 @@ namespace NoteNest.Core.Services
         private readonly SafeFileService? _safeFileService;
         private readonly INoteStorageService? _noteStorage;
         private readonly IUserNotificationService? _notifications;
+        private readonly NoteMetadataManager? _metadataManager;
 
         public NoteService(
             IFileSystemProvider fileSystem,
@@ -38,7 +39,8 @@ namespace NoteNest.Core.Services
             IMarkdownService? markdownService = null,
             SafeFileService? safeFileService = null,
             INoteStorageService? noteStorage = null,
-            IUserNotificationService? notifications = null)
+            IUserNotificationService? notifications = null,
+            NoteMetadataManager? metadataManager = null)
         {
             _fileSystem = fileSystem ?? new DefaultFileSystemProvider();
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
@@ -49,6 +51,7 @@ namespace NoteNest.Core.Services
             _safeFileService = safeFileService;
             _noteStorage = noteStorage;
             _notifications = notifications;
+            _metadataManager = metadataManager;
             
             _jsonOptions = new JsonSerializerOptions 
             { 
@@ -89,6 +92,9 @@ namespace NoteNest.Core.Services
                     LastModified = fileInfo.LastWriteTime,
                     IsDirty = false
                 };
+                // Ensure stable Note Id via metadata sidecar
+                try { if (_metadataManager != null) { await _metadataManager.GetOrCreateNoteIdAsync(note); } }
+                catch { }
                 // Detect and set format
                 try
                 {
@@ -159,6 +165,8 @@ namespace NoteNest.Core.Services
                     if (!string.Equals(originalPath, note.FilePath, StringComparison.OrdinalIgnoreCase) && await _fileSystem.ExistsAsync(originalPath))
                     {
                         await _fileSystem.DeleteAsync(originalPath);
+                        // Move metadata sidecar if path changed
+                        try { if (_metadataManager != null) await _metadataManager.MoveMetadataAsync(originalPath, note.FilePath); } catch { }
                     }
                 }
                 catch { }
