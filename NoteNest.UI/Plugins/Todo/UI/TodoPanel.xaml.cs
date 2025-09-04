@@ -29,10 +29,11 @@ namespace NoteNest.UI.Plugins.Todo.UI
 
 		public TodoPanel(ITodoService todoService)
 		{
-			InitializeComponent();
-			DataContext = this;
+			// Assign dependencies BEFORE InitializeComponent so any XAML-raised events can access them safely
 			_todoService = todoService ?? throw new ArgumentNullException(nameof(todoService));
 			TaskCategories = new ObservableCollection<TaskCategoryViewModel>();
+			DataContext = this;
+			InitializeComponent();
 			LoadTasks();
 		}
 
@@ -152,9 +153,9 @@ namespace NoteNest.UI.Plugins.Todo.UI
 						{
 							if (idx <= 0) newOrder = ordered[0].Order / 2;
 							else newOrder = (ordered[idx - 1].Order + ordered[idx].Order) / 2;
-						}
-						else
-						{
+			}
+			else
+			{
 							if (idx >= ordered.Count - 1) newOrder = ordered.Last().Order + 1000;
 							else newOrder = (ordered[idx].Order + ordered[idx + 1].Order) / 2;
 						}
@@ -186,9 +187,9 @@ namespace NoteNest.UI.Plugins.Todo.UI
 				if (fe.DataContext is TaskCategoryViewModel cat)
 				{
 					dropped.Category = cat.Name;
-					dropped.Order = int.MaxValue;
-					await _todoService.UpdateTaskAsync(dropped);
-					LoadTasks();
+				dropped.Order = int.MaxValue;
+			await _todoService.UpdateTaskAsync(dropped);
+			LoadTasks();
 					return;
 				}
 			}
@@ -340,6 +341,9 @@ namespace NoteNest.UI.Plugins.Todo.UI
 
 		private void ApplyFilters()
 		{
+			// Guard against early XAML SelectionChanged during initialization
+			if (_todoService == null || ViewSelector == null)
+				return;
 			// Simple MVP: global filters flattening via service read APIs (sync snapshot)
 			var all = _todoService.GetAllTasks();
 			var idx = ViewSelector.SelectedIndex;

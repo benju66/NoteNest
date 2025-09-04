@@ -135,14 +135,83 @@ namespace NoteNest.UI.Plugins.Todo
 		public void FromDictionary(System.Collections.Generic.Dictionary<string, object> settings)
 		{
 			if (settings == null) return;
-			if (settings.TryGetValue(nameof(ShowCompletedTasks), out var sc)) ShowCompletedTasks = Convert.ToBoolean(sc);
-			if (settings.TryGetValue(nameof(AutoDeleteCompleted), out var ad)) AutoDeleteCompleted = Convert.ToBoolean(ad);
-			if (settings.TryGetValue(nameof(AutoDeleteAfterDays), out var days)) AutoDeleteAfterDays = Convert.ToInt32(days);
-			if (settings.TryGetValue(nameof(ShowLinkErrorToasts), out var sl)) ShowLinkErrorToasts = Convert.ToBoolean(sl);
-			if (settings.TryGetValue(nameof(IgnoredTaskIds), out var ig) && ig is System.Collections.Generic.IEnumerable<object> seq)
+
+			bool TryGetBool(string key, out bool value)
 			{
-				IgnoredTaskIds = seq.Select(x => x?.ToString()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+				value = false;
+				if (!settings.TryGetValue(key, out var obj))
+				{
+					var kv = settings.FirstOrDefault(kvp => string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase));
+					obj = string.IsNullOrEmpty(kv.Key) ? null : kv.Value;
+				}
+				if (obj is null) return false;
+				if (obj is bool b) { value = b; return true; }
+				if (obj is string s && bool.TryParse(s, out var bs)) { value = bs; return true; }
+				if (obj is System.Text.Json.JsonElement je)
+				{
+					if (je.ValueKind == System.Text.Json.JsonValueKind.True) { value = true; return true; }
+					if (je.ValueKind == System.Text.Json.JsonValueKind.False) { value = false; return true; }
+					if (je.ValueKind == System.Text.Json.JsonValueKind.String && bool.TryParse(je.GetString(), out var jb)) { value = jb; return true; }
+				}
+				return false;
 			}
+
+			int TryGetInt(string key, int fallback)
+			{
+				if (!settings.TryGetValue(key, out var obj))
+				{
+					var kv = settings.FirstOrDefault(kvp => string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase));
+					obj = string.IsNullOrEmpty(kv.Key) ? null : kv.Value;
+				}
+				if (obj is null) return fallback;
+				if (obj is int i) return i;
+				if (obj is long l) return (int)l;
+				if (obj is string s && int.TryParse(s, out var si)) return si;
+				if (obj is System.Text.Json.JsonElement je)
+				{
+					if (je.ValueKind == System.Text.Json.JsonValueKind.Number && je.TryGetInt32(out var ji)) return ji;
+					if (je.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(je.GetString(), out var js)) return js;
+				}
+				return fallback;
+			}
+
+			System.Collections.Generic.List<string> TryGetStringList(string key)
+			{
+				var result = new System.Collections.Generic.List<string>();
+				if (!settings.TryGetValue(key, out var obj))
+				{
+					var kv = settings.FirstOrDefault(kvp => string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase));
+					obj = string.IsNullOrEmpty(kv.Key) ? null : kv.Value;
+				}
+				if (obj is System.Collections.Generic.IEnumerable<object> seq)
+				{
+					foreach (var o in seq)
+					{
+						var s = o?.ToString();
+						if (!string.IsNullOrWhiteSpace(s)) result.Add(s);
+					}
+					return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+				}
+				if (obj is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array)
+				{
+					foreach (var el in je.EnumerateArray())
+					{
+						if (el.ValueKind == System.Text.Json.JsonValueKind.String)
+						{
+							var s = el.GetString();
+							if (!string.IsNullOrWhiteSpace(s)) result.Add(s);
+						}
+					}
+					return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+				}
+				return result;
+			}
+
+			if (TryGetBool(nameof(ShowCompletedTasks), out var showCompleted)) ShowCompletedTasks = showCompleted;
+			if (TryGetBool(nameof(AutoDeleteCompleted), out var autoDelete)) AutoDeleteCompleted = autoDelete;
+			AutoDeleteAfterDays = TryGetInt(nameof(AutoDeleteAfterDays), AutoDeleteAfterDays);
+			if (TryGetBool(nameof(ShowLinkErrorToasts), out var showToasts)) ShowLinkErrorToasts = showToasts;
+			IgnoredTaskIds = TryGetStringList(nameof(IgnoredTaskIds));
 		}
 
 		public void ResetToDefaults()

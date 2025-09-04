@@ -57,7 +57,15 @@ namespace NoteNest.UI.ViewModels
             _storageService = new StorageLocationService();
             _showActivityBar = _settings.ShowActivityBar;
             _pluginManager = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IPluginManager)) as IPluginManager;
-            try { LoadPluginsIntoVm(); } catch { }
+            try
+            {
+                if (_pluginManager != null)
+                {
+                    _pluginManager.PluginsChanged += OnPluginsChanged;
+                }
+                LoadPluginsIntoVm();
+            }
+            catch { }
 
             MovePluginUpCommand = new RelayCommand<PluginItemViewModel>(p => MovePlugin(p, -1));
             MovePluginDownCommand = new RelayCommand<PluginItemViewModel>(p => MovePlugin(p, +1));
@@ -98,14 +106,39 @@ namespace NoteNest.UI.ViewModels
                     {
                         try
                         {
-                            if (vm.IsEnabled) _pluginManager.LoadPluginAsync(p.GetType());
-                            else _pluginManager.UnloadPluginAsync(p.Id);
+                            // If already loaded, toggle enabled state on the existing instance
+                            var existing = _pluginManager.GetPlugin(p.Id);
+                            if (existing != null)
+                            {
+                                existing.IsEnabled = vm.IsEnabled;
+                            }
+                            else if (vm.IsEnabled)
+                            {
+                                // Fallback: attempt to load when enabling (may fail for DI-only plugins)
+                                _pluginManager.LoadPluginAsync(p.GetType());
+                            }
+                            else
+                            {
+                                _pluginManager.UnloadPluginAsync(p.Id);
+                            }
                         }
                         catch { }
                     }
                 };
                 PluginItems.Add(vm);
             }
+        }
+
+        private void OnPluginsChanged()
+        {
+            try
+            {
+                System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    LoadPluginsIntoVm();
+                });
+            }
+            catch { }
         }
 
         private void MovePlugin(PluginItemViewModel item, int delta)

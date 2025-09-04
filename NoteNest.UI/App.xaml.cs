@@ -95,17 +95,12 @@ namespace NoteNest.UI
                 // Load plugins
                 try
                 {
-                    var pluginManager = ServiceProvider.GetService<IPluginManager>();
-                    if (pluginManager != null)
-                    {
-                        await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.TestPlugin { IsEnabled = true });
-                        // Load Todo plugin via DI
-                        var todoService = ServiceProvider.GetService<NoteNest.UI.Plugins.Todo.Services.ITodoService>();
-                        if (todoService != null)
-                        {
-                            await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.Todo.TodoPlugin(todoService) { IsEnabled = true });
-                        }
-                    }
+                    var pluginManager = ServiceProvider.GetRequiredService<IPluginManager>();
+                    await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.TestPlugin { IsEnabled = true });
+
+                    // Load Todo plugin via DI (fail fast if not registered)
+                    var todoService = ServiceProvider.GetRequiredService<NoteNest.UI.Plugins.Todo.Services.ITodoService>();
+                    await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.Todo.TodoPlugin(todoService) { IsEnabled = true });
                 }
                 catch { }
 
