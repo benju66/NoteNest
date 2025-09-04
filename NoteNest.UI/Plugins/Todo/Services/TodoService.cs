@@ -28,6 +28,11 @@ namespace NoteNest.UI.Plugins.Todo.Services
 		Task<TodoItem> GetTaskByIdAsync(string id);
 		Task<List<TodoItem>> GetTasksByCategoryAsync(string category);
 		Task<TodoOperationResult<TodoItem>> AddTaskSafeAsync(string text, string category = "General");
+
+		// Core event handlers (todo-linked updates)
+		Task OnNoteMovedAsync(string noteId, string oldPath, string newPath);
+		Task OnNoteRenamedAsync(string noteId, string oldPath, string newPath, string oldTitle, string newTitle);
+		Task OnNoteDeletedAsync(string noteId, string filePath);
 	}
 
 	public class TodoService : ITodoService
@@ -303,6 +308,66 @@ namespace NoteNest.UI.Plugins.Todo.Services
 			catch (Exception)
 			{
 				return TodoOperationResult<TodoItem>.Fail("Failed to add task");
+			}
+		}
+
+		public async Task OnNoteMovedAsync(string noteId, string oldPath, string newPath)
+		{
+			await _lock.WaitAsync();
+			try
+			{
+				await EnsureLoadedInternalAsync();
+				var changed = false;
+				foreach (var t in _storage.GetAllTasks())
+				{
+					if (!string.IsNullOrWhiteSpace(t.LinkedNoteId) && string.Equals(t.LinkedNoteId, noteId, StringComparison.OrdinalIgnoreCase))
+					{
+						t.LinkedNoteFilePath = newPath;
+						changed = true;
+					}
+				}
+				if (changed)
+				{
+					await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+					RefreshSnapshot();
+				}
+			}
+			finally
+			{
+				_lock.Release();
+			}
+		}
+
+		public async Task OnNoteRenamedAsync(string noteId, string oldPath, string newPath, string oldTitle, string newTitle)
+		{
+			await OnNoteMovedAsync(noteId, oldPath, newPath);
+		}
+
+		public async Task OnNoteDeletedAsync(string noteId, string filePath)
+		{
+			await _lock.WaitAsync();
+			try
+			{
+				await EnsureLoadedInternalAsync();
+				var changed = false;
+				foreach (var t in _storage.GetAllTasks())
+				{
+					if (!string.IsNullOrWhiteSpace(t.LinkedNoteId) && string.Equals(t.LinkedNoteId, noteId, StringComparison.OrdinalIgnoreCase))
+					{
+						// Keep ID for potential recovery; clear path
+						t.LinkedNoteFilePath = null;
+						changed = true;
+					}
+				}
+				if (changed)
+				{
+					await _dataStore.SaveDataAsync(_pluginId, "tasks", _storage);
+					RefreshSnapshot();
+				}
+			}
+			finally
+			{
+				_lock.Release();
 			}
 		}
 

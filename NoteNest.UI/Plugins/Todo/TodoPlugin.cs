@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using System.Windows;
 using NoteNest.Core.Plugins;
+using NoteNest.Core.Services;
 using NoteNest.UI.Plugins.Todo.Services;
 using NoteNest.UI.Plugins.Todo.UI;
 
@@ -12,6 +13,7 @@ namespace NoteNest.UI.Plugins.Todo
 		private ITodoService _todoService;
 		private TodoPluginPanel _panel;
 		private TodoPluginSettings _settings;
+		private IEventBus _eventBus;
 
 		public override string Id => "todo-plugin";
 		public override string Name => "Todo List";
@@ -30,6 +32,19 @@ namespace NoteNest.UI.Plugins.Todo
 			await _todoService.LoadTasksAsync();
 			var panel = new TodoPanel(_todoService);
 			_panel = new TodoPluginPanel(panel);
+			// Subscribe to core note events to keep linked tasks in sync
+			try
+			{
+				var bus = (Application.Current as NoteNest.UI.App)?.ServiceProvider?.GetService(typeof(IEventBus)) as IEventBus;
+				if (bus != null)
+				{
+					_eventBus = bus;
+					_eventBus.Subscribe<NoteNest.Core.Events.NoteMovedEvent>(async e => { try { await _todoService.OnNoteMovedAsync(e.NoteId, e.OldPath, e.NewPath); } catch { } });
+					_eventBus.Subscribe<NoteNest.Core.Events.NoteRenamedEvent>(async e => { try { await _todoService.OnNoteRenamedAsync(e.NoteId, e.OldPath, e.NewPath, e.OldTitle, e.NewTitle); } catch { } });
+					_eventBus.Subscribe<NoteNest.Core.Events.NoteDeletedEvent>(async e => { try { await _todoService.OnNoteDeletedAsync(e.NoteId, e.FilePath); } catch { } });
+				}
+			}
+			catch { }
 			// Background timer for recurring tasks (hourly)
 			var _ = Task.Run(async () =>
 			{

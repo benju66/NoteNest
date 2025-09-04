@@ -13,6 +13,7 @@
         <conv:BoolToStrikethroughConverter x:Key="BoolToStrikethroughConverter"/>
         <conv:PriorityToBrushConverter x:Key="PriorityToBrushConverter"/>
         <conv:NullToCollapsedConverter x:Key="NullToCollapsedConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
         <DataTemplate x:Key="TaskItemTemplate">
             <Border Background="Transparent"
@@ -63,7 +64,7 @@
 
                     <!-- Open linked note (visible if linked) -->
                     <Button Grid.Column="2" Content="🔗" Background="Transparent" BorderThickness="0" Padding="4,0"
-                            Visibility="{Binding IsLinkedToNote, Converter={StaticResource NullToCollapsedConverter}}"
+                            Visibility="{Binding IsLinkedToNote, Converter={StaticResource BoolToVis}}"
                             ToolTip="Open linked note" Click="OpenLinkedNote_Click"/>
 
                     <!-- Actions -->
