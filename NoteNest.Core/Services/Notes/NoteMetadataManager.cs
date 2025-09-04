@@ -129,6 +129,65 @@ namespace NoteNest.Core.Services
 			await _fileSystem.WriteTextAsync(metaPath, json);
 		}
 
+		private async Task WriteMetadataAsync(string metaPath, NoteMetadata meta)
+		{
+			try
+			{
+				var json = JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true });
+				await _fileSystem.WriteTextAsync(metaPath, json);
+			}
+			catch (Exception ex)
+			{
+				_logger.Error(ex, $"Failed to write metadata: {metaPath}");
+				throw;
+			}
+		}
+
+		public async Task SaveListFormattingAsync(NoteModel note, string formatting)
+		{
+			if (note == null) throw new ArgumentNullException(nameof(note));
+			var metaPath = GetMetaPath(note.FilePath);
+			NoteMetadata meta = new NoteMetadata { Id = note.Id, Created = DateTime.UtcNow };
+			try
+			{
+				if (await _fileSystem.ExistsAsync(metaPath))
+				{
+					var existing = await ReadMetadataAsync(metaPath);
+					if (existing != null)
+					{
+						meta = existing;
+						if (string.IsNullOrWhiteSpace(meta.Id)) meta.Id = note.Id;
+					}
+				}
+				meta.Extensions["listFormatting"] = formatting ?? string.Empty;
+				await WriteMetadataAsync(metaPath, meta);
+			}
+			catch (Exception ex)
+			{
+				_logger.Error(ex, $"Failed to save list formatting for: {note.FilePath}");
+			}
+		}
+
+		public async Task<string?> LoadListFormattingAsync(NoteModel note)
+		{
+			if (note == null) throw new ArgumentNullException(nameof(note));
+			var metaPath = GetMetaPath(note.FilePath);
+			try
+			{
+				if (!await _fileSystem.ExistsAsync(metaPath)) return null;
+				var meta = await ReadMetadataAsync(metaPath);
+				if (meta?.Extensions != null && meta.Extensions.TryGetValue("listFormatting", out var value))
+				{
+					return value?.ToString();
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.Error(ex, $"Failed to load list formatting for: {note.FilePath}");
+			}
+			return null;
+		}
+
 		private string GenerateDeterministicId(string path)
 		{
 			// Normalize path for stability

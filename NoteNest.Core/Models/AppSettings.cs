@@ -99,6 +99,9 @@ namespace NoteNest.Core.Models
         public bool RestoreTabs { get; set; } = true;
         public List<string> ExpandedCategoryIds { get; set; } = new();
 
+        // Feature flags
+        public bool EnhancedListHandlingEnabled { get; set; } = false;
+
         public AppSettings()
         {
             // Initialize collections/objects to prevent null reference issues.
