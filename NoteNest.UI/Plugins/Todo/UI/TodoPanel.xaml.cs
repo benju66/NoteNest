@@ -295,6 +295,19 @@ namespace NoteNest.UI.Plugins.Todo.UI
 		{
 			ApplyFilters();
 		}
+		private async void OpenLinkedNote_Click(object sender, RoutedEventArgs e)
+		{
+			try
+			{
+				var item = (sender as FrameworkElement)?.DataContext as TodoItem;
+				if (item == null) return;
+				var sp = (Application.Current as App)?.ServiceProvider;
+				var nav = sp?.GetService(typeof(NoteNest.UI.Services.LinkedNoteNavigator)) as NoteNest.UI.Services.LinkedNoteNavigator;
+				if (nav == null) return;
+				await nav.OpenByIdOrPathAsync(item.LinkedNoteId, item.LinkedNoteFilePath, item.SourceLine);
+			}
+			catch { }
+		}
 
 		private void ApplyFilters()
 		{

@@ -105,6 +105,13 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IPluginManager, PluginManager>();
             services.AddSingleton<ITodoService, TodoService>();
 
+            // Linked note navigation helper
+            services.AddSingleton<LinkedNoteNavigator>(sp => new LinkedNoteNavigator(
+                sp.GetRequiredService<IWorkspaceService>(),
+                sp.GetRequiredService<NoteService>(),
+                sp.GetRequiredService<IWorkspaceStateService>()
+            ));
+
             return services;
         }
     }

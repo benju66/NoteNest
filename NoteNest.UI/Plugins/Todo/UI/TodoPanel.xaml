@@ -29,6 +29,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Checkbox -->
@@ -60,8 +61,13 @@
                         </StackPanel>
                     </StackPanel>
 
+                    <!-- Open linked note (visible if linked) -->
+                    <Button Grid.Column="2" Content="🔗" Background="Transparent" BorderThickness="0" Padding="4,0"
+                            Visibility="{Binding IsLinkedToNote, Converter={StaticResource NullToCollapsedConverter}}"
+                            ToolTip="Open linked note" Click="OpenLinkedNote_Click"/>
+
                     <!-- Actions -->
-                    <Button Grid.Column="2" Content="⋯" FontSize="16" Background="Transparent" BorderThickness="0" Padding="4,0" Click="TaskMenu_Click">
+                    <Button Grid.Column="3" Content="⋯" FontSize="16" Background="Transparent" BorderThickness="0" Padding="4,0" Click="TaskMenu_Click">
                         <Button.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Edit" Click="EditTask_Click"/>
