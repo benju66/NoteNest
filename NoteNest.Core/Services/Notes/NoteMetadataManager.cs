@@ -60,7 +60,7 @@ namespace NoteNest.Core.Services
 			}
 			catch (Exception ex)
 			{
-				_logger.Warning(ex, $"Failed to obtain/create metadata for: {metaPath}");
+				_logger.Error(ex, $"Failed to obtain/create metadata for: {metaPath}");
 				// Fallback: keep existing or generate deterministic
 				if (string.IsNullOrWhiteSpace(note.Id))
 				{
@@ -86,7 +86,7 @@ namespace NoteNest.Core.Services
 			}
 			catch (Exception ex)
 			{
-				_logger.Warning(ex, $"Failed to move metadata from {oldMeta} to {newMeta}");
+				_logger.Error(ex, $"Failed to move metadata from {oldMeta} to {newMeta}");
 			}
 		}
 
@@ -112,7 +112,7 @@ namespace NoteNest.Core.Services
 			}
 			catch (Exception ex)
 			{
-				_logger.Warning(ex, $"Failed to read metadata: {metaPath}");
+				_logger.Error(ex, $"Failed to read metadata: {metaPath}");
 				return null;
 			}
 		}
