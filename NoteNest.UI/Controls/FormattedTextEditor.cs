@@ -100,35 +100,7 @@ namespace NoteNest.UI.Controls
                     break;
                     
                 case Key.Back:
-                    para = CaretPosition?.Paragraph;
-                    if (para != null)
-                    {
-                        // Check empty list item first
-                        if (IsEmptyListItem(para))
-                        {
-                            e.Handled = true;
-                            RemoveCurrentEmptyListItem(para);
-                            return;
-                        }
-                        
-                        // Check if at start of list item
-                        if (IsAtListItemStart() && para.Parent is ListItem li && li.Parent is List list)
-                        {
-                            e.Handled = true;
-                            
-                            // If nested, outdent first
-                            if (list.Parent is ListItem)
-                            {
-                                TryChangeListIndent(para, true);
-                            }
-                            else
-                            {
-                                // At root level, convert to paragraph
-                                ConvertListItemToParagraph(para, mergeWithPreviousIfParagraph: true);
-                            }
-                            return;
-                        }
-                    }
+                    HandleBackspaceKey(e);
                     break;
                     
                 case Key.Delete:
@@ -151,6 +123,49 @@ namespace NoteNest.UI.Controls
                         return;
                     }
                     break;
+            }
+        }
+
+        private void HandleBackspaceKey(KeyEventArgs e)
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para == null) return;
+            
+            // Only handle special list cases when appropriate
+            if (para.Parent is ListItem li && li.Parent is List list)
+            {
+                // Get the actual text content
+                var fullText = new TextRange(para.ContentStart, para.ContentEnd).Text;
+                var textBeforeCaret = new TextRange(para.ContentStart, CaretPosition).Text;
+                
+                // Case 1: Completely empty list item
+                if (string.IsNullOrWhiteSpace(fullText))
+                {
+                    e.Handled = true;
+                    RemoveCurrentEmptyListItem(para);
+                    return;
+                }
+                
+                // Case 2: At the TRUE start of a non-empty list item
+                if (string.IsNullOrEmpty(textBeforeCaret) && !string.IsNullOrWhiteSpace(fullText))
+                {
+                    e.Handled = true;
+                    
+                    // If nested, outdent first
+                    if (list.Parent is ListItem)
+                    {
+                        TryChangeListIndent(para, true);
+                    }
+                    else
+                    {
+                        // At root level, check for merge opportunity
+                        ConvertListItemToParagraph(para, mergeWithPreviousIfParagraph: true);
+                    }
+                    return;
+                }
+                
+                // Case 3: Normal character deletion - let default behavior handle it
+                // Don't set e.Handled, let WPF handle the backspace normally
             }
         }
 
@@ -453,11 +468,12 @@ namespace NoteNest.UI.Controls
             var para = CaretPosition?.Paragraph;
             if (para?.Parent is not ListItem) return false;
             
-            // More reliable check using GetOffsetToPosition
-            var startPos = para.ContentStart;
-            var currentPos = CaretPosition;
+            // Check if we have any actual content before the caret
+            var range = new TextRange(para.ContentStart, CaretPosition);
+            var textBeforeCaret = range.Text;
             
-            return startPos.GetOffsetToPosition(currentPos) <= 0;
+            // We're at start only if there's NO text before caret
+            return string.IsNullOrEmpty(textBeforeCaret);
         }
 
         private bool IsAtListItemEnd()
@@ -465,14 +481,12 @@ namespace NoteNest.UI.Controls
             var para = CaretPosition?.Paragraph;
             if (para?.Parent is not ListItem) return false;
             
-            // Check if we're at or very close to the end
-            var endPos = para.ContentEnd;
-            var currentPos = CaretPosition;
+            // Check if we have any actual content after the caret
+            var range = new TextRange(CaretPosition, para.ContentEnd);
+            var textAfterCaret = range.Text;
             
-            // Use GetOffsetToPosition for accurate comparison
-            var offset = currentPos.GetOffsetToPosition(endPos);
-            // Allow for 1 character of tolerance (for the paragraph break)
-            return offset >= -1 && offset <= 0;
+            // We're at end only if there's NO text after caret (ignoring trailing whitespace)
+            return string.IsNullOrWhiteSpace(textAfterCaret);
         }
 
         private void ConvertListItemToParagraph(Paragraph para, bool mergeWithPreviousIfParagraph)
@@ -487,50 +501,73 @@ namespace NoteNest.UI.Controls
 
                 int index = GetListItemIndex(list, li);
                 
-                // Handle merge with previous paragraph
+                // Only merge if we're at the first item AND there's a previous paragraph
                 if (mergeWithPreviousIfParagraph && index == 0)
                 {
-                    Block prevBlock = list.PreviousBlock;
+                    Block prevBlock = null;
+                    try { prevBlock = list.PreviousBlock; } catch { }
+                    
                     if (prevBlock is Paragraph prevPara)
                     {
-                        // Save caret position before merge
-                        var content = new TextRange(para.ContentStart, para.ContentEnd).Text;
-                        var prevLength = new TextRange(prevPara.ContentStart, prevPara.ContentEnd).Text.Length;
+                        // Get the content that will be merged
+                        var contentToMerge = new TextRange(para.ContentStart, para.ContentEnd).Text;
                         
-                        // Merge content
-                        MergeParagraphInto(para, prevPara);
-                        list.ListItems.Remove(li);
-                        
-                        // Remove empty list
-                        if (GetListItemCount(list) == 0)
+                        // Only merge if there's actual content to merge
+                        if (!string.IsNullOrWhiteSpace(contentToMerge))
                         {
-                            parentBlocks.Remove(list);
+                            // Remember position for caret
+                            var prevText = new TextRange(prevPara.ContentStart, prevPara.ContentEnd).Text;
+                            var mergePosition = prevText.Length;
+                            
+                            // Merge the content
+                            MergeParagraphInto(para, prevPara);
+                            
+                            // Remove the list item
+                            list.ListItems.Remove(li);
+                            
+                            // Remove empty list
+                            if (GetListItemCount(list) == 0)
+                            {
+                                parentBlocks.Remove(list);
+                            }
+                            
+                            // Position caret at merge point
+                            try
+                            {
+                                var newPos = prevPara.ContentStart.GetPositionAtOffset(mergePosition);
+                                if (newPos != null) CaretPosition = newPos;
+                            }
+                            catch
+                            {
+                                CaretPosition = prevPara.ContentEnd;
+                            }
+                            return;
                         }
-                        
-                        // Position caret at merge point
-                        CaretPosition = prevPara.ContentStart.GetPositionAtOffset(prevLength);
-                        return;
                     }
                 }
 
-                // Create new paragraph with content
+                // No merge - create standalone paragraph
                 var newPara = new Paragraph();
-                CopyParagraphContent(para, newPara);
+                
+                // Copy content if any
+                var text = new TextRange(para.ContentStart, para.ContentEnd).Text;
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    CopyParagraphContent(para, newPara);
+                }
 
-                // Determine where to insert the new paragraph
+                // Insert the paragraph at the appropriate position
                 if (index == 0)
                 {
-                    // Insert before the list
                     parentBlocks.InsertBefore(list, newPara);
                 }
                 else if (index >= GetListItemCount(list) - 1)
                 {
-                    // Insert after the list
                     parentBlocks.InsertAfter(list, newPara);
                 }
                 else
                 {
-                    // Split the list (middle item)
+                    // Middle item - split the list
                     SplitListAtItem(list, li, newPara, parentBlocks);
                     CaretPosition = newPara.ContentStart;
                     return;
@@ -539,13 +576,13 @@ namespace NoteNest.UI.Controls
                 // Remove the list item
                 list.ListItems.Remove(li);
                 
-                // Remove empty list
+                // Clean up empty list
                 if (GetListItemCount(list) == 0)
                 {
                     parentBlocks.Remove(list);
                 }
                 
-                // Position caret at start of new paragraph
+                // Position caret appropriately
                 CaretPosition = newPara.ContentStart;
             }
             finally
@@ -560,24 +597,42 @@ namespace NoteNest.UI.Controls
         {
             if (from == null || to == null) return;
             
-            // Use TextRange for reliable content transfer
-            var fromRange = new TextRange(from.ContentStart, from.ContentEnd);
-            var toEndPos = to.ContentEnd;
-            
-            // Insert space if needed
-            var toText = new TextRange(to.ContentStart, to.ContentEnd).Text;
-            if (!string.IsNullOrEmpty(toText) && !toText.EndsWith(" "))
+            try
             {
-                toEndPos.InsertTextInRun(" ");
+                var fromText = new TextRange(from.ContentStart, from.ContentEnd).Text;
+                
+                // Only merge if there's actual content
+                if (string.IsNullOrWhiteSpace(fromText)) return;
+                
+                // Add space between if needed
+                var toText = new TextRange(to.ContentStart, to.ContentEnd).Text;
+                if (!string.IsNullOrWhiteSpace(toText) && !toText.EndsWith(" "))
+                {
+                    to.ContentEnd.InsertTextInRun(" ");
+                }
+                
+                // Transfer content
+                var fromRange = new TextRange(from.ContentStart, from.ContentEnd);
+                using (var stream = new MemoryStream())
+                {
+                    fromRange.Save(stream, DataFormats.Xaml);
+                    stream.Position = 0;
+                    var insertRange = new TextRange(to.ContentEnd, to.ContentEnd);
+                    insertRange.Load(stream, DataFormats.Xaml);
+                }
             }
-            
-            // Copy content with formatting
-            using (var stream = new MemoryStream())
+            catch
             {
-                fromRange.Save(stream, DataFormats.Xaml);
-                stream.Position = 0;
-                var insertRange = new TextRange(toEndPos, toEndPos);
-                insertRange.Load(stream, DataFormats.Xaml);
+                // Fallback to plain text merge
+                try
+                {
+                    var text = new TextRange(from.ContentStart, from.ContentEnd).Text;
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        to.ContentEnd.InsertTextInRun(" " + text);
+                    }
+                }
+                catch { }
             }
         }
 
@@ -633,14 +688,34 @@ namespace NoteNest.UI.Controls
         {
             if (source == null || target == null) return;
             
-            // Use TextRange for complete content transfer
-            var sourceRange = new TextRange(source.ContentStart, source.ContentEnd);
-            using (var stream = new MemoryStream())
+            try
             {
-                sourceRange.Save(stream, DataFormats.Xaml);
-                stream.Position = 0;
-                var targetRange = new TextRange(target.ContentStart, target.ContentEnd);
-                targetRange.Load(stream, DataFormats.Xaml);
+                var sourceRange = new TextRange(source.ContentStart, source.ContentEnd);
+                
+                // Only copy if there's actual content
+                if (!string.IsNullOrWhiteSpace(sourceRange.Text))
+                {
+                    using (var stream = new MemoryStream())
+                    {
+                        sourceRange.Save(stream, DataFormats.Xaml);
+                        stream.Position = 0;
+                        var targetRange = new TextRange(target.ContentStart, target.ContentEnd);
+                        targetRange.Load(stream, DataFormats.Xaml);
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback to plain text copy
+                try
+                {
+                    var text = new TextRange(source.ContentStart, source.ContentEnd).Text;
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        target.Inlines.Add(new Run(text));
+                    }
+                }
+                catch { }
             }
         }
 
@@ -1012,6 +1087,26 @@ namespace NoteNest.UI.Controls
             }
             catch { }
         }
+
+        #region Debug Helper
+        private void LogListOperation(string operation, string details = "")
+        {
+            #if DEBUG
+            System.Diagnostics.Debug.WriteLine($"[LIST-OP] {operation}: {details}");
+            
+            // Log current state
+            var para = CaretPosition?.Paragraph;
+            if (para != null)
+            {
+                var text = new TextRange(para.ContentStart, para.ContentEnd).Text;
+                var beforeCaret = new TextRange(para.ContentStart, CaretPosition).Text;
+                System.Diagnostics.Debug.WriteLine($"  Text: '{text}'");
+                System.Diagnostics.Debug.WriteLine($"  Before Caret: '{beforeCaret}'");
+                System.Diagnostics.Debug.WriteLine($"  Is List Item: {para.Parent is ListItem}");
+            }
+            #endif
+        }
+        #endregion
     }
 }
 
