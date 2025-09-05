@@ -851,11 +851,19 @@ namespace NoteNest.UI.Controls
         }
         private void Toolbar_Indent_Click(object sender, RoutedEventArgs e)
         {
-            // Indent handled by list structure; no-op for now
+            var editor = ResolveEditorFromSender(sender as DependencyObject)
+                         ?? ResolveEditorFromSelectedTab()
+                         ?? FindVisualChild<FormattedTextEditor>(this);
+            editor?.Focus();
+            editor?.IndentSelection();
         }
         private void Toolbar_Outdent_Click(object sender, RoutedEventArgs e)
         {
-            // Outdent handled by list structure; no-op for now
+            var editor = ResolveEditorFromSender(sender as DependencyObject)
+                         ?? ResolveEditorFromSelectedTab()
+                         ?? FindVisualChild<FormattedTextEditor>(this);
+            editor?.Focus();
+            editor?.OutdentSelection();
         }
         private void Toolbar_Bold_Click(object sender, RoutedEventArgs e)
         {

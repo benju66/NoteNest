@@ -160,6 +160,21 @@
                                         <ui:FontIcon Glyph="&#xE9D5;"/>
                                     </ui:AppBarButton.Icon>
                                 </ui:AppBarButton>
+                                <ui:AppBarSeparator/>
+                                <ui:AppBarButton Label="Indent" 
+                                                 Click="Toolbar_Indent_Click"
+                                                 ToolTip="Increase indent (Tab)">
+                                    <ui:AppBarButton.Icon>
+                                        <ui:FontIcon Glyph="&#xE013;"/>
+                                    </ui:AppBarButton.Icon>
+                                </ui:AppBarButton>
+                                <ui:AppBarButton Label="Outdent" 
+                                                 Click="Toolbar_Outdent_Click"
+                                                 ToolTip="Decrease indent (Shift+Tab)">
+                                    <ui:AppBarButton.Icon>
+                                        <ui:FontIcon Glyph="&#xE012;"/>
+                                    </ui:AppBarButton.Icon>
+                                </ui:AppBarButton>
                             </ui:CommandBar>
 
                             <!-- Note content viewer: always-formatted editor -->

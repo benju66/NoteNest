@@ -18,6 +18,8 @@ namespace NoteNest.UI.Controls
         private readonly MarkdownFlowDocumentConverter _converter;
         private readonly DispatcherTimer _debounceTimer;
         private readonly ListStateTracker _listTracker = new ListStateTracker();
+        private bool _lastEnterWasEmpty = false;
+        private bool _hasUnsavedChanges = false;
 
         public static readonly DependencyProperty MarkdownContentProperty =
             DependencyProperty.Register(
@@ -57,11 +59,16 @@ namespace NoteNest.UI.Controls
             }
             catch { }
 
-            _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            // Increase debounce time for better performance
+            _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) }; // 1 second
             _debounceTimer.Tick += (s, e) =>
             {
                 _debounceTimer.Stop();
-                PushDocumentToMarkdown();
+                if (_hasUnsavedChanges)
+                {
+                    PushDocumentToMarkdown();
+                    _hasUnsavedChanges = false;
+                }
             };
 
             TextChanged += OnTextChanged;
@@ -73,6 +80,7 @@ namespace NoteNest.UI.Controls
 
             // Smart list behaviors
             PreviewKeyDown += OnPreviewKeyDown;
+            PreviewKeyUp += OnPreviewKeyUp;
         }
 
         private void OnPreviewKeyDown(object sender, KeyEventArgs e)
@@ -126,46 +134,45 @@ namespace NoteNest.UI.Controls
             }
         }
 
+        private void OnPreviewKeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+            {
+                _lastEnterWasEmpty = false;
+            }
+        }
+
         private void HandleBackspaceKey(KeyEventArgs e)
-            {
-                var para = CaretPosition?.Paragraph;
-            if (para == null) return;
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is not ListItem li || li.Parent is not List list) 
+                return;
             
-            // Only handle special list cases when appropriate
-            if (para.Parent is ListItem li && li.Parent is List list)
+            // Only handle if at the start of the list item
+            if (!IsAtListItemStart()) 
+                return;
+            
+            e.Handled = true;
+            _isUpdating = true;
+            
+            try
             {
-                // Get the actual text content
-                var fullText = new TextRange(para.ContentStart, para.ContentEnd).Text;
-                var textBeforeCaret = new TextRange(para.ContentStart, CaretPosition).Text;
+                var text = new TextRange(para.ContentStart, para.ContentEnd).Text;
                 
-                // Case 1: Completely empty list item
-                if (string.IsNullOrWhiteSpace(fullText))
+                if (string.IsNullOrWhiteSpace(text))
                 {
-                    e.Handled = true;
-                    RemoveCurrentEmptyListItem(para);
-                    return;
+                    // Empty item - just remove it
+                    RemoveListItem(list, li);
                 }
-                
-                // Case 2: At the TRUE start of a non-empty list item
-                if (string.IsNullOrEmpty(textBeforeCaret) && !string.IsNullOrWhiteSpace(fullText))
+                else
                 {
-                    e.Handled = true;
-                    
-                    // If nested, outdent first
-                    if (list.Parent is ListItem)
-                    {
-                        TryChangeListIndent(para, true);
-                    }
-                    else
-                    {
-                        // At root level, check for merge opportunity
-                        ConvertListItemToParagraph(para, mergeWithPreviousIfParagraph: true);
-                    }
-                    return;
+                    // Non-empty - convert to regular paragraph (no merging)
+                    ConvertListItemToParagraph(para, false);
                 }
-                
-                // Case 3: Normal character deletion - let default behavior handle it
-                // Don't set e.Handled, let WPF handle the backspace normally
+            }
+            finally
+            {
+                _isUpdating = false;
             }
         }
 
@@ -174,28 +181,52 @@ namespace NoteNest.UI.Controls
             if (currentPara.Parent is not ListItem li || li.Parent is not List list) 
                 return false;
 
-                _isUpdating = true;
-                try
-                {
+            _isUpdating = true;
+            try
+            {
                 var text = new TextRange(currentPara.ContentStart, currentPara.ContentEnd).Text;
                 
-                // Empty list item: convert to normal paragraph
                 if (string.IsNullOrWhiteSpace(text))
                 {
-                    ConvertListItemToParagraph(currentPara, mergeWithPreviousIfParagraph: false);
-                    return true;
+                    if (_lastEnterWasEmpty)
+                    {
+                        // Second Enter on empty item - exit list
+                        ConvertListItemToParagraph(currentPara, mergeWithPreviousIfParagraph: false);
+                        _lastEnterWasEmpty = false;
+                        return true;
+                    }
+                    else
+                    {
+                        // First Enter on empty item - create another empty item
+                        _lastEnterWasEmpty = true;
+                        var emptyItem = new ListItem();
+                        var emptyPara = new Paragraph { Margin = new Thickness(0) };
+                        emptyItem.Blocks.Add(emptyPara);
+                        
+                        int currentIndex = GetListItemIndex(list, li);
+                        InsertListItemAt(list, currentIndex + 1, emptyItem);
+                        
+                        // Apply hanging indent to empty item
+                        ListFormatting.ApplyHangingIndentToListItem(emptyItem);
+                        
+                        CaretPosition = emptyPara.ContentStart;
+                        return true;
+                    }
                 }
 
-                // Create new list item
+                // Non-empty item - create new item normally
+                _lastEnterWasEmpty = false;
+                
+                // Split content if caret is mid-paragraph
                 var caret = CaretPosition ?? currentPara.ContentEnd;
                 var newPara = new Paragraph { Margin = new Thickness(0) };
-                    var newLi = new ListItem();
-                    newLi.Blocks.Add(newPara);
+                var newLi = new ListItem();
+                newLi.Blocks.Add(newPara);
 
-                // SAFE content splitting
-                    if (caret.CompareTo(currentPara.ContentEnd) < 0)
-                    {
-                        var trailing = new TextRange(caret, currentPara.ContentEnd);
+                // Handle content after caret
+                if (caret.CompareTo(currentPara.ContentEnd) < 0)
+                {
+                    var trailing = new TextRange(caret, currentPara.ContentEnd);
                     
                     // Save content BEFORE clearing
                     byte[] savedContent = null;
@@ -230,6 +261,9 @@ namespace NoteNest.UI.Controls
                 // Insert the new list item
                     int index = GetListItemIndex(list, li);
                     InsertListItemAt(list, index + 1, newLi);
+                    
+                    // Apply hanging indent to new item
+                    ListFormatting.ApplyHangingIndentToListItem(newLi);
                 
                 // Position caret at start of new item
                     CaretPosition = newPara.ContentStart;
@@ -296,86 +330,35 @@ namespace NoteNest.UI.Controls
                     {
                         var prevItem = GetListItemAt(list, index - 1);
                         
-                        // Check for nested list in previous item
-                        if (prevItem?.Blocks.LastBlock is List nestedList && 
-                            GetListItemCount(nestedList) > 0)
-                        {
-                            // Position at end of last item in nested list
-                            var lastNestedItem = GetListItemAt(nestedList, GetListItemCount(nestedList) - 1);
-                            if (lastNestedItem?.Blocks.FirstBlock is Paragraph lastPara) // Use FirstBlock for the paragraph
-                            {
-                                // Position at the actual end of text content
-                                var text = new TextRange(lastPara.ContentStart, lastPara.ContentEnd).Text;
-                                if (!string.IsNullOrEmpty(text))
-                                {
-                                    // Get position just before the paragraph break
-                                    var endPos = lastPara.ContentEnd.GetPositionAtOffset(-1, LogicalDirection.Backward);
-                                    CaretPosition = endPos ?? lastPara.ContentEnd;
-                                }
-                                else
-                                {
-                                    CaretPosition = lastPara.ContentEnd;
-                                }
-                                return;
-                            }
-                        }
-                        
-                        // Position at end of previous item's FIRST paragraph (which contains the content)
-                        if (prevItem?.Blocks.FirstBlock is Paragraph prevPara)
-                        {
-                            // Get the actual text to find the true end position
-                            var text = new TextRange(prevPara.ContentStart, prevPara.ContentEnd).Text;
-                            
-                            // Position at the actual end of the text content
-                            if (!string.IsNullOrEmpty(text))
-                            {
-                                // Try to position just before the paragraph break marker
-                                var endPos = prevPara.ContentEnd.GetPositionAtOffset(-1, LogicalDirection.Backward);
-                                if (endPos != null)
-                                {
-                                    // Verify this is actually after the text
-                                    var testRange = new TextRange(prevPara.ContentStart, endPos);
-                                    if (testRange.Text.Length >= text.TrimEnd().Length)
-                                    {
-                                        CaretPosition = endPos;
-                    }
-                    else
+                                        // Check for nested list in previous item
+                if (prevItem?.Blocks.LastBlock is List nestedList && 
+                    GetListItemCount(nestedList) > 0)
+                {
+                    var lastNestedItem = GetListItemAt(nestedList, GetListItemCount(nestedList) - 1);
+                    if (lastNestedItem?.Blocks.FirstBlock is Paragraph lastPara)
                     {
-                                        // Fallback to ContentEnd
-                                        CaretPosition = prevPara.ContentEnd;
-                                    }
-                                }
-                                else
-                                {
-                                    CaretPosition = prevPara.ContentEnd;
-                                }
-                            }
-                            else
-                            {
-                                // Empty paragraph - position at start
-                                CaretPosition = prevPara.ContentStart;
-                            }
-                            return;
-                        }
-                        
-                        // Fallback: Check if previous item has ANY paragraph
-                        foreach (var block in prevItem?.Blocks ?? Enumerable.Empty<Block>())
-                        {
-                            if (block is Paragraph p)
-                            {
-                                var text = new TextRange(p.ContentStart, p.ContentEnd).Text;
-                                if (!string.IsNullOrEmpty(text))
-                                {
-                                    var endPos = p.ContentEnd.GetPositionAtOffset(-1, LogicalDirection.Backward);
-                                    CaretPosition = endPos ?? p.ContentEnd;
-                                }
-                                else
-                                {
-                                    CaretPosition = p.ContentStart;
-                                }
-                                return;
-                            }
-                        }
+                        // Position at actual end of text
+                        PositionCaretAtEndOfParagraph(lastPara);
+                        return;
+                    }
+                }
+                
+                // Position at end of previous item's first paragraph
+                if (prevItem?.Blocks.FirstBlock is Paragraph prevPara)
+                {
+                    PositionCaretAtEndOfParagraph(prevPara);
+                    return;
+                }
+                
+                // Fallback: Check any paragraph in previous item
+                foreach (var block in prevItem?.Blocks ?? Enumerable.Empty<Block>())
+                {
+                    if (block is Paragraph p)
+                    {
+                        PositionCaretAtEndOfParagraph(p);
+                        return;
+                    }
+                }
                     }
                     else
                     {
@@ -399,17 +382,7 @@ namespace NoteNest.UI.Controls
                         // Position at end of parent item's content
                         if (parentItem.Blocks.FirstBlock is Paragraph parentPara)
                         {
-                            // Position at actual end of text
-                            var text = new TextRange(parentPara.ContentStart, parentPara.ContentEnd).Text;
-                            if (!string.IsNullOrEmpty(text))
-                            {
-                                var endPos = parentPara.ContentEnd.GetPositionAtOffset(-1, LogicalDirection.Backward);
-                                CaretPosition = endPos ?? parentPara.ContentEnd;
-                            }
-                            else
-                            {
-                                CaretPosition = parentPara.ContentEnd;
-                            }
+                            PositionCaretAtEndOfParagraph(parentPara);
                         }
                     }
                     else if (parentBlocks != null)
@@ -427,6 +400,34 @@ namespace NoteNest.UI.Controls
                     _isUpdating = false;
                     _debounceTimer.Stop();
                     _debounceTimer.Start();
+            }
+        }
+
+        private void RemoveListItem(List list, ListItem item)
+        {
+            int index = GetListItemIndex(list, item);
+            list.ListItems.Remove(item);
+            
+            // Position caret appropriately
+            if (GetListItemCount(list) > 0)
+            {
+                var targetItem = index > 0 
+                    ? GetListItemAt(list, index - 1) 
+                    : GetListItemAt(list, 0);
+                    
+                if (targetItem?.Blocks.FirstBlock is Paragraph p)
+                {
+                    CaretPosition = index > 0 ? p.ContentEnd : p.ContentStart;
+                }
+            }
+            else
+            {
+                // List is empty - remove it
+                var parentBlocks = GetParentBlockCollection(list);
+                var newPara = new Paragraph();
+                parentBlocks.InsertAfter(list, newPara);
+                parentBlocks.Remove(list);
+                CaretPosition = newPara.ContentStart;
             }
         }
 
@@ -458,101 +459,82 @@ namespace NoteNest.UI.Controls
         private bool TryIndentListItem(ListItem item, List parentList)
         {
             int index = GetListItemIndex(parentList, item);
-            if (index <= 0) return false; // Can't indent first item
-
-            var prevItem = GetListItemAt(parentList, index - 1);
-            if (prevItem == null) return false;
-
-                        List nested;
-            if (prevItem.Blocks.LastBlock is List existing)
-                        {
-                            nested = existing;
-                        }
-                        else
-                        {
-                            nested = new List { MarkerStyle = parentList.MarkerStyle, Margin = new Thickness(0, 1, 0, 1) };
-                prevItem.Blocks.Add(nested);
-                        }
-
-                        RemoveListItemAt(parentList, index);
-            AddListItem(nested, item);
-
-            if (item.Blocks.FirstBlock is Paragraph firstP)
-                        {
-                            firstP.Margin = new Thickness(0);
-                CaretPosition = firstP.ContentStart;
-                        }
-                        return true;
-                    }
+            
+            // Allow indenting ANY item, including the first
+            List nestedList = null;
+            ListItem containerItem = null;
+            
+            if (index > 0)
+            {
+                // Try to add to previous item's nested list
+                var prevItem = GetListItemAt(parentList, index - 1);
+                containerItem = prevItem;
+                
+                if (prevItem.Blocks.LastBlock is List existing)
+                {
+                    nestedList = existing;
+                }
+            }
+            else
+            {
+                // First item - create a container for it
+                containerItem = new ListItem();
+                containerItem.Blocks.Add(new Paragraph()); // Placeholder
+                InsertListItemAt(parentList, 0, containerItem);
+                index = 1; // Adjust since we inserted
+            }
+            
+            if (nestedList == null)
+            {
+                // Create new nested list
+                nestedList = new List 
+                { 
+                    MarkerStyle = parentList.MarkerStyle,
+                    Margin = new Thickness(0, 0, 0, 0)
+                };
+                containerItem.Blocks.Add(nestedList);
+            }
+            
+            // Move item to nested list
+            parentList.ListItems.Remove(item);
+            nestedList.ListItems.Add(item);
+            
+            // Apply hanging indent to the moved item
+            ListFormatting.ApplyHangingIndentToListItem(item);
+            
+            // Keep caret in same position
+            if (item.Blocks.FirstBlock is Paragraph p)
+            {
+                CaretPosition = p.ContentStart;
+            }
+            
+            return true;
+        }
 
         private bool TryOutdentListItem(ListItem item, List list)
         {
-            // Preserve content BEFORE any operations
-            Paragraph paragraphToPreserve = null;
-            string contentToPreserve = null;
-            
-            if (item.Blocks.FirstBlock is Paragraph p)
+            // If in nested list, move to parent
+            if (list.Parent is ListItem parentItem && 
+                parentItem.Parent is List grandParentList)
             {
-                paragraphToPreserve = p;
-                var range = new TextRange(p.ContentStart, p.ContentEnd);
-                contentToPreserve = range.Text;
+                int insertIndex = GetListItemIndex(grandParentList, parentItem) + 1;
+                
+                list.ListItems.Remove(item);
+                InsertListItemAt(grandParentList, insertIndex, item);
+                
+                // Clean up empty nested list
+                if (GetListItemCount(list) == 0)
+                {
+                    parentItem.Blocks.Remove(list);
+                }
+                
+                return true;
             }
             
-            // If nested: move item to parent list SAFELY
-            if (list.Parent is ListItem parentItem && parentItem.Parent is List grandParentList)
+            // At root level - convert to paragraph
+            if (item.Blocks.FirstBlock is Paragraph para)
             {
-                try
-                {
-                    int insertIndex = GetListItemIndex(grandParentList, parentItem) + 1;
-                    
-                    // Create a NEW list item to avoid reference corruption
-                    var newItem = new ListItem();
-                    
-                    // Copy ALL blocks from original item to new item
-                    var blocksToMove = item.Blocks.ToList();
-                    foreach (var block in blocksToMove)
-                    {
-                        item.Blocks.Remove(block);
-                        newItem.Blocks.Add(block);
-                    }
-                    
-                    // Remove from nested list
-                    list.ListItems.Remove(item);
-                    
-                    // Add to parent list
-                    InsertListItemAt(grandParentList, insertIndex, newItem);
-                    
-                    // Clean up empty nested list WITHOUT deleting parent content
-                    if (GetListItemCount(list) == 0)
-                    {
-                        parentItem.Blocks.Remove(list);
-                        
-                        // If parent item is now completely empty, add placeholder
-                        if (!parentItem.Blocks.Any())
-                        {
-                            parentItem.Blocks.Add(new Paragraph());
-                        }
-                    }
-                    
-                    // Position caret in the moved item
-                    if (newItem.Blocks.FirstBlock is Paragraph newItemPara)
-                    {
-                        CaretPosition = newItemPara.ContentStart;
-                    }
-                    
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ERROR] Outdent failed: {ex.Message}");
-                    return false;
-                }
-            }
-            
-            // At root level: convert to paragraph
-            if (paragraphToPreserve != null)
-            {
-                ConvertListItemToParagraph(paragraphToPreserve, mergeWithPreviousIfParagraph: false);
+                ConvertListItemToParagraph(para, false);
                 return true;
             }
             
@@ -954,6 +936,35 @@ namespace NoteNest.UI.Controls
             return para.ContentEnd;
         }
 
+        private void PositionCaretAtEndOfParagraph(Paragraph para)
+        {
+            if (para == null) return;
+            
+            var text = new TextRange(para.ContentStart, para.ContentEnd).Text;
+            
+            if (string.IsNullOrEmpty(text))
+            {
+                CaretPosition = para.ContentStart;
+                return;
+            }
+            
+            // Position just before the paragraph break marker
+            var endPos = para.ContentEnd.GetPositionAtOffset(-1, LogicalDirection.Backward);
+            if (endPos != null)
+            {
+                // Verify this is actually after the text
+                var testRange = new TextRange(para.ContentStart, endPos);
+                if (testRange.Text.Length >= text.TrimEnd().Length)
+                {
+                    CaretPosition = endPos;
+                    return;
+                }
+            }
+            
+            // Fallback
+            CaretPosition = para.ContentEnd;
+        }
+
         private bool TryDeleteMergeAtEnd(Paragraph para)
         {
             if (para?.Parent is not ListItem li || li.Parent is not List list) 
@@ -1011,6 +1022,8 @@ namespace NoteNest.UI.Controls
         private void OnTextChanged(object sender, TextChangedEventArgs e)
         {
             if (_isUpdating) return;
+            
+            _hasUnsavedChanges = true;
             _debounceTimer.Stop();
             _debounceTimer.Start();
         }
@@ -1134,9 +1147,14 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        private List<Paragraph> GetParagraphRange(Paragraph startPara, Paragraph endPara)
+        private List<Paragraph> GetSelectedParagraphs()
         {
             var paragraphs = new List<Paragraph>();
+            var startPara = Selection.Start?.Paragraph ?? CaretPosition?.Paragraph;
+            var endPara = Selection.End?.Paragraph ?? startPara;
+            
+            if (startPara == null) return paragraphs;
+            
             var cursor = startPara as Block;
             while (cursor != null)
             {
@@ -1181,6 +1199,73 @@ namespace NoteNest.UI.Controls
                     touched.Add(list);
                 }
             }
+        }
+
+        private void ApplyListToSelection(List<Paragraph> paragraphs, TextMarkerStyle style)
+        {
+            if (paragraphs.Count == 0) return;
+            
+            // Group consecutive paragraphs into single lists
+            var groups = GroupConsecutiveParagraphs(paragraphs);
+            
+            foreach (var group in groups)
+            {
+                var list = new List 
+                { 
+                    MarkerStyle = style,
+                    Margin = new Thickness(0, 1, 0, 1)
+                };
+                
+                var firstPara = group.First();
+                var parentBlocks = GetParentBlockCollection(firstPara);
+                parentBlocks.InsertBefore(firstPara, list);
+                
+                foreach (var para in group)
+                {
+                    // Remove from current location
+                    var blocks = GetParentBlockCollection(para);
+                    blocks.Remove(para);
+                    
+                    // Add to list
+                    var item = new ListItem();
+                    para.Margin = new Thickness(0);
+                    item.Blocks.Add(para);
+                    list.ListItems.Add(item);
+                    
+                    // Apply hanging indent
+                    ListFormatting.ApplyHangingIndentToListItem(item);
+                }
+            }
+        }
+
+        private List<List<Paragraph>> GroupConsecutiveParagraphs(List<Paragraph> paragraphs)
+        {
+            var groups = new List<List<Paragraph>>();
+            var currentGroup = new List<Paragraph>();
+            
+            Block lastBlock = null;
+            foreach (var para in paragraphs)
+            {
+                if (lastBlock != null && lastBlock.NextBlock != para)
+                {
+                    // Not consecutive, start new group
+                    if (currentGroup.Count > 0)
+                    {
+                        groups.Add(currentGroup);
+                        currentGroup = new List<Paragraph>();
+                    }
+                }
+                
+                currentGroup.Add(para);
+                lastBlock = para;
+            }
+            
+            if (currentGroup.Count > 0)
+            {
+                groups.Add(currentGroup);
+            }
+            
+            return groups;
         }
 
         private void ApplyListToParagraphs(List<Paragraph> paragraphs, TextMarkerStyle style)
@@ -1255,36 +1340,26 @@ namespace NoteNest.UI.Controls
             _isUpdating = true;
             try
             {
-                var startPara = Selection.Start?.Paragraph ?? CaretPosition?.Paragraph;
-                var endPara = Selection.End?.Paragraph ?? startPara;
-                if (startPara == null) return;
-
-                var paragraphs = GetParagraphRange(startPara, endPara);
-                if (paragraphs.Count == 0) return;
-
-                bool allInSameType = paragraphs.All(p => IsInListOfType(p, markerStyle));
-                bool anyNotInList = paragraphs.Any(p => p?.Parent is not ListItem);
-                bool anyInDifferentType = paragraphs.Any(p => (p?.Parent is ListItem li && li.Parent is List list) && list.MarkerStyle != markerStyle);
-
-                if (allInSameType)
+                var selection = GetSelectedParagraphs();
+                
+                // Check if ALL selected paragraphs are in lists of this type
+                bool allInList = selection.All(p => 
+                    p.Parent is ListItem li && 
+                    li.Parent is List list && 
+                    list.MarkerStyle == markerStyle);
+                
+                if (allInList)
                 {
-                    // Remove formatting for selected items only
-                    RemoveListFromParagraphs(paragraphs);
-                }
-                else if (anyNotInList)
-                {
-                    // Mixed selection → apply list to all
-                    ApplyListToParagraphs(paragraphs, markerStyle);
-                }
-                else if (anyInDifferentType)
-                {
-                    // Change marker style in place
-                    ChangeMarkerStyleForSelectedLists(paragraphs, markerStyle);
+                    // Remove list formatting
+                    foreach (var para in selection)
+                    {
+                        ConvertListItemToParagraph(para, false);
+                    }
                 }
                 else
                 {
-                    // Default: apply list
-                    ApplyListToParagraphs(paragraphs, markerStyle);
+                    // Apply list formatting
+                    ApplyListToSelection(selection, markerStyle);
                 }
             }
             finally
@@ -1292,6 +1367,58 @@ namespace NoteNest.UI.Controls
                 _isUpdating = false;
                 _debounceTimer.Stop();
                 _debounceTimer.Start();
+            }
+        }
+
+        public void IndentSelection()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is ListItem)
+            {
+                TryChangeListIndent(para, false); // false = indent
+            }
+            else if (para != null)
+            {
+                // Regular paragraph - add left margin
+                para.Margin = new Thickness(
+                    para.Margin.Left + 20, 
+                    para.Margin.Top, 
+                    para.Margin.Right, 
+                    para.Margin.Bottom);
+            }
+        }
+
+        public void OutdentSelection()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is ListItem)
+            {
+                TryChangeListIndent(para, true); // true = outdent
+            }
+            else if (para != null)
+            {
+                // Regular paragraph - reduce left margin
+                var newMargin = Math.Max(0, para.Margin.Left - 20);
+                para.Margin = new Thickness(
+                    newMargin, 
+                    para.Margin.Top, 
+                    para.Margin.Right, 
+                    para.Margin.Bottom);
+            }
+        }
+
+        public void BatchUpdate(Action updateAction)
+        {
+            BeginChange();
+            try
+            {
+                _isUpdating = true;
+                updateAction();
+            }
+            finally
+            {
+                _isUpdating = false;
+                EndChange();
             }
         }
 
