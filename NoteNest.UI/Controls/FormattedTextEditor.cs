@@ -80,6 +80,9 @@ namespace NoteNest.UI.Controls
 
             // Register custom command bindings
             RegisterCommandBindings();
+            
+            // Initialize numbering system
+            InitializeNumberingSystem();
 
             // Smart list behaviors
             PreviewKeyDown += OnPreviewKeyDown;
@@ -296,6 +299,14 @@ namespace NoteNest.UI.Controls
                 
                 // Position caret at start of new item
                     CaretPosition = newPara.ContentStart;
+                    
+                    // After creating new list item
+                    if (list.MarkerStyle == TextMarkerStyle.Decimal)
+                    {
+                        // Schedule renumbering for numbered lists
+                        ScheduleRenumbering();
+                    }
+                    
                 return true;
                 }
                 finally
@@ -435,6 +446,12 @@ namespace NoteNest.UI.Controls
         private void RemoveListItem(List list, ListItem item)
         {
             RemoveListItemSimple(list, item);
+            
+            // Trigger renumbering if it's a numbered list
+            if (list?.MarkerStyle == TextMarkerStyle.Decimal)
+            {
+                ScheduleRenumbering();
+            }
         }
 
         // Simplified and more predictable list item removal
@@ -736,6 +753,12 @@ namespace NoteNest.UI.Controls
                     CaretPosition = p.ContentStart;
             }
             
+            // Trigger renumbering if it's a numbered list
+            if (parentList?.MarkerStyle == TextMarkerStyle.Decimal)
+            {
+                ScheduleRenumbering();
+            }
+            
             return true;
         }
 
@@ -772,6 +795,12 @@ namespace NoteNest.UI.Controls
                     {
                         SetCaretAtCharacterIndex(savedIndex);
                     }));
+                    
+                    // Trigger renumbering if it's a numbered list
+                    if (grandParentList?.MarkerStyle == TextMarkerStyle.Decimal)
+                    {
+                        ScheduleRenumbering();
+                    }
                     
                     return true;
                 }
