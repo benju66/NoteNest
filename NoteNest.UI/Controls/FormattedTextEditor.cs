@@ -12,7 +12,7 @@ using NoteNest.UI.Controls.ListHandling;
 
 namespace NoteNest.UI.Controls
 {
-    public class FormattedTextEditor : RichTextBox
+    public partial class FormattedTextEditor : RichTextBox
     {
         private bool _isUpdating;
         private readonly MarkdownFlowDocumentConverter _converter;
@@ -66,7 +66,7 @@ namespace NoteNest.UI.Controls
                 _debounceTimer.Stop();
                 if (_hasUnsavedChanges)
                 {
-                    PushDocumentToMarkdown();
+                PushDocumentToMarkdown();
                     _hasUnsavedChanges = false;
                 }
             };
@@ -77,6 +77,9 @@ namespace NoteNest.UI.Controls
             // Editing command keybindings
             InputBindings.Add(new KeyBinding(EditingCommands.ToggleBold, Key.B, ModifierKeys.Control));
             InputBindings.Add(new KeyBinding(EditingCommands.ToggleItalic, Key.I, ModifierKeys.Control));
+
+            // Register custom command bindings
+            RegisterCommandBindings();
 
             // Smart list behaviors
             PreviewKeyDown += OnPreviewKeyDown;
@@ -125,9 +128,20 @@ namespace NoteNest.UI.Controls
                     
                 case Key.Tab:
                     para = CaretPosition?.Paragraph;
-                    if (para != null && TryChangeListIndent(para, Keyboard.Modifiers == ModifierKeys.Shift))
+                    if (para?.Parent is ListItem)
                     {
                         e.Handled = true;
+                        
+                        if (Keyboard.Modifiers == ModifierKeys.Shift)
+                        {
+                            // Outdent
+                            OutdentListCommand.Execute(null, this);
+                        }
+                        else
+                        {
+                            // Indent - use built-in command
+                            EditingCommands.IncreaseIndentation.Execute(null, this);
+                        }
                         return;
                     }
                     break;
@@ -142,47 +156,52 @@ namespace NoteNest.UI.Controls
             }
         }
 
+        // SIMPLIFIED: Replace HandleBackspaceKey
         private void HandleBackspaceKey(KeyEventArgs e)
-        {
-            // Only handle special list behavior if we're in a list
-            var para = CaretPosition?.Paragraph;
+            {
+                var para = CaretPosition?.Paragraph;
             if (para?.Parent is not ListItem li || li.Parent is not List list) 
                 return;
             
-            // Use more reliable position detection
-            if (!IsAtListItemStartReliable()) 
+            // Check if at start using pointer comparison (more reliable)
+            if (para.ContentStart.CompareTo(CaretPosition) != 0)
                 return;
             
-            // Now we know we're at the start of a list item, handle it specially
-            e.Handled = true;
-            _isUpdating = true;
+                    e.Handled = true;
             
+            // Save state for restoration
+            var savedIndex = GetCaretCharacterIndex();
+            
+            BeginChange();
             try
             {
                 var text = new TextRange(para.ContentStart, para.ContentEnd).Text;
                 
                 if (string.IsNullOrWhiteSpace(text))
                 {
-                    // Empty item - just remove it cleanly
-                    RemoveListItemSimple(list, li);
+                    // Empty item - remove it
+                    RemoveEmptyListItem(list, li);
+                    }
+                    else
+                    {
+                    // Non-empty - convert to paragraph
+                    RemoveListFormattingInternal(para);
                 }
-                else
+                
+                // Defer caret positioning until after layout
+                Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
                 {
-                    // Non-empty - convert to regular paragraph (no merging)
-                    // Save caret info for consistency
-                    ConvertListItemToParagraphWithCaretPreservation(para, false, 0, string.Empty);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ERROR] HandleBackspaceKey failed: {ex.Message}");
-                e.Handled = false; // Let default handling take over on error
+                    // Position at start of the new paragraph
+                    var newPara = CaretPosition?.Paragraph;
+                    if (newPara != null)
+                    {
+                        CaretPosition = newPara.ContentStart;
+                    }
+                }));
             }
             finally
             {
-                _isUpdating = false;
-                _debounceTimer.Stop();
-                _debounceTimer.Start();
+                EndChange();
             }
         }
 
@@ -191,9 +210,9 @@ namespace NoteNest.UI.Controls
             if (currentPara.Parent is not ListItem li || li.Parent is not List list) 
                 return false;
 
-            _isUpdating = true;
-            try
-            {
+                _isUpdating = true;
+                try
+                {
                 var text = new TextRange(currentPara.ContentStart, currentPara.ContentEnd).Text;
                 
                 if (string.IsNullOrWhiteSpace(text))
@@ -201,10 +220,10 @@ namespace NoteNest.UI.Controls
                     if (_lastEnterWasEmpty)
                     {
                         // Second Enter on empty item - exit list
-                        ConvertListItemToParagraph(currentPara, mergeWithPreviousIfParagraph: false);
+                    ConvertListItemToParagraph(currentPara, mergeWithPreviousIfParagraph: false);
                         _lastEnterWasEmpty = false;
-                        return true;
-                    }
+                    return true;
+                }
                     else
                     {
                         // First Enter on empty item - create another empty item
@@ -230,13 +249,13 @@ namespace NoteNest.UI.Controls
                 // Split content if caret is mid-paragraph
                 var caret = CaretPosition ?? currentPara.ContentEnd;
                 var newPara = new Paragraph { Margin = new Thickness(0) };
-                var newLi = new ListItem();
-                newLi.Blocks.Add(newPara);
+                    var newLi = new ListItem();
+                    newLi.Blocks.Add(newPara);
 
                 // Handle content after caret
-                if (caret.CompareTo(currentPara.ContentEnd) < 0)
-                {
-                    var trailing = new TextRange(caret, currentPara.ContentEnd);
+                    if (caret.CompareTo(currentPara.ContentEnd) < 0)
+                    {
+                        var trailing = new TextRange(caret, currentPara.ContentEnd);
                     
                     // Save content BEFORE clearing
                     byte[] savedContent = null;
@@ -530,6 +549,100 @@ namespace NoteNest.UI.Controls
             }
         }
 
+        // SIMPLIFIED: Remove empty list item
+        private void RemoveEmptyListItem(List list, ListItem item)
+        {
+            if (list == null || item == null) return;
+            
+            int index = GetListItemIndex(list, item);
+            list.ListItems.Remove(item);
+            
+            if (GetListItemCount(list) > 0)
+            {
+                // Position at end of previous item or start of next
+                ListItem targetItem = null;
+                bool atEnd = true;
+                
+                if (index > 0)
+                {
+                    targetItem = GetListItemAt(list, index - 1);
+                    atEnd = true;
+                }
+                else if (GetListItemCount(list) > 0)
+                {
+                    targetItem = GetListItemAt(list, 0);
+                    atEnd = false;
+                }
+                
+                if (targetItem?.Blocks.FirstBlock is Paragraph targetPara)
+                {
+                    Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+                    {
+                        CaretPosition = atEnd ? targetPara.ContentEnd : targetPara.ContentStart;
+                    }));
+                }
+            }
+            else
+            {
+                // List is empty - remove it
+                var parentBlocks = GetParentBlockCollection(list);
+                if (parentBlocks != null)
+                {
+                    var newPara = new Paragraph();
+                    parentBlocks.InsertAfter(list, newPara);
+                    parentBlocks.Remove(list);
+                    
+                    Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+                    {
+                        CaretPosition = newPara.ContentStart;
+                    }));
+                }
+            }
+        }
+
+        // SIMPLIFIED: Remove list formatting from paragraph
+        private void RemoveListFormattingInternal(Paragraph para)
+        {
+            if (para?.Parent is not ListItem li || li.Parent is not List list) return;
+            
+            var parentBlocks = GetParentBlockCollection(list);
+            if (parentBlocks == null) return;
+            
+            // Create new paragraph with content
+            var newPara = new Paragraph();
+            
+            // Copy content
+            var text = new TextRange(para.ContentStart, para.ContentEnd).Text;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                newPara.Inlines.Add(new Run(text));
+            }
+            
+            // Determine position
+            int index = GetListItemIndex(list, li);
+            
+            // Remove list item
+            list.ListItems.Remove(li);
+            
+            // Insert new paragraph
+            if (GetListItemCount(list) == 0)
+            {
+                // Replace empty list with paragraph
+                parentBlocks.InsertAfter(list, newPara);
+                parentBlocks.Remove(list);
+            }
+            else if (index == 0)
+            {
+                // Was first item
+                parentBlocks.InsertBefore(list, newPara);
+            }
+            else
+            {
+                // Was last or middle - insert after list
+                parentBlocks.InsertAfter(list, newPara);
+            }
+        }
+
         private bool TryChangeListIndent(Paragraph para, bool outdent)
         {
             if (para.Parent is not ListItem li) return false;
@@ -574,11 +687,11 @@ namespace NoteNest.UI.Controls
             if (index > 0)
             {
                 // Try to add to previous item's nested list
-                var prevItem = GetListItemAt(parentList, index - 1);
+            var prevItem = GetListItemAt(parentList, index - 1);
                 containerItem = prevItem;
-                
-                if (prevItem.Blocks.LastBlock is List existing)
-                {
+
+            if (prevItem.Blocks.LastBlock is List existing)
+            {
                     nestedList = existing;
                 }
             }
@@ -596,7 +709,7 @@ namespace NoteNest.UI.Controls
                 // Create new nested list
                 nestedList = new List 
                 { 
-                    MarkerStyle = parentList.MarkerStyle,
+                    MarkerStyle = parentList.MarkerStyle, 
                     Margin = new Thickness(0, 0, 0, 0)
                 };
                 containerItem.Blocks.Add(nestedList);
@@ -626,81 +739,55 @@ namespace NoteNest.UI.Controls
             return true;
         }
 
+        // SIMPLIFIED: Replace TryOutdentListItem
         private bool TryOutdentListItem(ListItem item, List list)
         {
             if (item == null || list == null) return false;
             
-            // CRITICAL: Save current caret position with high precision
-            int caretOffset = 0;
-            string textBeforeCaret = string.Empty;
-            Paragraph itemPara = item.Blocks.FirstBlock as Paragraph;
+            // Save position using character index (more stable)
+            var savedIndex = GetCaretCharacterIndex();
             
-            if (itemPara != null && CaretPosition != null)
+            BeginChange();
+            try
             {
-                try
-                {
-                    var range = new TextRange(itemPara.ContentStart, CaretPosition);
-                    textBeforeCaret = range.Text ?? string.Empty;
-                    caretOffset = textBeforeCaret.Length;
-                    
-                    // Log for debugging
-                    LogListOperation("OUTDENT_START", $"Caret offset: {caretOffset}, Text before: '{textBeforeCaret}'");
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to save caret position: {ex.Message}");
-                    caretOffset = 0;
-                }
-            }
-            
-            // Handle nested list outdenting
-            if (list.Parent is ListItem parentItem && 
-                parentItem.Parent is List grandParentList)
-            {
-                try
+                // For nested lists, move to parent
+                if (list.Parent is ListItem parentItem && 
+                    parentItem.Parent is List grandParentList)
                 {
                     int insertIndex = GetListItemIndex(grandParentList, parentItem) + 1;
-                    
-                    // Remove from nested list
                     list.ListItems.Remove(item);
-                    
-                    // Insert into parent list
                     InsertListItemAt(grandParentList, insertIndex, item);
                     
-                    // Clean up empty nested list
                     if (GetListItemCount(list) == 0)
                     {
                         parentItem.Blocks.Remove(list);
-                        
-                        // If parent item is now empty (only had the nested list), remove it
-                        if (parentItem.Blocks.Count == 0 || 
-                            (parentItem.Blocks.Count == 1 && parentItem.Blocks.FirstBlock is Paragraph p && 
-                             string.IsNullOrWhiteSpace(new TextRange(p.ContentStart, p.ContentEnd).Text)))
+                        if (parentItem.Blocks.Count == 0)
                         {
                             grandParentList.ListItems.Remove(parentItem);
                         }
                     }
                     
-                    // Restore caret position
-                    RestoreCaretPosition(item.Blocks.FirstBlock as Paragraph, caretOffset, textBeforeCaret);
+                    // Defer positioning
+                    Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+                    {
+                        SetCaretAtCharacterIndex(savedIndex);
+                    }));
+                    
                     return true;
                 }
-                catch (Exception ex)
+                
+                // At root level - use command
+                Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
                 {
-                    System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to outdent from nested list: {ex.Message}");
-                    return false;
-                }
-            }
-            
-            // At root level - convert to paragraph with position preservation
-            if (itemPara != null)
-            {
-                LogListOperation("OUTDENT_ROOT", $"Converting to paragraph with caret offset: {caretOffset}");
-                ConvertListItemToParagraphWithCaretPreservation(itemPara, false, caretOffset, textBeforeCaret);
+                    RemoveListFormattingCommand.Execute(null, this);
+                }));
+                
                 return true;
             }
-            
-            return false;
+            finally
+            {
+                EndChange();
+            }
         }
 
 
@@ -727,6 +814,65 @@ namespace NoteNest.UI.Controls
             {
                 return false;
             }
+        }
+
+        // NEW: Character-based position tracking
+        private int GetCaretCharacterIndex()
+        {
+            try
+            {
+                var start = Document.ContentStart;
+                var caret = CaretPosition ?? start;
+                var range = new TextRange(start, caret);
+                return range.Text.Length;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private void SetCaretAtCharacterIndex(int index)
+        {
+            try
+            {
+                var navigator = Document.ContentStart;
+                int currentIndex = 0;
+                
+                while (navigator != null && currentIndex < index)
+                {
+                    var next = navigator.GetNextContextPosition(LogicalDirection.Forward);
+                    if (next == null) break;
+                    
+                    var text = new TextRange(navigator, next).Text;
+                    if (currentIndex + text.Length <= index)
+                    {
+                        navigator = next;
+                        currentIndex += text.Length;
+                    }
+                    else
+                    {
+                        // We need to go character by character
+                        for (int i = 0; i < (index - currentIndex); i++)
+                        {
+                            var charNext = navigator.GetNextInsertionPosition(LogicalDirection.Forward);
+                            if (charNext != null) navigator = charNext;
+                        }
+                        break;
+                    }
+                }
+                
+                CaretPosition = navigator ?? Document.ContentEnd;
+            }
+            catch
+            {
+                CaretPosition = Document.ContentEnd;
+            }
+        }
+
+        private string GetFullDocumentText()
+        {
+            return new TextRange(Document.ContentStart, Document.ContentEnd).Text;
         }
 
         // Helpers for ListItemCollection (no indexers provided)
@@ -811,12 +957,12 @@ namespace NoteNest.UI.Controls
             
             try
             {
-                // Check if we have any actual content before the caret
-                var range = new TextRange(para.ContentStart, CaretPosition);
-                var textBeforeCaret = range.Text;
-                
-                // We're at start only if there's NO text before caret
-                return string.IsNullOrEmpty(textBeforeCaret);
+            // Check if we have any actual content before the caret
+            var range = new TextRange(para.ContentStart, CaretPosition);
+            var textBeforeCaret = range.Text;
+            
+            // We're at start only if there's NO text before caret
+            return string.IsNullOrEmpty(textBeforeCaret);
             }
             catch
             {
