@@ -585,6 +585,24 @@ namespace NoteNest.UI.Controls
                 {
                     System.Diagnostics.Debug.WriteLine($"[UI] TextChanged ignored for untracked noteId={tab.Note.Id}");
                 }
+                
+                // Buffer content immediately for safety (non-blocking)
+                if (tab?.Note != null && sender is FormattedTextEditor editor)
+                {
+                    var quickContent = new System.Windows.Documents.TextRange(
+                        editor.Document.ContentStart, 
+                        editor.Document.ContentEnd).Text;
+                    
+                    // Get content buffer from state service (it manages the buffer)
+                    System.Threading.Tasks.Task.Run(() => 
+                    {
+                        try
+                        {
+                            state?.UpdateNoteContent(tab.Note.Id, quickContent);
+                        }
+                        catch { /* Non-critical, don't interrupt typing */ }
+                    });
+                }
             }
             catch (Exception ex)
             {

@@ -67,6 +67,7 @@ namespace NoteNest.Core.Services
     public class WorkspaceStateService : IWorkspaceStateService
     {
         private readonly NoteService _noteService;
+        private readonly ISafeContentBuffer _contentBuffer;
         private readonly Dictionary<string, WorkspaceNote> _openNotes = new();
         private readonly object _noteLock = new object();
         private string? _activeNoteId;
@@ -96,9 +97,10 @@ namespace NoteNest.Core.Services
             }
         }
 
-        public WorkspaceStateService(NoteService noteService)
+        public WorkspaceStateService(NoteService noteService, ISafeContentBuffer? contentBuffer = null)
         {
             _noteService = noteService;
+            _contentBuffer = contentBuffer ?? new SafeContentBuffer();
         }
 
         public async Task<WorkspaceNote> OpenNoteAsync(NoteModel note)
@@ -141,6 +143,9 @@ namespace NoteNest.Core.Services
 
         public void UpdateNoteContent(string noteId, string content)
         {
+            // Always buffer content immediately for safety
+            _contentBuffer.BufferContent(noteId, content);
+            
             lock (_noteLock)
             {
                 if (_openNotes.TryGetValue(noteId, out var note))
@@ -199,6 +204,15 @@ namespace NoteNest.Core.Services
                 saveLock.Release();
                 return new SaveResult { Success = true, NoteId = noteId, SavedAt = ts };
             }
+            
+            // Check buffer for latest content in case binding flush failed
+            var bufferedContent = _contentBuffer.GetLatestContent(noteId);
+            if (bufferedContent != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[State] SaveNoteAsync using buffered content for noteId={noteId} at={DateTime.Now:HH:mm:ss.fff}");
+                note.CurrentContent = bufferedContent;
+            }
+            
             // On save, push state content into the model that hits disk
             note.Model.Content = note.CurrentContent ?? string.Empty;
             try
@@ -218,6 +232,10 @@ namespace NoteNest.Core.Services
             }
             NoteStateChanged?.Invoke(this, new NoteStateChangedEventArgs { NoteId = noteId, IsDirty = false });
             System.Diagnostics.Debug.WriteLine($"[State] SaveNoteAsync OK noteId={noteId} savedAt={note.Model.LastModified:HH:mm:ss.fff} len={note.OriginalContent?.Length ?? 0}");
+            
+            // Clear buffer after successful save
+            _contentBuffer.ClearBuffer(noteId);
+            
             saveLock.Release();
             return new SaveResult { Success = true, NoteId = noteId, SavedAt = note.Model.LastModified };
         }

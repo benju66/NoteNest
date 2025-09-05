@@ -27,7 +27,10 @@ namespace NoteNest.UI.Services
             services.AddSingleton<ConfigurationService>(sp => new ConfigurationService(
                 sp.GetRequiredService<IFileSystemProvider>(),
                 sp.GetService<IEventBus>()));
-            services.AddSingleton<IWorkspaceStateService, WorkspaceStateService>();
+            services.AddSingleton<ISafeContentBuffer, SafeContentBuffer>();
+            services.AddSingleton<IWorkspaceStateService>(sp => new WorkspaceStateService(
+                sp.GetRequiredService<NoteService>(),
+                sp.GetRequiredService<ISafeContentBuffer>()));
             services.AddSingleton<ITabPersistenceService>(sp => new TabPersistenceService(
                 sp.GetRequiredService<ConfigurationService>(),
                 sp.GetRequiredService<IAppLogger>(),
