@@ -713,7 +713,7 @@ namespace NoteNest.UI.Controls
         {
             if (sender is Button button && button.Tag is ITabItem tab)
             {
-                // Optional: flush binding for the tab editor
+                // Force flush any pending content from the editor
                 try
                 {
                     var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
@@ -721,12 +721,17 @@ namespace NoteNest.UI.Controls
                     {
                         var presenter = FindVisualChild<ContentPresenter>(container);
                         var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                        
+                        // CRITICAL: Force flush debounce timer to ensure content is saved
+                        editor?.ForceFlushContent();
+                        
+                        // Then flush binding
                         var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
                         binding?.UpdateSource();
-                        System.Diagnostics.Debug.WriteLine($"[UI] CloseTab flush binding for noteId={tab?.Note?.Id} at={DateTime.Now:HH:mm:ss.fff}");
+                        System.Diagnostics.Debug.WriteLine($"[UI] CloseTab force flush for noteId={tab?.Note?.Id} at={DateTime.Now:HH:mm:ss.fff}");
                     }
                 }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[UI][WARN] CloseTab flush binding failed: {ex.Message}"); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[UI][WARN] CloseTab flush failed: {ex.Message}"); }
 
                 var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
                 if (closeService != null)
@@ -908,6 +913,11 @@ namespace NoteNest.UI.Controls
                         var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
                         var presenter = FindVisualChild<ContentPresenter>(container);
                         var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                        
+                        // Force flush any pending content from debounce timer
+                        editor?.ForceFlushContent();
+                        
+                        // Then update binding
                         var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
                         binding?.UpdateSource();
                     }

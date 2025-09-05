@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Services;
 using NoteNest.UI.ViewModels;
@@ -187,6 +189,42 @@ namespace NoteNest.UI
         {
             try
             {
+                _logger?.Info("Application shutting down - flushing pending saves...");
+                
+                // CRITICAL: Save all dirty notes before shutdown
+                try
+                {
+                    var stateService = ServiceProvider?.GetService<NoteNest.Core.Services.IWorkspaceStateService>();
+                    if (stateService != null)
+                    {
+                        var dirtyNotes = stateService.GetDirtyNotes().ToList();
+                        if (dirtyNotes.Any())
+                        {
+                            _logger?.Info($"Saving {dirtyNotes.Count} dirty notes before shutdown");
+                            await stateService.SaveAllDirtyNotesAsync();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Error(ex, "Failed to save dirty notes on shutdown");
+                }
+                
+                // Flush persistence log to ensure all changes are written
+                try
+                {
+                    var persistenceLog = ServiceProvider?.GetService<IContentPersistenceLog>();
+                    if (persistenceLog != null)
+                    {
+                        // Clear the log after successful saves to avoid false recovery prompts
+                        await persistenceLog.ClearLogAsync();
+                        
+                        // Then dispose to ensure any final writes are flushed
+                        (persistenceLog as IDisposable)?.Dispose();
+                    }
+                }
+                catch { }
+                
                 // Flush pending config saves
                 try
                 {

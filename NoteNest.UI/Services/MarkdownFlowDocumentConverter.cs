@@ -43,13 +43,30 @@ namespace NoteNest.UI.Services
             }
 
             var md = Markdown.Parse(markdown, _pipeline);
+            
+            // Track if we need to add spacing between blocks
+            MarkdownObject? previousBlock = null;
+            
             foreach (var block in md)
             {
+                // Add extra spacing between paragraphs if there was a blank line in markdown
+                if (previousBlock is ParagraphBlock && block is ParagraphBlock)
+                {
+                    // Check if there's significant line gap in the source
+                    if (previousBlock.Line + 1 < block.Line)
+                    {
+                        // Add empty paragraph to preserve spacing
+                        document.Blocks.Add(new Paragraph());
+                    }
+                }
+                
                 var flowBlock = ConvertBlock(block);
                 if (flowBlock != null)
                 {
                     document.Blocks.Add(flowBlock);
                 }
+                
+                previousBlock = block;
             }
 
             if (document.Blocks.Count == 0)
@@ -245,9 +262,16 @@ namespace NoteNest.UI.Services
         public string ConvertToMarkdown(FlowDocument document)
         {
             var markdown = new StringBuilder();
+            bool isFirstBlock = true;
             foreach (var block in document.Blocks)
             {
+                if (!isFirstBlock && block is Paragraph)
+                {
+                    // Preserve paragraph spacing - add blank line before each paragraph (except first)
+                    markdown.AppendLine();
+                }
                 markdown.Append(ConvertBlockToMarkdown(block));
+                isFirstBlock = false;
             }
             return markdown.ToString().TrimEnd();
         }
@@ -268,7 +292,6 @@ namespace NoteNest.UI.Services
                     {
                         sb.Append(ConvertInlineToMarkdown(inline));
                     }
-                    sb.AppendLine();
                     sb.AppendLine();
                     break;
                 case List l:
@@ -294,7 +317,6 @@ namespace NoteNest.UI.Services
                         }
                         i++;
                     }
-                    sb.AppendLine();
                     break;
             }
             return sb.ToString();

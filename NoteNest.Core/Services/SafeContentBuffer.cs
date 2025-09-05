@@ -33,14 +33,16 @@ namespace NoteNest.Core.Services
     {
         private readonly ConcurrentDictionary<string, BufferedContent> _buffer = new();
         private readonly IAppLogger _logger;
+        private readonly IContentPersistenceLog? _persistenceLog;
         private readonly Timer _cleanupTimer;
         private readonly TimeSpan _bufferExpiration;
         private int _totalBufferUpdates;
 
-        public SafeContentBuffer(IAppLogger? logger = null, TimeSpan? bufferExpiration = null)
+        public SafeContentBuffer(IAppLogger? logger = null, TimeSpan? bufferExpiration = null, IContentPersistenceLog? persistenceLog = null)
         {
             _logger = logger ?? AppLogger.Instance;
             _bufferExpiration = bufferExpiration ?? TimeSpan.FromMinutes(30);
+            _persistenceLog = persistenceLog;
             
             // Cleanup old entries periodically
             _cleanupTimer = new Timer(CleanupExpiredBuffers, null, 
@@ -73,10 +75,26 @@ namespace NoteNest.Core.Services
                         existing.Timestamp = DateTime.UtcNow;
                         existing.UpdateCount++;
                         existing.ContentHash = hash;
-                        Interlocked.Increment(ref _totalBufferUpdates);
+                                            Interlocked.Increment(ref _totalBufferUpdates);
+                }
+                return existing;
+            });
+
+            // Log to persistence if available
+            if (_persistenceLog != null)
+            {
+                _ = Task.Run(async () => 
+                {
+                    try
+                    {
+                        await _persistenceLog.LogChangeAsync(noteId, content);
                     }
-                    return existing;
+                    catch (Exception ex)
+                    {
+                        _logger.Warning($"Failed to persist content change: {ex.Message}");
+                    }
                 });
+            }
 
             // Log high-frequency updates for monitoring
             if (_totalBufferUpdates % 100 == 0)
@@ -100,6 +118,19 @@ namespace NoteNest.Core.Services
             if (_buffer.TryRemove(noteId, out var removed))
             {
                 _logger.Debug($"Cleared buffer for note {noteId} after {removed.UpdateCount} updates");
+                
+                // Mark as persisted in log
+                if (_persistenceLog != null)
+                {
+                    _ = Task.Run(async () => 
+                    {
+                        try
+                        {
+                            await _persistenceLog.MarkPersistedAsync(noteId);
+                        }
+                        catch { }
+                    });
+                }
             }
         }
 
@@ -168,6 +199,7 @@ namespace NoteNest.Core.Services
         {
             _cleanupTimer?.Dispose();
             _buffer.Clear();
+            (_persistenceLog as IDisposable)?.Dispose();
             _logger.Info($"SafeContentBuffer disposed after {_totalBufferUpdates} total updates");
         }
     }

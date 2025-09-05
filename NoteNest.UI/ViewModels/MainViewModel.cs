@@ -446,6 +446,9 @@ namespace NoteNest.UI.ViewModels
                 // Initialize auto-save after settings are loaded
                 InitializeAutoSave();
 
+                // Recover any unpersisted changes from crash/unexpected shutdown
+                await RecoverUnpersistedChangesAsync(cancellationToken);
+
                 try
                 {
                     await LoadCategoriesAsync();
@@ -539,6 +542,64 @@ namespace NoteNest.UI.ViewModels
             catch (Exception ex)
             {
                 _logger.Warning($"ValidateNotesRoot failed: {ex.Message}");
+            }
+        }
+
+        private async Task RecoverUnpersistedChangesAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                var persistenceLog = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IContentPersistenceLog)) as IContentPersistenceLog;
+                if (persistenceLog == null) return;
+
+                StatusMessage = "Checking for recovered content...";
+                var recoveredChanges = await persistenceLog.RecoverUnpersistedChangesAsync();
+                
+                if (recoveredChanges.Count > 0)
+                {
+                    _logger.Info($"Found {recoveredChanges.Count} unpersisted changes from previous session");
+                    
+                    // Ask user if they want to recover
+                    var message = recoveredChanges.Count == 1 
+                        ? "Found unsaved content from a previous session. Would you like to recover it?"
+                        : $"Found {recoveredChanges.Count} notes with unsaved content from a previous session. Would you like to recover them?";
+                    
+                    var recover = await _dialogService.ShowYesNoCancelAsync(message, "Recover Unsaved Content");
+                    
+                    if (recover == true)
+                    {
+                        var recovered = 0;
+                        foreach (var kvp in recoveredChanges)
+                        {
+                            try
+                            {
+                                // Update the buffer with recovered content
+                                _workspaceStateService.UpdateNoteContent(kvp.Key, kvp.Value);
+                                recovered++;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Warning($"Failed to recover content for note {kvp.Key}: {ex.Message}");
+                            }
+                        }
+                        
+                        StatusMessage = $"Recovered {recovered} unsaved changes";
+                        _logger.Info($"Successfully recovered {recovered} of {recoveredChanges.Count} changes");
+                        
+                        // Clear the persistence log after successful recovery
+                        await persistenceLog.ClearLogAsync();
+                    }
+                    else
+                    {
+                        // User declined recovery, clear the log
+                        await persistenceLog.ClearLogAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to recover unpersisted changes");
+                // Don't show error to user - recovery is best-effort
             }
         }
 

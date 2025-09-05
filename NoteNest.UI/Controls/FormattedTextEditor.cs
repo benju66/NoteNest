@@ -59,8 +59,8 @@ namespace NoteNest.UI.Controls
             }
             catch { }
 
-            // Increase debounce time for better performance
-            _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) }; // 1 second
+            // Reduced debounce for faster saves with content buffer protection
+            _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) }; // 500ms for quicker response
             _debounceTimer.Tick += (s, e) =>
             {
                 _debounceTimer.Stop();
@@ -1676,6 +1676,17 @@ namespace NoteNest.UI.Controls
             finally
             {
                 _isUpdating = false;
+            }
+        }
+
+        public void ForceFlushContent()
+        {
+            // Force immediate push of content (used during shutdown)
+            _debounceTimer?.Stop();
+            if (_hasUnsavedChanges)
+            {
+                PushDocumentToMarkdown();
+                _hasUnsavedChanges = false;
             }
         }
 

@@ -78,10 +78,54 @@ namespace NoteNest.UI.Windows
             try { Title = $"{tab.Title} - NoteNest"; } catch { }
         }
 
-        protected override void OnClosing(CancelEventArgs e)
+        protected override async void OnClosing(CancelEventArgs e)
         {
             base.OnClosing(e);
-            // Optional: prompt for unsaved changes if any
+            
+            // Save all dirty tabs before closing
+            if (_pane?.Tabs != null && _pane.Tabs.Any())
+            {
+                try
+                {
+                    // Get state service to save
+                    var stateService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
+                    if (stateService != null)
+                    {
+                        // First, force flush all editors in this window
+                        if (Content is SplitPaneView paneView)
+                        {
+                            paneView.FlushAllEditors();
+                        }
+                        
+                        // Then save any dirty notes
+                        var dirtyTabs = _pane.Tabs.Where(t => t.IsDirty).ToList();
+                        if (dirtyTabs.Any())
+                        {
+                            e.Cancel = true; // Prevent close while saving
+                            
+                            try
+                            {
+                                foreach (var tab in dirtyTabs)
+                                {
+                                    stateService.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty);
+                                }
+                                await stateService.SaveAllDirtyNotesAsync();
+                            }
+                            finally
+                            {
+                                // Re-trigger close after save completes
+                                e.Cancel = false;
+                                Close();
+                            }
+                            return;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DetachedWindow] Error saving on close: {ex.Message}");
+                }
+            }
         }
 
         protected override void OnClosed(EventArgs e)
