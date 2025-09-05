@@ -149,11 +149,11 @@ namespace NoteNest.UI.Controls
             if (para?.Parent is not ListItem li || li.Parent is not List list) 
                 return;
             
-            // Only handle if at the start of the list item
-            if (!IsAtListItemStart()) 
+            // Use more reliable position detection
+            if (!IsAtListItemStartReliable()) 
                 return;
             
-            // Now we know we're at the start of a list item, so handle it specially
+            // Now we know we're at the start of a list item, handle it specially
             e.Handled = true;
             _isUpdating = true;
             
@@ -163,19 +163,24 @@ namespace NoteNest.UI.Controls
                 
                 if (string.IsNullOrWhiteSpace(text))
                 {
-                    // Empty item - just remove it
-                    RemoveListItem(list, li);
+                    // Empty item - just remove it cleanly
+                    RemoveListItemSimple(list, li);
                 }
                 else
                 {
                     // Non-empty - convert to regular paragraph (no merging)
-                    ConvertListItemToParagraph(para, false);
+                    // Save caret info for consistency
+                    ConvertListItemToParagraphWithCaretPreservation(para, false, 0, string.Empty);
                 }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] HandleBackspaceKey failed: {ex.Message}");
+                e.Handled = false; // Let default handling take over on error
             }
             finally
             {
                 _isUpdating = false;
-                // Force markdown update after list structure change
                 _debounceTimer.Stop();
                 _debounceTimer.Start();
             }
@@ -410,29 +415,118 @@ namespace NoteNest.UI.Controls
 
         private void RemoveListItem(List list, ListItem item)
         {
-            int index = GetListItemIndex(list, item);
-            list.ListItems.Remove(item);
+            RemoveListItemSimple(list, item);
+        }
+
+        // Simplified and more predictable list item removal
+        private void RemoveListItemSimple(List list, ListItem item)
+        {
+            if (list == null || item == null) return;
             
-            // Position caret appropriately
-            if (GetListItemCount(list) > 0)
+            try
             {
-                var targetItem = index > 0 
-                    ? GetListItemAt(list, index - 1) 
-                    : GetListItemAt(list, 0);
-                    
-                if (targetItem?.Blocks.FirstBlock is Paragraph p)
+                int index = GetListItemIndex(list, item);
+                list.ListItems.Remove(item);
+                
+                // Position caret predictably
+                if (GetListItemCount(list) > 0)
                 {
-                    CaretPosition = index > 0 ? p.ContentEnd : p.ContentStart;
+                    if (index > 0)
+                    {
+                        // Go to end of previous item at same level (ignore nested lists)
+                        var prevItem = GetListItemAt(list, index - 1);
+                        if (prevItem?.Blocks.FirstBlock is Paragraph prevPara)
+                        {
+                            PositionCaretAtEndOfParagraphReliable(prevPara);
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        // Was first item, go to start of new first item
+                        var nextItem = GetListItemAt(list, 0);
+                        if (nextItem?.Blocks.FirstBlock is Paragraph nextPara)
+                        {
+                            CaretPosition = nextPara.ContentStart;
+                            return;
+                        }
+                    }
+                }
+                else
+                {
+                    // List is now empty - remove it and create replacement paragraph
+                    var parentBlocks = GetParentBlockCollection(list);
+                    if (parentBlocks != null)
+                    {
+                        var newPara = new Paragraph();
+                        
+                        // Insert before removing to maintain document structure
+                        try
+                        {
+                            parentBlocks.InsertAfter(list, newPara);
+                            parentBlocks.Remove(list);
+                            CaretPosition = newPara.ContentStart;
+                        }
+                        catch
+                        {
+                            // Fallback: just position at document end
+                            CaretPosition = Document.ContentEnd;
+                        }
+                    }
                 }
             }
-            else
+            catch (Exception ex)
             {
-                // List is empty - remove it
-                var parentBlocks = GetParentBlockCollection(list);
-                var newPara = new Paragraph();
-                parentBlocks.InsertAfter(list, newPara);
-                parentBlocks.Remove(list);
-                CaretPosition = newPara.ContentStart;
+                System.Diagnostics.Debug.WriteLine($"[ERROR] RemoveListItemSimple failed: {ex.Message}");
+            }
+        }
+
+        // More reliable end-of-paragraph positioning
+        private void PositionCaretAtEndOfParagraphReliable(Paragraph para)
+        {
+            if (para == null) return;
+            
+            try
+            {
+                var range = new TextRange(para.ContentStart, para.ContentEnd);
+                var text = range.Text ?? string.Empty;
+                
+                if (string.IsNullOrEmpty(text))
+                {
+                    // Empty paragraph
+                    CaretPosition = para.ContentStart;
+                    return;
+                }
+                
+                // Find actual end position (not including paragraph markers)
+                var position = para.ContentStart;
+                var lastGoodPosition = position;
+                
+                while (position != null)
+                {
+                    var next = position.GetNextInsertionPosition(LogicalDirection.Forward);
+                    if (next == null) break;
+                    
+                    var testRange = new TextRange(para.ContentStart, next);
+                    if (testRange.Text.Length <= text.TrimEnd().Length)
+                    {
+                        lastGoodPosition = next;
+                        position = next;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                
+                CaretPosition = lastGoodPosition ?? para.ContentEnd;
+                
+                LogListOperation("POSITION_END", $"Text length: {text.Length}, Positioned at end");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WARNING] PositionCaretAtEndOfParagraphReliable failed: {ex.Message}");
+                CaretPosition = para.ContentEnd; // Safe fallback
             }
         }
 
@@ -534,52 +628,105 @@ namespace NoteNest.UI.Controls
 
         private bool TryOutdentListItem(ListItem item, List list)
         {
-            // Save current caret position relative to the paragraph
+            if (item == null || list == null) return false;
+            
+            // CRITICAL: Save current caret position with high precision
             int caretOffset = 0;
-            if (item.Blocks.FirstBlock is Paragraph itemPara && CaretPosition != null)
+            string textBeforeCaret = string.Empty;
+            Paragraph itemPara = item.Blocks.FirstBlock as Paragraph;
+            
+            if (itemPara != null && CaretPosition != null)
             {
-                var range = new TextRange(itemPara.ContentStart, CaretPosition);
-                caretOffset = range.Text.Length;
+                try
+                {
+                    var range = new TextRange(itemPara.ContentStart, CaretPosition);
+                    textBeforeCaret = range.Text ?? string.Empty;
+                    caretOffset = textBeforeCaret.Length;
+                    
+                    // Log for debugging
+                    LogListOperation("OUTDENT_START", $"Caret offset: {caretOffset}, Text before: '{textBeforeCaret}'");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to save caret position: {ex.Message}");
+                    caretOffset = 0;
+                }
             }
             
-            // If in nested list, move to parent
+            // Handle nested list outdenting
             if (list.Parent is ListItem parentItem && 
                 parentItem.Parent is List grandParentList)
             {
-                int insertIndex = GetListItemIndex(grandParentList, parentItem) + 1;
-                
-                list.ListItems.Remove(item);
-                InsertListItemAt(grandParentList, insertIndex, item);
-                
-                // Clean up empty nested list
-                if (GetListItemCount(list) == 0)
+                try
                 {
-                    parentItem.Blocks.Remove(list);
-                }
-                
-                // Restore caret position
-                if (item.Blocks.FirstBlock is Paragraph para)
-                {
-                    var newPosition = para.ContentStart;
-                    for (int i = 0; i < caretOffset && newPosition != null; i++)
+                    int insertIndex = GetListItemIndex(grandParentList, parentItem) + 1;
+                    
+                    // Remove from nested list
+                    list.ListItems.Remove(item);
+                    
+                    // Insert into parent list
+                    InsertListItemAt(grandParentList, insertIndex, item);
+                    
+                    // Clean up empty nested list
+                    if (GetListItemCount(list) == 0)
                     {
-                        newPosition = newPosition.GetNextInsertionPosition(LogicalDirection.Forward);
+                        parentItem.Blocks.Remove(list);
+                        
+                        // If parent item is now empty (only had the nested list), remove it
+                        if (parentItem.Blocks.Count == 0 || 
+                            (parentItem.Blocks.Count == 1 && parentItem.Blocks.FirstBlock is Paragraph p && 
+                             string.IsNullOrWhiteSpace(new TextRange(p.ContentStart, p.ContentEnd).Text)))
+                        {
+                            grandParentList.ListItems.Remove(parentItem);
+                        }
                     }
-                    if (newPosition != null)
-                        CaretPosition = newPosition;
+                    
+                    // Restore caret position
+                    RestoreCaretPosition(item.Blocks.FirstBlock as Paragraph, caretOffset, textBeforeCaret);
+                    return true;
                 }
-                
-                return true;
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to outdent from nested list: {ex.Message}");
+                    return false;
+                }
             }
             
-            // At root level - convert to paragraph
-            if (item.Blocks.FirstBlock is Paragraph rootPara)
+            // At root level - convert to paragraph with position preservation
+            if (itemPara != null)
             {
-                ConvertListItemToParagraph(rootPara, false);
+                LogListOperation("OUTDENT_ROOT", $"Converting to paragraph with caret offset: {caretOffset}");
+                ConvertListItemToParagraphWithCaretPreservation(itemPara, false, caretOffset, textBeforeCaret);
                 return true;
             }
             
             return false;
+        }
+
+
+        // Add validation helper
+        private bool ValidateListStructure(List list)
+        {
+            if (list == null) return false;
+            
+            try
+            {
+                int count = 0;
+                foreach (var item in list.ListItems)
+                {
+                    count++;
+                    if (item.Blocks.Count == 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine("[WARNING] Found list item with no blocks");
+                        return false;
+                    }
+                }
+                return count > 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         // Helpers for ListItemCollection (no indexers provided)
@@ -675,6 +822,51 @@ namespace NoteNest.UI.Controls
             {
                 // If we can't determine position, assume we're not at start
                 return false;
+            }
+        }
+
+        // New reliable position detection
+        private bool IsAtListItemStartReliable()
+        {
+            try
+            {
+                var para = CaretPosition?.Paragraph;
+                if (para?.Parent is not ListItem) return false;
+                
+                // Method 1: Direct position comparison
+                if (para.ContentStart.CompareTo(CaretPosition) == 0)
+                    return true;
+                
+                // Method 2: Check if only whitespace/formatting before caret
+                var range = new TextRange(para.ContentStart, CaretPosition);
+                var textBefore = range.Text;
+                
+                // No text at all before caret
+                if (string.IsNullOrEmpty(textBefore))
+                    return true;
+                
+                // Only whitespace before caret (handles formatting markers)
+                if (string.IsNullOrWhiteSpace(textBefore) && textBefore.Length <= 2)
+                    return true;
+                
+                // Method 3: Try getting positions and counting
+                var start = para.ContentStart;
+                var current = CaretPosition;
+                int steps = 0;
+                
+                while (start != null && start.CompareTo(current) < 0 && steps < 3)
+                {
+                    start = start.GetNextInsertionPosition(LogicalDirection.Forward);
+                    steps++;
+                }
+                
+                // We're very close to the start (within 2 positions)
+                return steps <= 2 && string.IsNullOrWhiteSpace(textBefore);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WARNING] IsAtListItemStartReliable failed: {ex.Message}");
+                return false; // Safe default
             }
         }
 
@@ -950,6 +1142,191 @@ namespace NoteNest.UI.Controls
             if (block?.Parent is TableCell cell) return cell.Blocks;
             if (block?.Parent is BlockUIContainer container) return null; // Can't have block children
             return null;
+        }
+
+        // New method for converting with caret preservation
+        private void ConvertListItemToParagraphWithCaretPreservation(
+            Paragraph para, 
+            bool mergeWithPreviousIfParagraph, 
+            int caretOffset,
+            string expectedTextBeforeCaret)
+        {
+            if (para?.Parent is not ListItem li || li.Parent is not List list) return;
+
+            _isUpdating = true;
+            try
+            {
+                var parentBlocks = GetParentBlockCollection(list);
+                if (parentBlocks == null) 
+                {
+                    System.Diagnostics.Debug.WriteLine("[ERROR] Parent block collection is null");
+                    return;
+                }
+
+                int index = GetListItemIndex(list, li);
+                
+                // Create new paragraph and copy content
+                var newPara = new Paragraph();
+                
+                // Preserve text content with formatting
+                string fullText = string.Empty;
+                try
+                {
+                    var sourceRange = new TextRange(para.ContentStart, para.ContentEnd);
+                    fullText = sourceRange.Text ?? string.Empty;
+                    
+                    if (!string.IsNullOrWhiteSpace(fullText))
+                    {
+                        // Try to preserve formatting
+                        using (var stream = new MemoryStream())
+                        {
+                            sourceRange.Save(stream, DataFormats.Xaml);
+                            stream.Position = 0;
+                            var targetRange = new TextRange(newPara.ContentStart, newPara.ContentEnd);
+                            targetRange.Load(stream, DataFormats.Xaml);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Fallback to plain text
+                    System.Diagnostics.Debug.WriteLine($"[WARNING] Format preservation failed: {ex.Message}");
+                    if (!string.IsNullOrWhiteSpace(fullText))
+                    {
+                        newPara.Inlines.Add(new Run(fullText));
+                    }
+                }
+
+                // Determine insertion position
+                if (index == 0)
+                {
+                    parentBlocks.InsertBefore(list, newPara);
+                }
+                else if (index >= GetListItemCount(list) - 1)
+                {
+                    parentBlocks.InsertAfter(list, newPara);
+                }
+                else
+                {
+                    // Middle item - need to split list
+                    SplitListAtItem(list, li, newPara, parentBlocks);
+                    RestoreCaretPosition(newPara, caretOffset, expectedTextBeforeCaret);
+                    return;
+                }
+
+                // Remove the list item
+                list.ListItems.Remove(li);
+                
+                // Clean up empty list
+                if (GetListItemCount(list) == 0)
+                {
+                    parentBlocks.Remove(list);
+                }
+                
+                // CRITICAL: Restore caret to exact position
+                RestoreCaretPosition(newPara, caretOffset, expectedTextBeforeCaret);
+            }
+            finally
+            {
+                _isUpdating = false;
+                _debounceTimer.Stop();
+                _debounceTimer.Start();
+            }
+        }
+
+        // New robust caret restoration method
+        private void RestoreCaretPosition(Paragraph para, int offset, string expectedTextBefore)
+        {
+            if (para == null) 
+            {
+                System.Diagnostics.Debug.WriteLine("[WARNING] Cannot restore caret - paragraph is null");
+                return;
+            }
+            
+            try
+            {
+                // First, ensure the paragraph is loaded
+                para.Loaded += (s, e) => DoRestoreCaretPosition(para, offset, expectedTextBefore);
+                
+                // Try immediate restoration
+                DoRestoreCaretPosition(para, offset, expectedTextBefore);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to restore caret position: {ex.Message}");
+                CaretPosition = para.ContentStart;
+            }
+        }
+
+        private void DoRestoreCaretPosition(Paragraph para, int offset, string expectedTextBefore)
+        {
+            try
+            {
+                if (offset <= 0)
+                {
+                    CaretPosition = para.ContentStart;
+                    return;
+                }
+                
+                // Navigate to the target position
+                var position = para.ContentStart;
+                int currentOffset = 0;
+                
+                while (position != null && currentOffset < offset)
+                {
+                    var next = position.GetNextInsertionPosition(LogicalDirection.Forward);
+                    if (next == null) break;
+                    
+                    var range = new TextRange(position, next);
+                    var charCount = range.Text.Length;
+                    
+                    if (currentOffset + charCount <= offset)
+                    {
+                        position = next;
+                        currentOffset += charCount;
+                    }
+                    else
+                    {
+                        // We've gone too far, stay at current position
+                        break;
+                    }
+                }
+                
+                if (position != null)
+                {
+                    // Verify the position is correct
+                    var verification = new TextRange(para.ContentStart, position);
+                    var actualText = verification.Text ?? string.Empty;
+                    
+                    // Only set if we're reasonably close to expected position
+                    if (Math.Abs(actualText.Length - offset) <= 2) // Allow 2 char tolerance
+                    {
+                        CaretPosition = position;
+                        LogListOperation("CARET_RESTORED", $"Offset: {offset}, Actual: {actualText.Length}");
+                    }
+                    else
+                    {
+                        // Fallback to approximate position
+                        var fallbackPos = para.ContentStart;
+                        for (int i = 0; i < offset && fallbackPos != null; i++)
+                        {
+                            var next = fallbackPos.GetNextInsertionPosition(LogicalDirection.Forward);
+                            if (next != null) fallbackPos = next;
+                        }
+                        CaretPosition = fallbackPos ?? para.ContentStart;
+                        LogListOperation("CARET_FALLBACK", $"Target: {offset}, Used fallback");
+                    }
+                }
+                else
+                {
+                    CaretPosition = para.ContentEnd;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] DoRestoreCaretPosition failed: {ex.Message}");
+                CaretPosition = para.ContentStart;
+            }
         }
 
         private TextPointer GetRealEndPosition(Paragraph para)
