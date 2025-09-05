@@ -192,18 +192,38 @@ namespace NoteNest.UI.Controls
                 var newLi = new ListItem();
                 newLi.Blocks.Add(newPara);
 
-                // Handle content splitting if caret is not at end
+                // SAFE content splitting
                 if (caret.CompareTo(currentPara.ContentEnd) < 0)
                 {
                     var trailing = new TextRange(caret, currentPara.ContentEnd);
-                    using (var stream = new MemoryStream())
+                    
+                    // Save content BEFORE clearing
+                    byte[] savedContent = null;
+                    try
                     {
-                        trailing.Save(stream, DataFormats.Xaml);
-                        trailing.Text = string.Empty; // Clear original
+                        using (var stream = new MemoryStream())
+                        {
+                            trailing.Save(stream, DataFormats.Xaml);
+                            savedContent = stream.ToArray();
+                        }
+                    }
+                    catch { }
+                    
+                    // Only clear if we successfully saved
+                    if (savedContent != null && savedContent.Length > 0)
+                    {
+                        trailing.Text = string.Empty;
                         
-                        stream.Position = 0;
-                        var dest = new TextRange(newPara.ContentStart, newPara.ContentEnd);
-                        dest.Load(stream, DataFormats.Xaml);
+                        // Restore in new paragraph
+                        try
+                        {
+                            using (var stream = new MemoryStream(savedContent))
+                            {
+                                var dest = new TextRange(newPara.ContentStart, newPara.ContentEnd);
+                                dest.Load(stream, DataFormats.Xaml);
+                            }
+                        }
+                        catch { }
                     }
                 }
 
@@ -241,26 +261,58 @@ namespace NoteNest.UI.Controls
             _isUpdating = true;
             try
             {
+                // SAFETY CHECK: Only remove if this is a single-paragraph list item
+                int blockCount = 0;
+                foreach (var block in li.Blocks)
+                {
+                    blockCount++;
+                    if (blockCount > 1)
+                    {
+                        // Multiple blocks - only remove the empty paragraph, not the whole item
+                        li.Blocks.Remove(para);
+                        
+                        // Position caret at the next block
+                        if (li.Blocks.FirstBlock is Block nextBlock)
+                        {
+                            if (nextBlock is Paragraph nextPara)
+                                CaretPosition = nextPara.ContentStart;
+                            else
+                                CaretPosition = Document.ContentEnd;
+                        }
+                        return;
+                    }
+                }
+                
+                // Single block - safe to remove entire list item
                 int index = GetListItemIndex(list, li);
                 var parentBlocks = GetParentBlockCollection(list);
                 
-                // Remove the empty list item
                 list.ListItems.Remove(li);
                 
-                // Determine where to position caret
+                // Position caret appropriately
                 if (GetListItemCount(list) > 0)
                 {
-                    // Move to previous item if exists
                     if (index > 0)
                     {
                         var prevItem = GetListItemAt(list, index - 1);
-                        if (prevItem?.Blocks.LastBlock is Paragraph prevPara)
+                        
+                        // Check for nested list in previous item
+                        if (prevItem?.Blocks.LastBlock is List nestedList && 
+                            GetListItemCount(nestedList) > 0)
+                        {
+                            var lastNestedItem = GetListItemAt(nestedList, GetListItemCount(nestedList) - 1);
+                            if (lastNestedItem?.Blocks.LastBlock is Paragraph lastPara)
+                            {
+                                CaretPosition = lastPara.ContentEnd;
+                                return;
+                            }
+                        }
+                        else if (prevItem?.Blocks.LastBlock is Paragraph prevPara)
                         {
                             CaretPosition = prevPara.ContentEnd;
                             return;
                         }
                     }
-                    // Or move to next item (now at same index)
                     else
                     {
                         var nextItem = GetListItemAt(list, 0);
@@ -273,19 +325,26 @@ namespace NoteNest.UI.Controls
                 }
                 else
                 {
-                    // List is now empty, remove it and create a paragraph
-                    if (parentBlocks != null)
+                    // List is now empty
+                    if (list.Parent is ListItem parentItem)
                     {
+                        // Nested list - remove it without deleting parent
+                        parentItem.Blocks.Remove(list);
+                        
+                        if (parentItem.Blocks.FirstBlock is Paragraph parentPara)
+                        {
+                            CaretPosition = parentPara.ContentEnd;
+                        }
+                    }
+                    else if (parentBlocks != null)
+                    {
+                        // Root list - replace with paragraph
                         var newPara = new Paragraph();
                         parentBlocks.InsertAfter(list, newPara);
                         parentBlocks.Remove(list);
                         CaretPosition = newPara.ContentStart;
-                        return;
                     }
                 }
-                
-                // Fallback
-                CaretPosition = Document.ContentEnd;
             }
             finally
             {
@@ -352,39 +411,75 @@ namespace NoteNest.UI.Controls
 
         private bool TryOutdentListItem(ListItem item, List list)
         {
-            // If nested: move item to the parent list after its container list item
-            if (list.Parent is ListItem parentItem)
+            // Preserve content BEFORE any operations
+            Paragraph paragraphToPreserve = null;
+            string contentToPreserve = null;
+            
+            if (item.Blocks.FirstBlock is Paragraph p)
             {
-                if (parentItem.Parent is not List grandParentList) return false;
-                int insertIndex = GetListItemIndex(grandParentList, parentItem) + 1;
-                try { list.ListItems.Remove(item); } catch { }
-                InsertListItemAt(grandParentList, insertIndex, item);
-
-                // Clean up empty nested list
+                paragraphToPreserve = p;
+                var range = new TextRange(p.ContentStart, p.ContentEnd);
+                contentToPreserve = range.Text;
+            }
+            
+            // If nested: move item to parent list SAFELY
+            if (list.Parent is ListItem parentItem && parentItem.Parent is List grandParentList)
+            {
                 try
                 {
+                    int insertIndex = GetListItemIndex(grandParentList, parentItem) + 1;
+                    
+                    // Create a NEW list item to avoid reference corruption
+                    var newItem = new ListItem();
+                    
+                    // Copy ALL blocks from original item to new item
+                    var blocksToMove = item.Blocks.ToList();
+                    foreach (var block in blocksToMove)
+                    {
+                        item.Blocks.Remove(block);
+                        newItem.Blocks.Add(block);
+                    }
+                    
+                    // Remove from nested list
+                    list.ListItems.Remove(item);
+                    
+                    // Add to parent list
+                    InsertListItemAt(grandParentList, insertIndex, newItem);
+                    
+                    // Clean up empty nested list WITHOUT deleting parent content
                     if (GetListItemCount(list) == 0)
                     {
                         parentItem.Blocks.Remove(list);
+                        
+                        // If parent item is now completely empty, add placeholder
+                        if (!parentItem.Blocks.Any())
+                        {
+                            parentItem.Blocks.Add(new Paragraph());
+                        }
                     }
+                    
+                    // Position caret in the moved item
+                    if (newItem.Blocks.FirstBlock is Paragraph newItemPara)
+                    {
+                        CaretPosition = newItemPara.ContentStart;
+                    }
+                    
+                    return true;
                 }
-                catch { }
-
-                if (item.Blocks.FirstBlock is Paragraph p)
+                catch (Exception ex)
                 {
-                    p.Margin = new Thickness(0);
-                    CaretPosition = p.ContentStart;
+                    System.Diagnostics.Debug.WriteLine($"[ERROR] Outdent failed: {ex.Message}");
+                    return false;
                 }
-                return true;
             }
-
-            // Root-level: convert to paragraph
-            if (item.Blocks.FirstBlock is Paragraph rootPara)
+            
+            // At root level: convert to paragraph
+            if (paragraphToPreserve != null)
             {
-                ConvertListItemToParagraph(rootPara, mergeWithPreviousIfParagraph: false);
+                ConvertListItemToParagraph(paragraphToPreserve, mergeWithPreviousIfParagraph: false);
                 return true;
             }
-
+            
             return false;
         }
 
