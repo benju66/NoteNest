@@ -144,6 +144,7 @@ namespace NoteNest.UI.Controls
 
         private void HandleBackspaceKey(KeyEventArgs e)
         {
+            // Only handle special list behavior if we're in a list
             var para = CaretPosition?.Paragraph;
             if (para?.Parent is not ListItem li || li.Parent is not List list) 
                 return;
@@ -152,6 +153,7 @@ namespace NoteNest.UI.Controls
             if (!IsAtListItemStart()) 
                 return;
             
+            // Now we know we're at the start of a list item, so handle it specially
             e.Handled = true;
             _isUpdating = true;
             
@@ -173,6 +175,9 @@ namespace NoteNest.UI.Controls
             finally
             {
                 _isUpdating = false;
+                // Force markdown update after list structure change
+                _debounceTimer.Stop();
+                _debounceTimer.Start();
             }
         }
 
@@ -458,6 +463,14 @@ namespace NoteNest.UI.Controls
 
         private bool TryIndentListItem(ListItem item, List parentList)
         {
+            // Save current caret position relative to the paragraph
+            int caretOffset = 0;
+            if (item.Blocks.FirstBlock is Paragraph itemPara && CaretPosition != null)
+            {
+                var range = new TextRange(itemPara.ContentStart, CaretPosition);
+                caretOffset = range.Text.Length;
+            }
+            
             int index = GetListItemIndex(parentList, item);
             
             // Allow indenting ANY item, including the first
@@ -502,10 +515,18 @@ namespace NoteNest.UI.Controls
             // Apply hanging indent to the moved item
             ListFormatting.ApplyHangingIndentToListItem(item);
             
-            // Keep caret in same position
+            // Restore caret position
             if (item.Blocks.FirstBlock is Paragraph p)
             {
-                CaretPosition = p.ContentStart;
+                var newPosition = p.ContentStart;
+                for (int i = 0; i < caretOffset && newPosition != null; i++)
+                {
+                    newPosition = newPosition.GetNextInsertionPosition(LogicalDirection.Forward);
+                }
+                if (newPosition != null)
+                    CaretPosition = newPosition;
+                else
+                    CaretPosition = p.ContentStart;
             }
             
             return true;
@@ -513,6 +534,14 @@ namespace NoteNest.UI.Controls
 
         private bool TryOutdentListItem(ListItem item, List list)
         {
+            // Save current caret position relative to the paragraph
+            int caretOffset = 0;
+            if (item.Blocks.FirstBlock is Paragraph itemPara && CaretPosition != null)
+            {
+                var range = new TextRange(itemPara.ContentStart, CaretPosition);
+                caretOffset = range.Text.Length;
+            }
+            
             // If in nested list, move to parent
             if (list.Parent is ListItem parentItem && 
                 parentItem.Parent is List grandParentList)
@@ -528,13 +557,25 @@ namespace NoteNest.UI.Controls
                     parentItem.Blocks.Remove(list);
                 }
                 
+                // Restore caret position
+                if (item.Blocks.FirstBlock is Paragraph para)
+                {
+                    var newPosition = para.ContentStart;
+                    for (int i = 0; i < caretOffset && newPosition != null; i++)
+                    {
+                        newPosition = newPosition.GetNextInsertionPosition(LogicalDirection.Forward);
+                    }
+                    if (newPosition != null)
+                        CaretPosition = newPosition;
+                }
+                
                 return true;
             }
             
             // At root level - convert to paragraph
-            if (item.Blocks.FirstBlock is Paragraph para)
+            if (item.Blocks.FirstBlock is Paragraph rootPara)
             {
-                ConvertListItemToParagraph(para, false);
+                ConvertListItemToParagraph(rootPara, false);
                 return true;
             }
             
@@ -621,12 +662,20 @@ namespace NoteNest.UI.Controls
             var para = CaretPosition?.Paragraph;
             if (para?.Parent is not ListItem) return false;
             
-            // Check if we have any actual content before the caret
-            var range = new TextRange(para.ContentStart, CaretPosition);
-            var textBeforeCaret = range.Text;
-            
-            // We're at start only if there's NO text before caret
-            return string.IsNullOrEmpty(textBeforeCaret);
+            try
+            {
+                // Check if we have any actual content before the caret
+                var range = new TextRange(para.ContentStart, CaretPosition);
+                var textBeforeCaret = range.Text;
+                
+                // We're at start only if there's NO text before caret
+                return string.IsNullOrEmpty(textBeforeCaret);
+            }
+            catch
+            {
+                // If we can't determine position, assume we're not at start
+                return false;
+            }
         }
 
         private bool IsAtListItemEnd()

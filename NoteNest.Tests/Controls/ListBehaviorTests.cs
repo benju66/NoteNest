@@ -44,12 +44,12 @@ namespace NoteNest.Tests.Controls
             
             // First Enter - should create empty item
             SimulateKey(editor, Key.Enter);
-            Assert.AreEqual(2, list.ListItems.Count, "First Enter should create a new list item");
+            Assert.That(GetListItemCount(list), Is.EqualTo(2), "First Enter should create a new list item");
             
             // Second Enter - should exit list
             SimulateKey(editor, Key.Enter);
-            Assert.AreEqual(2, editor.Document.Blocks.Count, "Second Enter should exit list and create paragraph");
-            Assert.IsInstanceOfType(editor.Document.Blocks.LastBlock, typeof(Paragraph), "Should create a paragraph after list");
+            Assert.That(editor.Document.Blocks.Count, Is.EqualTo(2), "Second Enter should exit list and create paragraph");
+            Assert.That(editor.Document.Blocks.LastBlock, Is.TypeOf<Paragraph>(), "Should create a paragraph after list");
         }
 
         [Test]
@@ -74,7 +74,7 @@ namespace NoteNest.Tests.Controls
             
             // Backspace should remove the empty item
             SimulateKey(editor, Key.Back);
-            Assert.AreEqual(1, list.ListItems.Count, "Backspace should remove empty list item");
+            Assert.That(GetListItemCount(list), Is.EqualTo(1), "Backspace should remove empty list item");
         }
 
         [Test]
@@ -96,8 +96,8 @@ namespace NoteNest.Tests.Controls
             
             // Backspace should convert to paragraph
             SimulateKey(editor, Key.Back);
-            Assert.AreEqual(2, editor.Document.Blocks.Count, "Should have list and new paragraph");
-            Assert.IsInstanceOfType(editor.Document.Blocks.LastBlock, typeof(Paragraph), "Should convert to paragraph");
+            Assert.That(editor.Document.Blocks.Count, Is.EqualTo(2), "Should have list and new paragraph");
+            Assert.That(editor.Document.Blocks.LastBlock, Is.TypeOf<Paragraph>(), "Should convert to paragraph");
         }
 
         [Test]
@@ -124,7 +124,7 @@ namespace NoteNest.Tests.Controls
             SimulateKey(editor, Key.Tab);
             
             // Second item should now be nested under first
-            Assert.AreEqual(1, list.ListItems.Count, "Root list should have one item");
+            Assert.That(GetListItemCount(list), Is.EqualTo(1), "Root list should have one item");
             
             // Check for nested list in first item
             ListItem firstItem = null;
@@ -134,7 +134,7 @@ namespace NoteNest.Tests.Controls
                 break;
             }
             
-            Assert.IsNotNull(firstItem, "First item should exist");
+            Assert.That(firstItem, Is.Not.Null, "First item should exist");
             
             // Look for nested list
             List nestedList = null;
@@ -147,8 +147,8 @@ namespace NoteNest.Tests.Controls
                 }
             }
             
-            Assert.IsNotNull(nestedList, "First item should contain nested list");
-            Assert.AreEqual(1, GetListItemCount(nestedList), "Nested list should contain the indented item");
+            Assert.That(nestedList, Is.Not.Null, "First item should contain nested list");
+            Assert.That(GetListItemCount(nestedList), Is.EqualTo(1), "Nested list should contain the indented item");
         }
 
         [Test]
@@ -171,7 +171,7 @@ namespace NoteNest.Tests.Controls
             SimulateKey(editor, Key.Tab);
             
             // Should have a container item and nested list
-            Assert.AreEqual(1, list.ListItems.Count, "Should have container item");
+            Assert.That(GetListItemCount(list), Is.EqualTo(1), "Should have container item");
         }
 
         private int GetListItemCount(List list)
