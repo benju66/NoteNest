@@ -36,7 +36,9 @@ namespace NoteNest.UI.Services
                 sp.GetService<IContentPersistenceLog>()));
             services.AddSingleton<IWorkspaceStateService>(sp => new WorkspaceStateService(
                 sp.GetRequiredService<NoteService>(),
-                sp.GetRequiredService<ISafeContentBuffer>()));
+                sp.GetRequiredService<ISafeContentBuffer>(),
+                sp.GetService<IStateManager>(),
+                sp.GetService<IFileSystemProvider>()));
             services.AddSingleton<ITabPersistenceService>(sp => new TabPersistenceService(
                 sp.GetRequiredService<ConfigurationService>(),
                 sp.GetRequiredService<IAppLogger>(),

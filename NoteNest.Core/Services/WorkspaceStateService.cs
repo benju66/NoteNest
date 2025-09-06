@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Models;
 using System.Threading;
+using NoteNest.Core.Interfaces;
 
 namespace NoteNest.Core.Services
 {
@@ -29,6 +30,10 @@ namespace NoteNest.Core.Services
         bool IsNoteDetached(string noteId);
         string? GetNoteWindowKey(string noteId);
         void ClearWindowAssociation(string noteId);
+        
+        // Conflict resolution
+        Task<bool> CheckForExternalChangesAsync(string noteId);
+        Task<bool> ReloadFromDiskAsync(string noteId);
     }
 
     public class WorkspaceNote
@@ -39,6 +44,7 @@ namespace NoteNest.Core.Services
         public string CurrentContent { get; set; } = string.Empty;
         public DateTime OpenedAt { get; set; }
         public DateTime? LastSavedAt { get; set; }
+        public DateTime FileLastModified { get; set; } // Track file's last modified time at open/save
         public bool IsDirty => !string.Equals(OriginalContent, CurrentContent, StringComparison.Ordinal);
     }
 
@@ -68,6 +74,7 @@ namespace NoteNest.Core.Services
     {
         private readonly NoteService _noteService;
         private readonly ISafeContentBuffer _contentBuffer;
+        private readonly IStateManager? _stateManager;
         private readonly Dictionary<string, WorkspaceNote> _openNotes = new();
         private readonly object _noteLock = new object();
         private string? _activeNoteId;
@@ -97,11 +104,15 @@ namespace NoteNest.Core.Services
             }
         }
 
-        public WorkspaceStateService(NoteService noteService, ISafeContentBuffer? contentBuffer = null)
+        public WorkspaceStateService(NoteService noteService, ISafeContentBuffer? contentBuffer = null, IStateManager? stateManager = null, IFileSystemProvider? fileSystem = null)
         {
             _noteService = noteService;
             _contentBuffer = contentBuffer ?? new SafeContentBuffer();
+            _stateManager = stateManager;
+            _fileSystem = fileSystem ?? new DefaultFileSystemProvider();
         }
+        
+        private readonly IFileSystemProvider _fileSystem;
 
         public async Task<WorkspaceNote> OpenNoteAsync(NoteModel note)
         {
@@ -114,13 +125,22 @@ namespace NoteNest.Core.Services
                 }
             }
 
+            // Get current file modification time
+            DateTime fileLastModified = note.LastModified;
+            if (await _fileSystem.ExistsAsync(note.FilePath))
+            {
+                var info = await _fileSystem.GetFileInfoAsync(note.FilePath);
+                fileLastModified = info.LastWriteTime;
+            }
+
             var wn = new WorkspaceNote
             {
                 NoteId = note.Id,
                 Model = note,
                 OriginalContent = note.Content ?? string.Empty,
                 CurrentContent = note.Content ?? string.Empty,
-                OpenedAt = DateTime.Now
+                OpenedAt = DateTime.Now,
+                FileLastModified = fileLastModified
             };
             lock (_noteLock)
             {
@@ -197,6 +217,9 @@ namespace NoteNest.Core.Services
                     return new SaveResult { Success = false, NoteId = noteId, ErrorMessage = "Note not open" };
                 }
             }
+            
+            // Report save starting
+            _stateManager?.ReportProgress($"Saving {note.Model.Title}...");
             if (!note.IsDirty)
             {
                 var ts = DateTime.Now;
@@ -213,28 +236,71 @@ namespace NoteNest.Core.Services
                 note.CurrentContent = bufferedContent;
             }
             
+            // Check for external modifications (conflict detection)
+            if (await _fileSystem.ExistsAsync(note.Model.FilePath))
+            {
+                var info = await _fileSystem.GetFileInfoAsync(note.Model.FilePath);
+                if (info.LastWriteTime > note.FileLastModified)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[State][CONFLICT] External modification detected for noteId={noteId} at={DateTime.Now:HH:mm:ss.fff}");
+                    _stateManager?.ReportProgress($"External change detected for {note.Model.Title}. Save cancelled.");
+                    saveLock.Release();
+                    return new SaveResult { Success = false, NoteId = noteId, ErrorMessage = "File has been modified externally. Please reload to avoid data loss." };
+                }
+            }
+            
             // On save, push state content into the model that hits disk
             note.Model.Content = note.CurrentContent ?? string.Empty;
-            try
+            
+            // Retry logic with exponential backoff
+            const int maxRetries = 3;
+            int retryDelayMs = 100;
+            Exception? lastException = null;
+            
+            for (int attempt = 0; attempt < maxRetries; attempt++)
             {
-                await _noteService.SaveNoteAsync(note.Model);
+                try
+                {
+                    await _noteService.SaveNoteAsync(note.Model);
+                    lastException = null;
+                    break; // Success!
+                }
+                catch (Exception ex)
+                {
+                    lastException = ex;
+                    System.Diagnostics.Debug.WriteLine($"[State][ERROR] SaveNoteAsync noteId={noteId} attempt {attempt + 1}/{maxRetries} threw: {ex.Message} at={DateTime.Now:HH:mm:ss.fff}");
+                    
+                    if (attempt < maxRetries - 1)
+                    {
+                        _stateManager?.ReportProgress($"Save failed, retrying... ({attempt + 2}/{maxRetries})");
+                        await Task.Delay(retryDelayMs);
+                        retryDelayMs *= 2; // Exponential backoff: 100ms, 200ms, 400ms
+                    }
+                }
             }
-            catch (Exception ex)
+            
+            if (lastException != null)
             {
-                System.Diagnostics.Debug.WriteLine($"[State][ERROR] SaveNoteAsync noteId={noteId} threw: {ex.Message} at={DateTime.Now:HH:mm:ss.fff}");
+                System.Diagnostics.Debug.WriteLine($"[State][ERROR] SaveNoteAsync noteId={noteId} failed after {maxRetries} attempts at={DateTime.Now:HH:mm:ss.fff}");
+                _stateManager?.ReportProgress($"Failed to save {note.Model.Title}: {lastException.Message}");
                 saveLock.Release();
-                return new SaveResult { Success = false, NoteId = noteId, ErrorMessage = ex.Message };
+                return new SaveResult { Success = false, NoteId = noteId, ErrorMessage = lastException.Message };
             }
             lock (_noteLock)
             {
                 note.OriginalContent = note.CurrentContent;
                 note.LastSavedAt = note.Model.LastModified;
+                // Update tracked file modification time after successful save
+                note.FileLastModified = note.Model.LastModified;
             }
             NoteStateChanged?.Invoke(this, new NoteStateChangedEventArgs { NoteId = noteId, IsDirty = false });
             System.Diagnostics.Debug.WriteLine($"[State] SaveNoteAsync OK noteId={noteId} savedAt={note.Model.LastModified:HH:mm:ss.fff} len={note.OriginalContent?.Length ?? 0}");
             
             // Clear buffer after successful save
             _contentBuffer.ClearBuffer(noteId);
+            
+            // Report save completed
+            _stateManager?.ReportProgress($"Saved {note.Model.Title}");
             
             saveLock.Release();
             return new SaveResult { Success = true, NoteId = noteId, SavedAt = note.Model.LastModified };
@@ -244,6 +310,11 @@ namespace NoteNest.Core.Services
         {
             System.Diagnostics.Debug.WriteLine($"[State] SaveAllDirtyNotesAsync START at={DateTime.Now:HH:mm:ss.fff}");
             var dirty = GetDirtyNotes().Select(d => d.NoteId).ToList();
+            
+            if (dirty.Count > 0)
+            {
+                _stateManager?.ReportProgress($"Saving {dirty.Count} note{(dirty.Count > 1 ? "s" : "")}...");
+            }
             var results = new List<SaveResult>();
             using var gate = new System.Threading.SemaphoreSlim(maxParallel);
             var tasks = dirty.Select(async id =>
@@ -268,6 +339,17 @@ namespace NoteNest.Core.Services
                 Results = results
             };
             System.Diagnostics.Debug.WriteLine($"[State] SaveAllDirtyNotesAsync END success={batch.SuccessCount} fail={batch.FailureCount} at={DateTime.Now:HH:mm:ss.fff}");
+            
+            // Report batch save result
+            if (batch.FailureCount > 0)
+            {
+                _stateManager?.ReportProgress($"Saved {batch.SuccessCount} notes, {batch.FailureCount} failed");
+            }
+            else if (batch.SuccessCount > 0)
+            {
+                _stateManager?.ReportProgress($"All notes saved");
+            }
+            
             return batch;
         }
 
@@ -306,6 +388,64 @@ namespace NoteNest.Core.Services
         {
             if (string.IsNullOrEmpty(noteId)) return;
             _windowTracking.TryRemove(noteId, out _);
+        }
+        
+        public async Task<bool> CheckForExternalChangesAsync(string noteId)
+        {
+            WorkspaceNote note;
+            lock (_noteLock)
+            {
+                if (!_openNotes.TryGetValue(noteId, out note))
+                {
+                    return false;
+                }
+            }
+            
+            if (await _fileSystem.ExistsAsync(note.Model.FilePath))
+            {
+                var info = await _fileSystem.GetFileInfoAsync(note.Model.FilePath);
+                return info.LastWriteTime > note.FileLastModified;
+            }
+            
+            return false;
+        }
+        
+        public async Task<bool> ReloadFromDiskAsync(string noteId)
+        {
+            WorkspaceNote note;
+            lock (_noteLock)
+            {
+                if (!_openNotes.TryGetValue(noteId, out note))
+                {
+                    return false;
+                }
+            }
+            
+            try
+            {
+                // Reload the note from disk
+                var reloadedNote = await _noteService.LoadNoteAsync(note.Model.FilePath);
+                if (reloadedNote != null)
+                {
+                    lock (_noteLock)
+                    {
+                        note.Model = reloadedNote;
+                        note.OriginalContent = reloadedNote.Content ?? string.Empty;
+                        note.CurrentContent = reloadedNote.Content ?? string.Empty;
+                        note.FileLastModified = reloadedNote.LastModified;
+                    }
+                    
+                    NoteStateChanged?.Invoke(this, new NoteStateChangedEventArgs { NoteId = noteId, IsDirty = false });
+                    _stateManager?.ReportProgress($"Reloaded {note.Model.Title} from disk");
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _stateManager?.ReportProgress($"Failed to reload {note.Model.Title}: {ex.Message}");
+            }
+            
+            return false;
         }
     }
 }

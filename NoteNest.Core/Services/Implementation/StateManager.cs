@@ -3,6 +3,8 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services.Logging;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace NoteNest.Core.Services.Implementation
 {
@@ -11,6 +13,7 @@ namespace NoteNest.Core.Services.Implementation
         private readonly IAppLogger _logger;
         private bool _isLoading;
         private string _statusMessage;
+        private CancellationTokenSource? _statusClearCts;
         
         public bool IsLoading
         {
@@ -91,11 +94,38 @@ namespace NoteNest.Core.Services.Implementation
         public void ReportProgress(string message)
         {
             StatusMessage = message;
+            // Auto-clear after 3 seconds
+            ScheduleStatusClear(3000);
         }
         
         public void ClearStatus()
         {
+            _statusClearCts?.Cancel();
             StatusMessage = string.Empty;
+        }
+        
+        private void ScheduleStatusClear(int delayMs)
+        {
+            // Cancel any existing clear operation
+            _statusClearCts?.Cancel();
+            _statusClearCts = new CancellationTokenSource();
+            
+            var token = _statusClearCts.Token;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delayMs, token);
+                    if (!token.IsCancellationRequested)
+                    {
+                        StatusMessage = "Ready";
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                    // Expected when cancelled
+                }
+            });
         }
     }
 }
