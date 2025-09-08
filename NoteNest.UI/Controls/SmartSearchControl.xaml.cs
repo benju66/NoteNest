@@ -114,7 +114,23 @@ namespace NoteNest.UI.Controls
         {
             try
             {
-                if (e.SelectedItem is string suggestion)
+                if (e.SelectedItem is SearchResultViewModel result)
+                {
+                    _logger.Debug($"Search result chosen: {result.Title}");
+                    
+                    // Update the search query to show the selected result
+                    if (ViewModel != null)
+                    {
+                        ViewModel.SearchQuery = result.DisplayTitle;
+                    }
+                    
+                    // Trigger the result selection
+                    if (ViewModel?.SelectResultCommand?.CanExecute(result) == true)
+                    {
+                        ViewModel.SelectResultCommand.Execute(result);
+                    }
+                }
+                else if (e.SelectedItem is string suggestion)
                 {
                     _logger.Debug($"Search suggestion chosen: {suggestion}");
                     
@@ -148,27 +164,6 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        // Result click handling
-        private void OnResultClicked(object sender, MouseButtonEventArgs e)
-        {
-            try
-            {
-                if (sender is FrameworkElement element && element.DataContext is SearchResultViewModel result)
-                {
-                    _logger.Debug($"Search result clicked: {result.Title}");
-                    
-                    // Trigger the selection command
-                    if (ViewModel?.SelectResultCommand?.CanExecute(result) == true)
-                    {
-                        ViewModel.SelectResultCommand.Execute(result);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error handling result click");
-            }
-        }
 
         // Public methods for external control
         public void FocusSearchBox()

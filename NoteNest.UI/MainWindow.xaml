@@ -40,7 +40,6 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
@@ -178,18 +177,10 @@
             </MenuItem>
             </Menu>
 
-            <!-- Smart Search Control in title bar -->
-            <controls:SmartSearchControl x:Name="SearchControl"
-                                        Grid.Column="2"
-                                        VerticalAlignment="Center"
-                                        Margin="12,0,12,0"
-                                        MaxWidth="300"
-                                        shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                                        ResultSelected="OnSearchResultSelected"/>
 
             <!-- Right panel toggle just left of caption buttons -->
             <ToggleButton x:Name="RightPanelToggle"
-                          Grid.Column="4"
+                          Grid.Column="3"
                           Width="28"
                           Height="{x:Static SystemParameters.WindowCaptionHeight}"
                           Margin="6,0,6,0"
@@ -209,8 +200,8 @@
                            HorizontalAlignment="Center"/>
             </ToggleButton>
             
-            <!-- Drag/double-click spacer region between search and toggle -->
-            <Border Grid.Column="3"
+            <!-- Drag/double-click spacer region between menu and toggle -->
+            <Border Grid.Column="2"
                     Background="Transparent"
                     shell:WindowChrome.IsHitTestVisibleInChrome="False"/>
         </Grid>

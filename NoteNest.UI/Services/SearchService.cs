@@ -124,7 +124,7 @@ namespace NoteNest.UI.Services
                 cancellationToken.ThrowIfCancellationRequested();
                 
                 // Get all categories and notes - simplified approach
-                var allCategories = GetAllCategories();
+                var allCategories = await GetAllCategoriesAsync();
                 var allNotes = await GetAllNotesAsync();
                 
                 cancellationToken.ThrowIfCancellationRequested();
@@ -149,12 +149,12 @@ namespace NoteNest.UI.Services
             }
         }
 
-        private List<CategoryModel> GetAllCategories()
+        private async Task<List<CategoryModel>> GetAllCategoriesAsync()
         {
             try
             {
                 // Use existing NoteService to get categories
-                return _noteService.LoadCategoriesAsync(_configService.Settings.MetadataPath).Result ?? new List<CategoryModel>();
+                return await _noteService.LoadCategoriesAsync(_configService.Settings.MetadataPath) ?? new List<CategoryModel>();
             }
             catch (Exception ex)
             {
@@ -168,7 +168,7 @@ namespace NoteNest.UI.Services
             try
             {
                 var allNotes = new List<NoteModel>();
-                var categories = GetAllCategories();
+                var categories = await GetAllCategoriesAsync();
                 
                 foreach (var category in categories)
                 {

@@ -24,7 +24,6 @@ namespace NoteNest.UI.ViewModels
         
         // Collections
         private ObservableCollection<SearchResultViewModel> _searchResults;
-        private ObservableCollection<string> _suggestions;
         
         // Properties
         public string SearchQuery
@@ -46,11 +45,6 @@ namespace NoteNest.UI.ViewModels
             private set => SetProperty(ref _searchResults, value);
         }
         
-        public ObservableCollection<string> Suggestions
-        {
-            get => _suggestions;
-            private set => SetProperty(ref _suggestions, value);
-        }
         
         public bool IsSearching
         {
@@ -76,7 +70,7 @@ namespace NoteNest.UI.ViewModels
             private set => SetProperty(ref _statusText, value);
         }
         
-        public bool ShowNoResults => !IsSearching && !HasResults && !string.IsNullOrWhiteSpace(SearchQuery);
+        public bool ShowNoResults => !IsSearching && !HasResults && !string.IsNullOrWhiteSpace(SearchQuery) && SearchQuery.Length > 2;
 
         // Events
         public event EventHandler<SearchResultSelectedEventArgs>? ResultSelected;
@@ -93,7 +87,6 @@ namespace NoteNest.UI.ViewModels
             
             _cancellationTokenSource = new CancellationTokenSource();
             _searchResults = new ObservableCollection<SearchResultViewModel>();
-            _suggestions = new ObservableCollection<string>();
             
             // Fast 200ms debounce for responsive search
             _debounceTimer = new DispatcherTimer
@@ -103,6 +96,11 @@ namespace NoteNest.UI.ViewModels
             _debounceTimer.Tick += OnDebounceTimerTick;
             
             InitializeCommands();
+            
+            // Initialize collections and ensure binding works
+            SearchResults = _searchResults;
+            
+            _logger.Debug("SearchViewModel initialized successfully");
         }
 
         private void InitializeCommands()
@@ -125,28 +123,6 @@ namespace NoteNest.UI.ViewModels
             // Start debounce timer
             _debounceTimer.Start();
             
-            // Update suggestions immediately for better UX
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    var suggestions = await _searchService.GetSuggestionsAsync(SearchQuery, 5);
-                    
-                    // Update on UI thread
-                    Dispatcher.CurrentDispatcher.BeginInvoke(() =>
-                    {
-                        Suggestions.Clear();
-                        foreach (var suggestion in suggestions)
-                        {
-                            Suggestions.Add(suggestion);
-                        }
-                    });
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "Failed to get search suggestions");
-                }
-            });
         }
 
         private async void OnDebounceTimerTick(object? sender, EventArgs e)
@@ -204,7 +180,6 @@ namespace NoteNest.UI.ViewModels
         private void ClearSearch()
         {
             SearchResults.Clear();
-            Suggestions.Clear();
             HasResults = false;
             StatusText = "Start typing to search...";
             IsSearching = false;
