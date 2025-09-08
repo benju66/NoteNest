@@ -50,18 +50,26 @@ namespace NoteNest.UI.ViewModels
                     state?.UpdateNoteContent(_note.Id, newValue);
                     System.Diagnostics.Debug.WriteLine($"[Tab] Content set noteId={_note?.Id} len={newValue.Length} at={DateTime.Now:HH:mm:ss.fff}");
                     
-                    // Only update dirty state if this is not the initial load
-                    if (_initialLoadComplete)
+                    // Always check dirty state when content changes
+                    // This ensures persistent tabs properly track changes even during initial load
+                    if (state != null && state.OpenNotes.TryGetValue(_note.Id, out var wn))
                     {
-                        // Determine dirty by comparing with state's OriginalContent
-                        if (state != null && state.OpenNotes.TryGetValue(_note.Id, out var wn))
-                        {
-                            IsDirty = !string.Equals(wn.OriginalContent ?? string.Empty, newValue ?? string.Empty, StringComparison.Ordinal);
-                        }
-                        else
+                        var isContentChanged = !string.Equals(wn.OriginalContent ?? string.Empty, newValue ?? string.Empty, StringComparison.Ordinal);
+                        if (isContentChanged)
                         {
                             IsDirty = true;
                         }
+                        else if (_initialLoadComplete)
+                        {
+                            // Only mark as clean if we're past initial load
+                            // This prevents clearing dirty state during initialization
+                            IsDirty = false;
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(newValue))
+                    {
+                        // If we have content but no state tracking yet, mark as dirty to be safe
+                        IsDirty = true;
                     }
                 }
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Tab][ERROR] Content set failed: {ex.Message}"); }

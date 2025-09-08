@@ -1696,6 +1696,23 @@ namespace NoteNest.UI.Controls
             }
         }
 
+        /// <summary>
+        /// Forces immediate flush of any pending content updates.
+        /// Should be called before tab close or app shutdown.
+        /// </summary>
+        public void FlushPendingContent()
+        {
+            if (_debounceTimer.IsEnabled)
+            {
+                _debounceTimer.Stop();
+                if (_hasUnsavedChanges)
+                {
+                    PushDocumentToMarkdown();
+                    _hasUnsavedChanges = false;
+                }
+            }
+        }
+
         private void PushDocumentToMarkdown()
         {
             _isUpdating = true;

@@ -229,6 +229,10 @@ namespace NoteNest.UI.Controls
                             var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(oldTab) as TabItem;
                             var presenter = FindVisualChild<ContentPresenter>(container);
                             var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                            
+                            // First flush any pending content from the editor's debounce timer
+                            editor?.FlushPendingContent();
+                            
                             var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
                             binding?.UpdateSource();
                         }
@@ -493,6 +497,48 @@ namespace NoteNest.UI.Controls
             await SaveTabAsync(tab);
         }
 
+        /// <summary>
+        /// Flushes all pending content from all tabs in this pane.
+        /// Called during app shutdown to ensure no content is lost.
+        /// </summary>
+        public void FlushAllPendingContent()
+        {
+            try
+            {
+                foreach (var tab in Pane?.Tabs ?? Enumerable.Empty<ITabItem>())
+                {
+                    try
+                    {
+                        var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
+                        var presenter = FindVisualChild<ContentPresenter>(container);
+                        var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                        
+                        // Flush any pending content
+                        editor?.FlushPendingContent();
+                        
+                        // Force binding update
+                        var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
+                        binding?.UpdateSource();
+                        
+                        // Ensure content is pushed to state
+                        if (tab is NoteNest.UI.ViewModels.NoteTabItem nti && _stateService != null)
+                        {
+                            var content = editor?.MarkdownContent ?? nti.Content ?? string.Empty;
+                            _stateService.UpdateNoteContent(tab.Note.Id, content);
+                        }
+                    }
+                    catch
+                    {
+                        // Best effort - continue with other tabs
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort
+            }
+        }
+
         private async System.Threading.Tasks.Task SaveTabAsync(ITabItem tab)
         {
             if (tab?.Note == null || _stateService == null) return;
@@ -503,6 +549,10 @@ namespace NoteNest.UI.Controls
                     var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(nti) as TabItem;
                     var presenter = FindVisualChild<ContentPresenter>(container);
                     var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                    
+                    // First flush any pending content from the editor's debounce timer
+                    editor?.FlushPendingContent();
+                    
                     var content = editor?.MarkdownContent ?? nti.Content ?? string.Empty;
                     nti.Content = content;
                     _stateService.UpdateNoteContent(tab.Note.Id, content);
@@ -537,7 +587,7 @@ namespace NoteNest.UI.Controls
             catch { }
         }
 
-        private async void SmartEditor_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        private void SmartEditor_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
             var configService = _configService;
             if (configService?.Settings?.AutoSaveIdleMs > 0)
@@ -610,7 +660,7 @@ namespace NoteNest.UI.Controls
                         editor.Document.ContentEnd).Text;
                     
                     // Get content buffer from state service (it manages the buffer)
-                    System.Threading.Tasks.Task.Run(() => 
+                    _ = System.Threading.Tasks.Task.Run(() => 
                     {
                         try
                         {
@@ -646,6 +696,10 @@ namespace NoteNest.UI.Controls
                             var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
                             var presenter = FindVisualChild<ContentPresenter>(container);
                             var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                            
+                            // First flush any pending content from the editor's debounce timer
+                            editor?.FlushPendingContent();
+                            
                             var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
                             binding?.UpdateSource();
                         }
@@ -739,7 +793,7 @@ namespace NoteNest.UI.Controls
                         var editor = FindVisualChild<FormattedTextEditor>(presenter);
                         
                         // CRITICAL: Force flush debounce timer to ensure content is saved
-                        editor?.ForceFlushContent();
+                        editor?.FlushPendingContent();
                         
                         // Then flush binding
                         var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
