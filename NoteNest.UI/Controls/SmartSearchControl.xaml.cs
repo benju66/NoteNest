@@ -117,16 +117,22 @@ namespace NoteNest.UI.Controls
             }
         }
 
+        private bool _isNavigatingWithArrows = false;
+        
         private void OnSuggestionChosen(object sender, AutoSuggestBoxSuggestionChosenEventArgs e)
         {
             try
             {
+                // Ignore selection if navigating with arrow keys
+                if (_isNavigatingWithArrows)
+                {
+                    _logger.Debug("Ignoring suggestion chosen during arrow navigation");
+                    return;
+                }
+                
                 if (e.SelectedItem is SearchResultViewModel result)
                 {
                     _logger.Debug($"Search result chosen: {result.Title}");
-                    
-                    // Don't update the search query - keep the user's original search text
-                    // This prevents the AutoSuggestBox from showing "SearchResultViewModel"
                     
                     // Trigger the result selection
                     if (ViewModel?.SelectResultCommand?.CanExecute(result) == true)
@@ -185,23 +191,40 @@ namespace NoteNest.UI.Controls
                 // Handle arrow keys to navigate without selecting
                 if (e.Key == Key.Down || e.Key == Key.Up)
                 {
-                    // Let the AutoSuggestBox handle navigation but prevent automatic selection
-                    _logger.Debug($"Arrow key pressed: {e.Key}, not triggering selection");
+                    // Set flag to prevent selection when navigating with arrows
+                    _isNavigatingWithArrows = true;
+                    _logger.Debug($"Arrow key pressed: {e.Key}, preventing auto-selection");
                     
                     // Don't mark as handled - let it navigate the dropdown
-                    // but the selection will only happen on Enter or click
+                }
+                else if (e.Key == Key.Enter)
+                {
+                    // Reset flag on Enter - allow selection
+                    _isNavigatingWithArrows = false;
                 }
                 else if (e.Key == Key.Escape)
                 {
                     // Close the dropdown and clear focus
                     SearchBox.IsSuggestionListOpen = false;
+                    _isNavigatingWithArrows = false;
                     e.Handled = true;
+                }
+                else
+                {
+                    // Reset flag for any other key
+                    _isNavigatingWithArrows = false;
                 }
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error handling preview key down");
             }
+        }
+        
+        private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // Reset flag when clicking - allow selection
+            _isNavigatingWithArrows = false;
         }
 
 

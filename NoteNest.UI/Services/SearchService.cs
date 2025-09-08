@@ -284,6 +284,12 @@ namespace NoteNest.UI.Services
         public string DisplayTitle => !string.IsNullOrEmpty(Title) ? Title : "Untitled";
         public string DisplayPreview => !string.IsNullOrEmpty(Preview) ? Preview : "No content preview";
         public string ResultIcon => ResultType == SearchResultType.Note ? "📄" : "📁";
+        
+        // Override ToString to prevent "SearchResultViewModel" from appearing in search box
+        public override string ToString()
+        {
+            return DisplayTitle;
+        }
     }
 
     public enum SearchResultType

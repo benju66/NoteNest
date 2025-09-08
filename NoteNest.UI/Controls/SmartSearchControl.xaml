@@ -57,7 +57,8 @@
                QuerySubmitted="OnQuerySubmitted"
                SuggestionChosen="OnSuggestionChosen"
                TextChanged="OnTextChanged"
-               PreviewKeyDown="OnPreviewKeyDown">
+               PreviewKeyDown="OnPreviewKeyDown"
+               PreviewMouseDown="OnPreviewMouseDown">
                       
         <!-- Rich search result template for dropdown -->
         <ui:AutoSuggestBox.ItemTemplate>
