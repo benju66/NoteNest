@@ -103,6 +103,26 @@ namespace NoteNest.UI.Controls
         {
             try
             {
+                // Check if there's a selected item when Enter is pressed
+                if (e.ChosenSuggestion != null)
+                {
+                    _logger.Debug($"Query submitted with chosen suggestion");
+                    
+                    // Handle the selected item
+                    if (e.ChosenSuggestion is SearchResultViewModel result)
+                    {
+                        _logger.Debug($"Opening selected search result: {result.Title}");
+                        
+                        // Trigger the result selection
+                        if (ViewModel?.SelectResultCommand?.CanExecute(result) == true)
+                        {
+                            ViewModel.SelectResultCommand.Execute(result);
+                        }
+                    }
+                    return;
+                }
+                
+                
                 if (string.IsNullOrWhiteSpace(e.QueryText))
                     return;
 
@@ -117,16 +137,17 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        private bool _isNavigatingWithArrows = false;
+        private bool _suppressNextSelection = false;
         
         private void OnSuggestionChosen(object sender, AutoSuggestBoxSuggestionChosenEventArgs e)
         {
             try
             {
-                // Ignore selection if navigating with arrow keys
-                if (_isNavigatingWithArrows)
+                // Check if we should suppress this selection (arrow key navigation)
+                if (_suppressNextSelection)
                 {
-                    _logger.Debug("Ignoring suggestion chosen during arrow navigation");
+                    _logger.Debug("Suppressing selection from arrow key navigation");
+                    _suppressNextSelection = false;
                     return;
                 }
                 
@@ -166,8 +187,8 @@ namespace NoteNest.UI.Controls
                 {
                     _logger.Debug($"Search text changed by user: {SearchBox.Text}");
                     
-                    // Reset arrow navigation when user types
-                    _isNavigatingWithArrows = false;
+                    // Reset suppression flag when user types
+                    _suppressNextSelection = false;
                     
                     if (ViewModel == null)
                     {
@@ -191,31 +212,24 @@ namespace NoteNest.UI.Controls
         {
             try
             {
-                // Handle arrow keys to navigate without selecting
                 if (e.Key == Key.Down || e.Key == Key.Up)
                 {
-                    // Set flag to prevent selection when navigating with arrows
-                    _isNavigatingWithArrows = true;
-                    _logger.Debug($"Arrow key pressed: {e.Key}, preventing auto-selection");
-                    
-                    // Don't mark as handled - let it navigate the dropdown
+                    // Set flag to suppress the next selection event from arrow navigation
+                    _suppressNextSelection = true;
+                    _logger.Debug($"Arrow key pressed: {e.Key}, will suppress next selection");
                 }
                 else if (e.Key == Key.Enter)
                 {
-                    // Reset flag on Enter - allow selection
-                    _isNavigatingWithArrows = false;
+                    // Don't suppress selection for Enter key
+                    _suppressNextSelection = false;
+                    _logger.Debug("Enter key pressed, allowing selection");
                 }
                 else if (e.Key == Key.Escape)
                 {
                     // Close the dropdown and clear focus
                     SearchBox.IsSuggestionListOpen = false;
-                    _isNavigatingWithArrows = false;
+                    _suppressNextSelection = false;
                     e.Handled = true;
-                }
-                else
-                {
-                    // Reset flag for any other key
-                    _isNavigatingWithArrows = false;
                 }
             }
             catch (Exception ex)
@@ -226,8 +240,9 @@ namespace NoteNest.UI.Controls
         
         private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
-            // Reset flag when clicking - allow selection
-            _isNavigatingWithArrows = false;
+            // Don't suppress selection for mouse clicks
+            _suppressNextSelection = false;
+            _logger.Debug("Mouse down, allowing selection");
         }
 
 

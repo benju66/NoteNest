@@ -1950,6 +1950,10 @@ namespace NoteNest.UI.Controls
         private void SmartToggleList(TextMarkerStyle markerStyle)
         {
             _isUpdating = true;
+            
+            // CRITICAL FIX: Save the current caret position before any modifications
+            var savedCaretIndex = GetCaretCharacterIndex();
+            
             try
             {
                 var selection = GetSelectedParagraphs();
@@ -1973,6 +1977,22 @@ namespace NoteNest.UI.Controls
                     // Apply list formatting
                     ApplyListToSelection(selection, markerStyle);
                 }
+                
+                // CRITICAL FIX: Restore caret position after layout updates complete
+                // This uses the same deferred restoration pattern proven to work elsewhere in the codebase
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+                {
+                    try
+                    {
+                        SetCaretAtCharacterIndex(savedCaretIndex);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Fallback: If exact position fails, at least try to position reasonably
+                        System.Diagnostics.Debug.WriteLine($"[WARNING] Caret restoration failed: {ex.Message}");
+                        // Don't throw - graceful degradation is better than a crash
+                    }
+                }));
             }
             finally
             {
