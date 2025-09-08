@@ -144,13 +144,17 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
+                _logger.Debug($"PerformSearchAsync calling SearchService with query: '{SearchQuery.Trim()}'");
                 var results = await _searchService.SearchAsync(SearchQuery.Trim(), _cancellationTokenSource.Token);
+                
+                _logger.Debug($"SearchService returned {results.Count} results");
                 
                 // Update results on UI thread
                 SearchResults.Clear();
                 foreach (var result in results)
                 {
                     SearchResults.Add(result);
+                    _logger.Debug($"  Added result: {result.Title}");
                 }
                 
                 HasResults = SearchResults.Count > 0;
@@ -158,7 +162,7 @@ namespace NoteNest.UI.ViewModels
                     ? $"Found {SearchResults.Count} result{(SearchResults.Count == 1 ? "" : "s")}"
                     : "No results found";
                     
-                _logger.Debug($"Search completed: '{SearchQuery}' returned {SearchResults.Count} results");
+                _logger.Debug($"Search completed: '{SearchQuery}' returned {SearchResults.Count} results, HasResults={HasResults}");
             }
             catch (OperationCanceledException)
             {

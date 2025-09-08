@@ -58,14 +58,41 @@ namespace NoteNest.UI.Services
             await _searchLock.WaitAsync(cancellationToken);
             try
             {
-                // Ensure index is built
-                await EnsureIndexAsync(cancellationToken);
+                // Get all notes for simple search
+                var allNotes = await GetAllNotesAsync();
                 
                 // Use existing SearchIndexService
-                _logger.Debug($"Calling SearchIndexService.SearchAsync with query: '{query}'");
-                var results = await _searchIndex.SearchAsync(query, 50, cancellationToken);
+                _logger.Debug($"Calling simple search with query: '{query}' on {allNotes.Count} notes");
                 
-                _logger.Debug($"SearchIndexService returned {results.Count} results");
+                // TEMPORARY: Simple search implementation to test UI
+                var results = new List<SearchIndexService.SearchResult>();
+                var queryLower = query.ToLowerInvariant();
+                
+                // Search through all notes directly
+                foreach (var note in allNotes)
+                {
+                    if (note.Title?.ToLowerInvariant().Contains(queryLower) == true ||
+                        note.Content?.ToLowerInvariant().Contains(queryLower) == true)
+                    {
+                        results.Add(new SearchIndexService.SearchResult
+                        {
+                            NoteId = note.Id,
+                            Title = note.Title,
+                            FilePath = note.FilePath,
+                            CategoryId = note.CategoryId,
+                            Preview = GetPreview(note.Content),
+                            Relevance = 1.0f
+                        });
+                    }
+                }
+                
+                _logger.Debug($"Simple search returned {results.Count} results");
+                
+                // Log first few results for debugging
+                foreach (var result in results.Take(3))
+                {
+                    _logger.Debug($"  Result: Title='{result.Title}', Preview='{result.Preview?.Substring(0, Math.Min(50, result.Preview?.Length ?? 0))}...', Relevance={result.Relevance}");
+                }
                 
                 // Convert to ViewModels
                 var viewModels = results.Select(r => new SearchResultViewModel
@@ -154,7 +181,20 @@ namespace NoteNest.UI.Services
                 cancellationToken.ThrowIfCancellationRequested();
                 
                 // Build index using existing logic (run on background thread)
-                await Task.Run(() => _searchIndex.BuildIndex(allCategories, allNotes), cancellationToken);
+                try
+                {
+                    _logger.Debug($"About to build index with {allCategories.Count} categories and {allNotes.Count} notes");
+                    
+                    // Don't use Task.Run to avoid potential deadlock
+                    _searchIndex.BuildIndex(allCategories, allNotes);
+                    
+                    _logger.Debug("Index building completed");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Error during index building");
+                    throw;
+                }
                 
                 _indexDirty = false;
                 _lastIndexTime = DateTime.Now;
@@ -214,6 +254,20 @@ namespace NoteNest.UI.Services
                 _logger.Error(ex, "Failed to load notes for search index");
                 return new List<NoteModel>();
             }
+        }
+        
+        private string GetPreview(string content)
+        {
+            if (string.IsNullOrWhiteSpace(content))
+                return string.Empty;
+                
+            // Take first 150 characters
+            var preview = content.Length > 150 
+                ? content.Substring(0, 150) + "..." 
+                : content;
+                
+            // Remove newlines for cleaner preview
+            return preview.Replace("\r\n", " ").Replace("\n", " ").Trim();
         }
     }
 
