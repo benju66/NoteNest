@@ -58,7 +58,8 @@
                SuggestionChosen="OnSuggestionChosen"
                TextChanged="OnTextChanged"
                PreviewKeyDown="OnPreviewKeyDown"
-               PreviewMouseDown="OnPreviewMouseDown">
+               PreviewMouseDown="OnPreviewMouseDown"
+               UpdateTextOnSelect="False">
                       
         <!-- Rich search result template for dropdown -->
         <ui:AutoSuggestBox.ItemTemplate>

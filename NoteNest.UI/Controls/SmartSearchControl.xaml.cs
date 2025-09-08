@@ -166,6 +166,9 @@ namespace NoteNest.UI.Controls
                 {
                     _logger.Debug($"Search text changed by user: {SearchBox.Text}");
                     
+                    // Reset arrow navigation when user types
+                    _isNavigatingWithArrows = false;
+                    
                     if (ViewModel == null)
                     {
                         _logger.Warning("TextChanged but ViewModel is null!");
