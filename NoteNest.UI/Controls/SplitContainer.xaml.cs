@@ -49,9 +49,9 @@ namespace NoteNest.UI.Controls
                 {
                     Height = 4,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Background = System.Windows.Media.Brushes.Gray
+                    VerticalAlignment = VerticalAlignment.Center
                 };
+                _splitter.SetResourceReference(GridSplitter.BackgroundProperty, "SystemControlBackgroundBaseMediumBrush");
                 Grid.SetRow(_splitter, 1);
                 Grid.SetColumnSpan(_splitter, 3);
             }
@@ -66,9 +66,9 @@ namespace NoteNest.UI.Controls
                 {
                     Width = 4,
                     HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Stretch,
-                    Background = System.Windows.Media.Brushes.Gray
+                    VerticalAlignment = VerticalAlignment.Stretch
                 };
+                _splitter.SetResourceReference(GridSplitter.BackgroundProperty, "SystemControlBackgroundBaseMediumBrush");
                 Grid.SetColumn(_splitter, 1);
                 Grid.SetRowSpan(_splitter, 3);
             }

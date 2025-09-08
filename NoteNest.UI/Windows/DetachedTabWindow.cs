@@ -46,6 +46,27 @@ namespace NoteNest.UI.Windows
 
         private void InitializeContent()
         {
+            // Add ModernWpf theme resources to the window
+            this.Resources.MergedDictionaries.Add(new ModernWpf.ThemeResources());
+            this.Resources.MergedDictionaries.Add(new ModernWpf.Controls.XamlControlsResources());
+            
+            // Apply current theme based on main application theme
+            try 
+            {
+                var mainWindow = Application.Current?.MainWindow;
+                if (mainWindow != null)
+                {
+                    var currentTheme = ModernWpf.ThemeManager.GetRequestedTheme(mainWindow);
+                    ModernWpf.ThemeManager.SetRequestedTheme(this, currentTheme);
+                }
+                else
+                {
+                    // Fallback to default theme
+                    ModernWpf.ThemeManager.SetRequestedTheme(this, ModernWpf.ElementTheme.Default);
+                }
+            }
+            catch { }
+            
             _pane = new SplitPane { OwnerKey = $"detached:{GetHashCode()}" };
             _workspaceView = new SplitWorkspace();
             // Initialize with existing workspace service; filter panes by OwnerKey within the view

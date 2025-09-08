@@ -15,6 +15,7 @@
         UseLayoutRounding="True"
         Closing="Window_Closing">
     
+    
     <Window.CommandBindings>
         <CommandBinding Command="{x:Static local:MainWindow.ToggleEditorCommand}"
                         Executed="ToggleEditorCommand_Executed"/>
@@ -29,14 +30,16 @@
         </Grid.Resources>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="4"/> <!-- Barrier row -->
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
         <!-- Custom Title Bar: icon + main menu + search placed in caption area -->
         <Grid Grid.Row="0" x:Name="CustomTitleBar"
               shell:WindowChrome.IsHitTestVisibleInChrome="False"
-              Background="Transparent"
-              Height="{x:Static SystemParameters.WindowCaptionHeight}">
+              Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+              Height="{x:Static SystemParameters.WindowCaptionHeight}"
+              ClipToBounds="True">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
@@ -206,8 +209,13 @@
                     shell:WindowChrome.IsHitTestVisibleInChrome="False"/>
         </Grid>
         
+        <!-- Invisible barrier to block hover overflow -->
+        <Border Grid.Row="1" 
+                Background="{DynamicResource SystemControlPageBackgroundAltHighBrush}"
+                IsHitTestVisible="True"/>
+        
         <!-- Main Layout with optional Activity Bar -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition x:Name="EditorColumn" Width="*"/>
@@ -227,7 +235,7 @@
             <GridSplitter Grid.Column="2"
                           HorizontalAlignment="Left"
                           Width="4"
-                          Background="Transparent"
+                          Background="{DynamicResource SystemControlBackgroundBaseMediumBrush}"
                           ShowsPreview="True"
                           ResizeDirection="Columns"
                           ResizeBehavior="PreviousAndNext"
@@ -256,7 +264,7 @@
                               x:Name="InnerPluginSplitter"
                               Height="4"
                               HorizontalAlignment="Stretch"
-                              Background="Transparent"
+                              Background="{DynamicResource SystemControlBackgroundBaseMediumBrush}"
                               ShowsPreview="True"
                               Visibility="Collapsed"
                               DragCompleted="InnerPluginSplitter_DragCompleted"/>
@@ -269,7 +277,7 @@
         </Grid>
         <!-- Insert NotificationHost overlay at the end so it sits above -->
         <controls:NotificationHost x:Name="ToastHost"
-                                   Grid.Row="1"
+                                   Grid.Row="2"
                                    HorizontalAlignment="Right"
                                    VerticalAlignment="Top"
                                    Margin="0,60,20,0"

@@ -40,7 +40,8 @@ namespace NoteNest.UI.Controls
             IsReadOnlyCaretVisible = true;
             Focusable = true;
             IsHitTestVisible = true;
-            Background = System.Windows.Media.Brushes.Transparent;
+            SetResourceReference(BackgroundProperty, "SystemControlBackgroundAltHighBrush");
+            SetResourceReference(ForegroundProperty, "SystemControlForegroundBaseHighBrush");
             AcceptsReturn = true;
             AcceptsTab = true;
             FocusVisualStyle = null;
@@ -53,6 +54,7 @@ namespace NoteNest.UI.Controls
                     Document.PagePadding = new Thickness(0);
                     var pStyle = new Style(typeof(Paragraph));
                     pStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0, 0, 0, 1)));
+                    pStyle.Setters.Add(new Setter(Paragraph.ForegroundProperty, new DynamicResourceExtension("SystemControlForegroundBaseHighBrush")));
                     Document.Resources[typeof(Paragraph)] = pStyle;
                 }
             }
@@ -1704,6 +1706,7 @@ namespace NoteNest.UI.Controls
                     ?? Document.Blocks;
 
                 var list = new List { MarkerStyle = markerStyle, Margin = new Thickness(0, 1, 0, 1) };
+                list.SetResourceReference(List.ForegroundProperty, "SystemControlForegroundBaseHighBrush");
 
                 // Insert the list BEFORE we detach paragraphs, so the reference is valid
                 try { parentCollection.InsertBefore(firstPara, list); }
@@ -1865,6 +1868,7 @@ namespace NoteNest.UI.Controls
                 ?? Document.Blocks;
 
             var list = new List { MarkerStyle = style, Margin = new Thickness(0, 1, 0, 1) };
+            list.SetResourceReference(List.ForegroundProperty, "SystemControlForegroundBaseHighBrush");
 
             try { parentCollection.InsertBefore(firstPara, list); }
             catch { Document.Blocks.Add(list); }

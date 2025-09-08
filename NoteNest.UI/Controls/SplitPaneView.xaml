@@ -94,8 +94,9 @@
                                     </MenuItem>
                                 </ContextMenu>
                             </StackPanel.ContextMenu>
-                            <TextBlock Margin="5,2" VerticalAlignment="Center" Text="{Binding Note.Title}"/>
-                            <TextBlock Text="·" Margin="2,2,0,2" Foreground="Black" VerticalAlignment="Center">
+                            <TextBlock Margin="5,2" VerticalAlignment="Center" Text="{Binding Note.Title}" 
+                                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                            <TextBlock Text="·" Margin="2,2,0,2" Foreground="{DynamicResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -116,7 +117,7 @@
                                     Margin="3,0,0,0"
                                     FontSize="14"
                                     FontWeight="Bold"
-                                    Foreground="Gray"
+                                    Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                                     Cursor="Hand"/>
                         </StackPanel>
                     </DataTemplate>
@@ -198,7 +199,7 @@
                        Text="No tabs open"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
-                       Foreground="Gray"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                        FontStyle="Italic"
                        Visibility="Collapsed"/>
         </Grid>

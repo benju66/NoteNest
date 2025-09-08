@@ -41,9 +41,11 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
-            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-            <Border Background="#20000000" CornerRadius="6" Padding="4,1" Margin="6,0,0,0" Visibility="{Binding Notes.Count, Converter={StaticResource CountToVisibility}}">
-                <TextBlock Text="{Binding Notes.Count}" FontSize="10" Opacity="0.8"/>
+            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" 
+                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+            <Border Background="{DynamicResource SystemControlBackgroundBaseLowBrush}" CornerRadius="6" Padding="4,1" Margin="6,0,0,0" Visibility="{Binding Notes.Count, Converter={StaticResource CountToVisibility}}">
+                <TextBlock Text="{Binding Notes.Count}" FontSize="10" 
+                          Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}" Opacity="0.8"/>
             </Border>
         </StackPanel>
     </HierarchicalDataTemplate>
@@ -53,9 +55,11 @@
             <TextBlock Style="{StaticResource IconStyle}" FontSize="14"
                        Text="{Binding Model.Format, Converter={StaticResource NoteFormatToIcon}}"
                        Foreground="{StaticResource NoteIconBrush}"/>
-            <TextBlock Text="{Binding Title}" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Title}" VerticalAlignment="Center" 
+                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
+                        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsDirty}" Value="True">
                                 <Setter Property="FontStyle" Value="Italic"/>
