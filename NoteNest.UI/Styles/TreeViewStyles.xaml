@@ -76,14 +76,53 @@
         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
         <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
         <Setter Property="Padding" Value="2"/>
-        <Style.Triggers>
-            <Trigger Property="IsSelected" Value="True">
-                <Setter Property="Background" Value="{DynamicResource SystemAccentColorLight2}"/>
-            </Trigger>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Background" Value="{DynamicResource SystemAccentColorLight3}"/>
-            </Trigger>
-        </Style.Triggers>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TreeViewItem">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition/>
+                        </Grid.RowDefinitions>
+                        <Border x:Name="Bd" 
+                                Grid.Row="0"
+                                Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter x:Name="PART_Header" ContentSource="Header" 
+                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                        </Border>
+                        <ItemsPresenter x:Name="ItemsHost" Grid.Row="1" Visibility="Collapsed"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="true">
+                            <Setter TargetName="ItemsHost" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="true">
+                            <Setter TargetName="Bd" Property="Background" 
+                                    Value="{DynamicResource SystemControlHighlightListAccentLowBrush}"/>
+                            <Setter Property="Foreground" 
+                                    Value="{DynamicResource SystemControlHighlightAltBaseHighBrush}"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="true"/>
+                                <Condition Property="IsSelectionActive" Value="false"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" 
+                                    Value="{DynamicResource SystemControlHighlightListAccentLowBrush}"/>
+                            <Setter Property="Foreground" 
+                                    Value="{DynamicResource SystemControlHighlightAltBaseHighBrush}"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsMouseOver" Value="true">
+                            <Setter TargetName="Bd" Property="Background" 
+                                    Value="{DynamicResource SystemControlHighlightListLowBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>
