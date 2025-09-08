@@ -20,10 +20,6 @@
                         behaviors:TabOverflowBehavior.EnableOverflow="True"
                         SelectionChanged="TabControl_SelectionChanged"
                         GotFocus="TabControl_GotFocus">
-                <local:DraggableTabControl.Resources>
-                    <!-- Neutralize global TabItem Style to ensure ItemTemplate is used here -->
-                    <Style TargetType="TabItem"/>
-                </local:DraggableTabControl.Resources>
                 <local:DraggableTabControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal"
@@ -186,7 +182,7 @@
                                                       Focusable="True"
                                                       IsDocumentEnabled="True"
                                                       IsHitTestVisible="True"
-                                                      Background="Transparent"
+                                                      Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                                                       MarkdownContent="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                       TextChanged="SmartEditor_TextChanged"/>
                         </Grid>

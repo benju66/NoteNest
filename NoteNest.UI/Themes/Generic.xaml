@@ -190,11 +190,34 @@
 					<Setter Property="UseLayoutRounding" Value="True"/>
 					<Setter Property="ToolTip" Value="{Binding Title}"/>
 					<Setter Property="Panel.ZIndex" Value="1"/>
-					<Style.Triggers>
-						<Trigger Property="IsSelected" Value="True">
-							<Setter Property="Panel.ZIndex" Value="100"/>
-						</Trigger>
-					</Style.Triggers>
+					<Setter Property="Template">
+						<Setter.Value>
+							<ControlTemplate TargetType="TabItem">
+								<Border x:Name="TabBorder" 
+										Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+										BorderBrush="{DynamicResource SystemControlBackgroundBaseMediumBrush}"
+										BorderThickness="0,0,0,2"
+										Padding="{TemplateBinding Padding}">
+									<ContentPresenter ContentSource="Header" 
+													HorizontalAlignment="Center" 
+													VerticalAlignment="Center"/>
+								</Border>
+								<ControlTemplate.Triggers>
+									<Trigger Property="IsSelected" Value="True">
+										<Setter TargetName="TabBorder" Property="Background" 
+												Value="{DynamicResource SystemControlBackgroundAltHighBrush}"/>
+										<Setter TargetName="TabBorder" Property="BorderBrush" 
+												Value="{DynamicResource SystemControlHighlightAccentBrush}"/>
+										<Setter Property="Panel.ZIndex" Value="100"/>
+									</Trigger>
+									<Trigger Property="IsMouseOver" Value="True">
+										<Setter TargetName="TabBorder" Property="Background" 
+												Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
+									</Trigger>
+								</ControlTemplate.Triggers>
+							</ControlTemplate>
+						</Setter.Value>
+					</Setter>
 				</Style>
 			</Setter.Value>
 		</Setter>
