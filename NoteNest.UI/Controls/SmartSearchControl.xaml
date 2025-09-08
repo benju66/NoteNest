@@ -54,9 +54,10 @@
                       HorizontalAlignment="Stretch"
                       MaxSuggestionListHeight="400"
                       ItemsSource="{Binding SearchResults}"
-                      QuerySubmitted="OnQuerySubmitted"
-                      SuggestionChosen="OnSuggestionChosen"
-                      TextChanged="OnTextChanged">
+               QuerySubmitted="OnQuerySubmitted"
+               SuggestionChosen="OnSuggestionChosen"
+               TextChanged="OnTextChanged"
+               PreviewKeyDown="OnPreviewKeyDown">
                       
         <!-- Rich search result template for dropdown -->
         <ui:AutoSuggestBox.ItemTemplate>

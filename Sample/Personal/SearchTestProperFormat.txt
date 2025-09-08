@@ -1,0 +1,9 @@
+This is a test file for searching with proper formatting.
+
+Testing the search functionality with some keywords:
+- Concrete work and materials
+- Sand and aggregates
+- File management systems
+- Clean up procedures and protocols
+
+This file demonstrates the proper bullet list format using dash-space (- ) at the beginning of each line.

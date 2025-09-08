@@ -13,6 +13,7 @@ namespace NoteNest.UI.ViewModels
         private string _wordCount;
         private string _lastSaved;
         private bool _disposed;
+        private bool _initialLoadComplete;
 
         public NoteModel Note => _note;
         public string Id => _note?.Id ?? string.Empty;
@@ -48,14 +49,19 @@ namespace NoteNest.UI.ViewModels
                     var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
                     state?.UpdateNoteContent(_note.Id, newValue);
                     System.Diagnostics.Debug.WriteLine($"[Tab] Content set noteId={_note?.Id} len={newValue.Length} at={DateTime.Now:HH:mm:ss.fff}");
-                    // Determine dirty by comparing with state's OriginalContent
-                    if (state != null && state.OpenNotes.TryGetValue(_note.Id, out var wn))
+                    
+                    // Only update dirty state if this is not the initial load
+                    if (_initialLoadComplete)
                     {
-                        IsDirty = !string.Equals(wn.OriginalContent ?? string.Empty, newValue ?? string.Empty, StringComparison.Ordinal);
-                    }
-                    else
-                    {
-                        IsDirty = true;
+                        // Determine dirty by comparing with state's OriginalContent
+                        if (state != null && state.OpenNotes.TryGetValue(_note.Id, out var wn))
+                        {
+                            IsDirty = !string.Equals(wn.OriginalContent ?? string.Empty, newValue ?? string.Empty, StringComparison.Ordinal);
+                        }
+                        else
+                        {
+                            IsDirty = true;
+                        }
                     }
                 }
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Tab][ERROR] Content set failed: {ex.Message}"); }
@@ -104,6 +110,9 @@ namespace NoteNest.UI.ViewModels
                 }
             }
             catch { }
+            
+            // Mark initial load complete after constructor
+            _initialLoadComplete = true;
         }
 
         public new void OnPropertyChanged(string propertyName)
@@ -153,6 +162,11 @@ namespace NoteNest.UI.ViewModels
         public void UpdateLastSaved()
         {
             LastSaved = IsDirty ? "Unsaved changes" : $"Saved {DateTime.Now:HH:mm}";
+        }
+        
+        public void MarkInitialLoadComplete()
+        {
+            _initialLoadComplete = true;
         }
 
         public void Dispose()

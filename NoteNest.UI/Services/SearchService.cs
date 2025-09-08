@@ -61,10 +61,9 @@ namespace NoteNest.UI.Services
                 // Get all notes for simple search
                 var allNotes = await GetAllNotesAsync();
                 
-                // Use existing SearchIndexService
-                _logger.Debug($"Calling simple search with query: '{query}' on {allNotes.Count} notes");
+                // Use simple search implementation to avoid hanging issue
+                _logger.Debug($"Using simple search with query: '{query}' on {allNotes.Count} notes");
                 
-                // TEMPORARY: Simple search implementation to test UI
                 var results = new List<SearchIndexService.SearchResult>();
                 var queryLower = query.ToLowerInvariant();
                 

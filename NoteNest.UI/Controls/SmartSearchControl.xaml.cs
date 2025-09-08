@@ -125,11 +125,8 @@ namespace NoteNest.UI.Controls
                 {
                     _logger.Debug($"Search result chosen: {result.Title}");
                     
-                    // Update the search query to show the selected result
-                    if (ViewModel != null)
-                    {
-                        ViewModel.SearchQuery = result.DisplayTitle;
-                    }
+                    // Don't update the search query - keep the user's original search text
+                    // This prevents the AutoSuggestBox from showing "SearchResultViewModel"
                     
                     // Trigger the result selection
                     if (ViewModel?.SelectResultCommand?.CanExecute(result) == true)
@@ -178,6 +175,32 @@ namespace NoteNest.UI.Controls
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error handling text changed");
+            }
+        }
+        
+        private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            try
+            {
+                // Handle arrow keys to navigate without selecting
+                if (e.Key == Key.Down || e.Key == Key.Up)
+                {
+                    // Let the AutoSuggestBox handle navigation but prevent automatic selection
+                    _logger.Debug($"Arrow key pressed: {e.Key}, not triggering selection");
+                    
+                    // Don't mark as handled - let it navigate the dropdown
+                    // but the selection will only happen on Enter or click
+                }
+                else if (e.Key == Key.Escape)
+                {
+                    // Close the dropdown and clear focus
+                    SearchBox.IsSuggestionListOpen = false;
+                    e.Handled = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error handling preview key down");
             }
         }
 
