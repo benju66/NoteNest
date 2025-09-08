@@ -103,25 +103,8 @@ namespace NoteNest.UI.Controls
         {
             try
             {
-                // Check if there's a selected item when Enter is pressed
-                if (e.ChosenSuggestion != null)
-                {
-                    _logger.Debug($"Query submitted with chosen suggestion");
-                    
-                    // Handle the selected item
-                    if (e.ChosenSuggestion is SearchResultViewModel result)
-                    {
-                        _logger.Debug($"Opening selected search result: {result.Title}");
-                        
-                        // Trigger the result selection
-                        if (ViewModel?.SelectResultCommand?.CanExecute(result) == true)
-                        {
-                            ViewModel.SelectResultCommand.Execute(result);
-                        }
-                    }
-                    return;
-                }
-                
+                // Don't handle suggestion selection here - it's already handled in OnSuggestionChosen
+                // This prevents double-opening when clicking on search results
                 
                 if (string.IsNullOrWhiteSpace(e.QueryText))
                     return;
