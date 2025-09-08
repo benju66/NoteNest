@@ -18,7 +18,6 @@ namespace NoteNest.UI.Controls
         private readonly MarkdownFlowDocumentConverter _converter;
         private readonly DispatcherTimer _debounceTimer;
         private readonly ListStateTracker _listTracker = new ListStateTracker();
-        private bool _lastEnterWasEmpty = false;
         private bool _hasUnsavedChanges = false;
 
         public static readonly DependencyProperty MarkdownContentProperty =
@@ -153,10 +152,7 @@ namespace NoteNest.UI.Controls
 
         private void OnPreviewKeyUp(object sender, KeyEventArgs e)
         {
-            if (e.Key != Key.Enter)
-            {
-                _lastEnterWasEmpty = false;
-            }
+            // No longer tracking double-enter behavior
         }
 
         // SIMPLIFIED: Replace HandleBackspaceKey
@@ -220,34 +216,12 @@ namespace NoteNest.UI.Controls
                 
                 if (string.IsNullOrWhiteSpace(text))
                 {
-                    if (_lastEnterWasEmpty)
-                    {
-                        // Second Enter on empty item - exit list
+                    // Single Enter on empty item - exit list (standard behavior)
                     ConvertListItemToParagraph(currentPara, mergeWithPreviousIfParagraph: false);
-                        _lastEnterWasEmpty = false;
                     return true;
-                }
-                    else
-                    {
-                        // First Enter on empty item - create another empty item
-                        _lastEnterWasEmpty = true;
-                        var emptyItem = new ListItem();
-                        var emptyPara = new Paragraph { Margin = new Thickness(0) };
-                        emptyItem.Blocks.Add(emptyPara);
-                        
-                        int currentIndex = GetListItemIndex(list, li);
-                        InsertListItemAt(list, currentIndex + 1, emptyItem);
-                        
-                        // Apply hanging indent to empty item
-                        ListFormatting.ApplyHangingIndentToListItem(emptyItem);
-                        
-                        CaretPosition = emptyPara.ContentStart;
-                        return true;
-                    }
                 }
 
                 // Non-empty item - create new item normally
-                _lastEnterWasEmpty = false;
                 
                 // Split content if caret is mid-paragraph
                 var caret = CaretPosition ?? currentPara.ContentEnd;
@@ -1950,10 +1924,6 @@ namespace NoteNest.UI.Controls
         private void SmartToggleList(TextMarkerStyle markerStyle)
         {
             _isUpdating = true;
-            
-            // CRITICAL FIX: Save the current caret position before any modifications
-            var savedCaretIndex = GetCaretCharacterIndex();
-            
             try
             {
                 var selection = GetSelectedParagraphs();
@@ -1974,31 +1944,73 @@ namespace NoteNest.UI.Controls
                 }
                 else
                 {
-                    // Apply list formatting
+                    // Apply list formatting - only fix caret for this specific case
+                    var currentPara = CaretPosition?.Paragraph;
+                    var caretOffset = 0;
+                    
+                    // Only save position if we're converting a single paragraph with existing content
+                    if (selection.Count == 1 && currentPara != null && CaretPosition != null)
+                    {
+                        var text = new TextRange(currentPara.ContentStart, currentPara.ContentEnd).Text;
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            var range = new TextRange(currentPara.ContentStart, CaretPosition);
+                            caretOffset = range.Text.Length;
+                        }
+                    }
+                    
                     ApplyListToSelection(selection, markerStyle);
+                    
+                    // Only restore caret if we saved a position (single para with content)
+                    if (caretOffset > 0 && currentPara != null)
+                    {
+                        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+                        {
+                            try
+                            {
+                                // Find the paragraph - it should now be inside a ListItem
+                                var listItem = FindListItemContainingOriginalParagraph(currentPara);
+                                if (listItem?.Blocks.FirstBlock is Paragraph para)
+                                {
+                                    var position = para.ContentStart;
+                                    for (int i = 0; i < caretOffset && position != null; i++)
+                                    {
+                                        var next = position.GetNextInsertionPosition(LogicalDirection.Forward);
+                                        if (next == null || next.CompareTo(para.ContentEnd) > 0) break;
+                                        position = next;
+                                    }
+                                    CaretPosition = position;
+                                }
+                            }
+                            catch
+                            {
+                                // Silently fail - don't disrupt the user experience
+                            }
+                        }));
+                    }
                 }
-                
-                // CRITICAL FIX: Restore caret position after layout updates complete
-                // This uses the same deferred restoration pattern proven to work elsewhere in the codebase
-                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
-                {
-                    try
-                    {
-                        SetCaretAtCharacterIndex(savedCaretIndex);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Fallback: If exact position fails, at least try to position reasonably
-                        System.Diagnostics.Debug.WriteLine($"[WARNING] Caret restoration failed: {ex.Message}");
-                        // Don't throw - graceful degradation is better than a crash
-                    }
-                }));
             }
             finally
             {
                 _isUpdating = false;
                 _debounceTimer.Stop();
                 _debounceTimer.Start();
+            }
+        }
+        
+        private ListItem FindListItemContainingOriginalParagraph(Paragraph originalPara)
+        {
+            try
+            {
+                // The paragraph reference should still be valid, just in a new parent
+                if (originalPara.Parent is ListItem li)
+                    return li;
+                    
+                return null;
+            }
+            catch
+            {
+                return null;
             }
         }
 
