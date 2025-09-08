@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using System.Windows;
+using Microsoft.Extensions.DependencyInjection;
 using NoteNest.Core.Plugins;
 using NoteNest.Core.Services;
 using System.Linq;
@@ -28,11 +29,28 @@ namespace NoteNest.UI.Plugins.Todo
 			_settings = new TodoPluginSettings();
 		}
 
-		protected override async Task OnInitializeAsync()
+	protected override async Task OnInitializeAsync()
+	{
+		await _todoService.LoadTasksAsync();
+		
+		// FIX: Get dependencies through DI instead of service locator
+		var app = Application.Current as NoteNest.UI.App;
+		var serviceProvider = app?.ServiceProvider;
+		
+		if (serviceProvider != null)
 		{
-			await _todoService.LoadTasksAsync();
-			var panel = new TodoPanel(_todoService);
+			var linkedNavigator = serviceProvider.GetRequiredService<NoteNest.UI.Services.LinkedNoteNavigator>();
+			var integrityChecker = serviceProvider.GetRequiredService<NoteNest.UI.Services.IntegrityCheckerService>();
+			var toastService = serviceProvider.GetRequiredService<NoteNest.UI.Services.ToastNotificationService>();
+			var pluginManager = serviceProvider.GetRequiredService<NoteNest.Core.Plugins.IPluginManager>();
+			
+			var panel = new TodoPanel(_todoService, linkedNavigator, integrityChecker, toastService, pluginManager);
 			_panel = new TodoPluginPanel(panel);
+		}
+		else
+		{
+			throw new InvalidOperationException("Could not resolve required services for TodoPlugin");
+		}
 			// Subscribe to core note events to keep linked tasks in sync
 			try
 			{

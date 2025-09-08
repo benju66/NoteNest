@@ -16,6 +16,10 @@ namespace NoteNest.UI.Plugins.Todo.UI
 	public partial class TodoPanel : UserControl, INotifyPropertyChanged
 	{
 		private readonly ITodoService _todoService;
+		private readonly NoteNest.UI.Services.LinkedNoteNavigator _linkedNoteNavigator;
+		private readonly NoteNest.UI.Services.IntegrityCheckerService _integrityChecker;
+		private readonly NoteNest.UI.Services.ToastNotificationService _toastService;
+		private readonly NoteNest.Core.Plugins.IPluginManager _pluginManager;
 		private ObservableCollection<TaskCategoryViewModel> _taskCategories;
 
 		public ObservableCollection<TaskCategoryViewModel> TaskCategories
@@ -27,10 +31,21 @@ namespace NoteNest.UI.Plugins.Todo.UI
 		public int ActiveTaskCount => TaskCategories?.Sum(c => c.Tasks.Count(t => !t.IsCompleted)) ?? 0;
 		public bool ShowCompleted { get; set; } = true;
 
-		public TodoPanel(ITodoService todoService)
+		// FIX: Constructor injection instead of service locator
+		public TodoPanel(
+			ITodoService todoService,
+			NoteNest.UI.Services.LinkedNoteNavigator linkedNoteNavigator,
+			NoteNest.UI.Services.IntegrityCheckerService integrityChecker,
+			NoteNest.UI.Services.ToastNotificationService toastService,
+			NoteNest.Core.Plugins.IPluginManager pluginManager)
 		{
 			// Assign dependencies BEFORE InitializeComponent so any XAML-raised events can access them safely
 			_todoService = todoService ?? throw new ArgumentNullException(nameof(todoService));
+			_linkedNoteNavigator = linkedNoteNavigator ?? throw new ArgumentNullException(nameof(linkedNoteNavigator));
+			_integrityChecker = integrityChecker ?? throw new ArgumentNullException(nameof(integrityChecker));
+			_toastService = toastService ?? throw new ArgumentNullException(nameof(toastService));
+			_pluginManager = pluginManager ?? throw new ArgumentNullException(nameof(pluginManager));
+			
 			TaskCategories = new ObservableCollection<TaskCategoryViewModel>();
 			DataContext = this;
 			InitializeComponent();
@@ -302,21 +317,19 @@ namespace NoteNest.UI.Plugins.Todo.UI
 			{
 				var item = (sender as FrameworkElement)?.DataContext as TodoItem;
 				if (item == null) return;
-				var sp = (Application.Current as App)?.ServiceProvider;
-				var nav = sp?.GetService(typeof(NoteNest.UI.Services.LinkedNoteNavigator)) as NoteNest.UI.Services.LinkedNoteNavigator;
-				if (nav == null) return;
-				var ok = await nav.OpenByIdOrPathAsync(item.LinkedNoteId, item.LinkedNoteFilePath, item.SourceLine);
+				
+				// FIX: Use injected dependency instead of service locator
+				var ok = await _linkedNoteNavigator.OpenByIdOrPathAsync(item.LinkedNoteId, item.LinkedNoteFilePath, item.SourceLine);
 				if (!ok)
 				{
 					try
 					{
-						var pluginMgr = sp?.GetService(typeof(NoteNest.Core.Plugins.IPluginManager)) as NoteNest.Core.Plugins.IPluginManager;
-						var plugin = pluginMgr?.GetPlugin("todo-plugin") as NoteNest.UI.Plugins.Todo.TodoPlugin;
+						// FIX: Use injected dependencies instead of service locator
+						var plugin = _pluginManager.GetPlugin("todo-plugin") as NoteNest.UI.Plugins.Todo.TodoPlugin;
 						var settings = plugin?.GetSettings() as NoteNest.UI.Plugins.Todo.TodoPluginSettings;
 						if (settings?.ShowLinkErrorToasts == true)
 						{
-							var toast = sp?.GetService(typeof(NoteNest.UI.Services.ToastNotificationService)) as NoteNest.UI.Services.ToastNotificationService;
-							toast?.Error("Linked note could not be opened. It may have been moved or deleted.");
+							_toastService.Error("Linked note could not be opened. It may have been moved or deleted.");
 						}
 					}
 					catch { }
@@ -329,10 +342,8 @@ namespace NoteNest.UI.Plugins.Todo.UI
 		{
 			try
 			{
-				var sp = (Application.Current as App)?.ServiceProvider;
-				var checker = sp?.GetService(typeof(NoteNest.UI.Services.IntegrityCheckerService)) as NoteNest.UI.Services.IntegrityCheckerService;
-				if (checker == null) return;
-				var wnd = new NoteNest.UI.Windows.IntegrityDiagnosticsWindow(checker);
+				// FIX: Use injected dependency instead of service locator
+				var wnd = new NoteNest.UI.Windows.IntegrityDiagnosticsWindow(_integrityChecker);
 				wnd.Owner = Application.Current?.MainWindow;
 				wnd.Show();
 			}
