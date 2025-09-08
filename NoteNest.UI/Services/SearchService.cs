@@ -48,7 +48,12 @@ namespace NoteNest.UI.Services
         public async Task<List<SearchResultViewModel>> SearchAsync(string query, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(query))
+            {
+                _logger.Debug("Search query is empty, returning empty results");
                 return new List<SearchResultViewModel>();
+            }
+
+            _logger.Debug($"Starting search for query: '{query}'");
 
             await _searchLock.WaitAsync(cancellationToken);
             try
@@ -57,10 +62,13 @@ namespace NoteNest.UI.Services
                 await EnsureIndexAsync(cancellationToken);
                 
                 // Use existing SearchIndexService
+                _logger.Debug($"Calling SearchIndexService.SearchAsync with query: '{query}'");
                 var results = await _searchIndex.SearchAsync(query, 50, cancellationToken);
                 
+                _logger.Debug($"SearchIndexService returned {results.Count} results");
+                
                 // Convert to ViewModels
-                return results.Select(r => new SearchResultViewModel
+                var viewModels = results.Select(r => new SearchResultViewModel
                 {
                     NoteId = r.NoteId,
                     Title = r.Title,
@@ -70,6 +78,9 @@ namespace NoteNest.UI.Services
                     Relevance = r.Relevance,
                     ResultType = string.IsNullOrEmpty(r.NoteId) ? SearchResultType.Category : SearchResultType.Note
                 }).ToList();
+                
+                _logger.Debug($"Returning {viewModels.Count} search results for query: '{query}'");
+                return viewModels;
             }
             catch (OperationCanceledException)
             {
@@ -115,7 +126,10 @@ namespace NoteNest.UI.Services
         private async Task EnsureIndexAsync(CancellationToken cancellationToken = default)
         {
             if (!_indexDirty && (DateTime.Now - _lastIndexTime).TotalMinutes < 5)
+            {
+                _logger.Debug("Index is up-to-date, skipping rebuild");
                 return; // Index is recent enough
+            }
 
             _logger.Debug("Building search index...");
             
@@ -125,7 +139,17 @@ namespace NoteNest.UI.Services
                 
                 // Get all categories and notes - simplified approach
                 var allCategories = await GetAllCategoriesAsync();
+                _logger.Debug($"Loaded {allCategories.Count} categories");
+                
                 var allNotes = await GetAllNotesAsync();
+                _logger.Debug($"Loaded {allNotes.Count} notes total");
+                
+                // Log sample note details
+                if (allNotes.Any())
+                {
+                    var sampleNote = allNotes.First();
+                    _logger.Debug($"Sample note: Title='{sampleNote.Title}', Content length={sampleNote.Content?.Length ?? 0}, FilePath='{sampleNote.FilePath}'");
+                }
                 
                 cancellationToken.ThrowIfCancellationRequested();
                 
@@ -154,7 +178,13 @@ namespace NoteNest.UI.Services
             try
             {
                 // Use existing NoteService to get categories
-                return await _noteService.LoadCategoriesAsync(_configService.Settings.MetadataPath) ?? new List<CategoryModel>();
+                var metadataPath = _configService.Settings.MetadataPath;
+                _logger.Debug($"Loading categories from metadata path: '{metadataPath}'");
+                
+                var categories = await _noteService.LoadCategoriesAsync(metadataPath) ?? new List<CategoryModel>();
+                _logger.Debug($"Successfully loaded {categories.Count} categories");
+                
+                return categories;
             }
             catch (Exception ex)
             {

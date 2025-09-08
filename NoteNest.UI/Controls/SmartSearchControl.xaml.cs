@@ -54,6 +54,8 @@ namespace NoteNest.UI.Controls
 
         private void OnViewModelChanged(SearchViewModel? oldViewModel, SearchViewModel? newViewModel)
         {
+            _logger.Debug($"SmartSearchControl ViewModel changing from {oldViewModel?.GetType().Name ?? "null"} to {newViewModel?.GetType().Name ?? "null"}");
+            
             // Unsubscribe from old ViewModel
             if (oldViewModel != null)
             {
@@ -65,6 +67,11 @@ namespace NoteNest.UI.Controls
             {
                 newViewModel.ResultSelected += OnViewModelResultSelected;
                 DataContext = newViewModel;
+                _logger.Debug($"SmartSearchControl DataContext set to SearchViewModel");
+            }
+            else
+            {
+                _logger.Warning("SmartSearchControl ViewModel set to null");
             }
         }
 
@@ -155,6 +162,16 @@ namespace NoteNest.UI.Controls
                 if (e.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
                 {
                     _logger.Debug($"Search text changed by user: {SearchBox.Text}");
+                    
+                    if (ViewModel == null)
+                    {
+                        _logger.Warning("TextChanged but ViewModel is null!");
+                    }
+                    else
+                    {
+                        _logger.Debug($"ViewModel available, SearchQuery = '{ViewModel.SearchQuery}'");
+                    }
+                    
                     // The binding will handle updating the ViewModel
                 }
             }

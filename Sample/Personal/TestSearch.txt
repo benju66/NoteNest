@@ -1,0 +1,5 @@
+This is a test note for searching.
+
+It contains the word concrete and some other content like sand, cushion, and excavate.
+
+We want to make sure the search functionality is working correctly.

@@ -39,17 +39,31 @@ namespace NoteNest.Core.Services
             lock (_indexLock)
             {
                 _searchIndex.Clear();
+                
+                System.Diagnostics.Debug.WriteLine($"[SearchIndex] Building index with {allNotes.Count} notes and {categories.Count} categories");
 
                 // Index all notes
+                var notesIndexed = 0;
                 Parallel.ForEach(allNotes, note =>
                 {
                     IndexNote(note);
+                    System.Threading.Interlocked.Increment(ref notesIndexed);
                 });
+                
+                System.Diagnostics.Debug.WriteLine($"[SearchIndex] Indexed {notesIndexed} notes");
 
                 // Index categories
                 foreach (var category in categories)
                 {
                     IndexCategory(category);
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[SearchIndex] Total index entries: {_searchIndex.Count}");
+                
+                // Log sample index entries
+                foreach (var kvp in _searchIndex.Take(5))
+                {
+                    System.Diagnostics.Debug.WriteLine($"[SearchIndex] Word '{kvp.Key}' has {kvp.Value.Count} results");
                 }
 
                 _lastIndexTime = DateTime.Now;
@@ -70,6 +84,9 @@ namespace NoteNest.Core.Services
                 Preview = GetPreview(note.Content),
                 Relevance = 1.0f
             };
+            
+            // Debug logging
+            System.Diagnostics.Debug.WriteLine($"[SearchIndex] Indexing note: Title='{note.Title}', Content length={note.Content?.Length ?? 0}, Id='{note.Id}'");
 
             // Index title words
             var titleWords = TokenizeText(note.Title);
@@ -87,10 +104,15 @@ namespace NoteNest.Core.Services
                     contentToIndex = _markdownService.StripMarkdownForIndex(contentToIndex);
                 }
                 var contentWords = TokenizeText(contentToIndex);
+                System.Diagnostics.Debug.WriteLine($"[SearchIndex] Content has {contentWords.Count} unique words");
                 foreach (var word in contentWords.Take(_contentWordLimit)) // Configurable limit
                 {
                     AddToIndex(word, result, 1.0f);
                 }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[SearchIndex] Note '{note.Title}' has no content to index");
             }
 
             // Index file name without extension
@@ -149,16 +171,23 @@ namespace NoteNest.Core.Services
             if (string.IsNullOrWhiteSpace(query)) 
                 return new List<SearchResult>();
 
+            System.Diagnostics.Debug.WriteLine($"[SearchIndex] Searching for: '{query}'");
+
             var queryWords = TokenizeText(query);
+            System.Diagnostics.Debug.WriteLine($"[SearchIndex] Query tokenized into {queryWords.Count} words: {string.Join(", ", queryWords)}");
+            
             var resultScores = new Dictionary<string, (SearchResult result, float score)>();
 
             lock (_indexLock)
             {
+                System.Diagnostics.Debug.WriteLine($"[SearchIndex] Index contains {_searchIndex.Count} unique words");
+                
                 foreach (var word in queryWords)
                 {
                     // Exact match
                     if (_searchIndex.TryGetValue(word, out var exactMatches))
                     {
+                        System.Diagnostics.Debug.WriteLine($"[SearchIndex] Found {exactMatches.Count} exact matches for '{word}'");
                         foreach (var result in exactMatches)
                         {
                             UpdateResultScore(resultScores, result, 1.0f);
@@ -169,6 +198,12 @@ namespace NoteNest.Core.Services
                     var prefixMatches = _searchIndex
                         .Where(kvp => kvp.Key.StartsWith(word, StringComparison.OrdinalIgnoreCase))
                         .SelectMany(kvp => kvp.Value);
+
+                    var prefixCount = prefixMatches.Count();
+                    if (prefixCount > 0)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SearchIndex] Found {prefixCount} prefix matches for '{word}'");
+                    }
 
                     foreach (var result in prefixMatches)
                     {
@@ -182,6 +217,12 @@ namespace NoteNest.Core.Services
                             .Where(kvp => kvp.Key.Contains(word, StringComparison.OrdinalIgnoreCase))
                             .SelectMany(kvp => kvp.Value);
 
+                        var fuzzyCount = fuzzyMatches.Count();
+                        if (fuzzyCount > 0)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[SearchIndex] Found {fuzzyCount} fuzzy matches for '{word}'");
+                        }
+
                         foreach (var result in fuzzyMatches)
                         {
                             UpdateResultScore(resultScores, result, 0.5f);
@@ -190,12 +231,18 @@ namespace NoteNest.Core.Services
                 }
             }
 
+            System.Diagnostics.Debug.WriteLine($"[SearchIndex] Total unique results: {resultScores.Count}");
+
             // Sort by score and return top results
-            return resultScores
+            var finalResults = resultScores
                 .OrderByDescending(kvp => kvp.Value.score)
                 .Take(maxResults)
                 .Select(kvp => kvp.Value.result)
                 .ToList();
+                
+            System.Diagnostics.Debug.WriteLine($"[SearchIndex] Returning {finalResults.Count} results");
+            
+            return finalResults;
         }
 
         public async Task<List<SearchResult>> SearchAsync(string query, int maxResults = 50, System.Threading.CancellationToken cancellationToken = default)
