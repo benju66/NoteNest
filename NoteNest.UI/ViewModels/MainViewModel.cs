@@ -45,6 +45,8 @@ namespace NoteNest.UI.ViewModels
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Task _initializationTask;
+        private bool _recoveryInProgress;
+        private HashSet<string> _pendingRecoveryNotes = new();
         
         private ObservableCollection<CategoryTreeItem> _categories;
         private ObservableCollection<CategoryTreeItem> _pinnedCategories;
@@ -305,9 +307,64 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        private void OnWorkspaceTabOpened(object sender, TabEventArgs e)
+        private async void OnWorkspaceTabOpened(object sender, TabEventArgs e)
         {
             try { _tabPersistence.MarkChanged(); } catch { }
+            
+            // Check if this tab has recovered content that needs to be saved
+            if (_recoveryInProgress && e?.Tab?.Note != null && _pendingRecoveryNotes.Contains(e.Tab.Note.Id))
+            {
+                try
+                {
+                    _logger.Info($"Saving recovered content for opened tab: {e.Tab.Note.Title}");
+                    
+                    // Wait a moment for the tab to fully initialize
+                    await Task.Delay(500);
+                    
+                    // Force save the recovered content (bypass dirty check for recovery)
+                    // First ensure the tab knows it has dirty content
+                    if (e.Tab is NoteTabItem nti)
+                    {
+                        nti.IsDirty = true;
+                    }
+                    
+                    var result = await _workspaceStateService.SaveNoteAsync(e.Tab.Note.Id);
+                    if (result?.Success == true)
+                    {
+                        _pendingRecoveryNotes.Remove(e.Tab.Note.Id);
+                        _logger.Info($"Successfully saved recovered content for: {e.Tab.Note.Title}");
+                        
+                        // Clear recovery tracking if all notes are saved
+                        if (_pendingRecoveryNotes.Count == 0)
+                        {
+                            _recoveryInProgress = false;
+                            
+                            // Now it's safe to clear the persistence log
+                            try
+                            {
+                                var persistenceLog = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IContentPersistenceLog)) as IContentPersistenceLog;
+                                if (persistenceLog != null)
+                                {
+                                    await persistenceLog.ClearLogAsync();
+                                    _logger.Info("Cleared persistence log after all recovered notes were saved");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Warning($"Failed to clear persistence log: {ex.Message}");
+                            }
+                        }
+                    }
+                    else
+                    {
+                        _logger.Warning($"Failed to save recovered content for: {e.Tab.Note.Title}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"Error saving recovered content for tab: {e.Tab?.Note?.Title}");
+                }
+            }
         }
 
         private void OnWorkspaceTabClosed(object sender, TabEventArgs e)
@@ -493,9 +550,11 @@ namespace NoteNest.UI.ViewModels
                         {
                             try
                             {
-                                // Update the buffer with recovered content
+                                // Buffer the recovered content
+                                // It will be saved when the note is opened or during auto-save
                                 _workspaceStateService.UpdateNoteContent(kvp.Key, kvp.Value);
                                 recovered++;
+                                _logger.Info($"Buffered recovered content for note ID: {kvp.Key}");
                             }
                             catch (Exception ex)
                             {
@@ -503,11 +562,41 @@ namespace NoteNest.UI.ViewModels
                             }
                         }
                         
+                        // Mark recovery in progress so we can save when tabs are opened
+                        _recoveryInProgress = true;
+                        _pendingRecoveryNotes = new HashSet<string>(recoveredChanges.Keys);
+                        
                         StatusMessage = $"Recovered {recovered} unsaved changes";
                         _logger.Info($"Successfully recovered {recovered} of {recoveredChanges.Count} changes");
                         
-                        // Clear the persistence log after successful recovery
-                        await persistenceLog.ClearLogAsync();
+                        // Schedule clearing the persistence log after tabs are restored and saved
+                        _ = Task.Run(async () =>
+                        {
+                            await Task.Delay(5000); // Give time for tabs to open and save
+                            
+                            // Check if all recovered notes have been saved
+                            var allSaved = true;
+                            foreach (var noteId in _pendingRecoveryNotes)
+                            {
+                                if (_workspaceStateService.IsNoteDirty(noteId))
+                                {
+                                    allSaved = false;
+                                    _logger.Warning($"Recovery note {noteId} is still dirty after 5 seconds");
+                                }
+                            }
+                            
+                            if (allSaved)
+                            {
+                                _logger.Info("All recovered notes saved, clearing persistence log");
+                                await persistenceLog.ClearLogAsync();
+                                _pendingRecoveryNotes.Clear();
+                                _recoveryInProgress = false;
+                            }
+                            else
+                            {
+                                _logger.Warning("Some recovered notes still dirty, keeping persistence log");
+                            }
+                        });
                     }
                     else
                     {

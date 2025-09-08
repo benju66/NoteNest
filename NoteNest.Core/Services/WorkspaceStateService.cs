@@ -133,15 +133,44 @@ namespace NoteNest.Core.Services
                 fileLastModified = info.LastWriteTime;
             }
 
+            // Load the actual file content to determine the true original content
+            string originalContent = note.Content ?? string.Empty;
+            if (await _fileSystem.ExistsAsync(note.FilePath))
+            {
+                try
+                {
+                    // Always load from disk to get the true original content
+                    var loadedNote = await _noteService.LoadNoteAsync(note.FilePath);
+                    originalContent = loadedNote?.Content ?? string.Empty;
+                    System.Diagnostics.Debug.WriteLine($"[State] OpenNoteAsync loaded original from disk: noteId={note.Id} diskLen={originalContent.Length} passedLen={note.Content?.Length ?? 0}");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[State] Failed to load original content from disk for {note.Id}: {ex.Message}");
+                    // Fall back to passed content
+                }
+            }
+            
+            // Check if there's buffered content (e.g., from recovery)
+            var bufferedContent = _contentBuffer.GetLatestContent(note.Id);
+            var currentContent = bufferedContent ?? note.Content ?? originalContent;
+            
             var wn = new WorkspaceNote
             {
                 NoteId = note.Id,
                 Model = note,
-                OriginalContent = note.Content ?? string.Empty,
-                CurrentContent = note.Content ?? string.Empty,
+                OriginalContent = originalContent,
+                CurrentContent = currentContent,
                 OpenedAt = DateTime.Now,
                 FileLastModified = fileLastModified
             };
+            
+            // If we have buffered content that's different from disk, mark as dirty immediately
+            if (bufferedContent != null && !string.Equals(originalContent, bufferedContent, StringComparison.Ordinal))
+            {
+                System.Diagnostics.Debug.WriteLine($"[State] OpenNoteAsync detected buffered recovery content for noteId={note.Id}, marking as dirty");
+            }
+            
             lock (_noteLock)
             {
                 _openNotes[note.Id] = wn;

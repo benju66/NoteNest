@@ -18,7 +18,7 @@ namespace NoteNest.UI.ViewModels
         public NoteModel Note => _note;
         public string Id => _note?.Id ?? string.Empty;
 
-        public string Title => _note.Title;
+        public string Title => _isDirty ? $"{_note.Title} *" : _note.Title;
 
         public string Content
         {
@@ -48,7 +48,7 @@ namespace NoteNest.UI.ViewModels
                 {
                     var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
                     state?.UpdateNoteContent(_note.Id, newValue);
-                    System.Diagnostics.Debug.WriteLine($"[Tab] Content set noteId={_note?.Id} len={newValue.Length} at={DateTime.Now:HH:mm:ss.fff}");
+                    System.Diagnostics.Debug.WriteLine($"[Tab] Content set noteId={_note?.Id} len={newValue?.Length ?? 0} dirty={_isDirty} at={DateTime.Now:HH:mm:ss.fff}");
                     
                     // Always check dirty state when content changes
                     // This ensures persistent tabs properly track changes even during initial load
