@@ -8,6 +8,8 @@ using NoteNest.UI.Services;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
+using System.Threading.Tasks;
+using NoteNest.Core.Models;
 using NoteNest.UI.Controls.ListHandling;
 
 namespace NoteNest.UI.Controls
@@ -19,6 +21,8 @@ namespace NoteNest.UI.Controls
         private readonly DispatcherTimer _debounceTimer;
         private readonly ListStateTracker _listTracker = new ListStateTracker();
         private bool _hasUnsavedChanges = false;
+        private NoteModel _currentNote;
+        private NoteNest.Core.Services.NoteMetadataManager _metadataManager;
 
         public static readonly DependencyProperty MarkdownContentProperty =
             DependencyProperty.Register(
@@ -31,6 +35,17 @@ namespace NoteNest.UI.Controls
         {
             get => (string)GetValue(MarkdownContentProperty);
             set => SetValue(MarkdownContentProperty, value);
+        }
+
+        public NoteModel CurrentNote 
+        {
+            get => _currentNote;
+            set => _currentNote = value;
+        }
+
+        public void SetMetadataManager(NoteNest.Core.Services.NoteMetadataManager manager)
+        {
+            _metadataManager = manager;
         }
 
         public FormattedTextEditor()
@@ -56,6 +71,16 @@ namespace NoteNest.UI.Controls
                     pStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0, 0, 0, 1)));
                     pStyle.Setters.Add(new Setter(Paragraph.ForegroundProperty, new DynamicResourceExtension("SystemControlForegroundBaseHighBrush")));
                     Document.Resources[typeof(Paragraph)] = pStyle;
+                    
+                    // Add explicit styles for List elements to ensure proper block-level rendering
+                    var listStyle = new Style(typeof(List));
+                    listStyle.Setters.Add(new Setter(List.MarginProperty, new Thickness(0, 2, 0, 2)));
+                    listStyle.Setters.Add(new Setter(List.PaddingProperty, new Thickness(20, 0, 0, 0)));
+                    Document.Resources[typeof(List)] = listStyle;
+                    
+                    var listItemStyle = new Style(typeof(ListItem));
+                    listItemStyle.Setters.Add(new Setter(ListItem.MarginProperty, new Thickness(0, 1, 0, 1)));
+                    Document.Resources[typeof(ListItem)] = listItemStyle;
                 }
             }
             catch { }
@@ -1622,6 +1647,17 @@ namespace NoteNest.UI.Controls
                 try
                 {
                     Document.Blocks.Clear();
+                    
+                    // Ensure document has proper styles for lists
+                    var listStyle = new Style(typeof(List));
+                    listStyle.Setters.Add(new Setter(List.MarginProperty, new Thickness(0, 2, 0, 2)));
+                    listStyle.Setters.Add(new Setter(List.PaddingProperty, new Thickness(20, 0, 0, 0)));
+                    Document.Resources[typeof(List)] = listStyle;
+                    
+                    var listItemStyle = new Style(typeof(ListItem));
+                    listItemStyle.Setters.Add(new Setter(ListItem.MarginProperty, new Thickness(0, 1, 0, 1)));
+                    Document.Resources[typeof(ListItem)] = listItemStyle;
+                    
                     foreach (var block in flow.Blocks.ToList())
                     {
                         flow.Blocks.Remove(block);
@@ -1631,7 +1667,28 @@ namespace NoteNest.UI.Controls
                 catch { /* ignore copy failures */ }
                 try { CaretPosition = Document?.ContentEnd ?? caret; } catch { }
 
-                // Placeholder: list formatting restore will be invoked by caller on load if needed
+                // Load and apply list formatting metadata if available
+                if (_currentNote != null && _metadataManager != null)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var listFormatting = await _metadataManager.LoadListFormattingAsync(_currentNote);
+                            if (!string.IsNullOrEmpty(listFormatting))
+                            {
+                                await Dispatcher.InvokeAsync(() =>
+                                {
+                                    ApplyListFormattingMetadata(listFormatting);
+                                });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Failed to load list formatting: {ex.Message}");
+                        }
+                    });
+                }
             }
             finally
             {
@@ -1647,7 +1704,26 @@ namespace NoteNest.UI.Controls
                 var markdown = _converter.ConvertToMarkdown(Document);
                 SetCurrentValue(MarkdownContentProperty, markdown);
 
-                // Optionally persist list formatting metadata (Phase 1: no-op here; handled by caller on save)
+                // Save list formatting metadata if available
+                if (_currentNote != null && _metadataManager != null)
+                {
+                    var listFormatting = ExtractListFormattingMetadata();
+                    if (!string.IsNullOrEmpty(listFormatting))
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await _metadataManager.SaveListFormattingAsync(_currentNote, listFormatting);
+                            }
+                            catch (Exception ex)
+                            {
+                                // Log error but don't fail the save
+                                System.Diagnostics.Debug.WriteLine($"Failed to save list formatting: {ex.Message}");
+                            }
+                        });
+                    }
+                }
             }
             finally
             {
@@ -2115,7 +2191,25 @@ namespace NoteNest.UI.Controls
             #endif
         }
         #endregion
+
+        #region List Formatting Metadata
+        private string ExtractListFormattingMetadata()
+        {
+            // Since the markdown converter already handles lists correctly,
+            // we don't need to store additional metadata.
+            // The issue is likely in rendering or styles, not in conversion.
+            return string.Empty;
+        }
+
+        private void ApplyListFormattingMetadata(string listFormatting)
+        {
+            // List styles are now applied directly when the document is loaded.
+            // This method is kept for future enhancements where we might need
+            // to restore custom list formatting from metadata.
+        }
+        #endregion
     }
 }
+
 
 

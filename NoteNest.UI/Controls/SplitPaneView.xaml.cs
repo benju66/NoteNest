@@ -38,6 +38,7 @@ namespace NoteNest.UI.Controls
         private readonly NoteNest.Core.Services.IWorkspaceStateService? _stateService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
         private readonly NoteNest.Core.Services.ConfigurationService? _configService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
         private readonly NoteNest.Core.Services.Logging.IAppLogger? _logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
+        private readonly NoteNest.Core.Services.NoteMetadataManager? _metadataManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.NoteMetadataManager)) as NoteNest.Core.Services.NoteMetadataManager;
         private bool _isDragging;
 
         // Expose commands for input bindings
@@ -292,11 +293,26 @@ namespace NoteNest.UI.Controls
                 var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
                 var presenter = FindVisualChild<ContentPresenter>(container);
                 var editor = FindVisualChild<FormattedTextEditor>(presenter);
-                if (editor != null && config?.Settings != null)
+                if (editor != null)
                 {
-                    try { SpellCheck.SetIsEnabled(editor, config.Settings.EnableSpellCheck); } catch { }
-                    try { editor.Document.FontFamily = new System.Windows.Media.FontFamily(config.Settings.FontFamily); } catch { }
-                    try { editor.Document.FontSize = config.Settings.FontSize > 0 ? config.Settings.FontSize : editor.Document.FontSize; } catch { }
+                    // Apply editor settings
+                    if (config?.Settings != null)
+                    {
+                        try { SpellCheck.SetIsEnabled(editor, config.Settings.EnableSpellCheck); } catch { }
+                        try { editor.Document.FontFamily = new System.Windows.Media.FontFamily(config.Settings.FontFamily); } catch { }
+                        try { editor.Document.FontSize = config.Settings.FontSize > 0 ? config.Settings.FontSize : editor.Document.FontSize; } catch { }
+                    }
+                    
+                    // Wire up metadata manager and current note
+                    if (_metadataManager != null && Pane?.SelectedTab?.Note != null)
+                    {
+                        try
+                        {
+                            editor.SetMetadataManager(_metadataManager);
+                            editor.CurrentNote = Pane.SelectedTab.Note;
+                        }
+                        catch { }
+                    }
                 }
             }
             catch { }
