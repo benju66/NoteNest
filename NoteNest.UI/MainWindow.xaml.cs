@@ -20,6 +20,8 @@ using System.Windows.Input;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Microsoft.Extensions.DependencyInjection;
+using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI
 {
@@ -52,6 +54,9 @@ namespace NoteNest.UI
             InitializeComponent();
             UpdateThemeMenuChecks();
             AllowDrop = true;
+            
+            // Initialize search functionality
+            InitializeSearch();
             try
             {
                 // Ensure caption button area is not overlapped by our content
@@ -1044,5 +1049,101 @@ namespace NoteNest.UI
                 }
             }
         }
+
+        #region Search Functionality
+
+        private void InitializeSearch()
+        {
+            try
+            {
+                var app = Application.Current as App;
+                var serviceProvider = app?.ServiceProvider;
+                
+                if (serviceProvider != null)
+                {
+                    // Get search services from DI
+                    var searchViewModel = serviceProvider.GetRequiredService<SearchViewModel>();
+                    var logger = serviceProvider.GetRequiredService<IAppLogger>();
+                    
+                    // Set up the search control
+                    SearchControl.ViewModel = searchViewModel;
+                    
+                    logger.Debug("Search functionality initialized");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fallback - search will still work but without advanced features
+                System.Diagnostics.Debug.WriteLine($"Failed to initialize search: {ex.Message}");
+            }
+        }
+
+        private void OnSearchResultSelected(object sender, SearchResultSelectedEventArgs e)
+        {
+            try
+            {
+                var result = e.Result;
+                if (result == null) return;
+
+                // Get services from DI
+                var app = Application.Current as App;
+                var serviceProvider = app?.ServiceProvider;
+                if (serviceProvider == null) return;
+
+                var workspaceService = serviceProvider.GetService<IWorkspaceService>();
+                var logger = serviceProvider.GetService<IAppLogger>();
+                
+                logger?.Debug($"Opening search result: {result.Title}");
+
+                if (result.ResultType == SearchResultType.Note)
+                {
+                    // Open the note
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            // Load the note model from the file path
+                            var noteService = serviceProvider.GetService<NoteService>();
+                            if (noteService != null)
+                            {
+                                var note = await noteService.LoadNoteAsync(result.FilePath);
+                                if (note != null)
+                                {
+                                    // Open on UI thread
+                                    Dispatcher.Invoke(async () =>
+                                    {
+                                        try
+                                        {
+                                            await workspaceService?.OpenNoteAsync(note);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            logger?.Error(ex, $"Failed to open note: {result.Title}");
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger?.Error(ex, $"Failed to load note: {result.Title}");
+                        }
+                    });
+                }
+                else if (result.ResultType == SearchResultType.Category)
+                {
+                    // Navigate to category - this could expand the category in the tree view
+                    logger?.Debug($"Category selection not yet implemented: {result.Title}");
+                }
+            }
+            catch (Exception ex)
+            {
+                var logger = AppLogger.Instance;
+                logger.Error(ex, "Failed to handle search result selection");
+            }
+        }
+
+        #endregion
+
     }
 }

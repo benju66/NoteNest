@@ -127,6 +127,10 @@ namespace NoteNest.UI.Services
                 sp.GetRequiredService<IWorkspaceStateService>()
             ));
 
+            // Search services - lightweight, focused
+            services.AddSingleton<ISearchService, SearchService>();
+            services.AddTransient<SearchViewModel>(); // Transient for multiple instances
+
             return services;
         }
     }

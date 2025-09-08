@@ -32,12 +32,13 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Custom Title Bar: icon + main menu placed in caption area -->
+        <!-- Custom Title Bar: icon + main menu + search placed in caption area -->
         <Grid Grid.Row="0" x:Name="CustomTitleBar"
               shell:WindowChrome.IsHitTestVisibleInChrome="False"
               Background="Transparent"
               Height="{x:Static SystemParameters.WindowCaptionHeight}">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -177,9 +178,18 @@
             </MenuItem>
             </Menu>
 
+            <!-- Smart Search Control in title bar -->
+            <controls:SmartSearchControl x:Name="SearchControl"
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        Margin="12,0,12,0"
+                                        MaxWidth="300"
+                                        shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                                        ResultSelected="OnSearchResultSelected"/>
+
             <!-- Right panel toggle just left of caption buttons -->
             <ToggleButton x:Name="RightPanelToggle"
-                          Grid.Column="3"
+                          Grid.Column="4"
                           Width="28"
                           Height="{x:Static SystemParameters.WindowCaptionHeight}"
                           Margin="6,0,6,0"
@@ -199,8 +209,8 @@
                            HorizontalAlignment="Center"/>
             </ToggleButton>
             
-            <!-- Drag/double-click spacer region between menu and toggle -->
-            <Border Grid.Column="2"
+            <!-- Drag/double-click spacer region between search and toggle -->
+            <Border Grid.Column="3"
                     Background="Transparent"
                     shell:WindowChrome.IsHitTestVisibleInChrome="False"/>
         </Grid>

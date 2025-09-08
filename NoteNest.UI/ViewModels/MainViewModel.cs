@@ -34,7 +34,6 @@ namespace NoteNest.UI.ViewModels
         private readonly ITabPersistenceService _tabPersistence;
 
         // Lazy Services (created only when needed)
-        private SearchIndexService _searchIndex;
         private FileWatcherService _fileWatcher;
         private NoteNest.Core.Services.NoteMetadataManager _metadataManager;
         private ICategoryManagementService _categoryService;
@@ -42,8 +41,6 @@ namespace NoteNest.UI.ViewModels
         private readonly IWorkspaceService _workspaceService;
         private WorkspaceViewModel _workspaceViewModel;
         private DispatcherTimer _autoSaveTimer;
-        private DispatcherTimer _searchDebounceTimer;
-        private string _pendingSearchText;
         private readonly NoteNest.Core.Services.NotePinService _notePinService;
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -54,13 +51,8 @@ namespace NoteNest.UI.ViewModels
         private ObservableCollection<PinnedNoteItem> _pinnedNotes;
         private CategoryTreeItem _selectedCategory;
         private NoteTreeItem _selectedNote;
-        private string _searchText;
-        private bool _isSearchActive;
-        private List<NoteTreeItem> _searchResults = new List<NoteTreeItem>();
-        private int _searchSelectionIndex = -1;
         private bool _isLoading;
         private string _statusMessage;
-        private List<string> _recentSearches = new List<string>();
         private ITreeStateService _treeStateService;
 
         #region Properties
@@ -133,46 +125,6 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        public string SearchText
-        {
-            get => _searchText;
-            set
-            {
-                if (SetProperty(ref _searchText, value))
-                {
-                    _pendingSearchText = value;
-
-                    _searchDebounceTimer?.Stop();
-
-                    if (string.IsNullOrWhiteSpace(value))
-                    {
-                        ClearSearch();
-                    }
-                    else
-                    {
-                        if (_searchDebounceTimer == null)
-                        {
-                            _searchDebounceTimer = new DispatcherTimer
-                            {
-                                Interval = TimeSpan.FromMilliseconds(300)
-                            };
-                            _searchDebounceTimer.Tick += (s, e) =>
-                            {
-                                _searchDebounceTimer.Stop();
-                                PerformDebouncedSearch();
-                            };
-                        }
-                        _searchDebounceTimer.Start();
-                    }
-                }
-            }
-        }
-
-        public bool IsSearchActive
-        {
-            get => _isSearchActive;
-            set => SetProperty(ref _isSearchActive, value);
-        }
 
         public bool IsLoading
         {
@@ -189,10 +141,6 @@ namespace NoteNest.UI.ViewModels
         #endregion
 
         // Lazy service creation methods (called only when needed)
-        private SearchIndexService GetSearchIndex()
-        {
-            return _searchIndex ??= new SearchIndexService(_configService?.Settings?.SearchIndexContentWordLimit ?? 500);
-        }
 
         private FileWatcherService GetFileWatcher()
         {
@@ -288,10 +236,6 @@ namespace NoteNest.UI.ViewModels
         public ICommand DeleteCategoryCommand { get; private set; }
         public ICommand RefreshCommand { get; private set; }
         public ICommand ExitCommand { get; private set; }
-        public ICommand SearchNavigateDownCommand { get; private set; }
-        public ICommand SearchNavigateUpCommand { get; private set; }
-        public ICommand SearchOpenCommand { get; private set; }
-        public ICommand ClearSearchCommand { get; private set; }
 
         #endregion
 
@@ -376,26 +320,6 @@ namespace NoteNest.UI.ViewModels
             try { _tabPersistence.MarkChanged(); } catch { }
         }
 
-        public List<string> GetSearchSuggestions(string query)
-        {
-            if (string.IsNullOrWhiteSpace(query)) return new List<string>();
-
-            var titlesFromTree = Categories?
-                .SelectMany(c => GetAllNotesRecursive(c))
-                .Select(n => n.Title) ?? Enumerable.Empty<string>();
-
-            var titlesFromOpen = OpenTabs?.Select(t => t.Title) ?? Enumerable.Empty<string>();
-
-            var all = titlesFromTree
-                .Concat(titlesFromOpen)
-                .Concat(_recentSearches)
-                .Where(t => t?.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(10)
-                .ToList();
-
-            return all;
-        }
 
         private void InitializeCommands()
         {
@@ -421,10 +345,6 @@ namespace NoteNest.UI.ViewModels
                     System.Environment.Exit(0);
                 }
             });
-            SearchNavigateDownCommand = new RelayCommand(_ => NavigateSearch(+1), _ => _searchResults.Count > 0);
-            SearchNavigateUpCommand = new RelayCommand(_ => NavigateSearch(-1), _ => _searchResults.Count > 0);
-            SearchOpenCommand = new RelayCommand(async _ => await OpenFromSearchAsync(), _ => _searchResults.Count > 0);
-            ClearSearchCommand = new RelayCommand(_ => { SearchText = string.Empty; IsSearchActive = false; });
         }
 
         private async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -979,213 +899,9 @@ namespace NoteNest.UI.ViewModels
 
         #endregion
 
-        #region Search Operations
+        #region Helper Methods
 
-        private void FilterNotes()
-        {
-            if (string.IsNullOrWhiteSpace(SearchText))
-            {
-                // Show all
-                SetAllVisible(true);
-                _searchResults.Clear();
-                _searchSelectionIndex = -1;
-            }
-            else
-            {
-                var searchLower = SearchText.ToLower();
-                _searchResults = new List<NoteTreeItem>();
-                
-                foreach (var category in Categories)
-                {
-                    FilterCategory(category, searchLower);
-                }
-                
-                _searchSelectionIndex = -1;
-            }
-        }
 
-        private void PerformDebouncedSearch()
-        {
-            if (string.IsNullOrWhiteSpace(_pendingSearchText))
-            {
-                ClearSearch();
-                return;
-            }
-            
-            IsSearchActive = true;
-            _searchResults.Clear();
-            _searchSelectionIndex = -1;
-            
-            foreach (var category in Categories)
-            {
-                FilterCategory(category, _pendingSearchText.ToLower());
-            }
-            
-            StatusMessage = _searchResults.Count > 0 
-                ? $"Found {_searchResults.Count} notes" 
-                : "No notes found";
-        }
-
-        private void ClearSearch()
-        {
-            IsSearchActive = false;
-            _searchResults.Clear();
-            foreach (var category in Categories)
-            {
-                ResetCategoryVisibility(category);
-            }
-        }
-
-        private void ResetCategoryVisibility(CategoryTreeItem category)
-        {
-            SetCategoryVisibility(category, true);
-        }
-
-        private void SetAllVisible(bool visible)
-        {
-            foreach (var category in Categories)
-            {
-                SetCategoryVisibility(category, visible);
-            }
-        }
-
-        private void SetCategoryVisibility(CategoryTreeItem category, bool visible)
-        {
-            category.IsVisible = visible;
-            foreach (var note in category.Notes)
-            {
-                note.IsVisible = visible;
-            }
-            foreach (var subCategory in category.SubCategories)
-            {
-                SetCategoryVisibility(subCategory, visible);
-            }
-        }
-
-        private bool FilterCategory(CategoryTreeItem category, string searchLower)
-        {
-            var hasVisibleNotes = false;
-            
-            foreach (var note in category.Notes)
-            {
-                note.IsVisible = note.Model.Title.ToLower().Contains(searchLower);
-                if (note.IsVisible)
-                {
-                    hasVisibleNotes = true;
-                    _searchResults.Add(note);
-                }
-            }
-            
-            foreach (var subCategory in category.SubCategories)
-            {
-                if (FilterCategory(subCategory, searchLower))
-                {
-                    hasVisibleNotes = true;
-                }
-            }
-            
-            category.IsVisible = hasVisibleNotes || category.Name.ToLower().Contains(searchLower);
-            return category.IsVisible;
-        }
-
-        private void NavigateSearch(int delta)
-        {
-            if (_searchResults.Count == 0) return;
-            
-            _searchSelectionIndex = (_searchSelectionIndex + delta + _searchResults.Count) % _searchResults.Count;
-            var target = _searchResults[_searchSelectionIndex];
-            
-            // Find parent category
-            CategoryTreeItem parent = null;
-            foreach (var cat in Categories)
-            {
-                parent = FindCategoryContainingNote(cat, target);
-                if (parent != null) break;
-            }
-            
-            if (parent != null)
-            {
-                parent.IsExpanded = true;
-                SelectedCategory = parent;
-                SelectedNote = target;
-            }
-        }
-
-        private CategoryTreeItem FindCategoryContainingNote(CategoryTreeItem category, NoteTreeItem note)
-        {
-            if (category.Notes.Contains(note))
-                return category;
-            
-            foreach (var subCategory in category.SubCategories)
-            {
-                var found = FindCategoryContainingNote(subCategory, note);
-                if (found != null) return found;
-            }
-            
-            return null;
-        }
-
-        private IEnumerable<NoteTreeItem> GetAllNotesRecursive(CategoryTreeItem category)
-        {
-            foreach (var n in category.Notes) yield return n;
-            foreach (var sub in category.SubCategories)
-            {
-                foreach (var n in GetAllNotesRecursive(sub)) yield return n;
-            }
-        }
-
-        private Task OpenFromSearchAsync()
-        {
-            if (_searchResults.Count == 0) return Task.CompletedTask;
-            
-            if (_searchSelectionIndex < 0 && _searchResults.Count > 0)
-            {
-                _searchSelectionIndex = 0;
-                NavigateSearch(0);
-            }
-            
-            if (SelectedNote != null)
-            {
-                // Route open via event to split-pane layer
-                NoteOpenRequested?.Invoke(SelectedNote);
-            }
-
-            return Task.CompletedTask;
-        }
-
-        // Add new search method using the index
-        public async Task<List<NoteTreeItem>> SearchNotesAsync(string query)
-        {
-            if (_searchIndex.NeedsReindex)
-            {
-                await Task.Run(() =>
-                {
-                    var allCategories = GetAllCategoriesFlat();
-                    var allNotes = new List<NoteModel>();
-                    
-                    foreach (var category in Categories)
-                    {
-                        CollectAllNotes(category, allNotes);
-                    }
-                    
-                    _searchIndex.BuildIndex(allCategories, allNotes);
-                });
-            }
-
-            var results = _searchIndex.Search(query);
-            
-            var noteItems = new List<NoteTreeItem>();
-            foreach (var result in results.Where(r => !string.IsNullOrEmpty(r.NoteId)))
-            {
-                var noteItem = FindNoteById(result.NoteId);
-                if (noteItem != null)
-                {
-                    noteItems.Add(noteItem);
-                }
-            }
-            
-            return noteItems;
-        }
 
         // Helper method to collect all notes
         private void CollectAllNotes(CategoryTreeItem category, List<NoteModel> allNotes)
@@ -1199,6 +915,21 @@ namespace NoteNest.UI.ViewModels
             {
                 CollectAllNotes(subCategory, allNotes);
             }
+        }
+
+        // Helper method to find which category contains a specific note
+        private CategoryTreeItem FindCategoryContainingNote(CategoryTreeItem category, NoteTreeItem note)
+        {
+            if (category.Notes.Contains(note))
+                return category;
+            
+            foreach (var subCategory in category.SubCategories)
+            {
+                var found = FindCategoryContainingNote(subCategory, note);
+                if (found != null) return found;
+            }
+            
+            return null;
         }
 
         // Helper to find note by ID
@@ -1587,9 +1318,6 @@ namespace NoteNest.UI.ViewModels
                 {
                     // Cancel operations quickly
                     _cancellationTokenSource?.Cancel();
-                    // Stop search debounce timer
-                    try { _searchDebounceTimer?.Stop(); } catch { }
-                    _searchDebounceTimer = null;
                     _treeStateService = null;
 
                     // Unsubscribe events
@@ -1606,7 +1334,6 @@ namespace NoteNest.UI.ViewModels
                     }
 
                     // Dispose only what was actually created
-                    _searchIndex = null;
                     _fileWatcher?.Dispose();
                     (_workspaceViewModel as IDisposable)?.Dispose();
                     (_workspaceService as IDisposable)?.Dispose();
