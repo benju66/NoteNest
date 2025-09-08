@@ -1944,25 +1944,23 @@ namespace NoteNest.UI.Controls
                 }
                 else
                 {
-                    // Apply list formatting - only fix caret for this specific case
+                    // Apply list formatting - fix caret for both empty and non-empty paragraphs
                     var currentPara = CaretPosition?.Paragraph;
                     var caretOffset = 0;
+                    bool shouldRestoreCaret = false;
                     
-                    // Only save position if we're converting a single paragraph with existing content
+                    // Save position for single paragraph selection (empty or with content)
                     if (selection.Count == 1 && currentPara != null && CaretPosition != null)
                     {
-                        var text = new TextRange(currentPara.ContentStart, currentPara.ContentEnd).Text;
-                        if (!string.IsNullOrWhiteSpace(text))
-                        {
-                            var range = new TextRange(currentPara.ContentStart, CaretPosition);
-                            caretOffset = range.Text.Length;
-                        }
+                        var range = new TextRange(currentPara.ContentStart, CaretPosition);
+                        caretOffset = range.Text.Length;
+                        shouldRestoreCaret = true;
                     }
                     
                     ApplyListToSelection(selection, markerStyle);
                     
-                    // Only restore caret if we saved a position (single para with content)
-                    if (caretOffset > 0 && currentPara != null)
+                    // Restore caret position after list formatting
+                    if (shouldRestoreCaret && currentPara != null)
                     {
                         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
                         {
@@ -1972,14 +1970,23 @@ namespace NoteNest.UI.Controls
                                 var listItem = FindListItemContainingOriginalParagraph(currentPara);
                                 if (listItem?.Blocks.FirstBlock is Paragraph para)
                                 {
-                                    var position = para.ContentStart;
-                                    for (int i = 0; i < caretOffset && position != null; i++)
+                                    if (caretOffset == 0)
                                     {
-                                        var next = position.GetNextInsertionPosition(LogicalDirection.Forward);
-                                        if (next == null || next.CompareTo(para.ContentEnd) > 0) break;
-                                        position = next;
+                                        // Empty paragraph - position after the bullet
+                                        CaretPosition = para.ContentStart;
                                     }
-                                    CaretPosition = position;
+                                    else
+                                    {
+                                        // Non-empty - restore to saved position
+                                        var position = para.ContentStart;
+                                        for (int i = 0; i < caretOffset && position != null; i++)
+                                        {
+                                            var next = position.GetNextInsertionPosition(LogicalDirection.Forward);
+                                            if (next == null || next.CompareTo(para.ContentEnd) > 0) break;
+                                            position = next;
+                                        }
+                                        CaretPosition = position;
+                                    }
                                 }
                             }
                             catch
