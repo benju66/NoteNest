@@ -247,16 +247,24 @@ namespace NoteNest.Core.Services
 
         public void UpdateContent(string noteId, string content)
         {
+            System.Diagnostics.Debug.WriteLine($"[SaveManager] UpdateContent called: noteId={noteId}, contentLength={content?.Length ?? 0}");
+            
             _stateLock.EnterWriteLock();
             try
             {
+                System.Diagnostics.Debug.WriteLine($"[SaveManager] Checking if note exists in dictionary: noteId={noteId}, totalNotes={_notes.Count}");
+                
                 if (!_notes.TryGetValue(noteId, out var state))
                 {
+                    System.Diagnostics.Debug.WriteLine($"[SaveManager] ERROR: Note NOT FOUND in dictionary: noteId={noteId}");
+                    System.Diagnostics.Debug.WriteLine($"[SaveManager] Available noteIds: {string.Join(", ", _notes.Keys)}");
                     _logger.Warning($"UpdateContent called for unknown note: {noteId}");
                     return;
                 }
                 
+                System.Diagnostics.Debug.WriteLine($"[SaveManager] Note found, updating content: noteId={noteId}");
                 state.UpdateContent(content);
+                System.Diagnostics.Debug.WriteLine($"[SaveManager] Content updated, isDirty={state.IsDirty}");
                 
                 // Track update times for max delay enforcement
                 var now = DateTime.UtcNow;
@@ -285,12 +293,14 @@ namespace NoteNest.Core.Services
                         if (forceSave)
                         {
                             // Immediate save
+                            System.Diagnostics.Debug.WriteLine($"[SaveManager] Forcing immediate save due to delay: noteId={noteId}");
                             existingTimer.Change(0, Timeout.Infinite);
                             _firstUpdateTime.Remove(noteId);
                         }
                         else
                         {
                             // Reset timer for normal debounce
+                            System.Diagnostics.Debug.WriteLine($"[SaveManager] Resetting existing auto-save timer: noteId={noteId}, delay={AUTO_SAVE_DELAY_MS}ms");
                             existingTimer.Change(AUTO_SAVE_DELAY_MS, Timeout.Infinite);
                         }
                     }
@@ -298,8 +308,10 @@ namespace NoteNest.Core.Services
                     {
                         // Create new timer
                         var delay = forceSave ? 0 : AUTO_SAVE_DELAY_MS;
+                        System.Diagnostics.Debug.WriteLine($"[SaveManager] Creating new auto-save timer: noteId={noteId}, delay={delay}ms");
                         var newTimer = new Timer(
                             _ => {
+                                System.Diagnostics.Debug.WriteLine($"[SaveManager] Auto-save timer fired: noteId={noteId}");
                                 QueueAutoSave(noteId);
                                 _stateLock.EnterWriteLock();
                                 try
@@ -316,6 +328,7 @@ namespace NoteNest.Core.Services
                             delay, 
                             Timeout.Infinite);
                         _autoSaveTimers[noteId] = newTimer;
+                        System.Diagnostics.Debug.WriteLine($"[SaveManager] Auto-save timer created successfully: noteId={noteId}");
                     }
                 }
                 else

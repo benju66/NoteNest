@@ -163,21 +163,31 @@ namespace NoteNest.Core.Services.Implementation
                 }
                 
                 // CRITICAL: Open note in save manager FIRST to get correct ID
+                System.Diagnostics.Debug.WriteLine($"[WorkspaceService] Opening note in SaveManager: filePath={note.FilePath}");
                 var noteId = await _saveManager.OpenNoteAsync(note.FilePath);
+                System.Diagnostics.Debug.WriteLine($"[WorkspaceService] SaveManager returned noteId: {noteId}");
                 
                 // Synchronize the note ID
+                System.Diagnostics.Debug.WriteLine($"[WorkspaceService] Synchronizing note.Id from '{note.Id}' to '{noteId}'");
                 note.Id = noteId;
                 
                 // Update SaveManager with initial content if any
                 if (!string.IsNullOrEmpty(note.Content))
                 {
+                    System.Diagnostics.Debug.WriteLine($"[WorkspaceService] Updating SaveManager with initial content: noteId={noteId}, contentLength={note.Content.Length}");
                     _saveManager.UpdateContent(noteId, note.Content);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[WorkspaceService] No initial content to update for noteId={noteId}");
                 }
                 
                 _logger.Debug($"Registered note with save manager: {note.Title}, ID: {noteId}");
                 
                 // Create tab using factory (creates NoteTabItem)
+                System.Diagnostics.Debug.WriteLine($"[WorkspaceService] Creating tab via factory: noteId={noteId}");
                 var tab = _tabFactory.CreateTab(note, noteId);
+                System.Diagnostics.Debug.WriteLine($"[WorkspaceService] Tab created: type={tab.GetType().Name}, tabNoteId={tab.NoteId}");
                 
                 // Add to collections
                 if (!OpenTabs.Contains(tab))
