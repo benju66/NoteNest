@@ -108,6 +108,12 @@ namespace NoteNest.Core.Services
         private const int MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
         
         private readonly Channel<SaveRequest> _saveChannel;
+        private readonly Dictionary<string, DateTime> _lastContentUpdateTime = new();
+        private readonly Dictionary<string, DateTime> _firstUpdateTime = new();
+        private readonly Timer _periodicSaveTimer;
+        private const int AUTO_SAVE_DELAY_MS = 2000;
+        private const int MAX_AUTO_SAVE_DELAY_MS = 30000; // 30 seconds max
+        private const int PERIODIC_SAVE_INTERVAL_MS = 60000; // 1 minute
         private readonly Dictionary<string, NoteState> _notes = new();
         private readonly Dictionary<string, FileSystemWatcher> _watchers = new();
         private readonly Dictionary<string, Timer> _autoSaveTimers = new();
@@ -138,6 +144,13 @@ namespace NoteNest.Core.Services
                 SingleWriter = false,
                 AllowSynchronousContinuations = false
             });
+            
+            // ADD THIS: Periodic save timer
+            _periodicSaveTimer = new Timer(
+                _ => Task.Run(async () => await PeriodicSaveAsync()), 
+                null, 
+                PERIODIC_SAVE_INTERVAL_MS, 
+                PERIODIC_SAVE_INTERVAL_MS);
             
             _processorTask = Task.Run(() => ProcessSaveQueue(_cancellation.Token));
         }
@@ -236,35 +249,84 @@ namespace NoteNest.Core.Services
         {
             _stateLock.EnterWriteLock();
             try
-        {
-            if (!_notes.TryGetValue(noteId, out var state))
             {
-                _logger.Warning($"UpdateContent called for unknown note: {noteId}");
-                return;
-            }
-            
+                if (!_notes.TryGetValue(noteId, out var state))
+                {
+                    _logger.Warning($"UpdateContent called for unknown note: {noteId}");
+                    return;
+                }
+                
                 state.UpdateContent(content);
                 
-            if (state.IsDirty)
+                // Track update times for max delay enforcement
+                var now = DateTime.UtcNow;
+                _lastContentUpdateTime[noteId] = now;
+                
+                if (!_firstUpdateTime.ContainsKey(noteId))
                 {
-                    // Reuse existing timer if possible
-                    if (_autoSaveTimers.TryGetValue(noteId, out var timer))
+                    _firstUpdateTime[noteId] = now;
+                }
+                
+                if (state.IsDirty)
+                {
+                    bool forceSave = false;
+                    var firstUpdate = _firstUpdateTime[noteId];
+                    var delayedMs = (now - firstUpdate).TotalMilliseconds;
+                    
+                    // Force save if delayed too long
+                    if (delayedMs > MAX_AUTO_SAVE_DELAY_MS)
                     {
-                        // Reset existing timer
-                        timer.Change(2000, Timeout.Infinite);
+                        forceSave = true;
+                        _logger.Info($"Forcing auto-save for {noteId} after {delayedMs:F0}ms delay");
+                    }
+                    
+                    if (_autoSaveTimers.TryGetValue(noteId, out var existingTimer))
+                    {
+                        if (forceSave)
+                        {
+                            // Immediate save
+                            existingTimer.Change(0, Timeout.Infinite);
+                            _firstUpdateTime.Remove(noteId);
+                        }
+                        else
+                        {
+                            // Reset timer for normal debounce
+                            existingTimer.Change(AUTO_SAVE_DELAY_MS, Timeout.Infinite);
+                        }
                     }
                     else
                     {
-                        // Create new timer only if needed
-                        var newTimer = new Timer(_ => QueueAutoSave(noteId), 
-                                               null, 2000, Timeout.Infinite);
+                        // Create new timer
+                        var delay = forceSave ? 0 : AUTO_SAVE_DELAY_MS;
+                        var newTimer = new Timer(
+                            _ => {
+                                QueueAutoSave(noteId);
+                                _stateLock.EnterWriteLock();
+                                try
+                                {
+                                    _firstUpdateTime.Remove(noteId);
+                                    _lastContentUpdateTime.Remove(noteId);
+                                }
+                                finally
+                                {
+                                    _stateLock.ExitWriteLock();
+                                }
+                            }, 
+                            null, 
+                            delay, 
+                            Timeout.Infinite);
                         _autoSaveTimers[noteId] = newTimer;
                     }
                 }
-                else if (_autoSaveTimers.TryGetValue(noteId, out var timer))
+                else
                 {
-                    // Content is not dirty, disable timer
-                    timer.Change(Timeout.Infinite, Timeout.Infinite);
+                    // Content is not dirty, cleanup
+                    if (_autoSaveTimers.TryGetValue(noteId, out var timer))
+                    {
+                        timer.Change(Timeout.Infinite, Timeout.Infinite);
+                    }
+                    _firstUpdateTime.Remove(noteId);
+                    _lastContentUpdateTime.Remove(noteId);
                 }
             }
             finally
@@ -369,6 +431,47 @@ namespace NoteNest.Core.Services
             }
             
             return result;
+        }
+
+        private async Task PeriodicSaveAsync()
+        {
+            try
+            {
+                List<string> dirtyNotes;
+                _stateLock.EnterReadLock();
+                try
+                {
+                    dirtyNotes = _notes.Where(kvp => kvp.Value.IsDirty)
+                                       .Select(kvp => kvp.Key)
+                                       .ToList();
+                }
+                finally
+                {
+                    _stateLock.ExitReadLock();
+                }
+                
+                if (dirtyNotes.Count > 0)
+                {
+                    _logger.Info($"Periodic save triggered for {dirtyNotes.Count} dirty notes");
+                    
+                    foreach (var noteId in dirtyNotes)
+                    {
+                        var request = new SaveRequest
+                        {
+                            NoteId = noteId,
+                            Priority = SavePriority.AutoSave,
+                            QueuedAt = DateTime.UtcNow,
+                            CompletionSource = new TaskCompletionSource<bool>()
+                        };
+                        
+                        await _saveChannel.Writer.WriteAsync(request);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error in periodic save");
+            }
         }
 
         private async Task ProcessSaveQueue(CancellationToken cancellation)
@@ -1071,6 +1174,14 @@ namespace NoteNest.Core.Services
 
         public void Dispose()
         {
+            // ADD THIS: Stop and dispose periodic timer first
+            try
+            {
+                _periodicSaveTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+                _periodicSaveTimer?.Dispose();
+            }
+            catch { }
+            
             // Set shutdown flag
             _cancellation.Cancel();
             

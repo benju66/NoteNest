@@ -26,7 +26,8 @@ namespace NoteNest.Tests.Services
             var noteOps = new NoteOperationsServiceMock();
             var saveManager = new MockSaveManager();
 
-            _workspaceService = new WorkspaceService(contentCache, noteService, errorHandler, logger, noteOps, saveManager);
+            var mockTabFactory = new MockTabFactory();
+            _workspaceService = new WorkspaceService(contentCache, noteService, errorHandler, logger, noteOps, saveManager, mockTabFactory);
         }
 
         [Test]
@@ -150,6 +151,32 @@ namespace NoteNest.Tests.Services
             public void TrackOpenNote(NoteModel note) { }
             public void UntrackOpenNote(NoteModel note) { }
         }
+    }
+
+    public class MockTabFactory : ITabFactory
+    {
+        public ITabItem CreateTab(NoteModel note, string noteId)
+        {
+            return new MockTabItem(note, noteId);
+        }
+    }
+
+    public class MockTabItem : ITabItem
+    {
+        public MockTabItem(NoteModel note, string noteId)
+        {
+            Note = note;
+            NoteId = noteId;
+            Id = Guid.NewGuid().ToString();
+            Content = note.Content ?? "";
+        }
+
+        public string Id { get; }
+        public string Title => Note?.Title ?? "Mock Tab";
+        public NoteModel Note { get; }
+        public string NoteId { get; }
+        public bool IsDirty { get; set; }
+        public string Content { get; set; }
     }
 }
 

@@ -23,6 +23,7 @@ namespace NoteNest.Core.Services.Implementation
         private readonly IAppLogger _logger;
         private readonly INoteOperationsService _noteOperationsService;
         private readonly ISaveManager _saveManager;
+        private readonly ITabFactory _tabFactory;
         
         private ObservableCollection<ITabItem> _openTabs;
         private ITabItem? _selectedTab;
@@ -103,7 +104,8 @@ namespace NoteNest.Core.Services.Implementation
             IServiceErrorHandler errorHandler,
             IAppLogger logger,
             INoteOperationsService noteOperationsService,
-            ISaveManager saveManager)
+            ISaveManager saveManager,
+            ITabFactory tabFactory) // ADD THIS PARAMETER
         {
             _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
             _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
@@ -111,6 +113,7 @@ namespace NoteNest.Core.Services.Implementation
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _noteOperationsService = noteOperationsService ?? throw new ArgumentNullException(nameof(noteOperationsService));
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
+            _tabFactory = tabFactory ?? throw new ArgumentNullException(nameof(tabFactory)); // ADD THIS
             
             _openTabs = new ObservableCollection<ITabItem>();
             _panes = new ObservableCollection<SplitPane>();
@@ -144,40 +147,45 @@ namespace NoteNest.Core.Services.Implementation
                 {
                     SelectedTab = existingTab;
                     _logger.Debug($"Note already open, switching to tab: {note.Title}");
-                    System.Diagnostics.Debug.WriteLine($"[WS] OpenNoteAsync SKIP already-open id={note.Id} title={note.Title}");
                     return existingTab;
                 }
                 
                 // Load content if needed
                 if (string.IsNullOrEmpty(note.Content))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[WS] Loading content for {note.Title} from {note.FilePath}");
                     note.Content = await _contentCache.GetContentAsync(
                         note.FilePath,
                         async (path) => 
                         {
                             var loadedNote = await _noteService.LoadNoteAsync(path);
-                            System.Diagnostics.Debug.WriteLine($"[WS] Loaded content len={loadedNote?.Content?.Length ?? 0} for {note.Title}");
                             return loadedNote.Content;
                         });
                 }
                 
-                // Open note in save manager
+                // CRITICAL: Open note in save manager FIRST to get correct ID
                 var noteId = await _saveManager.OpenNoteAsync(note.FilePath);
-                _logger.Debug($"Registered note with save manager: {note.Title}");
-                System.Diagnostics.Debug.WriteLine($"[WS] Registered note id={note.Id} title={note.Title}");
                 
-                // Create new tab
-                // Note: The actual tab creation is delegated to UI layer
-                // This method returns a placeholder that will be replaced
-                var tab = new WorkspaceTabItem(note, noteId);
+                // Synchronize the note ID
+                note.Id = noteId;
                 
-                // Centralize: register tab in service collections and panes
+                // Update SaveManager with initial content if any
+                if (!string.IsNullOrEmpty(note.Content))
+                {
+                    _saveManager.UpdateContent(noteId, note.Content);
+                }
+                
+                _logger.Debug($"Registered note with save manager: {note.Title}, ID: {noteId}");
+                
+                // Create tab using factory (creates NoteTabItem)
+                var tab = _tabFactory.CreateTab(note, noteId);
+                
+                // Add to collections
                 if (!OpenTabs.Contains(tab))
                 {
                     OpenTabs.Add(tab);
                 }
-                // Ensure an active pane exists
+                
+                // Ensure active pane exists
                 if (ActivePane == null)
                 {
                     var initial = _panes.FirstOrDefault();
@@ -188,16 +196,17 @@ namespace NoteNest.Core.Services.Implementation
                     }
                     ActivePane = initial;
                 }
-                // Add to active pane if not already present
+                
+                // Add to active pane
                 if (ActivePane != null && !ActivePane.Tabs.Contains(tab))
                 {
                     ActivePane.Tabs.Add(tab);
                 }
+                
                 // Select the newly opened tab
                 SelectedTab = tab;
                 
                 _logger.Info($"Opened note: {note.Title}");
-                System.Diagnostics.Debug.WriteLine($"[WS] Opened note id={note.Id} title={note.Title}");
                 
                 TabOpened?.Invoke(this, new TabEventArgs { Tab = tab });
                 return tab;
@@ -491,53 +500,6 @@ namespace NoteNest.Core.Services.Implementation
         protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-    }
-    
-    // Internal implementation of ITabItem for workspace
-    internal class WorkspaceTabItem : ITabItem
-    {
-        private bool _isDirty;
-        private string _content;
-        private string _noteId;
-        
-        public string Id { get; }
-        public string Title => Note?.Title ?? "Untitled";
-        public NoteModel Note { get; }
-        public string NoteId => _noteId;
-        
-        public bool IsDirty
-        {
-            get => _isDirty;
-            set => _isDirty = value;
-        }
-        
-        public string Content
-        {
-            get => _content ?? Note?.Content ?? string.Empty;
-            set
-            {
-                var incoming = value ?? string.Empty;
-                var current = _content ?? Note?.Content ?? string.Empty;
-                if (!string.Equals(incoming, current, StringComparison.Ordinal))
-                {
-                    _content = incoming;
-                    if (Note != null)
-                    {
-                        Note.Content = incoming;
-                    }
-                    IsDirty = true;
-                }
-            }
-        }
-        
-        public WorkspaceTabItem(NoteModel note, string noteId = null)
-        {
-            Note = note ?? throw new ArgumentNullException(nameof(note));
-            Id = Guid.NewGuid().ToString();
-            _noteId = noteId ?? note.Id; // Use provided noteId or fall back to note.Id
-            _content = note.Content;
-            _isDirty = false;
         }
     }
 }

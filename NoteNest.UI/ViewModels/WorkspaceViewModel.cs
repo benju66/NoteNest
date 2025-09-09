@@ -41,7 +41,6 @@ namespace NoteNest.UI.ViewModels
             _uiTabs = new ObservableCollection<NoteTabItem>();
             
             // Subscribe to service events
-            _workspaceService.TabOpened += OnServiceTabOpened;
             _workspaceService.TabClosed += OnServiceTabClosed;
             _workspaceService.TabSelectionChanged += OnServiceTabSelectionChanged;
 
@@ -93,22 +92,6 @@ namespace NoteNest.UI.ViewModels
             if (_workspaceService.OpenTabs.Contains(noteTab))
             {
                 _workspaceService.OpenTabs.Remove(noteTab);
-            }
-        }
-        
-        private void OnServiceTabOpened(object sender, TabEventArgs e)
-        {
-            // Map service ITabItem to UI NoteTabItem where possible
-            if (e.Tab?.Note != null)
-            {
-                var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, e.Tab.Note));
-                if (existing == null)
-                {
-                    // Create NoteTabItem with SaveManager
-                    var uiTab = new NoteTabItem(e.Tab.Note, _saveManager);
-                    _uiTabs.Add(uiTab);
-                    System.Diagnostics.Debug.WriteLine($"[VM] TabOpened noteId={e.Tab.Note.Id} title={e.Tab.Note.Title}");
-                }
             }
         }
         
@@ -177,13 +160,25 @@ namespace NoteNest.UI.ViewModels
 
         private void SyncFromService()
         {
+            _uiTabs.Clear();
+            
             foreach (var tab in _workspaceService.OpenTabs)
             {
-                var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, tab.Note));
-                if (existing == null)
+                // All tabs from service should already be NoteTabItem
+                if (tab is NoteTabItem noteTab)
                 {
-                    _uiTabs.Add(new NoteTabItem(tab.Note, _saveManager));
+                    _uiTabs.Add(noteTab);
                 }
+                else
+                {
+                    // This shouldn't happen with new architecture
+                    System.Diagnostics.Debug.WriteLine($"[VM] Warning: Unexpected tab type in service: {tab.GetType().Name}");
+                }
+            }
+            
+            if (_workspaceService.SelectedTab is NoteTabItem selected)
+            {
+                SelectedTab = selected;
             }
         }
 
@@ -213,7 +208,6 @@ namespace NoteNest.UI.ViewModels
             {
                 if (_workspaceService != null)
                 {
-                    _workspaceService.TabOpened -= OnServiceTabOpened;
                     _workspaceService.TabClosed -= OnServiceTabClosed;
                     _workspaceService.TabSelectionChanged -= OnServiceTabSelectionChanged;
                     if (_workspaceService.OpenTabs is INotifyCollectionChanged ncc)

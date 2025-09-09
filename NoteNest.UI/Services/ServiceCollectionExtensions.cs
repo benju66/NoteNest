@@ -29,6 +29,7 @@ namespace NoteNest.UI.Services
                 sp.GetService<IEventBus>()));
             services.AddSingleton<ISaveManager, UnifiedSaveManager>(); // NEW unified manager
             services.AddSingleton<StartupRecoveryService>(); // NEW recovery service
+            services.AddSingleton<ITabFactory, UITabFactory>();
             services.AddSingleton<ITabPersistenceService>(sp => new TabPersistenceService(
                 sp.GetRequiredService<ConfigurationService>(),
                 sp.GetRequiredService<IAppLogger>(),
