@@ -27,11 +27,12 @@ namespace NoteNest.UI.Services
             services.AddSingleton<ConfigurationService>(sp => new ConfigurationService(
                 sp.GetRequiredService<IFileSystemProvider>(),
                 sp.GetService<IEventBus>()));
-            services.AddSingleton<ISaveManager, UnifiedSaveManager>(); // NEW
+            services.AddSingleton<ISaveManager, UnifiedSaveManager>(); // NEW unified manager
+            services.AddSingleton<StartupRecoveryService>(); // NEW recovery service
             services.AddSingleton<ITabPersistenceService>(sp => new TabPersistenceService(
                 sp.GetRequiredService<ConfigurationService>(),
                 sp.GetRequiredService<IAppLogger>(),
-                sp.GetRequiredService<IWorkspaceService>()));
+                sp.GetRequiredService<ISaveManager>()));
             // UI
             services.AddSingleton<MainWindow>();
             // EventBus planned for future integration; placeholder left out to avoid large changes

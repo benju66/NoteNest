@@ -32,8 +32,9 @@ namespace NoteNest.Tests.Services
 			_config.Settings.MetadataPath = Path.Combine(_tempRoot, ".metadata");
 			await _config.SaveSettingsAsync();
 
-			_workspace = new StubWorkspaceService();
-			_service = new TabPersistenceService(_config, AppLogger.Instance, _workspace);
+		_workspace = new StubWorkspaceService();
+		var mockSaveManager = new MockSaveManager();
+		_service = new TabPersistenceService(_config, AppLogger.Instance, mockSaveManager);
 		}
 
 		[TearDown]
@@ -125,6 +126,29 @@ namespace NoteNest.Tests.Services
 			public void UnregisterPane(SplitPane pane) { }
 			public System.Collections.Generic.IEnumerable<object> GetActivePanes() { yield break; }
 			public Task<bool> MoveTabToPaneAsync(ITabItem tab, object targetPane) => Task.FromResult(false);
+		}
+
+		private class MockSaveManager : ISaveManager
+		{
+			public event EventHandler<NoteSavedEventArgs>? NoteSaved;
+			public event EventHandler<SaveProgressEventArgs>? SaveStarted;
+			public event EventHandler<SaveProgressEventArgs>? SaveCompleted;
+			public event EventHandler<ExternalChangeEventArgs>? ExternalChangeDetected;
+
+			public async Task<string> OpenNoteAsync(string filePath) => System.Guid.NewGuid().ToString();
+			public void UpdateContent(string noteId, string content) { }
+			public async Task<bool> SaveNoteAsync(string noteId) => true;
+			public async Task<BatchSaveResult> SaveAllDirtyAsync() => new BatchSaveResult();
+			public async Task<bool> CloseNoteAsync(string noteId) => true;
+			public bool IsNoteDirty(string noteId) => false;
+			public bool IsSaving(string noteId) => false;
+			public string GetContent(string noteId) => "";
+			public string? GetLastSavedContent(string noteId) => null;
+			public string? GetFilePath(string noteId) => null;
+			public string? GetNoteIdForPath(string filePath) => null;
+			public IReadOnlyList<string> GetDirtyNoteIds() => new List<string>();
+			public async Task<bool> ResolveExternalChangeAsync(string noteId, ConflictResolution resolution) => true;
+			public void Dispose() { }
 		}
 	}
 }

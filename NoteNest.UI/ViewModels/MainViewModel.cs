@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Microsoft.Extensions.DependencyInjection;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
@@ -32,6 +33,7 @@ namespace NoteNest.UI.ViewModels
         private readonly ContentCache _contentCache;
         private readonly ITabPersistenceService _tabPersistence;
         private readonly ISaveManager _saveManager;
+        private readonly IServiceProvider _serviceProvider;
 
         // Lazy Services (created only when needed)
         private FileWatcherService _fileWatcher;
@@ -254,7 +256,8 @@ namespace NoteNest.UI.ViewModels
             ContentCache contentCache,
             ITabPersistenceService tabPersistence,
             NoteNest.Core.Services.NotePinService notePinService,
-            ISaveManager saveManager)
+            ISaveManager saveManager,
+            IServiceProvider serviceProvider)
         {
             // Assign essential services only (fast)
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -269,6 +272,7 @@ namespace NoteNest.UI.ViewModels
             _tabPersistence = tabPersistence ?? throw new ArgumentNullException(nameof(tabPersistence));
             _notePinService = notePinService ?? throw new ArgumentNullException(nameof(notePinService));
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 
             _logger.Info("MainViewModel fast startup initiated");
             _cancellationTokenSource = new CancellationTokenSource();
@@ -369,6 +373,48 @@ namespace NoteNest.UI.ViewModels
             try { _tabPersistence.MarkChanged(); } catch { }
         }
 
+        // ADD method for external change handling:
+        private async void OnExternalChangeDetected(object sender, ExternalChangeEventArgs e)
+        {
+            // Run on UI thread
+            await Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                var result = MessageBox.Show(
+                    $"The file '{Path.GetFileName(e.FilePath)}' has been modified externally.\n\n" +
+                    "Do you want to reload it?\n\n" +
+                    "Yes = Reload from disk (lose local changes)\n" +
+                    "No = Keep local version (overwrite on next save)",
+                    "External Change Detected",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+                
+                if (result == MessageBoxResult.Yes)
+                {
+                    var saveManager = _serviceProvider.GetService<ISaveManager>();
+                    await saveManager.ResolveExternalChangeAsync(e.NoteId, ConflictResolution.KeepExternal);
+                    
+                    // Refresh UI
+                    var workspace = GetWorkspaceService();
+                    var tab = workspace.FindTabByPath(e.FilePath);
+                    if (tab != null)
+                    {
+                        tab.Content = saveManager.GetContent(e.NoteId);
+                    }
+                }
+                else
+                {
+                    var saveManager = _serviceProvider.GetService<ISaveManager>();
+                    await saveManager.ResolveExternalChangeAsync(e.NoteId, ConflictResolution.KeepLocal);
+                }
+            });
+        }
+        
+        private async Task LoadTemplatesAsync()
+        {
+            // TODO: Implement template loading if needed
+            await Task.CompletedTask;
+        }
+
 
         private void InitializeCommands()
         {
@@ -415,13 +461,20 @@ namespace NoteNest.UI.ViewModels
                 // Initialize auto-save after settings are loaded
                 InitializeAutoSave();
 
-                // NEW: Recover interrupted saves from crashes
-                var recoveryService = new StartupRecoveryService(_saveManager, _logger);
-                var recoveredCount = await recoveryService.RecoverInterruptedSavesAsync(
-                    _configService.Settings.DefaultNotePath);
-                if (recoveredCount > 0)
+                // 1. FIRST: Run recovery service (MUST be before opening any notes)
+                var recoveryService = _serviceProvider.GetService<StartupRecoveryService>();
+                if (recoveryService != null)
                 {
-                    StatusMessage = $"Recovered {recoveredCount} interrupted saves";
+                    StatusMessage = "Checking for interrupted saves...";
+                    var notesPath = _configService.Settings.DefaultNotePath;
+                    
+                    var summary = await recoveryService.RecoverInterruptedSavesAsync(notesPath);
+                    
+                    if (summary.RecoveredFiles.Count > 0)
+                    {
+                        StatusMessage = $"Recovered {summary.RecoveredFiles.Count} interrupted saves";
+                        await Task.Delay(2000); // Show message briefly
+                    }
                 }
 
                 // Recover any unpersisted changes from crash/unexpected shutdown
@@ -449,6 +502,9 @@ namespace NoteNest.UI.ViewModels
 
                 // Restore previous tabs
                 await RestoreTabsAsync();
+                
+                // 4. Subscribe to external change events
+                _saveManager.ExternalChangeDetected += OnExternalChangeDetected;
 
                 StatusMessage = "Ready";
                 _logger.Info("Application initialized successfully");
@@ -532,49 +588,84 @@ namespace NoteNest.UI.ViewModels
 
         private async Task RestoreTabsAsync()
         {
+            var persistedState = await _tabPersistence.LoadAsync();
+            if (persistedState?.Tabs == null) return;
+            
+            foreach (var tabInfo in persistedState.Tabs)
+        {
             try
             {
-                if (_configService?.Settings?.RestoreTabs != true) return;
-                var state = await _tabPersistence.LoadAsync();
-                if (state?.Tabs == null || state.Tabs.Count == 0) return;
-
-                // Determine active tab
-                var active = !string.IsNullOrEmpty(state.ActiveTabId)
-                    ? state.Tabs.FirstOrDefault(t => t.Id == state.ActiveTabId)
-                    : state.Tabs.FirstOrDefault();
-                if (active == null) return;
-
-                // Open active first with embedded content (no disk read) and select it
-                var activeNote = new NoteModel { Id = active.Id, FilePath = active.Path, Title = active.Title, Content = state.ActiveTabContent ?? string.Empty };
-                var opened = await _workspaceService.OpenNoteAsync(activeNote);
-                try { _workspaceService.SelectedTab = opened; } catch { }
-
-                // Queue other tabs lazily
-                var others = state.Tabs.Where(t => t.Id != active.Id).ToList();
-                if (others.Count > 0)
-                {
-                    _ = Task.Run(async () =>
+                    if (!File.Exists(tabInfo.Path))
                     {
-                        await Task.Delay(300);
-                        foreach (var t in others)
+                        _logger.Warning($"Tab file no longer exists: {tabInfo.Path}");
+                        continue;
+                    }
+                    
+                    // Open the note
+                    var noteId = await _saveManager.OpenNoteAsync(tabInfo.Path);
+                    
+                    // If tab was dirty and we have dirty content, restore it
+                    if (tabInfo.IsDirty && !string.IsNullOrEmpty(tabInfo.DirtyContent))
+                    {
+                        // Verify the file hasn't changed since persistence
+                        bool canRestoreDirty = false;
+                        
+                        if (!string.IsNullOrEmpty(tabInfo.FileContentHash))
                         {
                             try
                             {
-                                var note = new NoteModel { Id = t.Id, FilePath = t.Path, Title = t.Title, Content = null };
-                                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                                var currentFileContent = await File.ReadAllTextAsync(tabInfo.Path);
+                                using (var sha256 = System.Security.Cryptography.SHA256.Create())
                                 {
-                                    try { await _workspaceService.OpenNoteAsync(note); } catch { }
-                                });
-                                await Task.Delay(30);
+                                    var currentHash = Convert.ToBase64String(
+                                        sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(currentFileContent))
+                                    );
+                                    
+                                    if (currentHash == tabInfo.FileContentHash)
+                                    {
+                                        canRestoreDirty = true;
+                                    }
+                                    else
+                                    {
+                                        _logger.Warning($"File changed since last session, not restoring dirty content: {tabInfo.Path}");
+                                    }
+                                }
                             }
-                            catch { }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, $"Failed to verify file content for: {tabInfo.Path}");
+                            }
                         }
-                    });
+                        
+                        if (canRestoreDirty)
+                        {
+                            // Restore dirty content
+                            _saveManager.UpdateContent(noteId, tabInfo.DirtyContent);
+                            _logger.Info($"Restored dirty content for: {tabInfo.Path}");
+                        }
+                    }
+                    
+                    // Create tab
+                    var note = new NoteModel
+                    {
+                        Id = noteId,
+                        FilePath = tabInfo.Path,
+                        Title = tabInfo.Title,
+                        Content = _saveManager.GetContent(noteId)
+                    };
+                    
+                    var tab = await _workspaceService.OpenNoteAsync(note);
+                    
+                    // Set active if needed
+                    if (tabInfo.Id == persistedState.ActiveTabId)
+                    {
+                        _workspaceService.SelectedTab = tab;
                 }
             }
             catch (Exception ex)
             {
-                _logger.Warning($"RestoreTabs failed: {ex.Message}");
+                    _logger.Error(ex, $"Failed to restore tab: {tabInfo.Path}");
+                }
             }
         }
 
@@ -762,7 +853,9 @@ namespace NoteNest.UI.ViewModels
             var current = GetWorkspaceService().SelectedTab;
             if (current != null)
             {
-                await _saveManager.SaveNoteAsync(current.NoteId);
+                StatusMessage = "Saving...";
+                var result = await _saveManager.SaveNoteAsync(current.NoteId);
+                StatusMessage = result ? "Saved" : "Save failed";
             }
         }
 
@@ -773,15 +866,32 @@ namespace NoteNest.UI.ViewModels
 
         private async Task SaveAllNotesAsync(CancellationToken cancellationToken)
         {
+            StatusMessage = "Saving all notes...";
             var result = await _saveManager.SaveAllDirtyAsync();
             
             if (result.FailureCount > 0)
             {
                 StatusMessage = $"Saved {result.SuccessCount} notes, {result.FailureCount} failed";
+                
+                // Show details of failures
+                if (result.FailedNoteIds.Count > 0)
+                {
+                    var message = "Failed to save:\n";
+                    foreach (var noteId in result.FailedNoteIds)
+                    {
+                        var path = _saveManager.GetFilePath(noteId);
+                        message += $"- {Path.GetFileName(path)}\n";
+                    }
+                    MessageBox.Show(message, "Save Failures", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
             }
             else if (result.SuccessCount > 0)
             {
-                StatusMessage = $"All notes saved";
+                StatusMessage = $"Saved {result.SuccessCount} notes";
+            }
+            else
+            {
+                StatusMessage = "No changes to save";
             }
         }
 
@@ -1309,6 +1419,10 @@ namespace NoteNest.UI.ViewModels
                     if (_stateManager != null)
                     {
                         _stateManager.PropertyChanged -= OnStateManagerPropertyChanged;
+                    }
+                    if (_saveManager != null)
+                    {
+                        _saveManager.ExternalChangeDetected -= OnExternalChangeDetected;
                     }
 
                     // Dispose only what was actually created

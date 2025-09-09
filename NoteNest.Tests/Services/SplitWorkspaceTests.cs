@@ -76,18 +76,24 @@ namespace NoteNest.Tests.Services
 
         private class MockSaveManager : ISaveManager
         {
-            public event EventHandler<NoteSavedEventArgs> NoteSaved;
-            public event EventHandler<ExternalChangeEventArgs> ExternalChangeDetected;
+            public event EventHandler<NoteSavedEventArgs>? NoteSaved;
+            public event EventHandler<SaveProgressEventArgs>? SaveStarted;
+            public event EventHandler<SaveProgressEventArgs>? SaveCompleted;
+            public event EventHandler<ExternalChangeEventArgs>? ExternalChangeDetected;
 
             public async Task<string> OpenNoteAsync(string filePath) => System.Guid.NewGuid().ToString();
             public void UpdateContent(string noteId, string content) { }
             public async Task<bool> SaveNoteAsync(string noteId) => true;
             public async Task<BatchSaveResult> SaveAllDirtyAsync() => new BatchSaveResult();
+            public async Task<bool> CloseNoteAsync(string noteId) => true;
             public bool IsNoteDirty(string noteId) => false;
+            public bool IsSaving(string noteId) => false;
             public string GetContent(string noteId) => "";
-            public string GetFilePath(string noteId) => "";
+            public string? GetLastSavedContent(string noteId) => null;
+            public string? GetFilePath(string noteId) => null;
+            public string? GetNoteIdForPath(string filePath) => null;
             public IReadOnlyList<string> GetDirtyNoteIds() => new List<string>();
-            public void CloseNote(string noteId) { }
+            public async Task<bool> ResolveExternalChangeAsync(string noteId, ConflictResolution resolution) => true;
             public void Dispose() { }
         }
 

@@ -1,8 +1,11 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Models;
@@ -214,7 +217,7 @@ namespace NoteNest.Core.Services.Implementation
                 // Always attempt to close the note in save manager
                 if (tab.Note != null && tab is ITabItem tabItem && !string.IsNullOrEmpty(tabItem.NoteId))
                 {
-                    _saveManager.CloseNote(tabItem.NoteId);
+                    await _saveManager.CloseNoteAsync(tabItem.NoteId);
                     _logger.Debug($"Closed note in save manager: {tab.Title}");
                     System.Diagnostics.Debug.WriteLine($"[WS] Closed note noteId={tabItem.NoteId}");
                 }
@@ -263,6 +266,7 @@ namespace NoteNest.Core.Services.Implementation
 
             }, "Save All Tabs");
         }
+
         
         public ITabItem? FindTabByNote(NoteModel note)
         {

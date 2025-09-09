@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
@@ -216,25 +217,67 @@ namespace NoteNest.UI
                 var saveManager = ServiceProvider?.GetService<ISaveManager>();
                 if (saveManager != null)
                 {
-                    // Save all dirty notes
-                    var result = await saveManager.SaveAllDirtyAsync();
+                    // Save all dirty notes with timeout
+                    var saveTask = saveManager.SaveAllDirtyAsync();
+                    var timeoutTask = Task.Delay(10000); // 10 second timeout
                     
-                    // If any failed, write emergency files
-                    if (result.FailureCount > 0)
+                    var completedTask = await Task.WhenAny(saveTask, timeoutTask);
+                    
+                    BatchSaveResult result = null;
+                    if (completedTask == saveTask)
                     {
-                        var noteIds = saveManager.GetDirtyNoteIds();
-                        foreach (var noteId in noteIds)
+                        result = await saveTask;
+                    }
+                    else
+                    {
+                        _logger?.Warning("Save timeout during shutdown");
+                    }
+                    
+                    // If any failed or timed out, write emergency files
+                    var dirtyNotes = saveManager.GetDirtyNoteIds();
+                    if (dirtyNotes.Count > 0)
+                    {
+                        foreach (var noteId in dirtyNotes)
                         {
                             try
                             {
                                 var content = saveManager.GetContent(noteId);
+                                var filePath = saveManager.GetFilePath(noteId);
+                                var fileName = Path.GetFileNameWithoutExtension(filePath);
+                                
                                 var emergencyPath = Path.Combine(
                                     Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                                    $"NoteNest_Recovery_{noteId}.txt"
+                                    $"NoteNest_Recovery_{fileName}_{DateTime.Now:yyyyMMddHHmmss}.txt"
                                 );
-                                File.WriteAllText(emergencyPath, content);
+                                
+                                await File.WriteAllTextAsync(emergencyPath, content);
+                                _logger?.Info($"Created emergency recovery file: {emergencyPath}");
                             }
-                            catch { }
+                            catch (Exception ex)
+                            {
+                                _logger?.Error(ex, $"Failed to create emergency file for note: {noteId}");
+                            }
+                        }
+                    }
+                    
+                    // Save tab state AFTER saves complete
+                    var tabPersistence = ServiceProvider?.GetService<ITabPersistenceService>();
+                    if (tabPersistence != null)
+                    {
+                        try
+                        {
+                            var workspace = ServiceProvider?.GetService<IWorkspaceService>();
+                            if (workspace != null)
+                            {
+                                await tabPersistence.SaveAsync(
+                                    workspace.OpenTabs,
+                                    workspace.SelectedTab?.Id,
+                                    null);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.Error(ex, "Failed to save tab state during shutdown");
                         }
                     }
                     
@@ -250,9 +293,9 @@ namespace NoteNest.UI
                 
                 _host?.Dispose();
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore shutdown errors
+                _logger?.Error(ex, "Error during application shutdown");
             }
 
             base.OnExit(e);

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,7 +24,7 @@ namespace NoteNest.Core.Services
 	{
 		private readonly ConfigurationService _config;
 		private readonly IAppLogger _logger;
-		private readonly IWorkspaceService _workspace;
+		private readonly ISaveManager _saveManager;
 		// compute lazily from configuration to avoid capturing empty paths before settings load
 		private readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions { WriteIndented = true };
 		private readonly SemaphoreSlim _saveLock = new SemaphoreSlim(1, 1);
@@ -31,13 +33,13 @@ namespace NoteNest.Core.Services
 		private readonly int _debounceMs = 800;
 		private Timer? _debounceTimer;
 
-		public TabPersistenceService(ConfigurationService config, IAppLogger logger, IWorkspaceService workspace)
-		{
-			_config = config ?? throw new ArgumentNullException(nameof(config));
-			_logger = logger ?? throw new ArgumentNullException(nameof(logger));
-			_workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
-			_safetyTimer = new Timer(async _ => await SafetySaveAsync(), null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
-		}
+	public TabPersistenceService(ConfigurationService config, IAppLogger logger, ISaveManager saveManager)
+	{
+		_config = config ?? throw new ArgumentNullException(nameof(config));
+		_logger = logger ?? throw new ArgumentNullException(nameof(logger));
+		_saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
+		_safetyTimer = new Timer(async _ => await SafetySaveAsync(), null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+	}
 
 		private string GetStateFilePath()
 		{
@@ -80,54 +82,78 @@ namespace NoteNest.Core.Services
 			}
 		}
 
-		public async Task SaveAsync(IEnumerable<ITabItem> tabs, string? activeTabId, string? embeddedActiveContent)
+	public async Task SaveAsync(IEnumerable<ITabItem> tabs, string? activeTabId, string? embeddedActiveContent)
+	{
+		await _saveLock.WaitAsync();
+		try
 		{
-			await _saveLock.WaitAsync();
-			try
-			{
-				var path = GetStateFilePath();
-				var dir = Path.GetDirectoryName(path) ?? string.Empty;
-				if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+			var path = GetStateFilePath();
+			var dir = Path.GetDirectoryName(path) ?? string.Empty;
+			if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
-				var tabList = tabs?.ToList() ?? new List<ITabItem>();
-				var state = new TabPersistenceState
+		var tabList = tabs?.ToList() ?? new List<ITabItem>();
+			
+			var state = new TabPersistenceState
+			{
+				Tabs = new List<TabInfo>(),
+				ActiveTabId = activeTabId,
+				LastSaved = DateTime.UtcNow
+			};
+			
+			foreach (var tab in tabList)
+			{
+				var info = new TabInfo
 				{
-					Tabs = tabList.Select(t => new TabInfo
-					{
-						Id = t.Note?.Id ?? string.Empty,
-						Path = t.Note?.FilePath ?? string.Empty,
-						Title = t.Note?.Title ?? string.Empty,
-						IsDirty = t.IsDirty
-					}).ToList(),
-					ActiveTabId = activeTabId,
-					LastSaved = DateTime.UtcNow
+					Id = tab.Note?.Id ?? string.Empty,
+					Path = tab.Note?.FilePath ?? string.Empty,
+					Title = tab.Note?.Title ?? string.Empty,
+					IsDirty = tab.IsDirty
 				};
-
-				// NO LONGER EMBED CONTENT - SaveManager handles persistence
-				state.ActiveTabContent = null;
-
-				var json = JsonSerializer.Serialize(state, _jsonOptions);
-				await File.WriteAllTextAsync(path, json);
-				_changed = false;
-			}
-			finally
+				
+			// Only store dirty content and hash
+			if (tab.IsDirty && _saveManager != null && !string.IsNullOrEmpty(tab.NoteId))
 			{
-				_saveLock.Release();
+				info.DirtyContent = _saveManager.GetContent(tab.NoteId);
+					
+					// Hash the current file content (not saved content)
+					if (File.Exists(info.Path))
+					{
+						try
+						{
+							var fileContent = await File.ReadAllTextAsync(info.Path);
+							using (var sha256 = SHA256.Create())
+							{
+								var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(fileContent));
+								info.FileContentHash = Convert.ToBase64String(bytes);
+							}
+						}
+						catch (Exception ex)
+						{
+							_logger?.Warning($"Failed to hash file content: {info.Path} - {ex.Message}");
+						}
+					}
+				}
+				
+				state.Tabs.Add(info);
 			}
+
+			var json = JsonSerializer.Serialize(state, _jsonOptions);
+			await File.WriteAllTextAsync(path, json);
+			_changed = false;
 		}
+		finally
+		{
+			_saveLock.Release();
+		}
+	}
 
 		private async Task DebouncedSaveAsync()
 		{
 			try
 			{
 				_debounceTimer?.Dispose();
-				// Snapshot tabs via injected workspace
-				if (_workspace?.OpenTabs?.Count > 0)
-				{
-					var activeId = _workspace.SelectedTab?.Note?.Id;
-					var embedded = _workspace.SelectedTab?.Content;
-					await SaveAsync(_workspace.OpenTabs, activeId, embedded);
-				}
+				// Note: Debounced saves are now handled by the calling code
+				// This method is kept for interface compatibility
 			}
 			catch (Exception ex)
 			{
@@ -140,12 +166,8 @@ namespace NoteNest.Core.Services
 			if (!_changed) return;
 			try
 			{
-				if (_workspace?.OpenTabs?.Count > 0)
-				{
-					var activeId = _workspace.SelectedTab?.Note?.Id;
-					var embedded = _workspace.SelectedTab?.Content;
-					await SaveAsync(_workspace.OpenTabs, activeId, embedded);
-				}
+				// Note: Safety saves are now handled by the calling code
+				// This method is kept for interface compatibility
 			}
 			catch (Exception ex)
 			{

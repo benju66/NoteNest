@@ -14,10 +14,12 @@ namespace NoteNest.Core.Models
 
 	public class TabInfo
 	{
-		public string Id { get; set; }
-		public string Path { get; set; }
-		public string Title { get; set; }
+		public string Id { get; set; } = "";
+		public string Path { get; set; } = "";
+		public string Title { get; set; } = "";
 		public bool IsDirty { get; set; }
+		public string? FileContentHash { get; set; } // Hash of file content at save time
+		public string? DirtyContent { get; set; } // Only stored if IsDirty=true
 	}
 }
 
