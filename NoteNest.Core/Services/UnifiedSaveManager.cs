@@ -157,27 +157,28 @@ namespace NoteNest.Core.Services
 
         public async Task<string> OpenNoteAsync(string filePath)
         {
-            // Normalize path for consistency
+            if (string.IsNullOrEmpty(filePath))
+                throw new ArgumentException("File path cannot be empty", nameof(filePath));
+            
             var normalizedPath = NormalizePath(filePath);
             
-            // Check file size limit
-            if (File.Exists(filePath))
-            {
-                var fileInfo = new FileInfo(filePath);
-                if (fileInfo.Length > MAX_FILE_SIZE)
-                {
-                    throw new NotSupportedException($"File too large: {fileInfo.Length:N0} bytes (max {MAX_FILE_SIZE:N0})");
-                }
-            }
-            
-            // Check if already open
+            // Check if already tracking this file
             _stateLock.EnterReadLock();
             try
             {
-                if (_pathToNoteId.TryGetValue(normalizedPath, out var existingId))
+                // CRITICAL: Check if we already have this file in memory
+                if (_pathToNoteId.TryGetValue(normalizedPath, out var existingNoteId))
                 {
-                    _logger.Info($"Note already open: {existingId} -> {filePath}");
-                    return existingId;
+                    // Reuse existing note ID and state
+                    if (_notes.TryGetValue(existingNoteId, out var existingState))
+                    {
+                        _logger.Info($"Reusing existing note from memory: {existingNoteId} -> {filePath}");
+                        
+                        // Re-setup file watcher since it was disposed on close
+                        SetupFileWatcher(existingNoteId, filePath);
+                        
+                        return existingNoteId;
+                    }
                 }
             }
             finally
@@ -185,56 +186,53 @@ namespace NoteNest.Core.Services
                 _stateLock.ExitReadLock();
             }
             
-            // Generate deterministic ID
-            string noteId = GenerateNoteId(normalizedPath);
+            // New note - generate ID
+            var noteId = GenerateNoteId(filePath);
             
-            // Handle unlikely collision
-            _stateLock.EnterWriteLock();
-            try
-            {
-                var baseId = noteId;
-                var counter = 1;
-                while (_notes.ContainsKey(noteId))
-                {
-                    noteId = $"{baseId}_{counter}";
-                    counter++;
-                }
-            }
-            finally
-            {
-                _stateLock.ExitWriteLock();
-            }
-            
-            // Read initial content asynchronously
+            // Load content from disk
             string content = "";
-            DateTime lastModified = DateTime.UtcNow;
+            DateTime lastModified = DateTime.MinValue;
             
             if (File.Exists(filePath))
             {
-                content = await File.ReadAllTextAsync(filePath);
-                lastModified = await Task.Run(() => File.GetLastWriteTimeUtc(filePath));
+                try
+                {
+                    content = await File.ReadAllTextAsync(filePath);
+                    lastModified = await Task.Run(() => File.GetLastWriteTimeUtc(filePath));
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"Failed to load note content: {filePath}");
+                    content = "";
+                }
             }
             
             // Store state
             _stateLock.EnterWriteLock();
             try
             {
+                // Double-check in case of race condition
+                if (_pathToNoteId.TryGetValue(normalizedPath, out var racedNoteId))
+                {
+                    return racedNoteId;
+                }
+                
                 var state = new NoteState
-            {
-                NoteId = noteId,
-                FilePath = filePath,
-                LastSaveTime = DateTime.UtcNow,
-                FileLastModified = lastModified
-            };
+                {
+                    NoteId = noteId,
+                    FilePath = filePath,
+                    LastSaveTime = DateTime.UtcNow,
+                    FileLastModified = lastModified
+                };
                 state.UpdateContent(content);
                 state.UpdateLastSaved(content);
                 
                 _notes[noteId] = state;
                 _pathToNoteId[normalizedPath] = noteId;
                 _pathCircuitBreakers[normalizedPath] = new CircuitBreaker();
-            
-            // Setup file watcher
-            SetupFileWatcher(noteId, filePath);
+                
+                // Setup file watcher
+                SetupFileWatcher(noteId, filePath);
             }
             finally
             {
@@ -480,6 +478,9 @@ namespace NoteNest.Core.Services
                         await _saveChannel.Writer.WriteAsync(request);
                     }
                 }
+                
+                // ADD THIS: Cleanup saved notes periodically
+                CleanupSavedNotes();
             }
             catch (Exception ex)
             {
@@ -1136,11 +1137,9 @@ namespace NoteNest.Core.Services
             _stateLock.EnterWriteLock();
             try
             {
-                // Get file path for cleanup
-                string filePath = null;
-                if (_notes.TryGetValue(noteId, out var state))
+                if (!_notes.TryGetValue(noteId, out var state))
                 {
-                    filePath = state.FilePath;
+                    return false;
                 }
                 
                 // Dispose watcher
@@ -1165,18 +1164,28 @@ namespace NoteNest.Core.Services
                     _externalChangeDebounceTimers.Remove(noteId);
                 }
                 
-                // Remove from collections
-                _notes.Remove(noteId);
+                // Remove from saving set
                 _savingNotes.Remove(noteId);
                 _pendingSaves.Remove(noteId);
                 
-                // Remove path mapping
-                if (filePath != null)
+                // CRITICAL: Only remove from memory if NOT dirty
+                // Keep dirty notes in memory for when tab reopens
+                if (!state.IsDirty)
                 {
-                    var normalizedPath = NormalizePath(filePath);
-                    _pathToNoteId.Remove(normalizedPath);
+                    // Safe to remove - no unsaved changes
+                    _notes.Remove(noteId);
+                    
+                    // Don't remove path mapping - keep for reuse
+                    // var normalizedPath = NormalizePath(state.FilePath);
+                    // _pathToNoteId.Remove(normalizedPath);
+                }
+                else
+                {
+                    // Note is dirty - keep in memory but mark as closed
+                    _logger.Info($"Keeping dirty note in memory: {noteId} ({state.FilePath})");
                 }
                 
+                _logger.Debug($"Closed note in save manager: {Path.GetFileName(state.FilePath)}");
                 return true;
             }
             finally
@@ -1227,6 +1236,52 @@ namespace NoteNest.Core.Services
                 SetupFileWatcher(noteId, newFilePath);
                 
                 _logger.Info($"Updated file path for note {noteId}: {oldPath} -> {newFilePath}");
+            }
+            finally
+            {
+                _stateLock.ExitWriteLock();
+            }
+        }
+
+        private void CleanupSavedNotes()
+        {
+            _stateLock.EnterWriteLock();
+            try
+            {
+                var toRemove = new List<string>();
+                
+                foreach (var kvp in _notes)
+                {
+                    var state = kvp.Value;
+                    var noteId = kvp.Key;
+                    
+                    // Remove if:
+                    // 1. Not dirty
+                    // 2. No active auto-save timer (not currently open)
+                    // 3. Has been closed for more than 5 minutes
+                    if (!state.IsDirty && 
+                        !_autoSaveTimers.ContainsKey(noteId) &&
+                        !_watchers.ContainsKey(noteId))
+                    {
+                        toRemove.Add(noteId);
+                    }
+                }
+                
+                foreach (var noteId in toRemove)
+                {
+                    if (_notes.TryGetValue(noteId, out var state))
+                    {
+                        var normalizedPath = NormalizePath(state.FilePath);
+                        _notes.Remove(noteId);
+                        _pathToNoteId.Remove(normalizedPath);
+                        _logger.Debug($"Cleaned up saved note from memory: {noteId}");
+                    }
+                }
+                
+                if (toRemove.Count > 0)
+                {
+                    _logger.Info($"Cleaned up {toRemove.Count} saved notes from memory");
+                }
             }
             finally
             {
