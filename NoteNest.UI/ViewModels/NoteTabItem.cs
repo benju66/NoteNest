@@ -34,20 +34,21 @@ namespace NoteNest.UI.ViewModels
             get => _content;
             set
             {
-                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content setter called: noteId={_noteId}, contentLength={value?.Length ?? 0}, saveManager={(_saveManager != null ? "OK" : "NULL")}");
+                var instanceId = this.GetHashCode();
+                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} Content setter called: noteId={_noteId}, contentLength={value?.Length ?? 0}, saveManager={(_saveManager != null ? "OK" : "NULL")}");
                 
                 if (SetProperty(ref _content, value))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content changed, calling SaveManager.UpdateContent: noteId={_noteId}");
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} Content CHANGED, calling SaveManager.UpdateContent: noteId={_noteId}");
                     
                     if (_saveManager != null)
                     {
                         _saveManager.UpdateContent(_noteId, value);
-                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] SaveManager.UpdateContent called successfully for noteId={_noteId}");
+                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} SaveManager.UpdateContent called successfully for noteId={_noteId}");
                     }
                     else
                     {
-                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] ERROR: SaveManager is NULL for noteId={_noteId}");
+                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} ERROR: SaveManager is NULL for noteId={_noteId}");
                     }
                     
                     OnPropertyChanged(nameof(IsDirty));
@@ -55,7 +56,7 @@ namespace NoteNest.UI.ViewModels
                 }
                 else
                 {
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content not changed (same value) for noteId={_noteId}");
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} Content not changed (same value) for noteId={_noteId}");
                 }
             }
         }
@@ -89,14 +90,15 @@ namespace NoteNest.UI.ViewModels
 
         public NoteTabItem(NoteModel note, ISaveManager saveManager)
         {
-            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Constructor called: note.Id={note?.Id}, note.Title={note?.Title}, saveManager={saveManager != null}");
+            var instanceId = this.GetHashCode();
+            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] NEW INSTANCE {instanceId}: note.Id={note?.Id}, note.Title={note?.Title}, saveManager={saveManager != null}");
             
             Note = note ?? throw new ArgumentNullException(nameof(note));
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _noteId = note.Id;
             _content = note.Content ?? "";
             
-            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Initialized: _noteId={_noteId}, contentLength={_content.Length}");
+            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} initialized: _noteId={_noteId}, contentLength={_content.Length}");
             
             // Use weak event pattern to prevent memory leaks
             WeakEventManager<ISaveManager, NoteSavedEventArgs>
@@ -108,7 +110,7 @@ namespace NoteNest.UI.ViewModels
             WeakEventManager<ISaveManager, SaveProgressEventArgs>
                 .AddHandler(_saveManager, nameof(ISaveManager.SaveCompleted), OnSaveCompleted);
                 
-            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Constructor completed for noteId={_noteId}");
+            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} constructor completed for noteId={_noteId}");
         }
 
         private void OnNoteSaved(object sender, NoteSavedEventArgs e)

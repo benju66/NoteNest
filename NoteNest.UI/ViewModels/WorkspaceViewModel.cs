@@ -132,7 +132,18 @@ namespace NoteNest.UI.ViewModels
                         var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, tab.Note));
                         if (existing == null)
                         {
-                            _uiTabs.Add(new NoteTabItem(tab.Note, _saveManager));
+                            // CRITICAL FIX: Use the actual tab from service instead of creating a new one
+                            if (tab is NoteTabItem noteTabItem)
+                            {
+                                _uiTabs.Add(noteTabItem);
+                                System.Diagnostics.Debug.WriteLine($"[VM] FIXED: Using existing NoteTabItem from service: {tab.NoteId}");
+                            }
+                            else
+                            {
+                                // Fallback for non-NoteTabItem types (shouldn't happen with new architecture)
+                                _uiTabs.Add(new NoteTabItem(tab.Note, _saveManager));
+                                System.Diagnostics.Debug.WriteLine($"[VM] FALLBACK: Created new NoteTabItem for: {tab.GetType().Name}");
+                            }
                         }
                     }
                 }
