@@ -175,7 +175,8 @@ namespace NoteNest.UI.ViewModels
                 _logger,
                 _fileSystem,
                 _configService,
-                _contentCache);
+                _contentCache,
+                _saveManager);
         }
 
         private IWorkspaceService GetWorkspaceService() => _workspaceService;

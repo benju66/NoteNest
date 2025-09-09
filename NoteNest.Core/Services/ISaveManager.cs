@@ -25,6 +25,9 @@ namespace NoteNest.Core.Services
         // Conflict resolution
         Task<bool> ResolveExternalChangeAsync(string noteId, ConflictResolution resolution);
         
+        // File path management
+        void UpdateFilePath(string noteId, string newFilePath);
+        
         // Events
         event EventHandler<NoteSavedEventArgs> NoteSaved;
         event EventHandler<SaveProgressEventArgs> SaveStarted;

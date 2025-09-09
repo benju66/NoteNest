@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Interfaces.Services;
+using NoteNest.Core.Services;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services.Logging;
 
@@ -19,6 +20,7 @@ namespace NoteNest.Core.Services.Implementation
         private readonly IFileSystemProvider _fileSystem;
         private readonly ConfigurationService _configService;
         private readonly ContentCache _contentCache;
+        private readonly ISaveManager _saveManager;
         
         // Store references to open notes for SaveAll functionality
         private readonly List<NoteModel> _openNotes = new List<NoteModel>();
@@ -29,7 +31,8 @@ namespace NoteNest.Core.Services.Implementation
             IAppLogger logger,
             IFileSystemProvider fileSystem,
             ConfigurationService configService,
-            ContentCache contentCache)
+            ContentCache contentCache,
+            ISaveManager saveManager)
         {
             _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
             _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
@@ -37,6 +40,7 @@ namespace NoteNest.Core.Services.Implementation
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
             _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
+            _saveManager = saveManager; // Can be null for backwards compatibility
             
             _logger.Debug("NoteOperationsService initialized");
         }
@@ -96,11 +100,21 @@ namespace NoteNest.Core.Services.Implementation
             
             return await _errorHandler.SafeExecuteAsync(async () =>
             {
+                var oldPath = note.FilePath;
                 var result = await _noteService.RenameNoteAsync(note, newName);
+                
                 if (result)
                 {
+                    // CRITICAL: Update SaveManager with new file path
+                    if (!string.IsNullOrEmpty(note.Id) && _saveManager != null)
+                    {
+                        _saveManager.UpdateFilePath(note.Id, note.FilePath);
+                        _logger.Info($"Updated SaveManager file path for note {note.Id}: {oldPath} -> {note.FilePath}");
+                    }
+                    
                     _logger.Info($"Renamed note to '{newName}'");
                 }
+                
                 return result;
             }, "Rename Note");
         }

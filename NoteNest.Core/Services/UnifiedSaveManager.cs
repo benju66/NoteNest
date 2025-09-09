@@ -1185,6 +1185,55 @@ namespace NoteNest.Core.Services
             }
         }
 
+        public void UpdateFilePath(string noteId, string newFilePath)
+        {
+            var normalizedNewPath = NormalizePath(newFilePath);
+            
+            _stateLock.EnterWriteLock();
+            try
+            {
+                if (!_notes.TryGetValue(noteId, out var state))
+                {
+                    _logger.Warning($"UpdateFilePath called for unknown note: {noteId}");
+                    return;
+                }
+                
+                var oldPath = state.FilePath;
+                var normalizedOldPath = NormalizePath(oldPath);
+                
+                // Update state
+                state.FilePath = newFilePath;
+                
+                // Update path mapping
+                _pathToNoteId.Remove(normalizedOldPath);
+                _pathToNoteId[normalizedNewPath] = noteId;
+                
+                // Update circuit breaker
+                if (_pathCircuitBreakers.TryGetValue(normalizedOldPath, out var breaker))
+                {
+                    _pathCircuitBreakers.Remove(normalizedOldPath);
+                    _pathCircuitBreakers[normalizedNewPath] = breaker;
+                }
+                
+                // Update file watcher
+                if (_watchers.TryGetValue(noteId, out var watcher))
+                {
+                    watcher.EnableRaisingEvents = false;
+                    watcher.Dispose();
+                    _watchers.Remove(noteId);
+                }
+                
+                // Setup new watcher for new path
+                SetupFileWatcher(noteId, newFilePath);
+                
+                _logger.Info($"Updated file path for note {noteId}: {oldPath} -> {newFilePath}");
+            }
+            finally
+            {
+                _stateLock.ExitWriteLock();
+            }
+        }
+
         public void Dispose()
         {
             // ADD THIS: Stop and dispose periodic timer first

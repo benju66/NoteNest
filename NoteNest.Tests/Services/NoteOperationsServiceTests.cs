@@ -20,6 +20,7 @@ namespace NoteNest.Tests.Services
         private IServiceErrorHandler _errorHandler;
         private IAppLogger _logger;
         private ContentCache _contentCache;
+        private MockSaveManager _mockSaveManager;
 
         [SetUp]
         public void Setup()
@@ -35,6 +36,7 @@ namespace NoteNest.Tests.Services
             _configService = new ConfigurationService(_mockFileSystem, bus);
             _errorHandler = new ServiceErrorHandler(_logger, null);
             _contentCache = new ContentCache();
+            _mockSaveManager = new MockSaveManager();
             
             _noteOperationsService = new NoteOperationsService(
                 _noteService,
@@ -42,13 +44,15 @@ namespace NoteNest.Tests.Services
                 _logger,
                 _mockFileSystem,
                 _configService,
-                _contentCache);
+                _contentCache,
+                _mockSaveManager);
         }
 
         [TearDown]
         public void TearDown()
         {
             _contentCache?.Dispose();
+            _mockSaveManager?.Dispose();
         }
 
         [Test]
@@ -110,6 +114,30 @@ namespace NoteNest.Tests.Services
             Assert.That(result, Is.True);
             Assert.That(note.Title, Is.EqualTo("NewName"));
             Assert.That(note.FilePath, Contains.Substring("NewName.txt"));
+        }
+
+        private class MockSaveManager : ISaveManager
+        {
+            public event EventHandler<NoteSavedEventArgs>? NoteSaved;
+            public event EventHandler<SaveProgressEventArgs>? SaveStarted;
+            public event EventHandler<SaveProgressEventArgs>? SaveCompleted;
+            public event EventHandler<ExternalChangeEventArgs>? ExternalChangeDetected;
+
+            public async Task<string> OpenNoteAsync(string filePath) => System.Guid.NewGuid().ToString();
+            public void UpdateContent(string noteId, string content) { }
+            public void UpdateFilePath(string noteId, string newFilePath) { }
+            public async Task<bool> SaveNoteAsync(string noteId) => true;
+            public async Task<BatchSaveResult> SaveAllDirtyAsync() => new BatchSaveResult();
+            public async Task<bool> CloseNoteAsync(string noteId) => true;
+            public bool IsNoteDirty(string noteId) => false;
+            public bool IsSaving(string noteId) => false;
+            public string GetContent(string noteId) => string.Empty;
+            public string? GetLastSavedContent(string noteId) => null;
+            public string? GetFilePath(string noteId) => null;
+            public string? GetNoteIdForPath(string filePath) => null;
+            public IReadOnlyList<string> GetDirtyNoteIds() => new List<string>();
+            public async Task<bool> ResolveExternalChangeAsync(string noteId, ConflictResolution resolution) => true;
+            public void Dispose() { }
         }
     }
 }

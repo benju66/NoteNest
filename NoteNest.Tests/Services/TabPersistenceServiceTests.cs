@@ -137,6 +137,7 @@ namespace NoteNest.Tests.Services
 
 			public async Task<string> OpenNoteAsync(string filePath) => System.Guid.NewGuid().ToString();
 			public void UpdateContent(string noteId, string content) { }
+			public void UpdateFilePath(string noteId, string newFilePath) { }
 			public async Task<bool> SaveNoteAsync(string noteId) => true;
 			public async Task<BatchSaveResult> SaveAllDirtyAsync() => new BatchSaveResult();
 			public async Task<bool> CloseNoteAsync(string noteId) => true;
