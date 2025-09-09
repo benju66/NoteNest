@@ -13,20 +13,20 @@ namespace NoteNest.UI.Services
         private readonly IWorkspaceService _workspace;
         private readonly IDialogService _dialog;
         private readonly IAppLogger _logger;
-        private readonly IWorkspaceStateService _workspaceState;
+        private readonly ISaveManager _saveManager;
         
         public TabCloseService(
             INoteOperationsService noteOperations,
             IWorkspaceService workspace,
             IDialogService dialog,
             IAppLogger logger,
-            IWorkspaceStateService workspaceState)
+            ISaveManager saveManager)
         {
             _noteOperations = noteOperations ?? throw new ArgumentNullException(nameof(noteOperations));
             _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
             _dialog = dialog ?? throw new ArgumentNullException(nameof(dialog));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-            _workspaceState = workspaceState ?? throw new ArgumentNullException(nameof(workspaceState));
+            _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
         }
         
         public async Task<bool> CloseTabWithPromptAsync(ITabItem tab)
@@ -39,12 +39,11 @@ namespace NoteNest.UI.Services
                 {
                     try
                     {
-                        // Auto-save using WorkspaceStateService
+                        // Auto-save using SaveManager
                         System.Diagnostics.Debug.WriteLine($"[Close] Attempting auto-save for tab id={tab?.Note?.Id} title={tab?.Title}");
-                        _workspaceState.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty);
-                        var result = await _workspaceState.SaveNoteAsync(tab.Note.Id);
-                        System.Diagnostics.Debug.WriteLine($"[Close] Auto-save result success={result?.Success} noteId={result?.NoteId}");
-                        if (result?.Success == true)
+                        var success = await _saveManager.SaveNoteAsync(tab.NoteId);
+                        System.Diagnostics.Debug.WriteLine($"[Close] Auto-save result success={success}");
+                        if (success)
                         {
                             _logger.Info($"Auto-saved on close: {tab.Title}");
                         }
@@ -84,9 +83,8 @@ namespace NoteNest.UI.Services
             if (result == true)
             {
                 System.Diagnostics.Debug.WriteLine($"[Close] User chose Save for tab id={tab?.Note?.Id} title={tab?.Title}");
-                _workspaceState.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty);
-                var save = await _workspaceState.SaveNoteAsync(tab.Note.Id);
-                System.Diagnostics.Debug.WriteLine($"[Close] Prompt save result success={save?.Success} noteId={save?.NoteId}");
+                var success = await _saveManager.SaveNoteAsync(tab.NoteId);
+                System.Diagnostics.Debug.WriteLine($"[Close] Prompt save result success={success}");
                 _logger.Info($"Saved and closing tab: {tab.Title}");
             }
             else
@@ -111,8 +109,7 @@ namespace NoteNest.UI.Services
                 {
                     foreach (var tab in dirtyTabs)
                     {
-                        _workspaceState.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty);
-                        await _workspaceState.SaveNoteAsync(tab.Note.Id);
+                        await _saveManager.SaveNoteAsync(tab.NoteId);
                     }
                 }
             }

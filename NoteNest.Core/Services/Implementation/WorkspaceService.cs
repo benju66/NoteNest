@@ -8,6 +8,7 @@ using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Interfaces.Split;
+using NoteNest.Core.Services;
 
 namespace NoteNest.Core.Services.Implementation
 {
@@ -18,7 +19,7 @@ namespace NoteNest.Core.Services.Implementation
         private readonly IServiceErrorHandler _errorHandler;
         private readonly IAppLogger _logger;
         private readonly INoteOperationsService _noteOperationsService;
-        private readonly NoteNest.Core.Services.IWorkspaceStateService? _stateService;
+        private readonly ISaveManager _saveManager;
         
         private ObservableCollection<ITabItem> _openTabs;
         private ITabItem? _selectedTab;
@@ -99,14 +100,14 @@ namespace NoteNest.Core.Services.Implementation
             IServiceErrorHandler errorHandler,
             IAppLogger logger,
             INoteOperationsService noteOperationsService,
-            NoteNest.Core.Services.IWorkspaceStateService workspaceStateService)
+            ISaveManager saveManager)
         {
             _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
             _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
             _errorHandler = errorHandler ?? throw new ArgumentNullException(nameof(errorHandler));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _noteOperationsService = noteOperationsService ?? throw new ArgumentNullException(nameof(noteOperationsService));
-            _stateService = workspaceStateService ?? throw new ArgumentNullException(nameof(workspaceStateService));
+            _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             
             _openTabs = new ObservableCollection<ITabItem>();
             _panes = new ObservableCollection<SplitPane>();
@@ -158,15 +159,15 @@ namespace NoteNest.Core.Services.Implementation
                         });
                 }
                 
-                // CRITICAL FIX: Register note with WorkspaceStateService
-                var wn = await _stateService.OpenNoteAsync(note);
-                _logger.Debug($"Registered note with state service: {note.Title}");
-                System.Diagnostics.Debug.WriteLine($"[WS] Registered note id={note.Id} title={note.Title} contentLen={wn?.CurrentContent?.Length ?? 0}");
+                // Open note in save manager
+                var noteId = await _saveManager.OpenNoteAsync(note.FilePath);
+                _logger.Debug($"Registered note with save manager: {note.Title}");
+                System.Diagnostics.Debug.WriteLine($"[WS] Registered note id={note.Id} title={note.Title}");
                 
                 // Create new tab
                 // Note: The actual tab creation is delegated to UI layer
                 // This method returns a placeholder that will be replaced
-                var tab = new WorkspaceTabItem(note);
+                var tab = new WorkspaceTabItem(note, noteId);
                 
                 // Centralize: register tab in service collections and panes
                 if (!OpenTabs.Contains(tab))
@@ -210,13 +211,12 @@ namespace NoteNest.Core.Services.Implementation
                 // Note: Save prompt is handled by UI layer
                 // Ensure unregistration from state even if the tab is not in OpenTabs
 
-                // Always attempt to unregister the note from state service and clear window association
-                if (tab.Note != null)
+                // Always attempt to close the note in save manager
+                if (tab.Note != null && tab is ITabItem tabItem && !string.IsNullOrEmpty(tabItem.NoteId))
                 {
-                    var ok = await _stateService.CloseNoteAsync(tab.Note.Id);
-                    _stateService.ClearWindowAssociation(tab.Note.Id);
-                    _logger.Debug($"Unregistered note from state service: {tab.Title}");
-                    System.Diagnostics.Debug.WriteLine($"[WS] Unregister note id={tab.Note.Id} ok={ok}");
+                    _saveManager.CloseNote(tabItem.NoteId);
+                    _logger.Debug($"Closed note in save manager: {tab.Title}");
+                    System.Diagnostics.Debug.WriteLine($"[WS] Closed note noteId={tabItem.NoteId}");
                 }
 
                 // Remove from service OpenTabs if present
@@ -254,9 +254,9 @@ namespace NoteNest.Core.Services.Implementation
         {
             await _errorHandler.SafeExecuteAsync(async () =>
             {
-                // Save all dirty notes via state service
-                var result = await _stateService.SaveAllDirtyNotesAsync();
-                _logger.Info($"Saved {result.SuccessCount} notes via state service");
+                // Save all dirty notes via save manager
+                var result = await _saveManager.SaveAllDirtyAsync();
+                _logger.Info($"Saved {result.SuccessCount} notes via save manager");
                 System.Diagnostics.Debug.WriteLine($"[WS] SaveAllTabsAsync completed success={result.SuccessCount} fail={result.FailureCount}");
                 OnPropertyChanged(nameof(HasUnsavedChanges));
 
@@ -495,10 +495,12 @@ namespace NoteNest.Core.Services.Implementation
     {
         private bool _isDirty;
         private string _content;
+        private string _noteId;
         
         public string Id { get; }
         public string Title => Note?.Title ?? "Untitled";
         public NoteModel Note { get; }
+        public string NoteId => _noteId;
         
         public bool IsDirty
         {
@@ -525,10 +527,11 @@ namespace NoteNest.Core.Services.Implementation
             }
         }
         
-        public WorkspaceTabItem(NoteModel note)
+        public WorkspaceTabItem(NoteModel note, string noteId = null)
         {
             Note = note ?? throw new ArgumentNullException(nameof(note));
             Id = Guid.NewGuid().ToString();
+            _noteId = noteId ?? note.Id; // Use provided noteId or fall back to note.Id
             _content = note.Content;
             _isDirty = false;
         }

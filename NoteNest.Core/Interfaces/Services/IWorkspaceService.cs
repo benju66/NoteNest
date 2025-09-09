@@ -116,6 +116,7 @@ namespace NoteNest.Core.Interfaces.Services
         NoteModel Note { get; }
         bool IsDirty { get; set; }
         string Content { get; set; }
+        string NoteId { get; }
     }
     
     public class TabChangedEventArgs : EventArgs

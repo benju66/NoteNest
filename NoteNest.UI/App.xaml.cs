@@ -213,110 +213,42 @@ namespace NoteNest.UI
         {
             try
             {
-                _logger?.Info("Application shutting down - flushing pending saves...");
-                
-                // CRITICAL: Save all dirty notes before shutdown
-                try
+                var saveManager = ServiceProvider?.GetService<ISaveManager>();
+                if (saveManager != null)
                 {
-                    var stateService = ServiceProvider?.GetService<IWorkspaceStateService>();
-                    var workspaceService = ServiceProvider?.GetService<IWorkspaceService>();
+                    // Save all dirty notes
+                    var result = await saveManager.SaveAllDirtyAsync();
                     
-                    if (stateService != null && workspaceService != null)
+                    // If any failed, write emergency files
+                    if (result.FailureCount > 0)
                     {
-                        // First, flush all pending content from main window
-                        try
+                        var noteIds = saveManager.GetDirtyNoteIds();
+                        foreach (var noteId in noteIds)
                         {
-                            if (MainWindow != null)
+                            try
                             {
-                                // Find all SplitPaneView controls in the visual tree
-                                var splitPaneViews = FindVisualChildren<SplitPaneView>(MainWindow);
-                                foreach (var spv in splitPaneViews)
-                                {
-                                    spv.FlushAllPendingContent();
-                                }
+                                var content = saveManager.GetContent(noteId);
+                                var emergencyPath = Path.Combine(
+                                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                                    $"NoteNest_Recovery_{noteId}.txt"
+                                );
+                                File.WriteAllText(emergencyPath, content);
                             }
-                        }
-                        catch { /* Best effort */ }
-                        
-                        // Get all open notes, not just dirty ones
-                        var openNotes = stateService.OpenNotes.Values.ToList();
-                        
-                        // Save dirty notes first
-                        var dirtyNotes = openNotes.Where(n => n.IsDirty).ToList();
-                        if (dirtyNotes.Any())
-                        {
-                            _logger?.Info($"Saving {dirtyNotes.Count} dirty notes before shutdown");
-                            await stateService.SaveAllDirtyNotesAsync();
-                        }
-                        
-                        // Then save any notes with content that might not be marked dirty
-                        var config = ServiceProvider?.GetService<NoteNest.Core.Services.ConfigurationService>();
-                        var forceSaveAll = config?.Settings?.ForceSaveOnExit ?? true;
-                        
-                        if (forceSaveAll)
-                        {
-                            var notesWithContent = openNotes
-                                .Where(n => !n.IsDirty && !string.IsNullOrEmpty(n.CurrentContent))
-                                .ToList();
-                                
-                            if (notesWithContent.Any())
-                            {
-                                _logger?.Info($"Force saving {notesWithContent.Count} additional notes with content");
-                                foreach (var note in notesWithContent)
-                                {
-                                    try
-                                    {
-                                        await stateService.SaveNoteAsync(note.NoteId);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger?.Error(ex, $"Failed to force save note {note.NoteId}");
-                                    }
-                                }
-                            }
+                            catch { }
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger?.Error(ex, "Failed to save notes on shutdown");
-                }
-                
-                // Flush persistence log to ensure all changes are written
-                try
-                {
-                    var persistenceLog = ServiceProvider?.GetService<IContentPersistenceLog>();
-                    if (persistenceLog != null)
-                    {
-                    // DON'T clear the log on normal shutdown - only clear after successful recovery
-                    // This ensures we can recover content if saves fail during shutdown
-                    // await persistenceLog.ClearLogAsync();
                     
-                    // Dispose to ensure any pending writes are flushed
-                    (persistenceLog as IDisposable)?.Dispose();
-                    }
+                    // Dispose save manager
+                    saveManager.Dispose();
                 }
-                catch { }
                 
-                // Flush pending config saves
-                try
-                {
-                    var config = ServiceProvider?.GetService<NoteNest.Core.Services.ConfigurationService>();
-                    if (config != null)
-                    {
-                        await config.FlushPendingAsync();
-                    }
-                }
-                catch { }
-                
-                // Fast shutdown
+                // Dispose other services
                 if (MainWindow?.DataContext is IDisposable vm)
                 {
                     vm.Dispose();
                 }
                 
                 _host?.Dispose();
-                (_logger as IDisposable)?.Dispose();
             }
             catch
             {

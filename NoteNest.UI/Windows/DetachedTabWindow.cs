@@ -15,7 +15,6 @@ namespace NoteNest.UI.Windows
     public class DetachedTabWindow : Window
     {
         private readonly IWorkspaceService _workspaceService;
-        private readonly IWorkspaceStateService _stateService;
         private readonly IDialogService _dialogService;
         private SplitPane _pane;
         private SplitWorkspace _workspaceView;
@@ -28,7 +27,6 @@ namespace NoteNest.UI.Windows
         {
             _services = services;
             _workspaceService = services.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
-            _stateService = services.GetService(typeof(IWorkspaceStateService)) as IWorkspaceStateService;
             _dialogService = services.GetService(typeof(IDialogService)) as IDialogService;
 
             if (_dialogService != null)
@@ -92,10 +90,7 @@ namespace NoteNest.UI.Windows
                 _pane.Tabs.Add(tab);
             }
             _pane.SelectedTab = tab;
-            if (tab.Note != null && _stateService != null)
-            {
-                _stateService.AssociateNoteWithWindow(tab.Note.Id, $"detached:{GetHashCode()}", true);
-            }
+            // Window association removed - SaveManager handles note tracking
             try { Title = $"{tab.Title} - NoteNest"; } catch { }
         }
 
@@ -108,15 +103,11 @@ namespace NoteNest.UI.Windows
             {
                 try
                 {
-                    // Get state service to save
-                    var stateService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                    if (stateService != null)
+                    // Get save manager to save
+                    var saveManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
+                    if (saveManager != null)
                     {
-                        // First, force flush all editors in this window
-                        if (Content is SplitPaneView paneView)
-                        {
-                            paneView.FlushAllEditors();
-                        }
+                        // Content is up-to-date since debouncing was removed
                         
                         // Then save any dirty notes
                         var dirtyTabs = _pane.Tabs.Where(t => t.IsDirty).ToList();
@@ -126,11 +117,8 @@ namespace NoteNest.UI.Windows
                             
                             try
                             {
-                                foreach (var tab in dirtyTabs)
-                                {
-                                    stateService.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty);
-                                }
-                                await stateService.SaveAllDirtyNotesAsync();
+                                // Save all dirty tabs
+                                await saveManager.SaveAllDirtyAsync();
                             }
                             finally
                             {

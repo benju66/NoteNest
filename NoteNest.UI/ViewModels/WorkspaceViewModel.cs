@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Linq;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Models;
+using NoteNest.Core.Services;
 
 namespace NoteNest.UI.ViewModels
 {
@@ -14,6 +15,7 @@ namespace NoteNest.UI.ViewModels
     public class WorkspaceViewModel : ViewModelBase, IDisposable
     {
         private readonly IWorkspaceService _workspaceService;
+        private readonly ISaveManager _saveManager;
         private readonly ObservableCollection<NoteTabItem> _uiTabs;
         private NoteTabItem? _selectedTab;
         private bool _disposed;
@@ -32,9 +34,10 @@ namespace NoteNest.UI.ViewModels
             }
         }
         
-        public WorkspaceViewModel(IWorkspaceService workspaceService)
+        public WorkspaceViewModel(IWorkspaceService workspaceService, ISaveManager saveManager)
         {
             _workspaceService = workspaceService ?? throw new ArgumentNullException(nameof(workspaceService));
+            _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _uiTabs = new ObservableCollection<NoteTabItem>();
             
             // Subscribe to service events
@@ -42,30 +45,8 @@ namespace NoteNest.UI.ViewModels
             _workspaceService.TabClosed += OnServiceTabClosed;
             _workspaceService.TabSelectionChanged += OnServiceTabSelectionChanged;
 
-            // Subscribe to WorkspaceStateService events
-            try
-            {
-                var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                if (state != null)
-                {
-                    state.NoteStateChanged += (s, e) =>
-                    {
-                        var match = _uiTabs.FirstOrDefault(t => t.Note?.Id == e.NoteId);
-                        if (match != null)
-                        {
-                            match.IsDirty = e.IsDirty;
-                            // Keep model dirty indicator in sync for tree dot
-                            try { match.Note.IsDirty = e.IsDirty; } catch { }
-                            System.Diagnostics.Debug.WriteLine($"[VM] NoteStateChanged noteId={e.NoteId} isDirty={e.IsDirty}");
-                        }
-                        else
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[VM][WARN] NoteStateChanged for unknown UI tab noteId={e.NoteId}");
-                        }
-                    };
-                }
-            }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[VM][ERROR] Subscribing NoteStateChanged failed: {ex.Message}"); }
+            // Subscribe to save events for dirty tracking
+            _saveManager.NoteSaved += OnNoteSaved;
             
             // Subscribe to service collection changes
             if (_workspaceService.OpenTabs is INotifyCollectionChanged ncc)
@@ -75,6 +56,16 @@ namespace NoteNest.UI.ViewModels
 
             // Initialize from any existing service tabs
             SyncFromService();
+        }
+        
+        private void OnNoteSaved(object sender, NoteSavedEventArgs e)
+        {
+            var tab = _uiTabs.FirstOrDefault(t => t.NoteId == e.NoteId);
+            if (tab != null)
+            {
+                // The tab will update itself through its own OnNoteSaved handler
+                // This method is just for any additional UI-level coordination if needed
+            }
         }
         
         public void AddTab(NoteTabItem noteTab)
@@ -113,16 +104,8 @@ namespace NoteNest.UI.ViewModels
                 var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, e.Tab.Note));
                 if (existing == null)
                 {
-                    var uiTab = new NoteTabItem(e.Tab.Note);
-                try
-                {
-                    var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                    if (state != null && state.OpenNotes.TryGetValue(e.Tab.Note.Id, out var wn))
-                    {
-                        uiTab.IsDirty = wn.IsDirty;
-                    }
-                }
-                catch { }
+                    // Create NoteTabItem with SaveManager
+                    var uiTab = new NoteTabItem(e.Tab.Note, _saveManager);
                     _uiTabs.Add(uiTab);
                     System.Diagnostics.Debug.WriteLine($"[VM] TabOpened noteId={e.Tab.Note.Id} title={e.Tab.Note.Title}");
                 }
@@ -166,7 +149,7 @@ namespace NoteNest.UI.ViewModels
                         var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, tab.Note));
                         if (existing == null)
                         {
-                            _uiTabs.Add(new NoteTabItem(tab.Note));
+                            _uiTabs.Add(new NoteTabItem(tab.Note, _saveManager));
                         }
                     }
                 }
@@ -199,7 +182,7 @@ namespace NoteNest.UI.ViewModels
                 var existing = _uiTabs.FirstOrDefault(t => ReferenceEquals(t.Note, tab.Note));
                 if (existing == null)
                 {
-                    _uiTabs.Add(new NoteTabItem(tab.Note));
+                    _uiTabs.Add(new NoteTabItem(tab.Note, _saveManager));
                 }
             }
         }
@@ -238,6 +221,12 @@ namespace NoteNest.UI.ViewModels
                         ncc.CollectionChanged -= OnServiceTabsCollectionChanged;
                     }
                 }
+                
+                if (_saveManager != null)
+                {
+                    _saveManager.NoteSaved -= OnNoteSaved;
+                }
+                
                 _uiTabs.Clear();
                 _disposed = true;
             }

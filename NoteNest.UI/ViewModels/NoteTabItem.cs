@@ -1,180 +1,71 @@
-using NoteNest.Core.Models;
-using NoteNest.Core.Interfaces.Services;
 using System;
 using System.ComponentModel;
+using NoteNest.Core.Models;
+using NoteNest.Core.Services;
+using NoteNest.Core.Interfaces.Services;
 
 namespace NoteNest.UI.ViewModels
 {
     public class NoteTabItem : ViewModelBase, ITabItem, IDisposable
     {
-        private readonly NoteModel _note;
-        private bool _isDirty;
+        private readonly ISaveManager _saveManager;
+        private readonly string _noteId;
         private string _content;
-        private string _wordCount;
-        private string _lastSaved;
         private bool _disposed;
-        private bool _initialLoadComplete;
 
-        public NoteModel Note => _note;
-        public string Id => _note?.Id ?? string.Empty;
-
-        public string Title => _isDirty ? $"{_note.Title} *" : _note.Title;
-
+        public string NoteId => _noteId;
+        public NoteModel Note { get; }
+        public string Id => _noteId;
+        
+        public string Title => IsDirty ? $"{Note.Title} *" : Note.Title;
+        
         public string Content
         {
-            get
-            {
-                try
-                {
-                    var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                    if (state != null && !string.IsNullOrEmpty(_note?.Id) && state.OpenNotes.TryGetValue(_note.Id, out var wn))
-                    {
-                        var value = wn.CurrentContent ?? _content ?? string.Empty;
-                        return value;
-                    }
-                }
-                catch { }
-                return _content ?? _note?.Content ?? string.Empty;
-            }
+            get => _content;
             set
             {
-                var newValue = value ?? string.Empty;
-                // Always keep local cache for UI binding responsiveness
-                var changed = SetProperty(ref _content, newValue);
-                if (!changed) return;
-
-                // Push content changes to WorkspaceStateService (single source of truth)
-                try
+                if (SetProperty(ref _content, value))
                 {
-                    var state = (System.Windows.Application.Current as UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                    state?.UpdateNoteContent(_note.Id, newValue);
-                    System.Diagnostics.Debug.WriteLine($"[Tab] Content set noteId={_note?.Id} len={newValue?.Length ?? 0} dirty={_isDirty} at={DateTime.Now:HH:mm:ss.fff}");
-                    
-                    // Always check dirty state when content changes
-                    // This ensures persistent tabs properly track changes even during initial load
-                    if (state != null && state.OpenNotes.TryGetValue(_note.Id, out var wn))
-                    {
-                        var isContentChanged = !string.Equals(wn.OriginalContent ?? string.Empty, newValue ?? string.Empty, StringComparison.Ordinal);
-                        if (isContentChanged)
-                        {
-                            IsDirty = true;
-                        }
-                        else if (_initialLoadComplete)
-                        {
-                            // Only mark as clean if we're past initial load
-                            // This prevents clearing dirty state during initialization
-                            IsDirty = false;
-                        }
-                    }
-                    else if (!string.IsNullOrEmpty(newValue))
-                    {
-                        // If we have content but no state tracking yet, mark as dirty to be safe
-                        IsDirty = true;
-                    }
-                }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Tab][ERROR] Content set failed: {ex.Message}"); }
-                UpdateWordCount();
-            }
-        }
-
-        public bool IsDirty
-        {
-            get => _isDirty;
-            set
-            {
-                if (SetProperty(ref _isDirty, value))
-                {
-                    OnPropertyChanged(nameof(Title));
-                    UpdateLastSaved();
-                }
-            }
-        }
-
-        public string WordCount
-        {
-            get => _wordCount ?? "0 words";
-            set => SetProperty(ref _wordCount, value);
-        }
-
-        public string LastSaved
-        {
-            get => _lastSaved ?? "Not saved";
-            set => SetProperty(ref _lastSaved, value);
-        }
-
-        public NoteTabItem(NoteModel note)
-        {
-            _note = note;
-            _content = note.Content;
-            _isDirty = false;
-            UpdateWordCount();
-            UpdateLastSaved();
-
-            try
-            {
-                if (_note is INotifyPropertyChanged inpc)
-                {
-                    inpc.PropertyChanged += OnNoteModelPropertyChanged;
-                }
-            }
-            catch { }
-            
-            // Mark initial load complete after constructor
-            _initialLoadComplete = true;
-        }
-
-        public new void OnPropertyChanged(string propertyName)
-        {
-            base.OnPropertyChanged(propertyName);
-        }
-
-        private void OnNoteModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            try
-            {
-                if (e.PropertyName == nameof(NoteModel.Title))
-                {
+                    _saveManager?.UpdateContent(_noteId, value);
+                    OnPropertyChanged(nameof(IsDirty));
                     OnPropertyChanged(nameof(Title));
                 }
-                else if (e.PropertyName == nameof(NoteModel.IsDirty))
-                {
-                    // Mirror model dirty state to tab
-                    IsDirty = _note.IsDirty;
-                }
-                else if (e.PropertyName == nameof(NoteModel.Content))
-                {
-                    if (!string.Equals(_content, _note.Content, StringComparison.Ordinal))
-                    {
-                        _content = _note.Content ?? string.Empty;
-                        OnPropertyChanged(nameof(Content));
-                        UpdateWordCount();
-                    }
-                }
             }
-            catch { }
-        }
-
-        public void UpdateWordCount()
-        {
-            if (string.IsNullOrEmpty(Content))
-            {
-                WordCount = "0 words";
-            }
-            else
-            {
-                var words = Content.Split(new[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries).Length;
-                WordCount = $"{words} words";
-            }
-        }
-
-        public void UpdateLastSaved()
-        {
-            LastSaved = IsDirty ? "Unsaved changes" : $"Saved {DateTime.Now:HH:mm}";
         }
         
-        public void MarkInitialLoadComplete()
+        public bool IsDirty 
+        { 
+            get => _saveManager?.IsNoteDirty(_noteId) ?? false;
+            set 
+            { 
+                // Note: For interface compliance, but actual dirty state is managed by SaveManager
+                // This setter is mainly used by old code during transition
+                if (value != IsDirty)
+                {
+                    OnPropertyChanged(nameof(IsDirty));
+                    OnPropertyChanged(nameof(Title));
+                }
+            }
+        }
+
+        public NoteTabItem(NoteModel note, ISaveManager saveManager)
         {
-            _initialLoadComplete = true;
+            Note = note ?? throw new ArgumentNullException(nameof(note));
+            _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
+            _noteId = note.Id;
+            _content = note.Content ?? "";
+            
+            // Subscribe to save events
+            _saveManager.NoteSaved += OnNoteSaved;
+        }
+
+        private void OnNoteSaved(object sender, NoteSavedEventArgs e)
+        {
+            if (e.NoteId == _noteId)
+            {
+                OnPropertyChanged(nameof(IsDirty));
+                OnPropertyChanged(nameof(Title));
+            }
         }
 
         public void Dispose()
@@ -185,19 +76,11 @@ namespace NoteNest.UI.ViewModels
 
         protected virtual void Dispose(bool disposing)
         {
-            if (_disposed) return;
-            if (disposing)
+            if (!_disposed && disposing)
             {
-                try
-                {
-                    if (_note is INotifyPropertyChanged inpc)
-                    {
-                        inpc.PropertyChanged -= OnNoteModelPropertyChanged;
-                    }
-                }
-                catch { }
+                _saveManager.NoteSaved -= OnNoteSaved;
+                _disposed = true;
             }
-            _disposed = true;
         }
     }
 }

@@ -10,16 +10,14 @@ namespace NoteNest.UI.Services
 	{
 		private readonly IWorkspaceService _workspaceService;
 		private readonly NoteService _noteService;
-		private readonly IWorkspaceStateService _stateService;
 
 		public LinkedNoteNavigator(
 			IWorkspaceService workspaceService,
 			NoteService noteService,
-			IWorkspaceStateService stateService)
+			object stateService = null) // Legacy parameter for compatibility
 		{
 			_workspaceService = workspaceService;
 			_noteService = noteService;
-			_stateService = stateService;
 		}
 
 		public async Task<bool> OpenByIdOrPathAsync(string noteId, string fallbackFilePath, int? lineNumber = null)
@@ -27,11 +25,13 @@ namespace NoteNest.UI.Services
 			try
 			{
 				NoteModel note = null;
-				if (!string.IsNullOrWhiteSpace(noteId))
+				// Try to find already open tab by file path first
+				if (!string.IsNullOrWhiteSpace(fallbackFilePath))
 				{
-					if (_stateService.OpenNotes.TryGetValue(noteId, out var wn) && wn?.Model != null)
+					var existingTab = _workspaceService.FindTabByPath(fallbackFilePath);
+					if (existingTab != null)
 					{
-						note = wn.Model;
+						note = existingTab.Note;
 					}
 				}
 

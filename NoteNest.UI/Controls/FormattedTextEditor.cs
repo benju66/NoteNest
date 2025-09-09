@@ -18,9 +18,7 @@ namespace NoteNest.UI.Controls
     {
         private bool _isUpdating;
         private readonly MarkdownFlowDocumentConverter _converter;
-        private readonly DispatcherTimer _debounceTimer;
         private readonly ListStateTracker _listTracker = new ListStateTracker();
-        private bool _hasUnsavedChanges = false;
         private NoteModel _currentNote;
         private NoteNest.Core.Services.NoteMetadataManager _metadataManager;
 
@@ -85,19 +83,17 @@ namespace NoteNest.UI.Controls
             }
             catch { }
 
-            // Reduced debounce for faster saves with content buffer protection
-            _debounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) }; // 500ms for quicker response
-            _debounceTimer.Tick += (s, e) =>
+            // Simple text changed - no debouncing
+            TextChanged += (s, e) =>
             {
-                _debounceTimer.Stop();
-                if (_hasUnsavedChanges)
+                if (!_isUpdating)
                 {
-                PushDocumentToMarkdown();
-                    _hasUnsavedChanges = false;
+                    _isUpdating = true;
+                    var markdown = _converter.ConvertToMarkdown(Document);
+                    SetCurrentValue(MarkdownContentProperty, markdown);
+                    _isUpdating = false;
                 }
             };
-
-            TextChanged += OnTextChanged;
             GotFocus += (s, e) => Keyboard.Focus(this);
 
             // Editing command keybindings
@@ -313,8 +309,6 @@ namespace NoteNest.UI.Controls
                 finally
                 {
                     _isUpdating = false;
-                    _debounceTimer.Stop();
-                    _debounceTimer.Start();
                 }
         }
 
@@ -439,8 +433,7 @@ namespace NoteNest.UI.Controls
                 finally
                 {
                     _isUpdating = false;
-                    _debounceTimer.Stop();
-                    _debounceTimer.Start();
+                    // Debouncing removed - content updates immediately
             }
         }
 
@@ -681,8 +674,7 @@ namespace NoteNest.UI.Controls
             finally
             {
                 _isUpdating = false;
-                _debounceTimer.Stop();
-                _debounceTimer.Start();
+                // Debouncing removed - content updates immediately
             }
         }
 
@@ -1169,8 +1161,7 @@ namespace NoteNest.UI.Controls
             finally
             {
                 _isUpdating = false;
-                _debounceTimer.Stop();
-                _debounceTimer.Start();
+                // Debouncing removed - content updates immediately
             }
         }
 
@@ -1405,8 +1396,7 @@ namespace NoteNest.UI.Controls
             finally
             {
                 _isUpdating = false;
-                _debounceTimer.Stop();
-                _debounceTimer.Start();
+                // Debouncing removed - content updates immediately
             }
         }
 
@@ -1621,14 +1611,6 @@ namespace NoteNest.UI.Controls
             editor.UpdateDocumentFromMarkdown(e.NewValue as string ?? string.Empty);
         }
 
-        private void OnTextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (_isUpdating) return;
-            
-            _hasUnsavedChanges = true;
-            _debounceTimer.Stop();
-            _debounceTimer.Start();
-        }
 
         private void UpdateDocumentFromMarkdown(string markdown)
         {
@@ -1696,68 +1678,8 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        /// <summary>
-        /// Forces immediate flush of any pending content updates.
-        /// Should be called before tab close or app shutdown.
-        /// </summary>
-        public void FlushPendingContent()
-        {
-            if (_debounceTimer.IsEnabled)
-            {
-                _debounceTimer.Stop();
-                if (_hasUnsavedChanges)
-                {
-                    PushDocumentToMarkdown();
-                    _hasUnsavedChanges = false;
-                }
-            }
-        }
 
-        private void PushDocumentToMarkdown()
-        {
-            _isUpdating = true;
-            try
-            {
-                var markdown = _converter.ConvertToMarkdown(Document);
-                SetCurrentValue(MarkdownContentProperty, markdown);
 
-                // Save list formatting metadata if available
-                if (_currentNote != null && _metadataManager != null)
-                {
-                    var listFormatting = ExtractListFormattingMetadata();
-                    if (!string.IsNullOrEmpty(listFormatting))
-                    {
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                await _metadataManager.SaveListFormattingAsync(_currentNote, listFormatting);
-                            }
-                            catch (Exception ex)
-                            {
-                                // Log error but don't fail the save
-                                System.Diagnostics.Debug.WriteLine($"Failed to save list formatting: {ex.Message}");
-                            }
-                        });
-                    }
-                }
-            }
-            finally
-            {
-                _isUpdating = false;
-            }
-        }
-
-        public void ForceFlushContent()
-        {
-            // Force immediate push of content (used during shutdown)
-            _debounceTimer?.Stop();
-            if (_hasUnsavedChanges)
-            {
-                PushDocumentToMarkdown();
-                _hasUnsavedChanges = false;
-            }
-        }
 
         public void InsertBulletList()
         {
@@ -1824,8 +1746,7 @@ namespace NoteNest.UI.Controls
             finally
             {
                 _isUpdating = false;
-                _debounceTimer.Stop();
-                _debounceTimer.Start();
+                // Debouncing removed - content updates immediately
             }
         }
 
@@ -2097,8 +2018,7 @@ namespace NoteNest.UI.Controls
             finally
             {
                 _isUpdating = false;
-                _debounceTimer.Stop();
-                _debounceTimer.Start();
+                // Debouncing removed - content updates immediately
             }
         }
         

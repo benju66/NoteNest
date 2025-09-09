@@ -30,8 +30,8 @@ namespace NoteNest.UI.ViewModels
         private readonly IDialogService _dialogService;
         private readonly IFileSystemProvider _fileSystem;
         private readonly ContentCache _contentCache;
-        private readonly IWorkspaceStateService _workspaceStateService;
         private readonly ITabPersistenceService _tabPersistence;
+        private readonly ISaveManager _saveManager;
 
         // Lazy Services (created only when needed)
         private FileWatcherService _fileWatcher;
@@ -180,7 +180,7 @@ namespace NoteNest.UI.ViewModels
 
         private WorkspaceViewModel GetWorkspaceViewModel()
         {
-            return _workspaceViewModel ??= new WorkspaceViewModel(GetWorkspaceService());
+            return _workspaceViewModel ??= new WorkspaceViewModel(GetWorkspaceService(), _saveManager);
         }
 
         private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
@@ -252,9 +252,9 @@ namespace NoteNest.UI.ViewModels
             IFileSystemProvider fileSystem,
             IWorkspaceService workspaceService,
             ContentCache contentCache,
-            IWorkspaceStateService workspaceStateService,
             ITabPersistenceService tabPersistence,
-            NoteNest.Core.Services.NotePinService notePinService)
+            NoteNest.Core.Services.NotePinService notePinService,
+            ISaveManager saveManager)
         {
             // Assign essential services only (fast)
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -266,9 +266,9 @@ namespace NoteNest.UI.ViewModels
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
             _workspaceService = workspaceService ?? throw new ArgumentNullException(nameof(workspaceService));
             _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
-            _workspaceStateService = workspaceStateService ?? throw new ArgumentNullException(nameof(workspaceStateService));
             _tabPersistence = tabPersistence ?? throw new ArgumentNullException(nameof(tabPersistence));
             _notePinService = notePinService ?? throw new ArgumentNullException(nameof(notePinService));
+            _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
 
             _logger.Info("MainViewModel fast startup initiated");
             _cancellationTokenSource = new CancellationTokenSource();
@@ -328,8 +328,13 @@ namespace NoteNest.UI.ViewModels
                         nti.IsDirty = true;
                     }
                     
-                    var result = await _workspaceStateService.SaveNoteAsync(e.Tab.Note.Id);
-                    if (result?.Success == true)
+                    bool success = false;
+                    if (e.Tab is ITabItem tabItem)
+                    {
+                        success = await _saveManager.SaveNoteAsync(tabItem.NoteId);
+                    }
+                    
+                    if (success)
                     {
                         _pendingRecoveryNotes.Remove(e.Tab.Note.Id);
                         _logger.Info($"Successfully saved recovered content for: {e.Tab.Note.Title}");
@@ -339,20 +344,7 @@ namespace NoteNest.UI.ViewModels
                         {
                             _recoveryInProgress = false;
                             
-                            // Now it's safe to clear the persistence log
-                            try
-                            {
-                                var persistenceLog = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IContentPersistenceLog)) as IContentPersistenceLog;
-                                if (persistenceLog != null)
-                                {
-                                    await persistenceLog.ClearLogAsync();
-                                    _logger.Info("Cleared persistence log after all recovered notes were saved");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.Warning($"Failed to clear persistence log: {ex.Message}");
-                            }
+                            // Recovery cleanup removed - StartupRecoveryService handles all recovery
                         }
                     }
                     else
@@ -422,6 +414,15 @@ namespace NoteNest.UI.ViewModels
 
                 // Initialize auto-save after settings are loaded
                 InitializeAutoSave();
+
+                // NEW: Recover interrupted saves from crashes
+                var recoveryService = new StartupRecoveryService(_saveManager, _logger);
+                var recoveredCount = await recoveryService.RecoverInterruptedSavesAsync(
+                    _configService.Settings.DefaultNotePath);
+                if (recoveredCount > 0)
+                {
+                    StatusMessage = $"Recovered {recoveredCount} interrupted saves";
+                }
 
                 // Recover any unpersisted changes from crash/unexpected shutdown
                 await RecoverUnpersistedChangesAsync(cancellationToken);
@@ -524,92 +525,9 @@ namespace NoteNest.UI.ViewModels
 
         private async Task RecoverUnpersistedChangesAsync(CancellationToken cancellationToken)
         {
-            try
-            {
-                var persistenceLog = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IContentPersistenceLog)) as IContentPersistenceLog;
-                if (persistenceLog == null) return;
-
-                StatusMessage = "Checking for recovered content...";
-                var recoveredChanges = await persistenceLog.RecoverUnpersistedChangesAsync();
-                
-                if (recoveredChanges.Count > 0)
-                {
-                    _logger.Info($"Found {recoveredChanges.Count} unpersisted changes from previous session");
-                    
-                    // Ask user if they want to recover
-                    var message = recoveredChanges.Count == 1 
-                        ? "Found unsaved content from a previous session. Would you like to recover it?"
-                        : $"Found {recoveredChanges.Count} notes with unsaved content from a previous session. Would you like to recover them?";
-                    
-                    var recover = await _dialogService.ShowYesNoCancelAsync(message, "Recover Unsaved Content");
-                    
-                    if (recover == true)
-                    {
-                        var recovered = 0;
-                        foreach (var kvp in recoveredChanges)
-                        {
-                            try
-                            {
-                                // Buffer the recovered content
-                                // It will be saved when the note is opened or during auto-save
-                                _workspaceStateService.UpdateNoteContent(kvp.Key, kvp.Value);
-                                recovered++;
-                                _logger.Info($"Buffered recovered content for note ID: {kvp.Key}");
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.Warning($"Failed to recover content for note {kvp.Key}: {ex.Message}");
-                            }
-                        }
-                        
-                        // Mark recovery in progress so we can save when tabs are opened
-                        _recoveryInProgress = true;
-                        _pendingRecoveryNotes = new HashSet<string>(recoveredChanges.Keys);
-                        
-                        StatusMessage = $"Recovered {recovered} unsaved changes";
-                        _logger.Info($"Successfully recovered {recovered} of {recoveredChanges.Count} changes");
-                        
-                        // Schedule clearing the persistence log after tabs are restored and saved
-                        _ = Task.Run(async () =>
-                        {
-                            await Task.Delay(5000); // Give time for tabs to open and save
-                            
-                            // Check if all recovered notes have been saved
-                            var allSaved = true;
-                            foreach (var noteId in _pendingRecoveryNotes)
-                            {
-                                if (_workspaceStateService.IsNoteDirty(noteId))
-                                {
-                                    allSaved = false;
-                                    _logger.Warning($"Recovery note {noteId} is still dirty after 5 seconds");
-                                }
-                            }
-                            
-                            if (allSaved)
-                            {
-                                _logger.Info("All recovered notes saved, clearing persistence log");
-                                await persistenceLog.ClearLogAsync();
-                                _pendingRecoveryNotes.Clear();
-                                _recoveryInProgress = false;
-                            }
-                            else
-                            {
-                                _logger.Warning("Some recovered notes still dirty, keeping persistence log");
-                            }
-                        });
-                    }
-                    else
-                    {
-                        // User declined recovery, clear the log
-                        await persistenceLog.ClearLogAsync();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to recover unpersisted changes");
-                // Don't show error to user - recovery is best-effort
-            }
+            // Recovery is now handled by StartupRecoveryService during initialization
+            // This method is kept for compatibility but does nothing
+            await Task.CompletedTask;
         }
 
         private async Task RestoreTabsAsync()
@@ -842,22 +760,9 @@ namespace NoteNest.UI.ViewModels
         private async Task SaveCurrentNoteAsync()
         {
             var current = GetWorkspaceService().SelectedTab;
-            if (current == null) return;
-
-            // Ensure state has freshest content and save
-            try
+            if (current != null)
             {
-                var text = current.Content ?? string.Empty;
-                System.Diagnostics.Debug.WriteLine($"[VM] SaveCurrent START noteId={current.Note?.Id} len={text.Length} at={DateTime.Now:HH:mm:ss.fff}");
-                _workspaceStateService.UpdateNoteContent(current.Note.Id, text);
-            }
-            catch { }
-            
-            var result = await _workspaceStateService.SaveNoteAsync(current.Note.Id);
-            System.Diagnostics.Debug.WriteLine($"[VM] SaveCurrent END noteId={current.Note?.Id} success={result?.Success} at={DateTime.Now:HH:mm:ss.fff}");
-            if (result?.Success == true)
-            {
-                _stateManager.StatusMessage = $"Saved: {current.Note.Title}";
+                await _saveManager.SaveNoteAsync(current.NoteId);
             }
         }
 
@@ -868,21 +773,15 @@ namespace NoteNest.UI.ViewModels
 
         private async Task SaveAllNotesAsync(CancellationToken cancellationToken)
         {
-            if (!GetWorkspaceService().HasUnsavedChanges) return;
+            var result = await _saveManager.SaveAllDirtyAsync();
             
-            _stateManager.BeginOperation("Saving all notes...");
-            
-            try
+            if (result.FailureCount > 0)
             {
-                var result = await _workspaceStateService.SaveAllDirtyNotesAsync();
-                _stateManager.EndOperation(result.FailureCount > 0
-                    ? $"Saved {result.SuccessCount} with {result.FailureCount} errors"
-                    : "All notes saved");
+                StatusMessage = $"Saved {result.SuccessCount} notes, {result.FailureCount} failed";
             }
-            catch (Exception ex)
+            else if (result.SuccessCount > 0)
             {
-                _logger.Error(ex, "Failed to save all notes");
-                _stateManager.EndOperation("Error saving notes");
+                StatusMessage = $"All notes saved";
             }
         }
 
@@ -1098,9 +997,7 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"[VM] AutoSave START at={DateTime.Now:HH:mm:ss.fff}");
-                var result = await _workspaceStateService.SaveAllDirtyNotesAsync();
-                System.Diagnostics.Debug.WriteLine($"[VM] AutoSave END success={result?.SuccessCount} fail={result?.FailureCount} at={DateTime.Now:HH:mm:ss.fff}");
+                var result = await _saveManager.SaveAllDirtyAsync();
                 if (result.SuccessCount > 0)
                 {
                     StatusMessage = $"Auto-saved {result.SuccessCount} note(s)";
@@ -1287,11 +1184,7 @@ namespace NoteNest.UI.ViewModels
             noteItem.OnPropertyChanged(nameof(NoteTreeItem.FilePath));
             
             // Update open tab if exists
-            var openTab = OpenTabs.FirstOrDefault(t => ReferenceEquals(t.Note, noteItem.Model));
-            if (openTab != null)
-            {
-                openTab.OnPropertyChanged(nameof(NoteTabItem.Title));
-            }
+            // Note: Tab should update itself automatically when the underlying NoteModel changes
             
             _stateManager.StatusMessage = $"Renamed note to '{newName}'";
         }
@@ -1375,11 +1268,7 @@ namespace NoteNest.UI.ViewModels
                 targetCategory.Notes.Add(noteItem);
                 
                 // Update open tab if exists
-                var openTab = OpenTabs.FirstOrDefault(t => ReferenceEquals(t.Note, noteItem.Model));
-                if (openTab != null)
-                {
-                    openTab.OnPropertyChanged(nameof(NoteTabItem.Title));
-                }
+                // Note: Tab should update itself automatically when the underlying NoteModel changes
                 
                 _stateManager.StatusMessage = $"Moved '{noteItem.Title}' to '{targetCategory.Name}'";
             }

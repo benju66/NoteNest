@@ -90,6 +90,7 @@ namespace NoteNest.Tests.Services
 			public NoteModel Note { get; }
 			public bool IsDirty { get; set; }
 			public string Content { get; set; }
+			public string NoteId => Note?.Id ?? string.Empty;
 			public TestTabItem(NoteModel note)
 			{
 				Note = note;

@@ -27,18 +27,7 @@ namespace NoteNest.UI.Services
             services.AddSingleton<ConfigurationService>(sp => new ConfigurationService(
                 sp.GetRequiredService<IFileSystemProvider>(),
                 sp.GetService<IEventBus>()));
-            services.AddSingleton<IContentPersistenceLog>(sp => new ContentPersistenceLog(
-                sp.GetRequiredService<ConfigurationService>(),
-                sp.GetService<IAppLogger>()));
-            services.AddSingleton<ISafeContentBuffer>(sp => new SafeContentBuffer(
-                sp.GetService<IAppLogger>(),
-                null,
-                sp.GetService<IContentPersistenceLog>()));
-            services.AddSingleton<IWorkspaceStateService>(sp => new WorkspaceStateService(
-                sp.GetRequiredService<NoteService>(),
-                sp.GetRequiredService<ISafeContentBuffer>(),
-                sp.GetService<IStateManager>(),
-                sp.GetService<IFileSystemProvider>()));
+            services.AddSingleton<ISaveManager, UnifiedSaveManager>(); // NEW
             services.AddSingleton<ITabPersistenceService>(sp => new TabPersistenceService(
                 sp.GetRequiredService<ConfigurationService>(),
                 sp.GetRequiredService<IAppLogger>(),
@@ -124,7 +113,7 @@ namespace NoteNest.UI.Services
             services.AddSingleton<LinkedNoteNavigator>(sp => new LinkedNoteNavigator(
                 sp.GetRequiredService<IWorkspaceService>(),
                 sp.GetRequiredService<NoteService>(),
-                sp.GetRequiredService<IWorkspaceStateService>()
+                null // Removed IWorkspaceStateService dependency
             ));
 
             // Search services - lightweight, focused

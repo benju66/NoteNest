@@ -537,8 +537,7 @@ namespace NoteNest.UI
                         {
                             dw.RemoveTab(tab);
                         }
-                        var state = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                        state?.AssociateNoteWithWindow(tab.Note.Id, "main", false);
+                        // Window association removed - SaveManager handles note tracking
                     }
                 }
                 TogglePaneDropHighlight(e.GetPosition(this), false);
@@ -952,7 +951,7 @@ namespace NoteNest.UI
                             var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
                             if (child is Controls.SplitPaneView spv)
                             {
-                                spv.FlushAllEditors();
+                                // Content is up-to-date since debouncing was removed
                             }
                             FlushSplitPanes(child);
                         }
@@ -963,20 +962,13 @@ namespace NoteNest.UI
 
                 try
                 {
-                    var state = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IWorkspaceStateService)) as NoteNest.Core.Services.IWorkspaceStateService;
-                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
-                    // Explicitly push all tabs' content into state before bulk save
-                    try
+                    // Save all dirty notes via SaveManager
+                    var saveManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
+                    if (saveManager != null)
                     {
-                        foreach (var tab in workspace?.OpenTabs ?? System.Linq.Enumerable.Empty<NoteNest.Core.Interfaces.Services.ITabItem>())
-                        {
-                            try { state?.UpdateNoteContent(tab.Note.Id, tab.Content ?? string.Empty); } catch { }
-                        }
+                        var task = saveManager.SaveAllDirtyAsync();
+                        task.Wait(TimeSpan.FromSeconds(2));
                     }
-                    catch { }
-                    // Save all dirty notes via state service synchronously up to a budget
-                    var task = state?.SaveAllDirtyNotesAsync();
-                    task?.Wait(TimeSpan.FromSeconds(2));
                 }
                 catch { }
 

@@ -103,18 +103,8 @@ namespace NoteNest.Core.Services
 					LastSaved = DateTime.UtcNow
 				};
 
-				if (!string.IsNullOrEmpty(activeTabId))
-				{
-					var activeTab = tabList.FirstOrDefault(t => t.Note?.Id == activeTabId);
-					if (activeTab != null)
-					{
-						// Cap embedded content to 256 KB
-						var content = embeddedActiveContent ?? activeTab.Content ?? string.Empty;
-						if (content?.Length > 256 * 1024)
-							content = null;
-						state.ActiveTabContent = content;
-					}
-				}
+				// NO LONGER EMBED CONTENT - SaveManager handles persistence
+				state.ActiveTabContent = null;
 
 				var json = JsonSerializer.Serialize(state, _jsonOptions);
 				await File.WriteAllTextAsync(path, json);

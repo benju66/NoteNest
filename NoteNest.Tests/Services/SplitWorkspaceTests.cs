@@ -24,9 +24,9 @@ namespace NoteNest.Tests.Services
             var errorHandler = new ServiceErrorHandler(logger);
             var contentCache = new ContentCache();
             var noteOps = new NoteOperationsServiceMock();
-            var workspaceStateService = new NoteNest.Core.Services.WorkspaceStateService(noteService);
+            var saveManager = new MockSaveManager();
 
-            _workspaceService = new WorkspaceService(contentCache, noteService, errorHandler, logger, noteOps, workspaceStateService);
+            _workspaceService = new WorkspaceService(contentCache, noteService, errorHandler, logger, noteOps, saveManager);
         }
 
         [Test]
@@ -74,12 +74,30 @@ namespace NoteNest.Tests.Services
             Assert.That(pane.IsActive, Is.True);
         }
 
+        private class MockSaveManager : ISaveManager
+        {
+            public event EventHandler<NoteSavedEventArgs> NoteSaved;
+            public event EventHandler<ExternalChangeEventArgs> ExternalChangeDetected;
+
+            public async Task<string> OpenNoteAsync(string filePath) => System.Guid.NewGuid().ToString();
+            public void UpdateContent(string noteId, string content) { }
+            public async Task<bool> SaveNoteAsync(string noteId) => true;
+            public async Task<BatchSaveResult> SaveAllDirtyAsync() => new BatchSaveResult();
+            public bool IsNoteDirty(string noteId) => false;
+            public string GetContent(string noteId) => "";
+            public string GetFilePath(string noteId) => "";
+            public IReadOnlyList<string> GetDirtyNoteIds() => new List<string>();
+            public void CloseNote(string noteId) { }
+            public void Dispose() { }
+        }
+
         private class DummyTabItem : ITabItem
         {
             public DummyTabItem(NoteModel note)
             {
                 Note = note;
                 Id = System.Guid.NewGuid().ToString();
+                NoteId = note.Id;
                 Content = note.Content ?? string.Empty;
             }
 
@@ -88,6 +106,7 @@ namespace NoteNest.Tests.Services
             public NoteModel Note { get; }
             public bool IsDirty { get; set; }
             public string Content { get; set; }
+            public string NoteId { get; }
         }
 
         private class NoteOperationsServiceMock : INoteOperationsService
