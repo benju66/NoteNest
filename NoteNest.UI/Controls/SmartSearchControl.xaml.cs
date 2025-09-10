@@ -61,7 +61,7 @@ namespace NoteNest.UI.Controls
             {
                 oldViewModel.ResultSelected -= OnResultSelected;
             }
-            
+
             if (newViewModel != null)
             {
                 newViewModel.ResultSelected += OnResultSelected;
@@ -83,8 +83,8 @@ namespace NoteNest.UI.Controls
         }
 
         private void OnResultSelected(object sender, SearchResultSelectedEventArgs e)
-        {
-            ResultSelected?.Invoke(this, e);
+            {
+                ResultSelected?.Invoke(this, e);
             _logger.Debug($"Search result selected: {e.Result.Title}");
             
             // Close popup and clear search
@@ -98,10 +98,10 @@ namespace NoteNest.UI.Controls
 
         // TextBox event handlers
         private void SearchTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            switch (e.Key)
             {
-                case Key.Down:
+                switch (e.Key)
+                {
+                    case Key.Down:
                     // Move focus to results list
                     if (ResultsList.Items.Count > 0)
                     {
@@ -111,26 +111,26 @@ namespace NoteNest.UI.Controls
                         {
                             ResultsList.SelectedIndex = 0;
                         }
-                        e.Handled = true;
-                    }
-                    break;
-                    
-                case Key.Enter:
-                    // Open selected result
+                            e.Handled = true;
+                        }
+                        break;
+                        
+                    case Key.Enter:
+                        // Open selected result
                     if (ViewModel?.SelectedResult != null)
-                    {
+                        {
                         ViewModel.OpenSelectedCommand?.Execute(null);
-                        e.Handled = true;
-                    }
-                    break;
-                    
-                case Key.Escape:
+                            e.Handled = true;
+                        }
+                        break;
+                        
+                    case Key.Escape:
                     // Clear search
                     if (!string.IsNullOrEmpty(SearchTextBox.Text))
-                    {
+                        {
                         ClearSearch();
-                        e.Handled = true;
-                    }
+                            e.Handled = true;
+                        }
                     break;
             }
         }
@@ -170,10 +170,10 @@ namespace NoteNest.UI.Controls
                     if (ResultsList.SelectedItem is SearchResultViewModel result)
                     {
                         ViewModel?.SelectResultCommand?.Execute(result);
-                        e.Handled = true;
-                    }
-                    break;
-                    
+                            e.Handled = true;
+                        }
+                        break;
+                        
                 case Key.Escape:
                     // Return focus to search box
                     ResultsPopup.IsOpen = false;
@@ -186,11 +186,11 @@ namespace NoteNest.UI.Controls
                     if (ResultsList.SelectedIndex == 0)
                     {
                         SearchTextBox.Focus();
-                        e.Handled = true;
-                    }
-                    break;
+                            e.Handled = true;
+                        }
+                        break;
+                }
             }
-        }
 
         private void ResultsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
@@ -208,10 +208,10 @@ namespace NoteNest.UI.Controls
         }
 
         private void ClearSearch()
-        {
-            if (ViewModel != null)
             {
-                ViewModel.SearchQuery = string.Empty;
+                if (ViewModel != null)
+                {
+                    ViewModel.SearchQuery = string.Empty;
                 ViewModel.ShowDropdown = false;
             }
             SearchTextBox.Focus();

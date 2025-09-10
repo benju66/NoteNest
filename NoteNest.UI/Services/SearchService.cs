@@ -179,17 +179,32 @@ namespace NoteNest.UI.Services
 
         private async Task BuildInitialIndexAsync()
         {
-            await _indexBuildLock.WaitAsync();
+            // Add timeout to prevent hanging
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            
+            try
+            {
+                await _indexBuildLock.WaitAsync(timeoutCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.Error("Timeout waiting for index build lock");
+                return;
+            }
+            
             try
             {
                 if (_isIndexBuilt && !_indexDirty) return;
                 
                 _logger.Info("Building search index in background...");
+                _logger.Debug("SEARCH DEBUG: Starting BuildInitialIndexAsync");
                 var startTime = DateTime.Now;
                 
                 // Ensure settings are loaded first
+                _logger.Debug("SEARCH DEBUG: Loading configuration settings...");
                 await _configService.LoadSettingsAsync();
                 await _configService.EnsureDefaultDirectoriesAsync();
+                _logger.Debug("SEARCH DEBUG: Configuration loaded successfully");
                 
                 // Load categories and notes
                 var metadataPath = _configService.Settings.MetadataPath;
@@ -254,7 +269,9 @@ namespace NoteNest.UI.Services
                 }
                 
                 // Build index on background thread to avoid UI freeze
+                _logger.Debug("SEARCH DEBUG: Starting index build with SearchIndexService...");
                 await Task.Run(() => _searchIndex.BuildIndex(categories, allNotes));
+                _logger.Debug("SEARCH DEBUG: SearchIndexService build completed");
                 
                 _isIndexBuilt = true;
                 _indexDirty = false;

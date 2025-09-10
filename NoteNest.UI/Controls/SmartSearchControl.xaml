@@ -50,7 +50,7 @@
                             Background="Transparent"
                             VerticalAlignment="Center"
                             Padding="4,6"
-                            FontSize="14"
+                              FontSize="14"
                             PreviewKeyDown="SearchTextBox_PreviewKeyDown"
                             GotFocus="SearchTextBox_GotFocus"
                             LostFocus="SearchTextBox_LostFocus">
@@ -63,7 +63,7 @@
                                                 <!-- Placeholder text -->
                                                 <TextBlock Text="Search notes... (Ctrl+F)"
                                                           Opacity="0.5"
-                                                          VerticalAlignment="Center"
+                              VerticalAlignment="Center"
                                                           Margin="4,0,0,0"
                                                           IsHitTestVisible="False">
                                                     <TextBlock.Style>
@@ -143,7 +143,7 @@
                     <!-- Results List -->
                     <ListBox x:Name="ResultsList"
                             Grid.Row="0"
-                            ItemsSource="{Binding SearchResults}"
+                      ItemsSource="{Binding SearchResults}"
                             SelectedItem="{Binding SelectedResult, Mode=TwoWay}"
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                             ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -156,7 +156,7 @@
                             MouseDoubleClick="ResultsList_MouseDoubleClick">
                         
                         <ListBox.ItemTemplate>
-                            <DataTemplate DataType="{x:Type services:SearchResultViewModel}">
+            <DataTemplate DataType="{x:Type services:SearchResultViewModel}">
                                 <Border Padding="10,8" 
                                        Background="Transparent"
                                        BorderThickness="0,0,0,1"
