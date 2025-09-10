@@ -19,9 +19,12 @@
     <Window.CommandBindings>
         <CommandBinding Command="{x:Static local:MainWindow.ToggleEditorCommand}"
                         Executed="ToggleEditorCommand_Executed"/>
+        <CommandBinding Command="{x:Static local:MainWindow.FocusSearchCommand}"
+                        Executed="FocusSearchCommand_Executed"/>
     </Window.CommandBindings>
     <Window.InputBindings>
         <KeyBinding Command="{x:Static local:MainWindow.ToggleEditorCommand}" Gesture="Ctrl+Alt+E"/>
+        <KeyBinding Key="F" Modifiers="Control" Command="{x:Static local:MainWindow.FocusSearchCommand}"/>
     </Window.InputBindings>
 
     <Grid SnapsToDevicePixels="True">

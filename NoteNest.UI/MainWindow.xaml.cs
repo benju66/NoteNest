@@ -29,9 +29,11 @@ namespace NoteNest.UI
     {
         public static readonly RoutedUICommand ToggleEditorCommand = new RoutedUICommand("ToggleEditor", nameof(ToggleEditorCommand), typeof(MainWindow));
         public static readonly RoutedUICommand ToggleRightPanelCommand = new RoutedUICommand("ToggleRightPanel", nameof(ToggleRightPanelCommand), typeof(MainWindow));
+        public static readonly RoutedUICommand FocusSearchCommand = new RoutedUICommand("FocusSearch", nameof(FocusSearchCommand), typeof(MainWindow));
 
         private bool _isRightPanelVisible;
         private double _lastRightPanelWidth = 320;
+        private readonly NoteNest.Core.Services.Logging.IAppLogger _logger;
 
         public bool IsRightPanelVisible
         {
@@ -52,6 +54,7 @@ namespace NoteNest.UI
         public MainWindow()
         {
             InitializeComponent();
+            _logger = NoteNest.Core.Services.Logging.AppLogger.Instance;
             UpdateThemeMenuChecks();
             AllowDrop = true;
             try
@@ -739,8 +742,33 @@ namespace NoteNest.UI
 
         private void FindMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            // Hook up to panel method if present
-            // Placeholder per guide; to be implemented in Phase 9
+            FocusSearchBox();
+        }
+
+        private void FocusSearchCommand_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            FocusSearchBox();
+        }
+
+        private void FocusSearchBox()
+        {
+            try
+            {
+                // Focus the search control in the main panel
+                if (MainPanel?.SearchControl != null)
+                {
+                    MainPanel.FocusSearchBox();
+                    _logger.Debug("Search box focused via Ctrl+F");
+                }
+                else
+                {
+                    _logger.Warning("SearchControl not found in MainPanel");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to focus search box");
+            }
         }
 
         private void ReplaceMenuItem_Click(object sender, RoutedEventArgs e)
