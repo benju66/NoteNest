@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.ViewModels;
 
 namespace NoteNest.UI.Services
@@ -15,8 +16,9 @@ namespace NoteNest.UI.Services
     {
         Task<List<SearchResultViewModel>> SearchAsync(string query, CancellationToken cancellationToken = default);
         Task<List<string>> GetSuggestionsAsync(string query, int maxResults = 10);
-        void InvalidateIndex(); // Called when notes change
+        void InvalidateIndex();
         bool IsIndexReady { get; }
+        Task<bool> InitializeAsync();
     }
 
     public class SearchService : ISearchService
@@ -31,14 +33,13 @@ namespace NoteNest.UI.Services
         
         // Track index state
         private volatile bool _isIndexBuilt = false;
-        private bool _indexDirty = true;
-        private DateTime _lastIndexTime = DateTime.MinValue;
+        private volatile bool _isInitializing = false;
         
         // Simple cache for recent searches
         private readonly Dictionary<string, (List<SearchResultViewModel> results, DateTime timestamp)> _searchCache = new();
         private readonly TimeSpan _cacheExpiry = TimeSpan.FromSeconds(30);
 
-        public bool IsIndexReady => _isIndexBuilt && !_indexDirty;
+        public bool IsIndexReady => _isIndexBuilt;
 
         public SearchService(
             NoteService noteService,
@@ -52,23 +53,151 @@ namespace NoteNest.UI.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             var contentWordLimit = _configService.Settings?.SearchIndexContentWordLimit ?? 500;
-            _searchIndex = new SearchIndexService(contentWordLimit);
+            
+            // Create search index with proper dependencies
+            _searchIndex = new SearchIndexService(
+                contentWordLimit,
+                new MarkdownService(_logger),
+                new DefaultFileSystemProvider(),
+                _logger);
             
             // Subscribe to file changes for incremental updates
+            if (_fileWatcher != null)
+            {
             _fileWatcher.FileChanged += OnFileChanged;
             _fileWatcher.FileCreated += OnFileCreated;
             _fileWatcher.FileDeleted += OnFileDeleted;
             _fileWatcher.FileRenamed += OnFileRenamed;
+            }
             
-            // Build initial index in background
-            _ = Task.Run(async () => await BuildInitialIndexAsync());
+            // Don't build index in constructor - wait for InitializeAsync
+            _logger.Debug("SearchService created, waiting for initialization");
         }
 
+        /// <summary>
+        /// Initializes the search service and builds the initial index
+        /// </summary>
+        public async Task<bool> InitializeAsync()
+        {
+            if (_isIndexBuilt || _isInitializing)
+                return _isIndexBuilt;
+
+            _isInitializing = true;
+            try
+            {
+                _logger.Info("Initializing search service...");
+                
+                // Wait a moment for the app to fully initialize
+                await Task.Delay(500);
+                
+                // Build the initial index
+                var success = await BuildIndexAsync();
+                
+                if (success)
+                {
+                    _logger.Info("Search service initialized successfully");
+                }
+                else
+                {
+                    _logger.Error("Search service initialization failed");
+                }
+                
+                return success;
+            }
+            finally
+            {
+                _isInitializing = false;
+            }
+        }
+
+        /// <summary>
+        /// Builds or rebuilds the search index
+        /// </summary>
+        private async Task<bool> BuildIndexAsync()
+        {
+            await _indexBuildLock.WaitAsync();
+            try
+            {
+                _logger.Info("Building search index...");
+                
+                // Clear cache when rebuilding
+                lock (_searchCache)
+                {
+                    _searchCache.Clear();
+                }
+
+                // Load settings and get categories
+                await _configService.LoadSettingsAsync();
+                var metadataPath = _configService.Settings.MetadataPath;
+                var categories = await _noteService.LoadCategoriesAsync(metadataPath) ?? new List<CategoryModel>();
+                var allNotes = new List<NoteModel>();
+
+                foreach (var category in categories)
+                {
+                    try
+                    {
+                        var notes = await _noteService.GetNotesInCategoryAsync(category);
+                        if (notes != null)
+                        {
+                            allNotes.AddRange(notes);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning($"Failed to get notes for category {category.Name}: {ex.Message}");
+                    }
+                }
+
+                _logger.Debug($"Building index with {allNotes.Count} notes from {categories.Count} categories");
+
+                // Build the index using the new async method
+                _isIndexBuilt = await _searchIndex.BuildIndexAsync(categories, allNotes);
+
+                if (_isIndexBuilt)
+                {
+                    _logger.Info($"Search index built successfully with {allNotes.Count} notes");
+                }
+                else
+                {
+                    _logger.Error("Failed to build search index");
+                }
+
+                return _isIndexBuilt;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Exception during index build");
+                _isIndexBuilt = false;
+                return false;
+            }
+            finally
+            {
+                _indexBuildLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Performs a search query
+        /// </summary>
         public async Task<List<SearchResultViewModel>> SearchAsync(string query, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(query))
             {
                 _logger.Debug("Search query is empty, returning empty results");
+                return new List<SearchResultViewModel>();
+            }
+
+            // Ensure index is built (with lazy initialization)
+            if (!_isIndexBuilt && !_isInitializing)
+            {
+                _logger.Info("Index not ready, initializing now...");
+                await InitializeAsync();
+            }
+
+            // If still not built, return empty
+            if (!_isIndexBuilt)
+            {
+                _logger.Warning("Search index not available, returning empty results");
                 return new List<SearchResultViewModel>();
             }
 
@@ -87,27 +216,12 @@ namespace NoteNest.UI.Services
                 }
             }
 
-            // Ensure index is built
-            if (!_isIndexBuilt)
-            {
-                _logger.Info("Index not ready, building now...");
-                await BuildInitialIndexAsync();
-                
-                // Check if build was successful
-                if (!_isIndexBuilt)
-                {
-                    _logger.Warning("Index build failed or incomplete");
-                    return new List<SearchResultViewModel>();
-                }
-                _logger.Debug("Index built successfully, proceeding with search");
-            }
-
             _logger.Debug($"Starting search for query: '{query}'");
 
             await _searchLock.WaitAsync(cancellationToken);
             try
             {
-                // USE THE SOPHISTICATED INDEX!
+                // Perform the search
                 var searchResults = await Task.Run(() => 
                     _searchIndex.Search(query, maxResults: 50), 
                     cancellationToken);
@@ -148,6 +262,9 @@ namespace NoteNest.UI.Services
             }
         }
 
+        /// <summary>
+        /// Gets search suggestions for autocomplete
+        /// </summary>
         public async Task<List<string>> GetSuggestionsAsync(string query, int maxResults = 10)
         {
             if (string.IsNullOrWhiteSpace(query))
@@ -155,12 +272,12 @@ namespace NoteNest.UI.Services
 
             try
             {
-                // Use the sophisticated search for suggestions
                 var results = await SearchAsync(query.Trim());
                 return results
                     .OrderByDescending(r => r.Relevance)
                     .Take(maxResults)
                     .Select(r => r.Title)
+                    .Distinct()
                     .ToList();
             }
             catch (Exception ex)
@@ -170,175 +287,19 @@ namespace NoteNest.UI.Services
             }
         }
 
+        /// <summary>
+        /// Invalidates the search index and clears cache
+        /// </summary>
         public void InvalidateIndex()
         {
-            _indexDirty = true;
+            _searchIndex.MarkDirty();
             InvalidateCache();
             _logger.Debug("Search index invalidated");
         }
 
-        private async Task BuildInitialIndexAsync()
-        {
-            // Add timeout to prevent hanging
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            
-            try
-            {
-                await _indexBuildLock.WaitAsync(timeoutCts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.Error("Timeout waiting for index build lock");
-                return;
-            }
-            
-            try
-            {
-                if (_isIndexBuilt && !_indexDirty) return;
-                
-                _logger.Info("Building search index in background...");
-                _logger.Debug("SEARCH DEBUG: Starting BuildInitialIndexAsync");
-                var startTime = DateTime.Now;
-                
-                // Ensure settings are loaded first
-                _logger.Debug("SEARCH DEBUG: Loading configuration settings...");
-                await _configService.LoadSettingsAsync();
-                await _configService.EnsureDefaultDirectoriesAsync();
-                _logger.Debug("SEARCH DEBUG: Configuration loaded successfully");
-                
-                // Load categories and notes
-                var metadataPath = _configService.Settings.MetadataPath;
-                var defaultNotePath = _configService.Settings.DefaultNotePath;
-                
-                _logger.Debug($"SEARCH DEBUG: MetadataPath='{metadataPath}', DefaultNotePath='{defaultNotePath}'");
-                
-                // If paths are still empty, use the documents fallback
-                if (string.IsNullOrEmpty(defaultNotePath))
-                {
-                    defaultNotePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
-                    _logger.Debug($"SEARCH DEBUG: Using fallback DefaultNotePath='{defaultNotePath}'");
-                }
-                
-                if (string.IsNullOrEmpty(metadataPath))
-                {
-                    metadataPath = Path.Combine(defaultNotePath, ".metadata");
-                    _logger.Debug($"SEARCH DEBUG: Using fallback MetadataPath='{metadataPath}'");
-                }
-                
-                // TEMP FIX: Check for the nested Projects directory issue
-                var nestedProjectsPath = Path.Combine(defaultNotePath, "Projects");
-                var nestedMetadataPath = Path.Combine(nestedProjectsPath, ".metadata");
-                if (Directory.Exists(nestedMetadataPath) && !Directory.Exists(metadataPath))
-                {
-                    _logger.Debug($"SEARCH DEBUG: Found nested Projects structure, using '{nestedProjectsPath}' instead of '{defaultNotePath}'");
-                    defaultNotePath = nestedProjectsPath;
-                    metadataPath = nestedMetadataPath;
-                    _logger.Debug($"SEARCH DEBUG: Corrected paths - DefaultNotePath='{defaultNotePath}', MetadataPath='{metadataPath}'");
-                }
-                
-                _logger.Debug($"SEARCH DEBUG: MetadataPath exists: {Directory.Exists(metadataPath)}");
-                _logger.Debug($"SEARCH DEBUG: DefaultNotePath exists: {Directory.Exists(defaultNotePath)}");
-                
-                var categories = await _noteService.LoadCategoriesAsync(metadataPath) ?? new List<CategoryModel>();
-                _logger.Debug($"SEARCH DEBUG: Loaded {categories.Count} categories");
-                
-                var allNotes = new List<NoteModel>();
-                foreach (var category in categories)
-                {
-                    _logger.Debug($"SEARCH DEBUG: Loading notes for category '{category.Name}' (Id: {category.Id})");
-                    var categoryNotes = await _noteService.GetNotesInCategoryAsync(category);
-                    _logger.Debug($"SEARCH DEBUG: Category '{category.Name}' has {categoryNotes.Count} notes");
-                    allNotes.AddRange(categoryNotes);
-                }
-                
-                _logger.Debug($"SEARCH DEBUG: Total loaded {allNotes.Count} notes from {categories.Count} categories");
-                
-                // If no notes found, try to scan directory directly
-                if (allNotes.Count == 0 && Directory.Exists(defaultNotePath))
-                {
-                    _logger.Debug($"SEARCH DEBUG: No notes found via categories, scanning directory directly...");
-                    var noteFiles = Directory.GetFiles(defaultNotePath, "*.txt", SearchOption.AllDirectories)
-                        .Concat(Directory.GetFiles(defaultNotePath, "*.md", SearchOption.AllDirectories))
-                        .ToArray();
-                    _logger.Debug($"SEARCH DEBUG: Found {noteFiles.Length} note files in directory");
-                    
-                    foreach (var filePath in noteFiles.Take(10)) // Log first 10 files
-                    {
-                        _logger.Debug($"SEARCH DEBUG: Found file: {filePath}");
-                    }
-                }
-                
-                // Build index on background thread to avoid UI freeze
-                _logger.Debug("SEARCH DEBUG: Starting index build with SearchIndexService...");
-                await Task.Run(() => _searchIndex.BuildIndex(categories, allNotes));
-                _logger.Debug("SEARCH DEBUG: SearchIndexService build completed");
-                
-                _isIndexBuilt = true;
-                _indexDirty = false;
-                _lastIndexTime = DateTime.Now;
-                
-                var elapsed = DateTime.Now - startTime;
-                _logger.Info($"Search index built successfully in {elapsed.TotalSeconds:F2}s: {allNotes.Count} notes indexed");
-                _logger.Debug($"SEARCH DEBUG: Index state after build - _isIndexBuilt={_isIndexBuilt}, _indexDirty={_indexDirty}, IsIndexReady={IsIndexReady}");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to build search index");
-                _isIndexBuilt = false;
-                _indexDirty = true;
-            }
-            finally
-            {
-                _indexBuildLock.Release();
-            }
-        }
-
-        // File watcher event handlers
-        private async void OnFileChanged(object sender, FileChangedEventArgs e)
-        {
-            if (!IsRelevantFile(e.FilePath)) return;
-            
-            _logger.Debug($"File changed: {e.FilePath}");
-            InvalidateCache();
-            
-            // For now, mark index as dirty and rebuild on next search
-            // TODO: Implement incremental update
-            _indexDirty = true;
-        }
-
-        private async void OnFileCreated(object sender, FileChangedEventArgs e)
-        {
-            if (!IsRelevantFile(e.FilePath)) return;
-            
-            _logger.Debug($"File created: {e.FilePath}");
-            InvalidateCache();
-            _indexDirty = true;
-        }
-
-        private async void OnFileDeleted(object sender, FileChangedEventArgs e)
-        {
-            if (!IsRelevantFile(e.FilePath)) return;
-            
-            _logger.Debug($"File deleted: {e.FilePath}");
-            InvalidateCache();
-            _indexDirty = true;
-        }
-
-        private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
-        {
-            if (!IsRelevantFile(e.NewPath)) return;
-            
-            _logger.Debug($"File renamed: {e.OldPath} -> {e.NewPath}");
-            InvalidateCache();
-            _indexDirty = true;
-        }
-
-        private bool IsRelevantFile(string filePath)
-        {
-            var ext = Path.GetExtension(filePath)?.ToLowerInvariant();
-            return ext == ".md" || ext == ".txt" || ext == ".markdown";
-        }
-
+        /// <summary>
+        /// Clears the search cache
+        /// </summary>
         private void InvalidateCache()
         {
             lock (_searchCache)
@@ -347,6 +308,53 @@ namespace NoteNest.UI.Services
             }
         }
 
+        // File watcher event handlers
+        private async void OnFileChanged(object sender, FileChangedEventArgs e)
+        {
+            if (IsNoteFile(e.FilePath))
+            {
+                _logger.Debug($"Note file changed: {e.FilePath}");
+                InvalidateCache();
+                // TODO: Implement incremental index update
+            }
+        }
+
+        private async void OnFileCreated(object sender, FileChangedEventArgs e)
+        {
+            if (IsNoteFile(e.FilePath))
+            {
+                _logger.Debug($"Note file created: {e.FilePath}");
+                InvalidateCache();
+                // TODO: Implement incremental index update
+            }
+        }
+
+        private async void OnFileDeleted(object sender, FileChangedEventArgs e)
+        {
+            if (IsNoteFile(e.FilePath))
+            {
+                _logger.Debug($"Note file deleted: {e.FilePath}");
+                InvalidateCache();
+                // TODO: Implement incremental index update
+            }
+        }
+
+        private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
+        {
+            if (IsNoteFile(e.NewPath) || IsNoteFile(e.OldPath))
+            {
+                _logger.Debug($"Note file renamed: {e.OldPath} -> {e.NewPath}");
+                InvalidateCache();
+                // TODO: Implement incremental index update
+            }
+        }
+
+        private bool IsNoteFile(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            var extension = Path.GetExtension(path)?.ToLowerInvariant();
+            return extension == ".md" || extension == ".txt" || extension == ".markdown";
+        }
     }
 
     public class SearchResultViewModel
