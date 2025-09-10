@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Threading.Tasks;
 using System.Windows;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
@@ -13,6 +14,7 @@ namespace NoteNest.UI.ViewModels
         private readonly string _noteId;
         private string _content;
         private bool _isSaving;
+        private bool _localIsDirty;
 
         public string NoteId => _noteId;
         public NoteModel Note { get; }
@@ -34,42 +36,35 @@ namespace NoteNest.UI.ViewModels
             get => _content;
             set
             {
-                var instanceId = this.GetHashCode();
-                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} Content setter called: noteId={_noteId}, contentLength={value?.Length ?? 0}, saveManager={(_saveManager != null ? "OK" : "NULL")}");
-                
                 if (SetProperty(ref _content, value))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} Content CHANGED, calling SaveManager.UpdateContent: noteId={_noteId}");
-                    
-                    if (_saveManager != null)
-                    {
-                        _saveManager.UpdateContent(_noteId, value);
-                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} SaveManager.UpdateContent called successfully for noteId={_noteId}");
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} ERROR: SaveManager is NULL for noteId={_noteId}");
-                    }
-                    
-                    OnPropertyChanged(nameof(IsDirty));
-                    OnPropertyChanged(nameof(Title));
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} Content not changed (same value) for noteId={_noteId}");
+                    UpdateContent(value);
                 }
             }
         }
-        
-        public bool IsDirty 
+
+        public void UpdateContent(string content)
         {
-            get => _saveManager?.IsNoteDirty(_noteId) ?? false;
-            set 
+            if (string.IsNullOrEmpty(_noteId))
+                return;
+                
+            Note.Content = content;
+            
+            // Update SaveManager
+            _saveManager?.UpdateContent(_noteId, content);
+            
+            // Set dirty flag immediately for instant UI feedback
+            IsDirty = true;
+        }
+        
+        public bool IsDirty
+        {
+            get => _localIsDirty;
+            set
             {
-                // Note: For interface compliance, but actual dirty state is managed by SaveManager
-                // This setter is mainly used by old code during transition
-                if (value != IsDirty)
+                if (_localIsDirty != value)
                 {
+                    _localIsDirty = value;
                     OnPropertyChanged(nameof(IsDirty));
                     OnPropertyChanged(nameof(Title));
                 }
@@ -113,12 +108,12 @@ namespace NoteNest.UI.ViewModels
             System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} constructor completed for noteId={_noteId}");
         }
 
-        private void OnNoteSaved(object sender, NoteSavedEventArgs e)
+        private void OnNoteSaved(object? sender, NoteSavedEventArgs e)
         {
-            if (e.NoteId == _noteId)
+            if (e?.NoteId == _noteId)
             {
-                OnPropertyChanged(nameof(IsDirty));
-                OnPropertyChanged(nameof(Title));
+                // Clear dirty flag when save completes
+                IsDirty = false;
             }
         }
         
@@ -135,6 +130,23 @@ namespace NoteNest.UI.ViewModels
             if (e.NoteId == _noteId)
             {
                 IsSaving = false;
+            }
+        }
+
+        public async Task SaveAsync()
+        {
+            if (string.IsNullOrEmpty(_noteId) || _saveManager == null)
+                return;
+
+            var success = await _saveManager.SaveNoteAsync(_noteId);
+            if (success)
+            {
+                // Dirty flag will be cleared by NoteSaved event
+                System.Diagnostics.Debug.WriteLine($"Manual save completed for {Note.Title}");
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"Manual save failed for {Note.Title}");
             }
         }
 

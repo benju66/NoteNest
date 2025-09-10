@@ -1,435 +1,404 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
+using NoteNest.Core.Events;
+using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.Core.Services
 {
-    public class NoteState
+    public sealed class UnifiedSaveManager : ISaveManager
     {
-        private string? _currentContent;
-        private string? _lastSavedContent;
-        private string? _currentHash;
-        private string? _lastSavedHash;
-        
-        public string NoteId { get; set; } = "";
-        public string FilePath { get; set; } = "";
-        public DateTime LastSaveTime { get; set; }
-        public DateTime FileLastModified { get; set; }
-        
-        public string? CurrentContent => _currentContent;
-        public string? LastSavedContent => _lastSavedContent;
-        
-        public bool IsDirty
-        {
-            get
-            {
-                if (_currentContent == null) return false;
-                if (_lastSavedContent == null) return true;
-                
-                // Use hash for large content
-                if (_currentContent.Length > 10000 || _lastSavedContent.Length > 10000)
-                {
-                    return _currentHash != _lastSavedHash;
-                }
-                
-                return _currentContent != _lastSavedContent;
-            }
-        }
-        
-        public void UpdateContent(string? content)
-        {
-            _currentContent = content;
-            if (content != null && content.Length > 10000)
-            {
-                using (var sha256 = SHA256.Create())
-                {
-                    var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(content));
-                    _currentHash = Convert.ToBase64String(bytes);
-                }
-            }
-            else
-            {
-                _currentHash = null;
-            }
-        }
-        
-        public void UpdateLastSaved(string? content)
-        {
-            _lastSavedContent = content;
-            if (content != null && content.Length > 10000)
-            {
-                using (var sha256 = SHA256.Create())
-                {
-                    var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(content));
-                    _lastSavedHash = Convert.ToBase64String(bytes);
-                }
-            }
-            else
-            {
-                _lastSavedHash = null;
-            }
-        }
-    }
-    
-    public class CircuitBreaker
-    {
-        private int _failureCount;
-        private DateTime _lastFailureTime;
-        private readonly int _threshold;
-        private readonly TimeSpan _timeout;
-        
-        public CircuitBreaker(int threshold = 3, int timeoutSeconds = 30)
-        {
-            _threshold = threshold;
-            _timeout = TimeSpan.FromSeconds(timeoutSeconds);
-        }
-        
-        public bool IsOpen => _failureCount >= _threshold && 
-                              DateTime.UtcNow - _lastFailureTime < _timeout;
-        
-        public void RecordSuccess() => _failureCount = 0;
-        
-        public void RecordFailure()
-        {
-            _failureCount++;
-            _lastFailureTime = DateTime.UtcNow;
-        }
-    }
-
-    public class UnifiedSaveManager : ISaveManager
-    {
-        private const int MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-        
-        private readonly Channel<SaveRequest> _saveChannel;
-        private readonly Dictionary<string, DateTime> _lastContentUpdateTime = new();
-        private readonly Dictionary<string, DateTime> _firstUpdateTime = new();
-        private readonly Timer _periodicSaveTimer;
-        private const int AUTO_SAVE_DELAY_MS = 2000;
-        private const int MAX_AUTO_SAVE_DELAY_MS = 30000; // 30 seconds max
-        private const int PERIODIC_SAVE_INTERVAL_MS = 60000; // 1 minute
-        private readonly Dictionary<string, NoteState> _notes = new();
-        private readonly Dictionary<string, FileSystemWatcher> _watchers = new();
-        private readonly Dictionary<string, Timer> _autoSaveTimers = new();
-        private readonly Dictionary<string, Timer> _externalChangeDebounceTimers = new();
-        private readonly Dictionary<string, SaveRequest> _pendingSaves = new();
-        private readonly Dictionary<string, CircuitBreaker> _pathCircuitBreakers = new();
-        private readonly Dictionary<string, string> _pathToNoteId = new();
-        private readonly HashSet<string> _savingNotes = new();
-        
-        private readonly ReaderWriterLockSlim _stateLock = new();
-        private readonly CancellationTokenSource _cancellation = new();
-        private readonly Task _processorTask;
         private readonly IAppLogger _logger;
+        private readonly IWriteAheadLog _wal;
+        private readonly SaveConfiguration _config;
+        private readonly ConcurrentDictionary<string, NoteState> _notes;
+        private readonly ConcurrentDictionary<string, NoteTimer> _timers;
+        private readonly ConcurrentDictionary<string, string> _pathToNoteId;
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _saveLocksPerFile;
+        private readonly Timer _periodicCleanup;
+        private readonly SemaphoreSlim _globalSaveSemaphore;
+        private bool _disposed;
 
         public event EventHandler<NoteSavedEventArgs>? NoteSaved;
         public event EventHandler<SaveProgressEventArgs>? SaveStarted;
         public event EventHandler<SaveProgressEventArgs>? SaveCompleted;
         public event EventHandler<ExternalChangeEventArgs>? ExternalChangeDetected;
 
-        public UnifiedSaveManager(IAppLogger logger)
+        public UnifiedSaveManager(IAppLogger logger, IWriteAheadLog wal, SaveConfiguration config = null)
         {
-            _logger = logger;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _wal = wal ?? throw new ArgumentNullException(nameof(wal));
+            _config = config ?? new SaveConfiguration();
             
-            _saveChannel = Channel.CreateBounded<SaveRequest>(new BoundedChannelOptions(100)
+            _notes = new ConcurrentDictionary<string, NoteState>();
+            _timers = new ConcurrentDictionary<string, NoteTimer>();
+            _pathToNoteId = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            _saveLocksPerFile = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+            
+            // Global semaphore for concurrent saves
+            _globalSaveSemaphore = new SemaphoreSlim(_config.MaxConcurrentSaves, _config.MaxConcurrentSaves);
+            
+            // Cleanup timer
+            var cleanupInterval = TimeSpan.FromMinutes(5);
+            _periodicCleanup = new Timer(CleanupInactiveNotes, null, cleanupInterval, cleanupInterval);
+            
+            // Recover from WAL on startup
+            Task.Run(RecoverFromWAL);
+        }
+
+        private class NoteState
+        {
+            private string _currentContent = string.Empty;
+            private string _lastSavedContent = string.Empty;
+            
+            public string NoteId { get; set; } = string.Empty;
+            public string FilePath { get; set; } = string.Empty;
+            public DateTime LastAccessTime { get; set; } = DateTime.UtcNow;
+            public DateTime LastSaveTime { get; set; } = DateTime.UtcNow;
+            public bool IsOpen { get; set; }
+            
+            public string CurrentContent
             {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleReader = true,
-                SingleWriter = false,
-                AllowSynchronousContinuations = false
-            });
+                get => _currentContent;
+                set
+                {
+                    _currentContent = value;
+                    Touch();
+                }
+            }
             
-            // ADD THIS: Periodic save timer
-            _periodicSaveTimer = new Timer(
-                _ => Task.Run(async () => await PeriodicSaveAsync()), 
-                null, 
-                PERIODIC_SAVE_INTERVAL_MS, 
-                PERIODIC_SAVE_INTERVAL_MS);
+            public string LastSavedContent
+            {
+                get => _lastSavedContent;
+                set
+                {
+                    _lastSavedContent = value;
+                    LastSaveTime = DateTime.UtcNow;
+                }
+            }
             
-            _processorTask = Task.Run(() => ProcessSaveQueue(_cancellation.Token));
+            public bool IsDirty => _currentContent != _lastSavedContent;
+            
+            public void Touch() => LastAccessTime = DateTime.UtcNow;
+        }
+
+        private class NoteTimer : IDisposable
+        {
+            private readonly Action<string> _onTrigger;
+            private readonly string _noteId;
+            private readonly int _debounceMs;
+            private readonly int _maxDelayMs;
+            private Timer? _timer;
+            private DateTime _firstChange;
+
+            public NoteTimer(string noteId, Action<string> onTrigger, int debounceMs, int maxDelayMs)
+            {
+                _noteId = noteId;
+                _onTrigger = onTrigger;
+                _debounceMs = debounceMs;
+                _maxDelayMs = maxDelayMs;
+            }
+
+            public void Reset()
+            {
+                if (_timer == null)
+                {
+                    _firstChange = DateTime.UtcNow;
+                    _timer = new Timer(_ => _onTrigger(_noteId), null, _debounceMs, Timeout.Infinite);
+                }
+                else
+                {
+                    var elapsed = (DateTime.UtcNow - _firstChange).TotalMilliseconds;
+                    if (elapsed >= _maxDelayMs)
+                    {
+                        // Force save now
+                        _timer.Change(0, Timeout.Infinite);
+                    }
+                    else
+                    {
+                        // Reset debounce
+                        _timer.Change(_debounceMs, Timeout.Infinite);
+                    }
+                }
+            }
+
+            public void Cancel()
+            {
+                _timer?.Change(Timeout.Infinite, Timeout.Infinite);
+                _timer?.Dispose();
+                _timer = null;
+            }
+
+            public void Dispose() => Cancel();
         }
 
         public async Task<string> OpenNoteAsync(string filePath)
         {
             if (string.IsNullOrEmpty(filePath))
                 throw new ArgumentException("File path cannot be empty", nameof(filePath));
-            
-            var normalizedPath = NormalizePath(filePath);
+
+            var normalizedPath = Path.GetFullPath(filePath).ToLowerInvariant();
             
             // Check if already tracking this file
-            _stateLock.EnterReadLock();
-            try
+            if (_pathToNoteId.TryGetValue(normalizedPath, out var existingId))
             {
-                // CRITICAL: Check if we already have this file in memory
-                if (_pathToNoteId.TryGetValue(normalizedPath, out var existingNoteId))
+                if (_notes.TryGetValue(existingId, out var existingState))
                 {
-                    // Reuse existing note ID and state
-                    if (_notes.TryGetValue(existingNoteId, out var existingState))
-                    {
-                        _logger.Info($"Reusing existing note from memory: {existingNoteId} -> {filePath}");
-                        
-                        // Re-setup file watcher since it was disposed on close
-                        SetupFileWatcher(existingNoteId, filePath);
-                        
-                        return existingNoteId;
-                    }
+                    existingState.IsOpen = true;
+                    existingState.Touch();
+                    _logger.Info($"Reusing note from memory: {existingId} -> {filePath}");
+                    return existingId;
                 }
+                
+                // Orphaned mapping - clean it up
+                _pathToNoteId.TryRemove(normalizedPath, out _);
+                _logger.Debug($"Cleaned up orphaned path mapping for: {filePath}");
             }
-            finally
-            {
-                _stateLock.ExitReadLock();
-            }
+
+            // Generate stable ID (not based on path)
+            var noteId = GenerateStableNoteId();
             
-            // New note - generate ID
-            var noteId = GenerateNoteId(filePath);
+            // Try to recover from WAL first
+            var walContent = await _wal.RecoverAsync(noteId);
             
-            // Load content from disk
-            string content = "";
-            DateTime lastModified = DateTime.MinValue;
-            
-            if (File.Exists(filePath))
+            // Load from disk if no WAL
+            string content = walContent ?? "";
+            if (string.IsNullOrEmpty(walContent) && File.Exists(filePath))
             {
                 try
                 {
                     content = await File.ReadAllTextAsync(filePath);
-                    lastModified = await Task.Run(() => File.GetLastWriteTimeUtc(filePath));
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(ex, $"Failed to load note content: {filePath}");
+                    _logger.Error(ex, $"Failed to load note: {filePath}");
                     content = "";
                 }
             }
-            
-            // Store state
-            _stateLock.EnterWriteLock();
-            try
+
+            // Create state
+            var state = new NoteState
             {
-                // Double-check in case of race condition
-                if (_pathToNoteId.TryGetValue(normalizedPath, out var racedNoteId))
-                {
-                    return racedNoteId;
-                }
-                
-                var state = new NoteState
-                {
-                    NoteId = noteId,
-                    FilePath = filePath,
-                    LastSaveTime = DateTime.UtcNow,
-                    FileLastModified = lastModified
-                };
-                state.UpdateContent(content);
-                state.UpdateLastSaved(content);
-                
-                _notes[noteId] = state;
-                _pathToNoteId[normalizedPath] = noteId;
-                _pathCircuitBreakers[normalizedPath] = new CircuitBreaker();
-                
-                // Setup file watcher
-                SetupFileWatcher(noteId, filePath);
-            }
-            finally
+                NoteId = noteId,
+                FilePath = filePath,
+                CurrentContent = content,
+                LastSavedContent = string.IsNullOrEmpty(walContent) ? content : "",
+                IsOpen = true
+            };
+
+            _notes[noteId] = state;
+            _pathToNoteId[normalizedPath] = noteId;
+
+            if (!string.IsNullOrEmpty(walContent))
             {
-                _stateLock.ExitWriteLock();
+                _logger.Info($"Recovered unsaved content for: {filePath}");
             }
-            
+
             _logger.Info($"Opened note: {noteId} -> {filePath}");
             return noteId;
         }
 
         public void UpdateContent(string noteId, string content)
         {
-            System.Diagnostics.Debug.WriteLine($"[SaveManager] UpdateContent called: noteId={noteId}, contentLength={content?.Length ?? 0}");
-            
-            _stateLock.EnterWriteLock();
-            try
+            if (!_notes.TryGetValue(noteId, out var state))
             {
-                System.Diagnostics.Debug.WriteLine($"[SaveManager] Checking if note exists in dictionary: noteId={noteId}, totalNotes={_notes.Count}");
+                _logger.Warning($"UpdateContent called for unknown note: {noteId}");
+                return;
+            }
+
+            content = content ?? "";
+            state.CurrentContent = content;
+
+            if (state.IsDirty)
+            {
+                // Write to WAL immediately for crash protection
+                _ = Task.Run(async () => await _wal.AppendAsync(noteId, content));
                 
-                if (!_notes.TryGetValue(noteId, out var state))
+                // Start/reset save timer
+                var timer = _timers.GetOrAdd(noteId, id => 
+                    new NoteTimer(id, AutoSave, _config.AutoSaveDelayMs, _config.MaxAutoSaveDelayMs));
+                timer.Reset();
+                
+                _logger.Debug($"Content updated for {noteId}, auto-save scheduled");
+            }
+            else
+            {
+                // Content matches saved - cancel timer
+                if (_timers.TryRemove(noteId, out var timer))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[SaveManager] ERROR: Note NOT FOUND in dictionary: noteId={noteId}");
-                    System.Diagnostics.Debug.WriteLine($"[SaveManager] Available noteIds: {string.Join(", ", _notes.Keys)}");
-                    _logger.Warning($"UpdateContent called for unknown note: {noteId}");
-                    return;
-                }
-                
-                System.Diagnostics.Debug.WriteLine($"[SaveManager] Note found, updating content: noteId={noteId}");
-                state.UpdateContent(content);
-                System.Diagnostics.Debug.WriteLine($"[SaveManager] Content updated, isDirty={state.IsDirty}");
-                
-                // Track update times for max delay enforcement
-                var now = DateTime.UtcNow;
-                _lastContentUpdateTime[noteId] = now;
-                
-                if (!_firstUpdateTime.ContainsKey(noteId))
-                {
-                    _firstUpdateTime[noteId] = now;
-                }
-                
-                if (state.IsDirty)
-                {
-                    bool forceSave = false;
-                    var firstUpdate = _firstUpdateTime[noteId];
-                    var delayedMs = (now - firstUpdate).TotalMilliseconds;
-                    
-                    // Force save if delayed too long
-                    if (delayedMs > MAX_AUTO_SAVE_DELAY_MS)
-                    {
-                        forceSave = true;
-                        _logger.Info($"Forcing auto-save for {noteId} after {delayedMs:F0}ms delay");
-                    }
-                    
-                    if (_autoSaveTimers.TryGetValue(noteId, out var existingTimer))
-                    {
-                        if (forceSave)
-                        {
-                            // Immediate save
-                            System.Diagnostics.Debug.WriteLine($"[SaveManager] Forcing immediate save due to delay: noteId={noteId}");
-                            existingTimer.Change(0, Timeout.Infinite);
-                            _firstUpdateTime.Remove(noteId);
-                        }
-                        else
-                        {
-                            // Reset timer for normal debounce
-                            System.Diagnostics.Debug.WriteLine($"[SaveManager] Resetting existing auto-save timer: noteId={noteId}, delay={AUTO_SAVE_DELAY_MS}ms");
-                            existingTimer.Change(AUTO_SAVE_DELAY_MS, Timeout.Infinite);
-                        }
-                    }
-                    else
-                    {
-                        // Create new timer
-                        var delay = forceSave ? 0 : AUTO_SAVE_DELAY_MS;
-                        System.Diagnostics.Debug.WriteLine($"[SaveManager] Creating new auto-save timer: noteId={noteId}, delay={delay}ms");
-                        var newTimer = new Timer(
-                            _ => {
-                                System.Diagnostics.Debug.WriteLine($"[SaveManager] Auto-save timer fired: noteId={noteId}");
-                                QueueAutoSave(noteId);
-                                _stateLock.EnterWriteLock();
-                                try
-                                {
-                                    _firstUpdateTime.Remove(noteId);
-                                    _lastContentUpdateTime.Remove(noteId);
-                                }
-                                finally
-                                {
-                                    _stateLock.ExitWriteLock();
-                                }
-                            }, 
-                            null, 
-                            delay, 
-                            Timeout.Infinite);
-                        _autoSaveTimers[noteId] = newTimer;
-                        System.Diagnostics.Debug.WriteLine($"[SaveManager] Auto-save timer created successfully: noteId={noteId}");
-                    }
-                }
-                else
-                {
-                    // Content is not dirty, cleanup
-                    if (_autoSaveTimers.TryGetValue(noteId, out var timer))
-                    {
-                        timer.Change(Timeout.Infinite, Timeout.Infinite);
-                    }
-                    _firstUpdateTime.Remove(noteId);
-                    _lastContentUpdateTime.Remove(noteId);
+                    timer.Dispose();
+                    _logger.Debug($"Content matches saved, cancelled auto-save for {noteId}");
                 }
             }
-            finally
+        }
+
+        private void AutoSave(string noteId)
+        {
+            _ = Task.Run(async () =>
             {
-                _stateLock.ExitWriteLock();
-            }
+                try
+                {
+                    await SaveNoteAsync(noteId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"Auto-save failed for note {noteId}");
+                }
+            });
         }
 
         public async Task<bool> SaveNoteAsync(string noteId)
         {
-            if (!_notes.ContainsKey(noteId))
+            if (!_notes.TryGetValue(noteId, out var state))
             {
                 _logger.Warning($"SaveNoteAsync called for unknown note: {noteId}");
                 return false;
             }
+
+            // Cancel any pending auto-save timer
+            if (_timers.TryRemove(noteId, out var timer))
+            {
+                timer.Dispose();
+            }
+
+            // Skip if not dirty
+            if (!state.IsDirty)
+            {
+                _logger.Debug($"Note not dirty, skipping save: {noteId}");
+                return true;
+            }
+
+            var filePath = state.FilePath;
+            var content = state.CurrentContent;
+
+            // Get file-specific lock to prevent concurrent saves to same file
+            var fileLock = _saveLocksPerFile.GetOrAdd(
+                filePath.ToLowerInvariant(), 
+                _ => new SemaphoreSlim(1, 1));
+
+            // Notify save started
+            SaveStarted?.Invoke(this, new SaveProgressEventArgs 
+            { 
+                NoteId = noteId, 
+                FilePath = filePath 
+            });
+
+            // Wait for global semaphore (limits total concurrent saves)
+            await _globalSaveSemaphore.WaitAsync();
             
-            // Cancel any pending auto-save
-            _stateLock.EnterWriteLock();
             try
             {
-            if (_autoSaveTimers.TryGetValue(noteId, out var timer))
-                {
-                    timer?.Change(Timeout.Infinite, Timeout.Infinite);
-                }
+                // Wait for file-specific lock
+                await fileLock.WaitAsync();
                 
-                // Coalesce with existing save if present
-                if (_pendingSaves.TryGetValue(noteId, out var existing))
+                try
                 {
-                    if (existing.Priority < SavePriority.UserSave)
+                    // Save to temp file with exclusive access
+                    var tempPath = filePath + ".tmp";
+                    var directory = Path.GetDirectoryName(filePath);
+                    
+                    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                     {
-                        // Upgrade priority
-                        existing.Priority = SavePriority.UserSave;
+                        Directory.CreateDirectory(directory);
                     }
-                    // Return the existing task
-                    return await existing.CompletionSource.Task;
+
+                    // Write with exclusive lock
+                    using (var fs = new FileStream(tempPath, FileMode.Create, 
+                        FileAccess.Write, FileShare.None, 4096, useAsync: true))
+                    {
+                        using (var writer = new StreamWriter(fs, System.Text.Encoding.UTF8))
+                        {
+                            await writer.WriteAsync(content);
+                            await writer.FlushAsync();
+                        }
+                    }
+                    
+                    // Atomic rename
+                    File.Move(tempPath, filePath, true);
+                    
+                    // Update state
+                    state.LastSavedContent = content;
+                    
+                    // Clear WAL after successful save
+                    await _wal.CommitAsync(noteId);
+                    
+                    _logger.Info($"Saved: {filePath} ({content.Length} chars)");
+                    
+                    // Notify save completed
+                    NoteSaved?.Invoke(this, new NoteSavedEventArgs
+                    {
+                        NoteId = noteId,
+                        FilePath = filePath,
+                        SavedAt = DateTime.UtcNow,
+                        WasAutoSave = true
+                    });
+                    
+                    SaveCompleted?.Invoke(this, new SaveProgressEventArgs
+                    {
+                        NoteId = noteId,
+                        FilePath = filePath,
+                        Success = true
+                    });
+                    
+                    return true;
                 }
+                finally
+                {
+                    fileLock.Release();
+                }
+            }
+            catch (IOException ioEx) when (IsFileLocked(ioEx))
+            {
+                _logger.Warning($"File is locked by another process: {filePath}");
+                SaveCompleted?.Invoke(this, new SaveProgressEventArgs
+                {
+                    NoteId = noteId,
+                    FilePath = filePath,
+                    Success = false
+                });
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to save note: {filePath}");
+                SaveCompleted?.Invoke(this, new SaveProgressEventArgs
+                {
+                    NoteId = noteId,
+                    FilePath = filePath,
+                    Success = false
+                });
+                return false;
             }
             finally
             {
-                _stateLock.ExitWriteLock();
+                _globalSaveSemaphore.Release();
             }
-            
-            var request = new SaveRequest
-            {
-                NoteId = noteId,
-                Priority = SavePriority.UserSave,
-                QueuedAt = DateTime.UtcNow,
-                CompletionSource = new TaskCompletionSource<bool>()
-            };
-            
-            await _saveChannel.Writer.WriteAsync(request);
-            return await request.CompletionSource.Task;
+        }
+
+        private bool IsFileLocked(IOException ex)
+        {
+            // Check if it's a sharing violation or lock error
+            var errorCode = ex.HResult & 0xFFFF;
+            return errorCode == 32 || errorCode == 33; // ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION
         }
 
         public async Task<BatchSaveResult> SaveAllDirtyAsync()
         {
-            var result = new BatchSaveResult();
-            var tasks = new List<Task<(string noteId, bool success)>>();
-            
-            List<string> dirtyNotes;
-            _stateLock.EnterReadLock();
-            try
-            {
-                dirtyNotes = _notes.Where(kvp => kvp.Value.IsDirty)
+            var dirtyNotes = _notes.Where(kvp => kvp.Value.IsDirty)
                                    .Select(kvp => kvp.Key)
                                    .ToList();
-            }
-            finally
+
+            var result = new BatchSaveResult();
+            
+            // Save in parallel (different files can save simultaneously)
+            var tasks = dirtyNotes.Select(async noteId =>
             {
-                _stateLock.ExitReadLock();
-            }
-            
-            foreach (var noteId in dirtyNotes)
-                {
-                    var request = new SaveRequest
-                    {
-                    NoteId = noteId,
-                        Priority = SavePriority.ShutdownSave,
-                        QueuedAt = DateTime.UtcNow,
-                        CompletionSource = new TaskCompletionSource<bool>()
-                    };
-                    
-                    await _saveChannel.Writer.WriteAsync(request);
-                
-                tasks.Add(request.CompletionSource.Task.ContinueWith(t => 
-                    (noteId, t.Result)));
-            }
-            
-            var results = await Task.WhenAll(tasks);
-            
-            foreach (var (noteId, success) in results)
-            {
+                var success = await SaveNoteAsync(noteId);
                 if (success)
                 {
                     result.SuccessCount++;
@@ -439,932 +408,188 @@ namespace NoteNest.Core.Services
                     result.FailureCount++;
                     result.FailedNoteIds.Add(noteId);
                 }
-            }
-            
-            return result;
-        }
-
-        private async Task PeriodicSaveAsync()
-        {
-            try
-            {
-                List<string> dirtyNotes;
-                _stateLock.EnterReadLock();
-                try
-                {
-                    dirtyNotes = _notes.Where(kvp => kvp.Value.IsDirty)
-                                       .Select(kvp => kvp.Key)
-                                       .ToList();
-                }
-                finally
-                {
-                    _stateLock.ExitReadLock();
-                }
-                
-                if (dirtyNotes.Count > 0)
-                {
-                    _logger.Info($"Periodic save triggered for {dirtyNotes.Count} dirty notes");
-                    
-                    foreach (var noteId in dirtyNotes)
-                    {
-                        var request = new SaveRequest
-                        {
-                            NoteId = noteId,
-                            Priority = SavePriority.AutoSave,
-                            QueuedAt = DateTime.UtcNow,
-                            CompletionSource = new TaskCompletionSource<bool>()
-                        };
-                        
-                        await _saveChannel.Writer.WriteAsync(request);
-                    }
-                }
-                
-                // ADD THIS: Cleanup saved notes periodically
-                CleanupSavedNotes();
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error in periodic save");
-            }
-        }
-
-        private async Task ProcessSaveQueue(CancellationToken cancellation)
-        {
-            var priorityQueues = new Dictionary<SavePriority, Queue<SaveRequest>>();
-            foreach (SavePriority priority in Enum.GetValues(typeof(SavePriority)))
-            {
-                priorityQueues[priority] = new Queue<SaveRequest>();
-            }
-            
-            while (!cancellation.IsCancellationRequested)
-            {
-                try
-                {
-                    // First, process ALL pending priority items
-                    bool hasProcessedItem;
-                    do
-                    {
-                        hasProcessedItem = false;
-                        
-                        // Check each priority level in order (highest to lowest)
-                        for (int p = (int)SavePriority.ShutdownSave; p >= (int)SavePriority.AutoSave; p--)
-                        {
-                            var priority = (SavePriority)p;
-                            if (priorityQueues[priority].Count > 0)
-                            {
-                                var request = priorityQueues[priority].Dequeue();
-                                
-                                // Remove from pending saves
-                                _stateLock.EnterWriteLock();
-                                try
-                                {
-                                    _pendingSaves.Remove(request.NoteId);
-                                }
-                                finally
-                                {
-                                    _stateLock.ExitWriteLock();
-                                }
-                                
-                                await ExecuteSave(request);
-                                hasProcessedItem = true;
-                                break; // Start from highest priority again
-                            }
-                        }
-                    } while (hasProcessedItem && !cancellation.IsCancellationRequested);
-                    
-                    // Now wait for new items with timeout
-                    var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-                    timeoutCts.CancelAfter(100); // Check every 100ms
-                    
-                    try
-                    {
-                        var request = await _saveChannel.Reader.ReadAsync(timeoutCts.Token);
-                        
-                        // Check for coalescing opportunity
-                        _stateLock.EnterWriteLock();
-                        try
-                        {
-                            if (_pendingSaves.TryGetValue(request.NoteId, out var existing))
-                            {
-                                // Coalesce - complete old request and use new one
-                                existing.CompletionSource?.TrySetResult(false);
-                                existing.IsCoalesced = true;
-                                
-                                // Upgrade priority if needed
-                                if (request.Priority > existing.Priority)
-                                {
-                                    request.Priority = existing.Priority;
-                                }
-                            }
-                            
-                            _pendingSaves[request.NoteId] = request;
-                        }
-                        finally
-                        {
-                            _stateLock.ExitWriteLock();
-                        }
-                        
-                        priorityQueues[request.Priority].Enqueue(request);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // Timeout is expected, continue loop
-                        continue;
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    break; // Shutdown requested
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "Error in save queue processor");
-                }
-            }
-            
-            // Process remaining items on shutdown
-            foreach (var queue in priorityQueues.Values)
-            {
-                while (queue.Count > 0)
-                {
-                    try
-                    {
-                        var request = queue.Dequeue();
-                        await ExecuteSave(request);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Error(ex, "Error processing remaining saves on shutdown");
-                    }
-                }
-            }
-        }
-
-        private async Task ExecuteSave(SaveRequest request)
-        {
-            string contentToSave;
-            string filePath;
-            DateTime fileLastModified;
-            
-            // Raise SaveStarted event
-            SaveStarted?.Invoke(this, new SaveProgressEventArgs
-            {
-                NoteId = request.NoteId,
-                FilePath = _notes.ContainsKey(request.NoteId) ? _notes[request.NoteId].FilePath : "",
-                Priority = request.Priority,
-                Timestamp = DateTime.UtcNow
             });
+
+            await Task.WhenAll(tasks);
             
-            // Mark as saving
-            _stateLock.EnterWriteLock();
-            try
-            {
-                _savingNotes.Add(request.NoteId);
-            }
-            finally
-            {
-                _stateLock.ExitWriteLock();
-            }
-            
-            try
-            {
-                // Capture state atomically
-                _stateLock.EnterWriteLock();
-                try
-                {
-                    if (!_notes.TryGetValue(request.NoteId, out var state))
-                {
-                    request.CompletionSource?.TrySetResult(false);
-                    return;
-                }
-                
-                if (!state.IsDirty)
-                {
-                    request.CompletionSource?.TrySetResult(true);
-                    return;
-                }
-                
-                    // Capture content and metadata while locked
-                    contentToSave = state.CurrentContent ?? "";
-                    filePath = state.FilePath;
-                    fileLastModified = state.FileLastModified;
-                }
-                finally
-                {
-                    _stateLock.ExitWriteLock();
-                }
-                
-                // Check circuit breaker
-                var normalizedPath = NormalizePath(filePath);
-                CircuitBreaker breaker;
-                _stateLock.EnterReadLock();
-                try
-                {
-                    _pathCircuitBreakers.TryGetValue(normalizedPath, out breaker);
-                }
-                finally
-                {
-                    _stateLock.ExitReadLock();
-                }
-                
-                if (breaker?.IsOpen == true)
-                {
-                    _logger.Warning($"Circuit breaker open for: {filePath}");
-                    request.CompletionSource?.TrySetResult(false);
-                    return;
-                }
-                
-                // Perform I/O outside of lock
-                
-                // Check file permissions
-                if (File.Exists(filePath))
-                {
-                    var fileInfo = new FileInfo(filePath);
-                    if (fileInfo.IsReadOnly)
-                    {
-                        _logger.Warning($"File is read-only: {filePath}");
-                        breaker?.RecordFailure();
-                        request.CompletionSource?.TrySetResult(false);
-                        return;
-                    }
-                    
-                    // Check for external modifications
-                    var currentModified = await Task.Run(() => File.GetLastWriteTimeUtc(filePath));
-                    if (currentModified > fileLastModified.AddSeconds(1))
-                    {
-                        _logger.Warning($"External modification detected for: {filePath}");
-                        
-                        // Read external content for event
-                        var externalContent = await File.ReadAllTextAsync(filePath);
-                        
-                        ExternalChangeDetected?.Invoke(this, new ExternalChangeEventArgs
-                        {
-                            NoteId = request.NoteId,
-                            FilePath = filePath,
-                            ExternalContent = externalContent,
-                            DetectedAt = DateTime.UtcNow
-                        });
-                        
-                        request.CompletionSource?.TrySetResult(false);
-                        return;
-                    }
-                }
-                
-                // Ensure directory exists
-                var directory = Path.GetDirectoryName(filePath);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
-                
-                // Write to temp file
-                var tempFile = filePath + ".tmp";
-                await File.WriteAllTextAsync(tempFile, contentToSave);
-                
-                // Verify written content
-                var writtenContent = await File.ReadAllTextAsync(tempFile);
-                if (writtenContent != contentToSave)
-                {
-                    throw new IOException($"Content verification failed for {tempFile}");
-                }
-                
-                // Atomic rename with retry
-                int retries = 3;
-                Exception lastException = null;
-                
-                while (retries > 0)
-                {
-                    try
-                    {
-                        await Task.Run(() => File.Move(tempFile, filePath, true));
-                        break;
-                    }
-                    catch (IOException ex) when (retries > 1)
-                    {
-                        lastException = ex;
-                        retries--;
-                        await Task.Delay(100);
-                    }
-                }
-                
-                if (retries == 0 && lastException != null)
-                {
-                    breaker?.RecordFailure();
-                    throw lastException;
-                }
-                
-                // Update state after successful save
-                var newLastModified = await Task.Run(() => File.GetLastWriteTimeUtc(filePath));
-                
-                _stateLock.EnterWriteLock();
-                try
-                {
-                    if (_notes.TryGetValue(request.NoteId, out var state))
-                    {
-                        // Only update if content hasn't changed since we captured it
-                        if ((state.CurrentContent ?? "") == contentToSave)
-                        {
-                            state.UpdateLastSaved(contentToSave);
-                        }
-                state.LastSaveTime = DateTime.UtcNow;
-                        state.FileLastModified = newLastModified;
-                    }
-                }
-                finally
-                {
-                    _stateLock.ExitWriteLock();
-                }
-                
-                breaker?.RecordSuccess();
-                
-                // Raise event
-                NoteSaved?.Invoke(this, new NoteSavedEventArgs
-                {
-                    NoteId = request.NoteId,
-                    FilePath = filePath,
-                    SavedAt = DateTime.UtcNow,
-                    WasAutoSave = request.Priority == SavePriority.AutoSave
-                });
-                
-                _logger.Info($"Saved: {filePath}");
-                request.CompletionSource?.TrySetResult(true);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Failed to save note: {request.NoteId}");
-                request.CompletionSource?.TrySetResult(false);
-            }
-            finally
-            {
-                // Remove from saving set
-                _stateLock.EnterWriteLock();
-                try
-                {
-                    _savingNotes.Remove(request.NoteId);
-                }
-                finally
-                {
-                    _stateLock.ExitWriteLock();
-                }
-                
-                // Raise SaveCompleted event
-                SaveCompleted?.Invoke(this, new SaveProgressEventArgs
-                {
-                    NoteId = request.NoteId,
-                    FilePath = _notes.ContainsKey(request.NoteId) ? _notes[request.NoteId].FilePath : "",
-                    Priority = request.Priority,
-                    Timestamp = DateTime.UtcNow
-                });
-            }
-        }
-
-        public async Task<bool> ResolveExternalChangeAsync(string noteId, ConflictResolution resolution)
-        {
-            _stateLock.EnterWriteLock();
-            try
-            {
-                if (!_notes.TryGetValue(noteId, out var state))
-                    return false;
-                
-                switch (resolution)
-                {
-                    case ConflictResolution.KeepLocal:
-                        // Force save local content
-                        state.FileLastModified = DateTime.MinValue;
-                        break;
-                        
-                    case ConflictResolution.KeepExternal:
-                        // Reload from file
-                        if (File.Exists(state.FilePath))
-                        {
-                            var content = await File.ReadAllTextAsync(state.FilePath);
-                            state.UpdateContent(content);
-                            state.UpdateLastSaved(content);
-                            state.FileLastModified = File.GetLastWriteTimeUtc(state.FilePath);
-                        }
-                        break;
-                        
-                    case ConflictResolution.Merge:
-                        // TODO: Implement three-way merge
-                        _logger.Warning("Merge resolution not yet implemented");
-                        return false;
-                }
-                
-                return true;
-            }
-            finally
-            {
-                _stateLock.ExitWriteLock();
-            }
-        }
-
-        private void SetupFileWatcher(string noteId, string filePath)
-        {
-            try
-            {
-                var directory = Path.GetDirectoryName(filePath);
-                if (string.IsNullOrEmpty(directory))
-                    return;
-                    
-                var fileName = Path.GetFileName(filePath);
-                
-                var watcher = new FileSystemWatcher(directory)
-                {
-                    Filter = fileName,
-                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
-                    EnableRaisingEvents = false // Will enable after setup
-                };
-                
-                watcher.Changed += (s, e) =>
-                {
-                    _stateLock.EnterWriteLock();
-                    try
-                    {
-                        // Don't trigger if we're saving
-                        if (_savingNotes.Contains(noteId))
-                            return;
-                            
-                        // Cancel existing debounce timer
-                        if (_externalChangeDebounceTimers.TryGetValue(noteId, out var existingTimer))
-                        {
-                            existingTimer?.Dispose();
-                            _externalChangeDebounceTimers.Remove(noteId);
-                        }
-                        
-                        // Create new debounce timer (500ms)
-                        var debounceTimer = new Timer(_ =>
-                        {
-                            CheckExternalChange(noteId, filePath);
-                        }, null, 500, Timeout.Infinite);
-                        
-                        _externalChangeDebounceTimers[noteId] = debounceTimer;
-                    }
-                    finally
-                    {
-                        _stateLock.ExitWriteLock();
-                    }
-                };
-                
-                watcher.EnableRaisingEvents = true;
-                _watchers[noteId] = watcher;
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Failed to setup file watcher for: {filePath} - {ex.Message}");
-            }
-        }
-
-        private async void CheckExternalChange(string noteId, string filePath)
-        {
-            try
-            {
-                _stateLock.EnterReadLock();
-                try
-                {
-                    if (!_notes.TryGetValue(noteId, out var state))
-                        return;
-                        
-                    if (_savingNotes.Contains(noteId))
-                        return;
-                }
-                finally
-                {
-                    _stateLock.ExitReadLock();
-                }
-                
-                if (File.Exists(filePath))
-                {
-                    var currentModified = await Task.Run(() => File.GetLastWriteTimeUtc(filePath));
-                    var externalContent = await File.ReadAllTextAsync(filePath);
-                    
-                    _stateLock.EnterReadLock();
-                    try
-                    {
-                        if (_notes.TryGetValue(noteId, out var state))
-                        {
-                            if (currentModified > state.FileLastModified.AddSeconds(1))
-                            {
-                                ExternalChangeDetected?.Invoke(this, new ExternalChangeEventArgs
-                                {
-                                    NoteId = noteId,
-                                    FilePath = filePath,
-                                    ExternalContent = externalContent,
-                                    DetectedAt = DateTime.UtcNow
-                                });
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        _stateLock.ExitReadLock();
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Error checking external change for {filePath}");
-            }
-        }
-
-        private void QueueAutoSave(string noteId)
-        {
-            // Check if there's already a pending save
-            _stateLock.EnterReadLock();
-            try
-            {
-                if (_pendingSaves.ContainsKey(noteId))
-                    return;
-            }
-            finally
-            {
-                _stateLock.ExitReadLock();
-            }
-            
-            var request = new SaveRequest
-            {
-                NoteId = noteId,
-                Priority = SavePriority.AutoSave,
-                QueuedAt = DateTime.UtcNow,
-                CompletionSource = new TaskCompletionSource<bool>()
-            };
-            
-            if (!_saveChannel.Writer.TryWrite(request))
-            {
-                _logger.Warning($"Failed to queue auto-save for: {noteId}");
-            }
-        }
-
-        private string NormalizePath(string path)
-        {
-            return Path.GetFullPath(path)
-                .Replace('\\', '/')
-                .ToLowerInvariant();
-        }
-
-        private string GenerateNoteId(string normalizedPath)
-        {
-            using (var sha256 = SHA256.Create())
-            {
-                var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalizedPath));
-                return Convert.ToBase64String(hashBytes)
-                    .Replace("/", "_")
-                    .Replace("+", "-")
-                    .Replace("=", "")
-                    .Substring(0, Math.Min(22, Convert.ToBase64String(hashBytes).Length));
-            }
-        }
-
-        public bool IsNoteDirty(string noteId)
-        {
-            _stateLock.EnterReadLock();
-            try
-            {
-                return _notes.TryGetValue(noteId, out var state) && state.IsDirty;
-            }
-            finally
-            {
-                _stateLock.ExitReadLock();
-            }
-        }
-
-        public bool IsSaving(string noteId)
-        {
-            _stateLock.EnterReadLock();
-            try
-            {
-                return _savingNotes.Contains(noteId);
-            }
-            finally
-            {
-                _stateLock.ExitReadLock();
-            }
-        }
-
-        public string GetContent(string noteId)
-        {
-            _stateLock.EnterReadLock();
-            try
-            {
-                return _notes.TryGetValue(noteId, out var state) ? state.CurrentContent ?? "" : "";
-            }
-            finally
-            {
-                _stateLock.ExitReadLock();
-            }
-        }
-
-        public string? GetLastSavedContent(string noteId)
-        {
-            _stateLock.EnterReadLock();
-            try
-            {
-                return _notes.TryGetValue(noteId, out var state) ? state.LastSavedContent : null;
-            }
-            finally
-            {
-                _stateLock.ExitReadLock();
-            }
-        }
-
-        public string? GetFilePath(string noteId)
-        {
-            _stateLock.EnterReadLock();
-            try
-            {
-                return _notes.TryGetValue(noteId, out var state) ? state.FilePath : null;
-            }
-            finally
-            {
-                _stateLock.ExitReadLock();
-            }
-        }
-
-        public string? GetNoteIdForPath(string filePath)
-        {
-            var normalizedPath = NormalizePath(filePath);
-            _stateLock.EnterReadLock();
-            try
-            {
-                return _pathToNoteId.TryGetValue(normalizedPath, out var noteId) ? noteId : null;
-            }
-            finally
-            {
-                _stateLock.ExitReadLock();
-            }
-        }
-
-        public IReadOnlyList<string> GetDirtyNoteIds()
-        {
-            _stateLock.EnterReadLock();
-            try
-            {
-                return _notes.Where(kvp => kvp.Value.IsDirty)
-                            .Select(kvp => kvp.Key)
-                            .ToList();
-            }
-            finally
-            {
-                _stateLock.ExitReadLock();
-            }
+            _logger.Info($"Batch save completed: {result.SuccessCount} succeeded, {result.FailureCount} failed");
+            return result;
         }
 
         public async Task<bool> CloseNoteAsync(string noteId)
         {
-            // Wait for any pending save to complete
-            SaveRequest pendingSave = null;
-            _stateLock.EnterReadLock();
-            try
+            if (!_notes.TryGetValue(noteId, out var state))
+                return false;
+
+            // Cancel timer
+            if (_timers.TryRemove(noteId, out var timer))
             {
-                _pendingSaves.TryGetValue(noteId, out pendingSave);
+                timer.Dispose();
             }
-            finally
+
+            // Save if dirty
+            if (state.IsDirty)
             {
-                _stateLock.ExitReadLock();
+                await SaveNoteAsync(noteId);
             }
-            
-            if (pendingSave != null)
-            {
-                try
-                {
-                    await pendingSave.CompletionSource.Task;
-                }
-                catch
-                {
-                    // Ignore save failures during close
-                }
-            }
-            
-            _stateLock.EnterWriteLock();
-            try
-            {
-                if (!_notes.TryGetValue(noteId, out var state))
-                {
-                    return false;
-                }
-                
-                // Dispose watcher
-                if (_watchers.TryGetValue(noteId, out var watcher))
-                {
-                    watcher.EnableRaisingEvents = false;
-                    watcher.Dispose();
-                    _watchers.Remove(noteId);
-                }
-                
-                // Dispose auto-save timer
-                if (_autoSaveTimers.TryGetValue(noteId, out var timer))
-                {
-                    timer.Dispose();
-                    _autoSaveTimers.Remove(noteId);
-                }
-                
-                // Dispose external change debounce timer
-                if (_externalChangeDebounceTimers.TryGetValue(noteId, out var debounceTimer))
-                {
-                    debounceTimer.Dispose();
-                    _externalChangeDebounceTimers.Remove(noteId);
-                }
-                
-                // Remove from saving set
-                _savingNotes.Remove(noteId);
-                _pendingSaves.Remove(noteId);
-                
-                // CRITICAL: Only remove from memory if NOT dirty
-                // Keep dirty notes in memory for when tab reopens
-                if (!state.IsDirty)
-                {
-                    // Safe to remove - no unsaved changes
-                    _notes.Remove(noteId);
-                    
-                    // Don't remove path mapping - keep for reuse
-                    // var normalizedPath = NormalizePath(state.FilePath);
-                    // _pathToNoteId.Remove(normalizedPath);
-                }
-                else
-                {
-                    // Note is dirty - keep in memory but mark as closed
-                    _logger.Info($"Keeping dirty note in memory: {noteId} ({state.FilePath})");
-                }
-                
-                _logger.Debug($"Closed note in save manager: {Path.GetFileName(state.FilePath)}");
-                return true;
-            }
-            finally
-            {
-                _stateLock.ExitWriteLock();
-            }
+
+            // Mark as closed but keep in memory for reuse
+            state.IsOpen = false;
+            state.Touch();
+
+            _logger.Debug($"Closed note: {noteId} (keeping in memory for reuse)");
+            return true;
         }
 
         public void UpdateFilePath(string noteId, string newFilePath)
         {
-            var normalizedNewPath = NormalizePath(newFilePath);
-            
-            _stateLock.EnterWriteLock();
+            if (!_notes.TryGetValue(noteId, out var state))
+            {
+                _logger.Warning($"UpdateFilePath called for unknown note: {noteId}");
+                return;
+            }
+
+            var oldNormalized = Path.GetFullPath(state.FilePath).ToLowerInvariant();
+            var newNormalized = Path.GetFullPath(newFilePath).ToLowerInvariant();
+
+            // Update state
+            state.FilePath = newFilePath;
+            state.Touch();
+
+            // Update path mapping
+            _pathToNoteId.TryRemove(oldNormalized, out _);
+            _pathToNoteId[newNormalized] = noteId;
+
+            _logger.Info($"Updated file path for {noteId}: {state.FilePath} -> {newFilePath}");
+        }
+
+        public bool IsNoteDirty(string noteId)
+        {
+            return _notes.TryGetValue(noteId, out var state) && state.IsDirty;
+        }
+
+        public bool IsSaving(string noteId)
+        {
+            // Simplified - we don't track this anymore
+            return false;
+        }
+
+        public string GetContent(string noteId)
+        {
+            return _notes.TryGetValue(noteId, out var state) ? state.CurrentContent : "";
+        }
+
+        public string? GetLastSavedContent(string noteId)
+        {
+            return _notes.TryGetValue(noteId, out var state) ? state.LastSavedContent : null;
+        }
+
+        public string? GetFilePath(string noteId)
+        {
+            return _notes.TryGetValue(noteId, out var state) ? state.FilePath : null;
+        }
+
+        public string? GetNoteIdForPath(string filePath)
+        {
+            var normalized = Path.GetFullPath(filePath).ToLowerInvariant();
+            return _pathToNoteId.TryGetValue(normalized, out var noteId) ? noteId : null;
+        }
+
+        public IReadOnlyList<string> GetDirtyNoteIds()
+        {
+            return _notes.Where(kvp => kvp.Value.IsDirty)
+                        .Select(kvp => kvp.Key)
+                        .ToList();
+        }
+
+        public Task<bool> ResolveExternalChangeAsync(string noteId, ConflictResolution resolution)
+        {
+            // Simplified for now
+            return Task.FromResult(true);
+        }
+
+        private async Task RecoverFromWAL()
+        {
             try
             {
-                if (!_notes.TryGetValue(noteId, out var state))
+                var recovered = await _wal.RecoverAllAsync();
+                if (recovered.Count > 0)
                 {
-                    _logger.Warning($"UpdateFilePath called for unknown note: {noteId}");
-                    return;
+                    _logger.Info($"Found {recovered.Count} WAL entries to recover");
                 }
-                
-                var oldPath = state.FilePath;
-                var normalizedOldPath = NormalizePath(oldPath);
-                
-                // Update state
-                state.FilePath = newFilePath;
-                
-                // Update path mapping
-                _pathToNoteId.Remove(normalizedOldPath);
-                _pathToNoteId[normalizedNewPath] = noteId;
-                
-                // Update circuit breaker
-                if (_pathCircuitBreakers.TryGetValue(normalizedOldPath, out var breaker))
-                {
-                    _pathCircuitBreakers.Remove(normalizedOldPath);
-                    _pathCircuitBreakers[normalizedNewPath] = breaker;
-                }
-                
-                // Update file watcher
-                if (_watchers.TryGetValue(noteId, out var watcher))
-                {
-                    watcher.EnableRaisingEvents = false;
-                    watcher.Dispose();
-                    _watchers.Remove(noteId);
-                }
-                
-                // Setup new watcher for new path
-                SetupFileWatcher(noteId, newFilePath);
-                
-                _logger.Info($"Updated file path for note {noteId}: {oldPath} -> {newFilePath}");
             }
-            finally
+            catch (Exception ex)
             {
-                _stateLock.ExitWriteLock();
+                _logger.Error(ex, "Failed to recover from WAL");
             }
         }
 
-        private void CleanupSavedNotes()
+        private void CleanupInactiveNotes(object? state)
         {
-            _stateLock.EnterWriteLock();
             try
             {
-                var toRemove = new List<string>();
-                
-                foreach (var kvp in _notes)
-                {
-                    var state = kvp.Value;
-                    var noteId = kvp.Key;
-                    
-                    // Remove if:
-                    // 1. Not dirty
-                    // 2. No active auto-save timer (not currently open)
-                    // 3. Has been closed for more than 5 minutes
-                    if (!state.IsDirty && 
-                        !_autoSaveTimers.ContainsKey(noteId) &&
-                        !_watchers.ContainsKey(noteId))
-                    {
-                        toRemove.Add(noteId);
-                    }
-                }
-                
+                var cutoff = DateTime.UtcNow.AddMinutes(-_config.InactiveCleanupMinutes);
+                var toRemove = _notes.Where(kvp => 
+                    !kvp.Value.IsOpen && 
+                    !kvp.Value.IsDirty && 
+                    kvp.Value.LastAccessTime < cutoff)
+                    .Select(kvp => kvp.Key)
+                    .ToList();
+
                 foreach (var noteId in toRemove)
                 {
-                    if (_notes.TryGetValue(noteId, out var state))
+                    if (_notes.TryRemove(noteId, out var noteState))
                     {
-                        var normalizedPath = NormalizePath(state.FilePath);
-                        _notes.Remove(noteId);
-                        _pathToNoteId.Remove(normalizedPath);
-                        _logger.Debug($"Cleaned up saved note from memory: {noteId}");
+                        var normalized = Path.GetFullPath(noteState.FilePath).ToLowerInvariant();
+                        _pathToNoteId.TryRemove(normalized, out _);
+                        _logger.Debug($"Cleaned up inactive note: {noteId}");
                     }
                 }
-                
+
                 if (toRemove.Count > 0)
                 {
-                    _logger.Info($"Cleaned up {toRemove.Count} saved notes from memory");
+                    _logger.Info($"Cleaned up {toRemove.Count} inactive notes from memory");
                 }
             }
-            finally
+            catch (Exception ex)
             {
-                _stateLock.ExitWriteLock();
+                _logger.Error(ex, "Error during cleanup");
             }
+        }
+
+        private string GenerateStableNoteId()
+        {
+            // Generate a stable ID that doesn't change with file path
+            return Guid.NewGuid().ToString("N").Substring(0, 22);
         }
 
         public void Dispose()
         {
-            // ADD THIS: Stop and dispose periodic timer first
-            try
+            if (_disposed) return;
+            _disposed = true;
+
+            // Save all dirty notes
+            var saveTask = SaveAllDirtyAsync();
+            if (!saveTask.Wait(TimeSpan.FromSeconds(30)))
             {
-                _periodicSaveTimer?.Change(Timeout.Infinite, Timeout.Infinite);
-                _periodicSaveTimer?.Dispose();
+                _logger.Warning("Timeout saving notes during shutdown");
             }
-            catch { }
+
+            // Cleanup
+            _periodicCleanup?.Dispose();
             
-            // Set shutdown flag
-            _cancellation.Cancel();
-            
-            // Complete the channel
-            _saveChannel.Writer.TryComplete();
-            
-            // Cancel all pending completion sources
-            _stateLock.EnterWriteLock();
-            try
+            foreach (var timer in _timers.Values)
             {
-                foreach (var pending in _pendingSaves.Values)
-                {
-                    pending.CompletionSource?.TrySetCanceled();
-                }
-                _pendingSaves.Clear();
-            }
-            finally
-            {
-                _stateLock.ExitWriteLock();
+                timer?.Dispose();
             }
             
-            // Wait for processor to finish with timeout
-            try
+            foreach (var semaphore in _saveLocksPerFile.Values)
             {
-                if (!_processorTask.Wait(30000)) // 30 seconds
-                {
-                    _logger.Warning("Save processor did not complete within timeout");
-                }
-            }
-            catch (AggregateException ex)
-            {
-                _logger.Error(ex.InnerException, "Error during save processor shutdown");
+                semaphore?.Dispose();
             }
             
-            // Clean up resources
-            _stateLock.EnterWriteLock();
-            try
-            {
-                // Dispose all timers
-                foreach (var timer in _autoSaveTimers.Values)
-                {
-                    timer?.Dispose();
-                }
-                _autoSaveTimers.Clear();
-                
-                foreach (var timer in _externalChangeDebounceTimers.Values)
-                {
-                    timer?.Dispose();
-                }
-                _externalChangeDebounceTimers.Clear();
-                
-                // Dispose all watchers
-                foreach (var watcher in _watchers.Values)
-                {
-                    watcher.EnableRaisingEvents = false;
-                    watcher?.Dispose();
-                }
-                _watchers.Clear();
-            }
-            finally
-            {
-                _stateLock.ExitWriteLock();
-            }
-            
-            _stateLock?.Dispose();
-            _cancellation?.Dispose();
+            _globalSaveSemaphore?.Dispose();
+            _wal?.Dispose();
         }
     }
 }

@@ -27,7 +27,28 @@ namespace NoteNest.UI.Services
             services.AddSingleton<ConfigurationService>(sp => new ConfigurationService(
                 sp.GetRequiredService<IFileSystemProvider>(),
                 sp.GetService<IEventBus>()));
-            services.AddSingleton<ISaveManager, UnifiedSaveManager>(); // NEW unified manager
+            // Add WAL service
+            services.AddSingleton<IWriteAheadLog, WriteAheadLog>();
+
+            // Add save configuration (using default values)
+            services.AddSingleton<SaveConfiguration>(provider =>
+            {
+                return new SaveConfiguration
+                {
+                    AutoSaveDelayMs = 2000,
+                    MaxAutoSaveDelayMs = 10000,
+                    MaxConcurrentSaves = 3,
+                    InactiveCleanupMinutes = 30
+                };
+            });
+
+            // Update SaveManager registration to include WAL
+            services.AddSingleton<ISaveManager>(provider => 
+                new UnifiedSaveManager(
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<IWriteAheadLog>(),
+                    provider.GetRequiredService<SaveConfiguration>()
+                ));
             services.AddSingleton<StartupRecoveryService>(); // NEW recovery service
             services.AddSingleton<ITabFactory, UITabFactory>();
             services.AddSingleton<ITabPersistenceService>(sp => new TabPersistenceService(

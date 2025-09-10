@@ -48,6 +48,7 @@ namespace NoteNest.Core.Services
         public string FilePath { get; set; }
         public SavePriority Priority { get; set; }
         public DateTime Timestamp { get; set; }
+        public bool Success { get; set; }
     }
     
     public class NoteSavedEventArgs : EventArgs

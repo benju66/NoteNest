@@ -478,8 +478,8 @@ namespace NoteNest.UI.ViewModels
                     }
                 }
 
-                // Recover any unpersisted changes from crash/unexpected shutdown
-                await RecoverUnpersistedChangesAsync(cancellationToken);
+                // Check for recovery and notify user
+                await CheckForRecovery();
 
                 try
                 {
@@ -580,11 +580,44 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        private async Task CheckForRecovery()
+        {
+            try
+            {
+                var wal = GetService<IWriteAheadLog>();
+                if (wal == null) return;
+                
+                var recovered = await wal.RecoverAllAsync();
+                if (recovered.Count > 0)
+                {
+                    _logger.Info($"Found {recovered.Count} unsaved notes from previous session");
+                    
+                    // Optional: Show notification to user
+                    var message = recovered.Count == 1 
+                        ? "Recovered 1 unsaved note from previous session" 
+                        : $"Recovered {recovered.Count} unsaved notes from previous session";
+                        
+                    _stateManager.StatusMessage = message;
+                    
+                    // Note: The recovered content will be loaded when notes are opened
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to check for recovery");
+            }
+        }
+
         private async Task RecoverUnpersistedChangesAsync(CancellationToken cancellationToken)
         {
             // Recovery is now handled by StartupRecoveryService during initialization
             // This method is kept for compatibility but does nothing
             await Task.CompletedTask;
+        }
+
+        private T GetService<T>()
+        {
+            return _serviceProvider.GetService<T>();
         }
 
         private async Task RestoreTabsAsync()

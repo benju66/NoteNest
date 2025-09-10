@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,7 +20,9 @@ namespace NoteNest.Tests.Services
         {
             _testDirectory = Path.Combine(Path.GetTempPath(), $"SaveTest_{Guid.NewGuid()}");
             Directory.CreateDirectory(_testDirectory);
-            _manager = new UnifiedSaveManager(new TestLogger());
+            var mockWal = new TestWriteAheadLog();
+            var config = new SaveConfiguration();
+            _manager = new UnifiedSaveManager(new TestLogger(), mockWal, config);
         }
 
         [TearDown]
@@ -274,5 +277,14 @@ namespace NoteNest.Tests.Services
             public void Fatal(string message, params object[] args) => Console.WriteLine($"FATAL: {string.Format(message, args)}");
             public void Fatal(Exception ex, string message, params object[] args) => Console.WriteLine($"FATAL: {string.Format(message, args)} - {ex}");
         }
+    }
+
+    public class TestWriteAheadLog : IWriteAheadLog
+    {
+        public Task AppendAsync(string noteId, string content) => Task.CompletedTask;
+        public Task<string?> RecoverAsync(string noteId) => Task.FromResult<string?>(null);
+        public Task CommitAsync(string noteId) => Task.CompletedTask;
+        public Task<Dictionary<string, string>> RecoverAllAsync() => Task.FromResult(new Dictionary<string, string>());
+        public void Dispose() { }
     }
 }
