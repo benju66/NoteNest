@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using NoteNest.Core.Events;
@@ -22,6 +23,9 @@ namespace NoteNest.Core.Services
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _saveLocksPerFile;
         private readonly Timer _periodicCleanup;
         private readonly SemaphoreSlim _globalSaveSemaphore;
+        private readonly string _emergencyDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "NoteNest_Emergency");
         private bool _disposed;
 
         public event EventHandler<NoteSavedEventArgs>? NoteSaved;
@@ -141,6 +145,17 @@ namespace NoteNest.Core.Services
         {
             if (string.IsNullOrEmpty(filePath))
                 throw new ArgumentException("File path cannot be empty", nameof(filePath));
+            
+            // Validate the path before doing anything
+            try
+            {
+                ValidateFilePath(filePath);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.Error($"Invalid file path: {filePath} - {ex.Message}");
+                throw; // Re-throw to caller
+            }
 
             var normalizedPath = Path.GetFullPath(filePath).ToLowerInvariant();
             
@@ -355,6 +370,14 @@ namespace NoteNest.Core.Services
             catch (IOException ioEx) when (IsFileLocked(ioEx))
             {
                 _logger.Warning($"File is locked by another process: {filePath}");
+                
+                // EMERGENCY SAVE when file is locked
+                var emergencySuccess = await EmergencySave(noteId, content);
+                if (emergencySuccess)
+                {
+                    _logger.Info("Content saved to emergency location");
+                }
+                
                 SaveCompleted?.Invoke(this, new SaveProgressEventArgs
                 {
                     NoteId = noteId,
@@ -366,6 +389,14 @@ namespace NoteNest.Core.Services
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed to save note: {filePath}");
+                
+                // EMERGENCY SAVE on any failure
+                var emergencySuccess = await EmergencySave(noteId, content);
+                if (emergencySuccess)
+                {
+                    _logger.Info("Content saved to emergency location due to save failure");
+                }
+                
                 SaveCompleted?.Invoke(this, new SaveProgressEventArgs
                 {
                     NoteId = noteId,
@@ -443,6 +474,17 @@ namespace NoteNest.Core.Services
 
         public void UpdateFilePath(string noteId, string newFilePath)
         {
+            // Validate new path
+            try
+            {
+                ValidateFilePath(newFilePath);
+            }
+            catch (ArgumentException ex)
+            {
+                _logger.Error($"Invalid new file path: {newFilePath} - {ex.Message}");
+                return; // Don't update to invalid path
+            }
+
             if (!_notes.TryGetValue(noteId, out var state))
             {
                 _logger.Warning($"UpdateFilePath called for unknown note: {noteId}");
@@ -561,6 +603,101 @@ namespace NoteNest.Core.Services
         {
             // Generate a stable ID that doesn't change with file path
             return Guid.NewGuid().ToString("N").Substring(0, 22);
+        }
+
+        private async Task<bool> EmergencySave(string noteId, string content)
+        {
+            try
+            {
+                // Create emergency directory if it doesn't exist
+                Directory.CreateDirectory(_emergencyDirectory);
+                
+                // Get original filename if possible
+                var originalName = "unknown_note";
+                if (_notes.TryGetValue(noteId, out var state))
+                {
+                    originalName = Path.GetFileNameWithoutExtension(state.FilePath);
+                }
+                
+                // Create unique emergency filename with timestamp
+                var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                var fileName = $"EMERGENCY_{originalName}_{timestamp}.txt";
+                var emergencyPath = Path.Combine(_emergencyDirectory, fileName);
+                
+                // Write content to emergency location
+                await File.WriteAllTextAsync(emergencyPath, content, Encoding.UTF8);
+                
+                _logger.Warning($"EMERGENCY SAVE: Content saved to {emergencyPath}");
+                
+                // Notify UI that emergency save occurred
+                SaveCompleted?.Invoke(this, new SaveProgressEventArgs
+                {
+                    NoteId = noteId,
+                    FilePath = emergencyPath,
+                    Success = true
+                });
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Emergency save also failed!");
+                return false;
+            }
+        }
+
+        private void ValidateFilePath(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                throw new ArgumentException("File path cannot be empty");
+            }
+            
+            // Windows path length limit (260 chars total, leave room for temp files)
+            if (filePath.Length > 250)
+            {
+                throw new ArgumentException($"Path too long: {filePath.Length} characters (max 250)");
+            }
+            
+            // Check for invalid path characters
+            var invalidPathChars = Path.GetInvalidPathChars();
+            if (filePath.Any(c => invalidPathChars.Contains(c)))
+            {
+                throw new ArgumentException($"Path contains invalid characters");
+            }
+            
+            // Get just the filename without extension
+            var fileName = Path.GetFileNameWithoutExtension(filePath);
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                throw new ArgumentException("File name cannot be empty");
+            }
+            
+            // Check for invalid filename characters
+            var invalidFileChars = Path.GetInvalidFileNameChars();
+            if (fileName.Any(c => invalidFileChars.Contains(c)))
+            {
+                throw new ArgumentException($"File name contains invalid characters");
+            }
+            
+            // Windows reserved filenames (CON, PRN, AUX, etc.)
+            var reserved = new[] { 
+                "CON", "PRN", "AUX", "NUL", 
+                "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+                "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+            };
+            
+            var upperFileName = fileName.ToUpperInvariant();
+            if (reserved.Contains(upperFileName))
+            {
+                throw new ArgumentException($"'{fileName}' is a reserved Windows filename");
+            }
+            
+            // File names cannot end with space or period in Windows
+            if (fileName.EndsWith(" ") || fileName.EndsWith("."))
+            {
+                throw new ArgumentException("File name cannot end with space or period");
+            }
         }
 
         public void Dispose()

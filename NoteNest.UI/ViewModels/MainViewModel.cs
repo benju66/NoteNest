@@ -374,6 +374,25 @@ namespace NoteNest.UI.ViewModels
             try { _tabPersistence.MarkChanged(); } catch { }
         }
 
+        // Event handler for emergency save notifications
+        private void OnSaveCompleted(object? sender, SaveProgressEventArgs e)
+        {
+            if (e != null && e.FilePath.Contains("EMERGENCY"))
+            {
+                // Show notification to user
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    var message = $"File could not be saved to original location.\n" +
+                                 $"Emergency backup saved to:\n{e.FilePath}";
+                    
+                    _dialogService?.ShowError(message, "Emergency Save");
+                    
+                    // Update status bar
+                    _stateManager.StatusMessage = "Emergency save completed - check Documents/NoteNest_Emergency";
+                });
+            }
+        }
+
         // ADD method for external change handling:
         private async void OnExternalChangeDetected(object sender, ExternalChangeEventArgs e)
         {
@@ -480,6 +499,9 @@ namespace NoteNest.UI.ViewModels
 
                 // Check for recovery and notify user
                 await CheckForRecovery();
+                
+                // Check for emergency saves from previous sessions
+                await CheckForEmergencySaves();
 
                 try
                 {
@@ -504,8 +526,9 @@ namespace NoteNest.UI.ViewModels
                 // Restore previous tabs
                 await RestoreTabsAsync();
                 
-                // 4. Subscribe to external change events
+                // 4. Subscribe to save events
                 _saveManager.ExternalChangeDetected += OnExternalChangeDetected;
+                _saveManager.SaveCompleted += OnSaveCompleted;
 
                 StatusMessage = "Ready";
                 _logger.Info("Application initialized successfully");
@@ -618,6 +641,34 @@ namespace NoteNest.UI.ViewModels
         private T GetService<T>()
         {
             return _serviceProvider.GetService<T>();
+        }
+
+        private async Task CheckForEmergencySaves()
+        {
+            try
+            {
+                var emergencyDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "NoteNest_Emergency");
+                
+                if (Directory.Exists(emergencyDir))
+                {
+                    var emergencyFiles = Directory.GetFiles(emergencyDir, "EMERGENCY_*.txt");
+                    if (emergencyFiles.Length > 0)
+                    {
+                        var message = $"Found {emergencyFiles.Length} emergency backup(s) from previous sessions.\n" +
+                                     $"Check {emergencyDir} to recover your content.";
+                        
+                        _dialogService?.ShowInfo(message, "Emergency Backups Found");
+                        
+                        _stateManager.StatusMessage = $"Found {emergencyFiles.Length} emergency backup(s) - check Documents folder";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to check for emergency saves");
+            }
         }
 
         private async Task RestoreTabsAsync()
@@ -846,38 +897,63 @@ namespace NoteNest.UI.ViewModels
             }
 
             var title = "New Note " + DateTime.Now.ToString("yyyy-MM-dd HH-mm-ss");
-            var note = await GetNoteOperationsService().CreateNoteAsync(SelectedCategory.Model, title, string.Empty);
             
-            if (note != null)
+            try
             {
-                // If the category is expanded but not yet loaded, load to avoid duplicate when lazy load triggers
-                if (SelectedCategory.IsExpanded && !SelectedCategory.IsLoaded)
-                {
-                    await SelectedCategory.LoadChildrenAsync();
-                }
-
-                // Prevent duplicate additions (by Id or FilePath)
-                var existingNote = SelectedCategory.Notes.FirstOrDefault(n =>
-                    string.Equals(n.Model.FilePath, note.FilePath, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(n.Model.Id, note.Id, StringComparison.OrdinalIgnoreCase));
-
-                NoteTreeItem noteItem = existingNote ?? new NoteTreeItem(note);
-                if (existingNote == null)
-                {
-                    SelectedCategory.Notes.Add(noteItem);
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"Prevented duplicate add in CreateNewNoteAsync: id={note.Id} path={note.FilePath}");
-                }
-                SelectedCategory.IsExpanded = true;
+                var note = await GetNoteOperationsService().CreateNoteAsync(SelectedCategory.Model, title, string.Empty);
                 
-                SelectedNote = noteItem;
-                // Route open via split-pane exclusive flow
-                NoteOpenRequested?.Invoke(noteItem);
-                
-                _stateManager.StatusMessage = $"Created: {title}";
+                if (note != null)
+                {
+                    await HandleNewNoteCreated(note);
+                }
             }
+            catch (ArgumentException ex) when (ex.Message.Contains("reserved") || 
+                                               ex.Message.Contains("invalid"))
+            {
+                // Path validation failed
+                _dialogService?.ShowError(
+                    $"Cannot create note with name '{title}':\n{ex.Message}", 
+                    "Invalid Name");
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Other errors
+                _logger.Error(ex, $"Failed to create note: {title}");
+                _dialogService?.ShowError($"Failed to create note: {ex.Message}");
+                return;
+            }
+        }
+
+        private async Task HandleNewNoteCreated(NoteModel note)
+        {
+            // If the category is expanded but not yet loaded, load to avoid duplicate when lazy load triggers
+            if (SelectedCategory.IsExpanded && !SelectedCategory.IsLoaded)
+            {
+                await SelectedCategory.LoadChildrenAsync();
+            }
+
+            // Prevent duplicate additions (by Id or FilePath)
+            var existingNote = SelectedCategory.Notes.FirstOrDefault(n =>
+                string.Equals(n.Model.FilePath, note.FilePath, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(n.Model.Id, note.Id, StringComparison.OrdinalIgnoreCase));
+
+            NoteTreeItem noteItem = existingNote ?? new NoteTreeItem(note);
+            if (existingNote == null)
+            {
+                SelectedCategory.Notes.Add(noteItem);
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"Prevented duplicate add in CreateNewNoteAsync: id={note.Id} path={note.FilePath}");
+            }
+            SelectedCategory.IsExpanded = true;
+            
+            SelectedNote = noteItem;
+            // Route open via split-pane exclusive flow
+            NoteOpenRequested?.Invoke(noteItem);
+            
+            _stateManager.StatusMessage = $"Created: {note.Title}";
         }
 
 		// Removed: OpenNoteAsync - opening is handled exclusively by split-pane layer
@@ -1457,6 +1533,7 @@ namespace NoteNest.UI.ViewModels
                     if (_saveManager != null)
                     {
                         _saveManager.ExternalChangeDetected -= OnExternalChangeDetected;
+                        _saveManager.SaveCompleted -= OnSaveCompleted;
                     }
 
                     // Dispose only what was actually created
