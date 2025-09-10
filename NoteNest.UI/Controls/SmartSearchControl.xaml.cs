@@ -2,7 +2,8 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using ModernWpf.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Services;
 using NoteNest.UI.ViewModels;
@@ -12,6 +13,7 @@ namespace NoteNest.UI.Controls
     public partial class SmartSearchControl : UserControl
     {
         private readonly IAppLogger _logger;
+        private bool _suppressFocusChange = false;
 
         // Dependency property for ViewModel
         public static readonly DependencyProperty ViewModelProperty =
@@ -33,15 +35,14 @@ namespace NoteNest.UI.Controls
         public SmartSearchControl()
         {
             InitializeComponent();
-            _logger = AppLogger.Instance; // Fallback logger
+            _logger = AppLogger.Instance;
             
             // Set up data context binding
             DataContextChanged += OnDataContextChanged;
-        }
-
-        public SmartSearchControl(IAppLogger logger) : this()
-        {
-            _logger = logger ?? AppLogger.Instance;
+            
+            // Handle popup closing when clicking outside
+            AddHandler(Mouse.PreviewMouseDownOutsideCapturedElementEvent, 
+                      new MouseButtonEventHandler(OnMouseDownOutsidePopup), true);
         }
 
         private static void OnViewModelChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -54,255 +55,205 @@ namespace NoteNest.UI.Controls
 
         private void OnViewModelChanged(SearchViewModel? oldViewModel, SearchViewModel? newViewModel)
         {
-            _logger.Debug($"SmartSearchControl ViewModel changing from {oldViewModel?.GetType().Name ?? "null"} to {newViewModel?.GetType().Name ?? "null"}");
+            _logger.Debug($"SmartSearchControl ViewModel changed: old={oldViewModel?.GetType().Name}, new={newViewModel?.GetType().Name}");
             
-            // Unsubscribe from old ViewModel
             if (oldViewModel != null)
             {
-                oldViewModel.ResultSelected -= OnViewModelResultSelected;
+                oldViewModel.ResultSelected -= OnResultSelected;
             }
-
-            // Subscribe to new ViewModel
+            
             if (newViewModel != null)
             {
-                newViewModel.ResultSelected += OnViewModelResultSelected;
+                newViewModel.ResultSelected += OnResultSelected;
                 DataContext = newViewModel;
                 _logger.Debug($"SmartSearchControl DataContext set to SearchViewModel");
             }
             else
             {
-                _logger.Warning("SmartSearchControl ViewModel set to null");
+                _logger.Warning("SmartSearchControl ViewModel set to null!");
             }
         }
 
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            // Auto-wire ViewModel if DataContext is SearchViewModel
-            if (e.NewValue is SearchViewModel viewModel && ViewModel != viewModel)
+            if (e.NewValue is SearchViewModel viewModel)
             {
                 ViewModel = viewModel;
             }
         }
 
-        private void OnViewModelResultSelected(object? sender, SearchResultSelectedEventArgs e)
+        private void OnResultSelected(object sender, SearchResultSelectedEventArgs e)
         {
-            try
+            ResultSelected?.Invoke(this, e);
+            _logger.Debug($"Search result selected: {e.Result.Title}");
+            
+            // Close popup and clear search
+            if (ViewModel != null)
             {
-                // Forward the event to external subscribers
-                ResultSelected?.Invoke(this, e);
-                _logger.Debug($"Search result forwarded: {e.Result.Title}");
+                ViewModel.ShowDropdown = false;
+                ViewModel.SearchQuery = string.Empty;
             }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error forwarding search result selection");
-            }
+            SearchTextBox.Focus();
         }
 
-        // AutoSuggestBox event handlers
-        private void OnQuerySubmitted(object sender, AutoSuggestBoxQuerySubmittedEventArgs e)
+        // TextBox event handlers
+        private void SearchTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            try
+            switch (e.Key)
             {
-                // Don't handle suggestion selection here - it's already handled in OnSuggestionChosen
-                // This prevents double-opening when clicking on search results
-                
-                if (string.IsNullOrWhiteSpace(e.QueryText))
-                    return;
-
-                _logger.Debug($"Search query submitted: {e.QueryText}");
-                
-                // The SearchViewModel will handle the actual search via binding
-                // This event is just for logging/tracking
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error handling query submitted");
-            }
-        }
-
-        private bool _suppressNextSelection = false;
-        
-        private void OnSuggestionChosen(object sender, AutoSuggestBoxSuggestionChosenEventArgs e)
-        {
-            try
-            {
-                if (e.SelectedItem is SearchResultViewModel result)
-                {
-                    _logger.Debug($"Search result chosen via click: {result.Title}");
-                    
-                    // Open the selected result
-                    if (ViewModel?.SelectResultCommand?.CanExecute(result) == true)
+                case Key.Down:
+                    // Move focus to results list
+                    if (ResultsList.Items.Count > 0)
                     {
-                        ViewModel.SelectResultCommand.Execute(result);
+                        ResultsPopup.IsOpen = true;
+                        ResultsList.Focus();
+                        if (ResultsList.SelectedIndex < 0)
+                        {
+                            ResultsList.SelectedIndex = 0;
+                        }
+                        e.Handled = true;
                     }
+                    break;
+                    
+                case Key.Enter:
+                    // Open selected result
+                    if (ViewModel?.SelectedResult != null)
+                    {
+                        ViewModel.OpenSelectedCommand?.Execute(null);
+                        e.Handled = true;
+                    }
+                    break;
+                    
+                case Key.Escape:
+                    // Clear search
+                    if (!string.IsNullOrEmpty(SearchTextBox.Text))
+                    {
+                        ClearSearch();
+                        e.Handled = true;
+                    }
+                    break;
+            }
+        }
+
+        private void SearchTextBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            // Show dropdown if we have results
+            if (ViewModel?.HasResults == true)
+            {
+                _suppressFocusChange = true;
+                ResultsPopup.IsOpen = true;
+                _suppressFocusChange = false;
+            }
+        }
+
+        private void SearchTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (_suppressFocusChange) return;
+            
+            // Delay closing to allow click events to process
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!SearchTextBox.IsFocused && !ResultsList.IsFocused && !ResultsPopup.IsKeyboardFocusWithin)
+                {
+                    ResultsPopup.IsOpen = false;
+                }
+            }), System.Windows.Threading.DispatcherPriority.Input);
+        }
+
+        // Results list event handlers
+        private void ResultsList_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            switch (e.Key)
+            {
+                case Key.Enter:
+                    // Open selected result
+                    if (ResultsList.SelectedItem is SearchResultViewModel result)
+                    {
+                        ViewModel?.SelectResultCommand?.Execute(result);
+                        e.Handled = true;
+                    }
+                    break;
+                    
+                case Key.Escape:
+                    // Return focus to search box
+                    ResultsPopup.IsOpen = false;
+                    SearchTextBox.Focus();
+                    e.Handled = true;
+                    break;
+                    
+                case Key.Up:
+                    // Return to search box if at top
+                    if (ResultsList.SelectedIndex == 0)
+                    {
+                        SearchTextBox.Focus();
+                        e.Handled = true;
+                    }
+                    break;
+            }
+        }
+
+        private void ResultsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            // Open the double-clicked result
+            if (ResultsList.SelectedItem is SearchResultViewModel result)
+            {
+                ViewModel?.SelectResultCommand?.Execute(result);
+            }
+        }
+
+        // Clear button handler
+        private void ClearButton_Click(object sender, RoutedEventArgs e)
+        {
+            ClearSearch();
+        }
+
+        private void ClearSearch()
+        {
+            if (ViewModel != null)
+            {
+                ViewModel.SearchQuery = string.Empty;
+                ViewModel.ShowDropdown = false;
+            }
+            SearchTextBox.Focus();
+        }
+
+        // Handle clicking outside the popup
+        private void OnMouseDownOutsidePopup(object sender, MouseButtonEventArgs e)
+        {
+            if (ResultsPopup.IsOpen)
+            {
+                // Check if click is outside both the search box and popup
+                var hitTest = VisualTreeHelper.HitTest(this, e.GetPosition(this));
+                if (hitTest == null || !IsDescendantOf(hitTest.VisualHit, ResultsPopup.Child))
+                {
+                    ResultsPopup.IsOpen = false;
                 }
             }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error handling suggestion chosen");
-            }
         }
 
-        private void OnTextChanged(object sender, AutoSuggestBoxTextChangedEventArgs e)
+        private static bool IsDescendantOf(DependencyObject child, DependencyObject parent)
         {
-            try
+            if (child == null || parent == null) return false;
+            
+            var current = child;
+            while (current != null)
             {
-                // Handle user input vs programmatic changes
-                if (e.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
-                {
-                    _logger.Debug($"Search text changed by user: {SearchBox.Text}");
-                    
-                    // Reset suppression flag when user types
-                    _suppressNextSelection = false;
-                    
-                    if (ViewModel == null)
-                    {
-                        _logger.Warning("TextChanged but ViewModel is null!");
-                    }
-                    else
-                    {
-                        _logger.Debug($"ViewModel available, SearchQuery = '{ViewModel.SearchQuery}'");
-                    }
-                    
-                    // The binding will handle updating the ViewModel
-                }
+                if (current == parent) return true;
+                current = VisualTreeHelper.GetParent(current);
             }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error handling text changed");
-            }
+            return false;
         }
-        
-        private void OnPreviewKeyDown(object sender, KeyEventArgs e)
-        {
-            try
-            {
-                switch (e.Key)
-                {
-                    case Key.Down:
-                        // Navigate down through results
-                        if (ViewModel?.NavigateDownCommand?.CanExecute(null) == true)
-                        {
-                            ViewModel.NavigateDownCommand.Execute(null);
-                            e.Handled = true;
-                        }
-                        break;
-                        
-                    case Key.Up:
-                        // Navigate up through results
-                        if (ViewModel?.NavigateUpCommand?.CanExecute(null) == true)
-                        {
-                            ViewModel.NavigateUpCommand.Execute(null);
-                            e.Handled = true;
-                        }
-                        break;
-                        
-                    case Key.Enter:
-                        // Open selected result
-                        if (ViewModel?.SelectedResult != null && 
-                            ViewModel?.OpenSelectedCommand?.CanExecute(null) == true)
-                        {
-                            ViewModel.OpenSelectedCommand.Execute(null);
-                            e.Handled = true;
-                        }
-                        break;
-                        
-                    case Key.Escape:
-                        // Close dropdown and clear search
-                        if (ViewModel?.ShowDropdown == true)
-                        {
-                            ViewModel.CloseDropdown();
-                            e.Handled = true;
-                        }
-                        else if (!string.IsNullOrWhiteSpace(ViewModel?.SearchQuery))
-                        {
-                            ViewModel.ClearSearchCommand?.Execute(null);
-                            e.Handled = true;
-                        }
-                        break;
-                        
-                    case Key.Tab:
-                        // Tab can also select like Enter
-                        if (e.KeyboardDevice.Modifiers == ModifierKeys.None && 
-                            ViewModel?.SelectedResult != null)
-                        {
-                            ViewModel.OpenSelectedCommand?.Execute(null);
-                            e.Handled = true;
-                        }
-                        break;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error handling key press in search");
-            }
-        }
-        
-        private void OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
-        {
-            // Don't suppress selection for mouse clicks
-            _suppressNextSelection = false;
-            _logger.Debug("Mouse down, allowing selection");
-        }
-
 
         // Public methods for external control
         public void FocusSearchBox()
         {
-            try
-            {
-                SearchBox?.Focus();
-                Keyboard.Focus(SearchBox);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error focusing search box");
-            }
+            SearchTextBox?.Focus();
+            Keyboard.Focus(SearchTextBox);
         }
 
-        public void ClearSearch()
+        public void ClearSearchBox()
         {
-            try
-            {
-                if (ViewModel != null)
-                {
-                    ViewModel.SearchQuery = string.Empty;
-                }
-                SearchBox?.Focus();
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error clearing search");
-            }
-        }
-
-        // Keyboard shortcuts
-        protected override void OnKeyDown(KeyEventArgs e)
-        {
-            try
-            {
-                // Escape to clear search
-                if (e.Key == Key.Escape)
-                {
-                    ClearSearch();
-                    e.Handled = true;
-                    return;
-                }
-
-                // Enter to search (if not already handled by AutoSuggestBox)
-                if (e.Key == Key.Enter && ViewModel?.SearchCommand?.CanExecute(null) == true)
-                {
-                    ViewModel.SearchCommand.Execute(null);
-                    e.Handled = true;
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Error handling key down");
-            }
-
-            base.OnKeyDown(e);
+            ClearSearch();
         }
     }
 }

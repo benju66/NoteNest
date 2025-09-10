@@ -9,76 +9,159 @@
     <UserControl.Resources>
         <!-- Converter for boolean to visibility -->
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-        
-        <!-- Search result template -->
-        <DataTemplate x:Key="SearchResultTemplate" DataType="{x:Type services:SearchResultViewModel}">
-            <Border Background="Transparent" 
-                    Padding="8,4"
-                    Cursor="Hand">
+    </UserControl.Resources>
+    
+    <Grid ClipToBounds="False" Background="Transparent">
+        <!-- Search input with icon -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            
+            <!-- Custom TextBox styled like AutoSuggestBox -->
+            <Border x:Name="SearchBoxBorder"
+                    Grid.Column="0"
+                    BorderBrush="{DynamicResource SystemControlForegroundChromeDisabledLowBrush}"
+                    BorderThickness="1"
+                    Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    CornerRadius="2">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     
-                    <!-- Result type icon -->
+                    <!-- Search Icon -->
                     <TextBlock Grid.Column="0" 
-                              Text="{Binding ResultIcon}" 
+                              Text="&#xE721;"
+                              FontFamily="Segoe MDL2 Assets"
                               FontSize="14"
+                              Margin="8,0,4,0"
                               VerticalAlignment="Center"
-                              Margin="0,0,8,0"/>
+                              Opacity="0.6"/>
                     
-                    <!-- Title and preview -->
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding DisplayTitle}" 
-                                  FontWeight="SemiBold" 
-                                  FontSize="13"
-                                  TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding DisplayPreview}" 
-                                  FontSize="11" 
-                                  Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                                  TextTrimming="CharacterEllipsis"
-                                  MaxHeight="32"/>
-                    </StackPanel>
+                    <!-- Search TextBox -->
+                    <TextBox x:Name="SearchTextBox"
+                            Grid.Column="1"
+                            Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                            BorderThickness="0"
+                            Background="Transparent"
+                            VerticalAlignment="Center"
+                            Padding="4,6"
+                            FontSize="14"
+                            PreviewKeyDown="SearchTextBox_PreviewKeyDown"
+                            GotFocus="SearchTextBox_GotFocus"
+                            LostFocus="SearchTextBox_LostFocus">
+                        <TextBox.Style>
+                            <Style TargetType="TextBox">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="TextBox">
+                                            <Grid>
+                                                <!-- Placeholder text -->
+                                                <TextBlock Text="Search notes... (Ctrl+F)"
+                                                          Opacity="0.5"
+                                                          VerticalAlignment="Center"
+                                                          Margin="4,0,0,0"
+                                                          IsHitTestVisible="False">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Text.Length, RelativeSource={RelativeSource TemplatedParent}}" Value="0">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                
+                                                <!-- Actual TextBox content -->
+                                                <ScrollViewer x:Name="PART_ContentHost"
+                                                            Focusable="false"
+                                                            HorizontalScrollBarVisibility="Hidden"
+                                                            VerticalScrollBarVisibility="Hidden"/>
+                                            </Grid>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </TextBox.Style>
+                    </TextBox>
+                    
+                    <!-- Clear button (visible when has text) -->
+                    <Button Grid.Column="2"
+                           x:Name="ClearButton"
+                           Content="&#xE711;"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="12"
+                           Background="Transparent"
+                           BorderThickness="0"
+                           Padding="4,0"
+                           Margin="0,0,4,0"
+                           VerticalAlignment="Center"
+                           Click="ClearButton_Click"
+                           Visibility="{Binding HasText, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                 </Grid>
             </Border>
-        </DataTemplate>
-    </UserControl.Resources>
-    
-    <!-- Single AutoSuggestBox with results as suggestions dropdown -->
-    <ui:AutoSuggestBox x:Name="SearchBox"
-                      Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
-                      PlaceholderText="Search notes... (Ctrl+F)"
-                      QueryIcon="Find"
-                      IsTabStop="True"
-                      HorizontalAlignment="Stretch"
-                      MaxSuggestionListHeight="400"
-                      ItemsSource="{Binding SearchResults}"
-                      IsSuggestionListOpen="{Binding ShowDropdown, Mode=TwoWay}"
-                      QuerySubmitted="OnQuerySubmitted"
-                      SuggestionChosen="OnSuggestionChosen"
-                      TextChanged="OnTextChanged"
-                      PreviewKeyDown="OnPreviewKeyDown"
-                      UpdateTextOnSelect="False">
-                      
-        <!-- Rich result template -->
-        <ui:AutoSuggestBox.ItemTemplate>
-            <DataTemplate DataType="{x:Type services:SearchResultViewModel}">
-                <Border Background="Transparent" 
-                        BorderBrush="Transparent"
-                        BorderThickness="0">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Style.Triggers>
-                                <!-- Highlight selected item -->
-                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                    <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListAccentLowBrush}"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
+        </Grid>
+        
+        <!-- Custom Popup for search results -->
+        <Popup x:Name="ResultsPopup"
+               PlacementTarget="{Binding ElementName=SearchBoxBorder}"
+               Placement="Bottom"
+               StaysOpen="False"
+               AllowsTransparency="True"
+               PopupAnimation="None"
+               IsOpen="{Binding ShowDropdown, Mode=TwoWay}"
+               MaxHeight="400"
+               HorizontalOffset="0"
+               VerticalOffset="2"
+               MinWidth="{Binding ActualWidth, ElementName=SearchBoxBorder}"
+               Width="{Binding ActualWidth, ElementName=SearchBoxBorder}"
+               Focusable="False">
+            
+            <Border Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                    BorderBrush="{DynamicResource SystemControlForegroundChromeDisabledLowBrush}"
+                    BorderThickness="1"
+                    CornerRadius="0,0,2,2">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="8" 
+                                     ShadowDepth="2" 
+                                     Opacity="0.2" 
+                                     Color="Black"/>
+                </Border.Effect>
+                
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
                     
-                    <Grid Margin="8,6">
+                    <!-- Results List -->
+                    <ListBox x:Name="ResultsList"
+                            Grid.Row="0"
+                            ItemsSource="{Binding SearchResults}"
+                            SelectedItem="{Binding SelectedResult, Mode=TwoWay}"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            BorderThickness="0"
+                            Background="Transparent"
+                            MaxHeight="360"
+                            VirtualizingPanel.IsVirtualizing="True"
+                            VirtualizingPanel.VirtualizationMode="Recycling"
+                            PreviewKeyDown="ResultsList_PreviewKeyDown"
+                            MouseDoubleClick="ResultsList_MouseDoubleClick">
+                        
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type services:SearchResultViewModel}">
+                                <Border Padding="10,8" 
+                                       Background="Transparent"
+                                       BorderThickness="0,0,0,1"
+                                       BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+                                    <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -89,11 +172,12 @@
                         <TextBlock Grid.Column="0" 
                                   Text="{Binding ResultIcon}" 
                                   FontSize="16"
-                                  VerticalAlignment="Center"
-                                  Margin="0,0,12,0"/>
+                                                  Margin="0,0,10,0"
+                                                  VerticalAlignment="Top"/>
                         
-                        <!-- Title and preview -->
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <!-- Title and Preview -->
+                                        <StackPanel Grid.Column="1" 
+                                                   VerticalAlignment="Center">
                             <TextBlock Text="{Binding DisplayTitle}" 
                                       FontWeight="SemiBold" 
                                       FontSize="14"
@@ -102,21 +186,85 @@
                                       FontSize="12" 
                                       Opacity="0.7"
                                       TextTrimming="CharacterEllipsis"
-                                      MaxWidth="350"/>
+                                                      MaxHeight="32"
+                                                      TextWrapping="Wrap"
+                                                      Margin="0,2,0,0"/>
                         </StackPanel>
                         
-                        <!-- Keyboard hint -->
+                                        <!-- Keyboard hint (shows when selected) -->
                         <TextBlock Grid.Column="2"
                                   Text="Enter ↵"
                                   FontSize="10"
                                   Opacity="0.5"
                                   VerticalAlignment="Center"
-                                  Margin="8,0,0,0"
-                                  Visibility="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}, 
-                                              Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                                  Margin="8,0,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" 
+                                                                   Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                     </Grid>
                 </Border>
             </DataTemplate>
-        </ui:AutoSuggestBox.ItemTemplate>
-    </ui:AutoSuggestBox>
+                        </ListBox.ItemTemplate>
+                        
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Border"
+                                                   Background="{TemplateBinding Background}"
+                                                   Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Border" Property="Background" 
+                                                           Value="{DynamicResource SystemControlHighlightListLowBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Border" Property="Background" 
+                                                           Value="{DynamicResource SystemControlHighlightListAccentLowBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+                    
+                    <!-- Status bar -->
+                    <Border Grid.Row="1" 
+                           Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+                           Padding="8,4"
+                           Visibility="{Binding HasResults, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Text="{Binding StatusText}" 
+                                  FontSize="11"
+                                  Opacity="0.7"/>
+                    </Border>
+                    
+                    <!-- No results message -->
+                    <TextBlock Grid.Row="0"
+                              Text="No results found"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Padding="20"
+                              Opacity="0.5"
+                              Visibility="{Binding ShowNoResults, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                </Grid>
+            </Border>
+        </Popup>
+    </Grid>
 </UserControl>

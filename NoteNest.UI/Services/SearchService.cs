@@ -92,6 +92,14 @@ namespace NoteNest.UI.Services
             {
                 _logger.Info("Index not ready, building now...");
                 await BuildInitialIndexAsync();
+                
+                // Check if build was successful
+                if (!_isIndexBuilt)
+                {
+                    _logger.Warning("Index build failed or incomplete");
+                    return new List<SearchResultViewModel>();
+                }
+                _logger.Debug("Index built successfully, proceeding with search");
             }
 
             _logger.Debug($"Starting search for query: '{query}'");
@@ -179,18 +187,71 @@ namespace NoteNest.UI.Services
                 _logger.Info("Building search index in background...");
                 var startTime = DateTime.Now;
                 
+                // Ensure settings are loaded first
+                await _configService.LoadSettingsAsync();
+                await _configService.EnsureDefaultDirectoriesAsync();
+                
                 // Load categories and notes
                 var metadataPath = _configService.Settings.MetadataPath;
+                var defaultNotePath = _configService.Settings.DefaultNotePath;
+                
+                _logger.Debug($"SEARCH DEBUG: MetadataPath='{metadataPath}', DefaultNotePath='{defaultNotePath}'");
+                
+                // If paths are still empty, use the documents fallback
+                if (string.IsNullOrEmpty(defaultNotePath))
+                {
+                    defaultNotePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
+                    _logger.Debug($"SEARCH DEBUG: Using fallback DefaultNotePath='{defaultNotePath}'");
+                }
+                
+                if (string.IsNullOrEmpty(metadataPath))
+                {
+                    metadataPath = Path.Combine(defaultNotePath, ".metadata");
+                    _logger.Debug($"SEARCH DEBUG: Using fallback MetadataPath='{metadataPath}'");
+                }
+                
+                // TEMP FIX: Check for the nested Projects directory issue
+                var nestedProjectsPath = Path.Combine(defaultNotePath, "Projects");
+                var nestedMetadataPath = Path.Combine(nestedProjectsPath, ".metadata");
+                if (Directory.Exists(nestedMetadataPath) && !Directory.Exists(metadataPath))
+                {
+                    _logger.Debug($"SEARCH DEBUG: Found nested Projects structure, using '{nestedProjectsPath}' instead of '{defaultNotePath}'");
+                    defaultNotePath = nestedProjectsPath;
+                    metadataPath = nestedMetadataPath;
+                    _logger.Debug($"SEARCH DEBUG: Corrected paths - DefaultNotePath='{defaultNotePath}', MetadataPath='{metadataPath}'");
+                }
+                
+                _logger.Debug($"SEARCH DEBUG: MetadataPath exists: {Directory.Exists(metadataPath)}");
+                _logger.Debug($"SEARCH DEBUG: DefaultNotePath exists: {Directory.Exists(defaultNotePath)}");
+                
                 var categories = await _noteService.LoadCategoriesAsync(metadataPath) ?? new List<CategoryModel>();
+                _logger.Debug($"SEARCH DEBUG: Loaded {categories.Count} categories");
                 
                 var allNotes = new List<NoteModel>();
                 foreach (var category in categories)
                 {
+                    _logger.Debug($"SEARCH DEBUG: Loading notes for category '{category.Name}' (Id: {category.Id})");
                     var categoryNotes = await _noteService.GetNotesInCategoryAsync(category);
+                    _logger.Debug($"SEARCH DEBUG: Category '{category.Name}' has {categoryNotes.Count} notes");
                     allNotes.AddRange(categoryNotes);
                 }
                 
-                _logger.Debug($"Loaded {allNotes.Count} notes from {categories.Count} categories");
+                _logger.Debug($"SEARCH DEBUG: Total loaded {allNotes.Count} notes from {categories.Count} categories");
+                
+                // If no notes found, try to scan directory directly
+                if (allNotes.Count == 0 && Directory.Exists(defaultNotePath))
+                {
+                    _logger.Debug($"SEARCH DEBUG: No notes found via categories, scanning directory directly...");
+                    var noteFiles = Directory.GetFiles(defaultNotePath, "*.txt", SearchOption.AllDirectories)
+                        .Concat(Directory.GetFiles(defaultNotePath, "*.md", SearchOption.AllDirectories))
+                        .ToArray();
+                    _logger.Debug($"SEARCH DEBUG: Found {noteFiles.Length} note files in directory");
+                    
+                    foreach (var filePath in noteFiles.Take(10)) // Log first 10 files
+                    {
+                        _logger.Debug($"SEARCH DEBUG: Found file: {filePath}");
+                    }
+                }
                 
                 // Build index on background thread to avoid UI freeze
                 await Task.Run(() => _searchIndex.BuildIndex(categories, allNotes));
@@ -201,11 +262,13 @@ namespace NoteNest.UI.Services
                 
                 var elapsed = DateTime.Now - startTime;
                 _logger.Info($"Search index built successfully in {elapsed.TotalSeconds:F2}s: {allNotes.Count} notes indexed");
+                _logger.Debug($"SEARCH DEBUG: Index state after build - _isIndexBuilt={_isIndexBuilt}, _indexDirty={_indexDirty}, IsIndexReady={IsIndexReady}");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to build search index");
                 _isIndexBuilt = false;
+                _indexDirty = true;
             }
             finally
             {

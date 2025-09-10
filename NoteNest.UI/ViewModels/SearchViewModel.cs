@@ -41,6 +41,7 @@ namespace NoteNest.UI.ViewModels
                 if (SetProperty(ref _searchQuery, value))
                 {
                     OnPropertyChanged(nameof(ShowNoResults));
+                    OnPropertyChanged(nameof(HasText));
                     OnSearchQueryChanged();
                 }
             }
@@ -78,6 +79,9 @@ namespace NoteNest.UI.ViewModels
         }
         
         public bool ShowNoResults => !IsSearching && !HasResults && !string.IsNullOrWhiteSpace(SearchQuery) && SearchQuery.Length > 2;
+
+        // Add HasText property for clear button visibility
+        public bool HasText => !string.IsNullOrWhiteSpace(SearchQuery);
         
         // ADD: Property for dropdown visibility
         public bool ShowDropdown
@@ -157,9 +161,8 @@ namespace NoteNest.UI.ViewModels
                 return;
             }
             
-            // Start debounce timer
+            // Start debounce timer for real search
             _debounceTimer.Start();
-            
         }
 
         private async void OnDebounceTimerTick(object? sender, EventArgs e)
@@ -182,9 +185,18 @@ namespace NoteNest.UI.ViewModels
             try
             {
                 _logger.Debug($"PerformSearchAsync calling SearchService with query: '{SearchQuery.Trim()}'");
+                _logger.Debug($"SearchService.IsIndexReady: {_searchService.IsIndexReady}");
+                
                 var results = await _searchService.SearchAsync(SearchQuery.Trim(), _cancellationTokenSource.Token);
                 
                 _logger.Debug($"SearchService returned {results.Count} results");
+                if (results.Count > 0)
+                {
+                    foreach (var result in results.Take(3)) // Log first 3 results
+                    {
+                        _logger.Debug($"Result: '{result.Title}' at '{result.FilePath}' with preview: '{result.Preview?.Substring(0, Math.Min(50, result.Preview?.Length ?? 0))}...'");
+                    }
+                }
                 
                 // Update results on UI thread
                 SearchResults.Clear();
@@ -208,7 +220,11 @@ namespace NoteNest.UI.ViewModels
                     ? $"Found {SearchResults.Count} result{(SearchResults.Count == 1 ? "" : "s")}"
                     : "No results found";
                     
-                _logger.Debug($"Search completed: {SearchResults.Count} results, ShowDropdown={ShowDropdown}");
+                _logger.Debug($"Search completed: {SearchResults.Count} results, ShowDropdown={ShowDropdown}, HasResults={HasResults}");
+                
+                // Force property change notifications
+                OnPropertyChanged(nameof(ShowDropdown));
+                OnPropertyChanged(nameof(HasResults));
             }
             catch (OperationCanceledException)
             {

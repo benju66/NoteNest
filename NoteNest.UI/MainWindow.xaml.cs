@@ -3,7 +3,6 @@ using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
-using NoteNest.UI.ViewModels;
 using System.Collections.Generic;
 using ModernWpf.Controls;
 using NoteNest.UI.Services;
@@ -13,7 +12,6 @@ using NoteNest.UI.Controls;
 using NoteNest.UI.Services.DragDrop;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
-using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Plugins;
 using NoteNest.UI.ViewModels;
 using System.Windows.Input;
@@ -747,7 +745,44 @@ namespace NoteNest.UI
 
         private void FocusSearchCommand_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            FocusSearchBox();
+            try
+            {
+                // Find the SmartSearchControl in the visual tree
+                var searchControl = FindVisualChild<SmartSearchControl>(MainPanel);
+                if (searchControl != null)
+                {
+                    searchControl.FocusSearchBox();
+                    _logger?.Debug("Search box focused via keyboard shortcut");
+                }
+                else
+                {
+                    _logger?.Warning("SmartSearchControl not found in visual tree");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to focus search box");
+            }
+        }
+
+        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            // Guard: only Visual/Visual3D are valid for VisualTreeHelper
+            if (parent is not Visual && parent is not System.Windows.Media.Media3D.Visual3D)
+            {
+                return null;
+            }
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T result)
+                    return result;
+                var childResult = FindVisualChild<T>(child);
+                if (childResult != null)
+                    return childResult;
+            }
+            return null;
         }
 
         private void FocusSearchBox()
