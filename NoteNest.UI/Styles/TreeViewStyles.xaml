@@ -56,19 +56,7 @@
                        Text="{Binding Model.Format, Converter={StaticResource NoteFormatToIcon}}"
                        Foreground="{StaticResource NoteIconBrush}"/>
             <TextBlock Text="{Binding Title}" VerticalAlignment="Center" 
-                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsDirty}" Value="True">
-                                <Setter Property="FontStyle" Value="Italic"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
-            <Ellipse Width="6" Height="6" Fill="{StaticResource UnsavedIndicatorBrush}" Margin="4,0,0,0" Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}"/>
+                       Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
         </StackPanel>
     </DataTemplate>
 

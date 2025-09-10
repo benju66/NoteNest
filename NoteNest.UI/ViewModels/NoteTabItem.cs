@@ -27,7 +27,7 @@ namespace NoteNest.UI.ViewModels
                 var baseTitle = Note.Title;
                 if (IsSaving)
                     return $"{baseTitle} (saving...)";
-                return IsDirty ? $"{baseTitle} *" : baseTitle;
+                return IsDirty ? $"{baseTitle} •" : baseTitle;
             }
         }
         
