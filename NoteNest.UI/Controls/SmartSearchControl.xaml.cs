@@ -101,19 +101,23 @@ namespace NoteNest.UI.Controls
             {
                 switch (e.Key)
                 {
-                    case Key.Down:
-                    // Move focus to results list
+                case Key.Down:
+                    // Move focus to results list and select first item immediately
                     if (ResultsList.Items.Count > 0)
                     {
                         ResultsPopup.IsOpen = true;
+                        
+                        // Select first item before focusing (prevents container selection)
+                        ResultsList.SelectedIndex = 0;
+                        
+                        // Focus the selected item, not the container
                         ResultsList.Focus();
-                        if (ResultsList.SelectedIndex < 0)
-                        {
-                            ResultsList.SelectedIndex = 0;
-                        }
-                            e.Handled = true;
-                        }
-                        break;
+                        var container = ResultsList.ItemContainerGenerator.ContainerFromIndex(0) as ListBoxItem;
+                        container?.Focus();
+                        
+                        e.Handled = true;
+                    }
+                    break;
                         
                     case Key.Enter:
                         // Open selected result
