@@ -48,49 +48,74 @@
     <!-- Single AutoSuggestBox with results as suggestions dropdown -->
     <ui:AutoSuggestBox x:Name="SearchBox"
                       Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
-                      PlaceholderText="Search notes and content..."
+                      PlaceholderText="Search notes... (Ctrl+F)"
                       QueryIcon="Find"
                       IsTabStop="True"
                       HorizontalAlignment="Stretch"
                       MaxSuggestionListHeight="400"
                       ItemsSource="{Binding SearchResults}"
-               QuerySubmitted="OnQuerySubmitted"
-               SuggestionChosen="OnSuggestionChosen"
-               TextChanged="OnTextChanged"
-               PreviewKeyDown="OnPreviewKeyDown"
-               PreviewMouseDown="OnPreviewMouseDown"
-               UpdateTextOnSelect="False">
+                      IsSuggestionListOpen="{Binding ShowDropdown, Mode=TwoWay}"
+                      QuerySubmitted="OnQuerySubmitted"
+                      SuggestionChosen="OnSuggestionChosen"
+                      TextChanged="OnTextChanged"
+                      PreviewKeyDown="OnPreviewKeyDown"
+                      UpdateTextOnSelect="False">
                       
-        <!-- Rich search result template for dropdown -->
+        <!-- Rich result template -->
         <ui:AutoSuggestBox.ItemTemplate>
             <DataTemplate DataType="{x:Type services:SearchResultViewModel}">
-                <Grid Margin="8,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+                <Border Background="Transparent" 
+                        BorderBrush="Transparent"
+                        BorderThickness="0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <!-- Highlight selected item -->
+                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource SystemControlHighlightListAccentLowBrush}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
                     
-                    <!-- Result type icon -->
-                    <TextBlock Grid.Column="0" 
-                              Text="{Binding ResultIcon}" 
-                              FontSize="16"
-                              VerticalAlignment="Center"
-                              Margin="0,0,12,0"/>
-                    
-                    <!-- Title and preview -->
-                    <StackPanel Grid.Column="1">
-                        <TextBlock Text="{Binding DisplayTitle}" 
-                                  FontWeight="SemiBold" 
-                                  FontSize="14"
-                                  TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding DisplayPreview}" 
-                                  FontSize="12" 
-                                  Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                                  TextTrimming="CharacterEllipsis"
-                                  MaxWidth="300"
-                                  TextWrapping="NoWrap"/>
-                    </StackPanel>
-                </Grid>
+                    <Grid Margin="8,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <!-- Icon -->
+                        <TextBlock Grid.Column="0" 
+                                  Text="{Binding ResultIcon}" 
+                                  FontSize="16"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,12,0"/>
+                        
+                        <!-- Title and preview -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DisplayTitle}" 
+                                      FontWeight="SemiBold" 
+                                      FontSize="14"
+                                      TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding DisplayPreview}" 
+                                      FontSize="12" 
+                                      Opacity="0.7"
+                                      TextTrimming="CharacterEllipsis"
+                                      MaxWidth="350"/>
+                        </StackPanel>
+                        
+                        <!-- Keyboard hint -->
+                        <TextBlock Grid.Column="2"
+                                  Text="Enter ↵"
+                                  FontSize="10"
+                                  Opacity="0.5"
+                                  VerticalAlignment="Center"
+                                  Margin="8,0,0,0"
+                                  Visibility="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}, 
+                                              Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                    </Grid>
+                </Border>
             </DataTemplate>
         </ui:AutoSuggestBox.ItemTemplate>
     </ui:AutoSuggestBox>

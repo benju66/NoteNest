@@ -126,32 +126,14 @@ namespace NoteNest.UI.Controls
         {
             try
             {
-                // Check if we should suppress this selection (arrow key navigation)
-                if (_suppressNextSelection)
-                {
-                    _logger.Debug("Suppressing selection from arrow key navigation");
-                    _suppressNextSelection = false;
-                    return;
-                }
-                
                 if (e.SelectedItem is SearchResultViewModel result)
                 {
-                    _logger.Debug($"Search result chosen: {result.Title}");
+                    _logger.Debug($"Search result chosen via click: {result.Title}");
                     
-                    // Trigger the result selection
+                    // Open the selected result
                     if (ViewModel?.SelectResultCommand?.CanExecute(result) == true)
                     {
                         ViewModel.SelectResultCommand.Execute(result);
-                    }
-                }
-                else if (e.SelectedItem is string suggestion)
-                {
-                    _logger.Debug($"Search suggestion chosen: {suggestion}");
-                    
-                    // Update the search query to the chosen suggestion
-                    if (ViewModel != null)
-                    {
-                        ViewModel.SearchQuery = suggestion;
                     }
                 }
             }
@@ -195,29 +177,64 @@ namespace NoteNest.UI.Controls
         {
             try
             {
-                if (e.Key == Key.Down || e.Key == Key.Up)
+                switch (e.Key)
                 {
-                    // Set flag to suppress the next selection event from arrow navigation
-                    _suppressNextSelection = true;
-                    _logger.Debug($"Arrow key pressed: {e.Key}, will suppress next selection");
-                }
-                else if (e.Key == Key.Enter)
-                {
-                    // Don't suppress selection for Enter key
-                    _suppressNextSelection = false;
-                    _logger.Debug("Enter key pressed, allowing selection");
-                }
-                else if (e.Key == Key.Escape)
-                {
-                    // Close the dropdown and clear focus
-                    SearchBox.IsSuggestionListOpen = false;
-                    _suppressNextSelection = false;
-                    e.Handled = true;
+                    case Key.Down:
+                        // Navigate down through results
+                        if (ViewModel?.NavigateDownCommand?.CanExecute(null) == true)
+                        {
+                            ViewModel.NavigateDownCommand.Execute(null);
+                            e.Handled = true;
+                        }
+                        break;
+                        
+                    case Key.Up:
+                        // Navigate up through results
+                        if (ViewModel?.NavigateUpCommand?.CanExecute(null) == true)
+                        {
+                            ViewModel.NavigateUpCommand.Execute(null);
+                            e.Handled = true;
+                        }
+                        break;
+                        
+                    case Key.Enter:
+                        // Open selected result
+                        if (ViewModel?.SelectedResult != null && 
+                            ViewModel?.OpenSelectedCommand?.CanExecute(null) == true)
+                        {
+                            ViewModel.OpenSelectedCommand.Execute(null);
+                            e.Handled = true;
+                        }
+                        break;
+                        
+                    case Key.Escape:
+                        // Close dropdown and clear search
+                        if (ViewModel?.ShowDropdown == true)
+                        {
+                            ViewModel.CloseDropdown();
+                            e.Handled = true;
+                        }
+                        else if (!string.IsNullOrWhiteSpace(ViewModel?.SearchQuery))
+                        {
+                            ViewModel.ClearSearchCommand?.Execute(null);
+                            e.Handled = true;
+                        }
+                        break;
+                        
+                    case Key.Tab:
+                        // Tab can also select like Enter
+                        if (e.KeyboardDevice.Modifiers == ModifierKeys.None && 
+                            ViewModel?.SelectedResult != null)
+                        {
+                            ViewModel.OpenSelectedCommand?.Execute(null);
+                            e.Handled = true;
+                        }
+                        break;
                 }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error handling preview key down");
+                _logger.Error(ex, "Error handling key press in search");
             }
         }
         

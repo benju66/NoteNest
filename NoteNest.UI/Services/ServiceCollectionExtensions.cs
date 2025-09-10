@@ -151,7 +151,14 @@ namespace NoteNest.UI.Services
                 var logger = provider.GetRequiredService<IAppLogger>();
                 return new SearchService(noteService, configService, fileWatcher, logger);
             });
-            services.AddTransient<SearchViewModel>(); // Transient for multiple instances
+            services.AddTransient<SearchViewModel>(provider =>
+            {
+                var searchService = provider.GetRequiredService<ISearchService>();
+                var workspaceService = provider.GetRequiredService<IWorkspaceService>();
+                var noteService = provider.GetRequiredService<NoteService>();
+                var logger = provider.GetRequiredService<IAppLogger>();
+                return new SearchViewModel(searchService, workspaceService, noteService, logger);
+            });
 
             return services;
         }

@@ -1,9 +1,12 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Threading;
+using NoteNest.Core.Interfaces.Services;
+using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Commands;
 using NoteNest.UI.Services;
@@ -13,6 +16,8 @@ namespace NoteNest.UI.ViewModels
     public class SearchViewModel : ViewModelBase, IDisposable
     {
         private readonly ISearchService _searchService;
+        private readonly IWorkspaceService _workspaceService;
+        private readonly NoteService _noteService;
         private readonly IAppLogger _logger;
         private DispatcherTimer _debounceTimer;
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -20,7 +25,9 @@ namespace NoteNest.UI.ViewModels
         private string _searchQuery = string.Empty;
         private bool _isSearching;
         private bool _hasResults;
-        private string _statusText = "Start typing to search...";
+        private bool _showDropdown;
+        private string _statusText = "Type to search...";
+        private SearchResultViewModel? _selectedResult;
         
         // Collections
         private ObservableCollection<SearchResultViewModel> _searchResults;
@@ -71,6 +78,20 @@ namespace NoteNest.UI.ViewModels
         }
         
         public bool ShowNoResults => !IsSearching && !HasResults && !string.IsNullOrWhiteSpace(SearchQuery) && SearchQuery.Length > 2;
+        
+        // ADD: Property for dropdown visibility
+        public bool ShowDropdown
+        {
+            get => _showDropdown;
+            set => SetProperty(ref _showDropdown, value);
+        }
+        
+        // ADD: Property for keyboard-selected result
+        public SearchResultViewModel? SelectedResult
+        {
+            get => _selectedResult;
+            set => SetProperty(ref _selectedResult, value);
+        }
 
         // Events
         public event EventHandler<SearchResultSelectedEventArgs>? ResultSelected;
@@ -79,19 +100,30 @@ namespace NoteNest.UI.ViewModels
         public ICommand SearchCommand { get; private set; }
         public ICommand ClearSearchCommand { get; private set; }
         public ICommand SelectResultCommand { get; private set; }
+        
+        // ADD: Commands for keyboard navigation
+        public ICommand NavigateUpCommand { get; private set; }
+        public ICommand NavigateDownCommand { get; private set; }
+        public ICommand OpenSelectedCommand { get; private set; }
 
-        public SearchViewModel(ISearchService searchService, IAppLogger logger)
+        public SearchViewModel(
+            ISearchService searchService,
+            IWorkspaceService workspaceService,
+            NoteService noteService,
+            IAppLogger logger)
         {
             _searchService = searchService ?? throw new ArgumentNullException(nameof(searchService));
+            _workspaceService = workspaceService ?? throw new ArgumentNullException(nameof(workspaceService));
+            _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _cancellationTokenSource = new CancellationTokenSource();
             _searchResults = new ObservableCollection<SearchResultViewModel>();
             
-            // Fast 200ms debounce for responsive search
+            // 300ms debounce for smooth typing (industry standard)
             _debounceTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(200)
+                Interval = TimeSpan.FromMilliseconds(300)
             };
             _debounceTimer.Tick += OnDebounceTimerTick;
             
@@ -107,7 +139,12 @@ namespace NoteNest.UI.ViewModels
         {
             SearchCommand = new AsyncRelayCommand(async _ => await PerformSearchAsync());
             ClearSearchCommand = new RelayCommand(_ => ClearSearch());
-            SelectResultCommand = new RelayCommand<SearchResultViewModel>(OnResultSelected);
+            SelectResultCommand = new RelayCommand<SearchResultViewModel>(OpenSelectedResult);
+            
+            // ADD: Commands for keyboard navigation
+            NavigateUpCommand = new RelayCommand(_ => NavigateResults(-1));
+            NavigateDownCommand = new RelayCommand(_ => NavigateResults(1));
+            OpenSelectedCommand = new RelayCommand(_ => OpenSelectedResult(SelectedResult));
         }
 
         private void OnSearchQueryChanged()
@@ -151,29 +188,40 @@ namespace NoteNest.UI.ViewModels
                 
                 // Update results on UI thread
                 SearchResults.Clear();
+                SelectedResult = null;  // Reset selection
+                
                 foreach (var result in results)
                 {
                     SearchResults.Add(result);
-                    _logger.Debug($"  Added result: {result.Title}");
+                }
+                
+                // Auto-select first result for keyboard navigation
+                if (SearchResults.Any())
+                {
+                    SelectedResult = SearchResults.First();
                 }
                 
                 HasResults = SearchResults.Count > 0;
+                ShowDropdown = HasResults;  // Show dropdown when results exist
+                
                 StatusText = HasResults 
                     ? $"Found {SearchResults.Count} result{(SearchResults.Count == 1 ? "" : "s")}"
                     : "No results found";
                     
-                _logger.Debug($"Search completed: '{SearchQuery}' returned {SearchResults.Count} results, HasResults={HasResults}");
+                _logger.Debug($"Search completed: {SearchResults.Count} results, ShowDropdown={ShowDropdown}");
             }
             catch (OperationCanceledException)
             {
                 _logger.Debug("Search operation was cancelled");
                 StatusText = "Search cancelled";
+                ShowDropdown = false;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Search failed for query: '{SearchQuery}'");
                 StatusText = "Search failed";
                 HasResults = false;
+                ShowDropdown = false;
             }
             finally
             {
@@ -184,24 +232,64 @@ namespace NoteNest.UI.ViewModels
         private void ClearSearch()
         {
             SearchResults.Clear();
+            SelectedResult = null;
             HasResults = false;
-            StatusText = "Start typing to search...";
+            ShowDropdown = false;
+            StatusText = "Type to search...";
             IsSearching = false;
+            SearchQuery = string.Empty;  // Clear the search box too
         }
 
-        private void OnResultSelected(SearchResultViewModel? result)
+        // Navigate through results with arrow keys
+        private void NavigateResults(int direction)
+        {
+            if (!HasResults || SearchResults.Count == 0) return;
+            
+            var currentIndex = SelectedResult != null ? SearchResults.IndexOf(SelectedResult) : -1;
+            var newIndex = currentIndex + direction;
+            
+            // Wrap around
+            if (newIndex < 0) newIndex = SearchResults.Count - 1;
+            if (newIndex >= SearchResults.Count) newIndex = 0;
+            
+            SelectedResult = SearchResults[newIndex];
+        }
+
+        // Open the selected search result
+        private async void OpenSelectedResult(SearchResultViewModel? result)
         {
             if (result == null) return;
             
+            _logger.Debug($"Opening search result: {result.Title} at {result.FilePath}");
+            
             try
             {
-                _logger.Debug($"Search result selected: {result.Title}");
-                ResultSelected?.Invoke(this, new SearchResultSelectedEventArgs(result));
+                // Load the note
+                var note = await _noteService.LoadNoteAsync(result.FilePath);
+                if (note != null)
+                {
+                    // Open in workspace
+                    await _workspaceService.OpenNoteAsync(note);
+                    
+                    // Clear search after successful open
+                    ClearSearch();
+                    ShowDropdown = false;
+                    
+                    _logger.Info($"Opened note from search: {result.Title}");
+                }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error handling search result selection");
+                _logger.Error(ex, $"Failed to open search result: {result.FilePath}");
+                StatusText = "Failed to open note";
             }
+        }
+
+        // Handle escape key
+        public void CloseDropdown()
+        {
+            ShowDropdown = false;
+            SelectedResult = null;
         }
 
         public void Dispose()
