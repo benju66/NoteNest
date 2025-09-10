@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,25 +25,43 @@ namespace NoteNest.UI.Services
         private readonly NoteService _noteService;
         private readonly ConfigurationService _configService;
         private readonly IAppLogger _logger;
+        private readonly FileWatcherService _fileWatcher;
         private readonly SemaphoreSlim _searchLock = new(1, 1);
+        private readonly SemaphoreSlim _indexBuildLock = new(1, 1);
         
-        private DateTime _lastIndexTime = DateTime.MinValue;
+        // Track index state
+        private volatile bool _isIndexBuilt = false;
         private bool _indexDirty = true;
+        private DateTime _lastIndexTime = DateTime.MinValue;
+        
+        // Simple cache for recent searches
+        private readonly Dictionary<string, (List<SearchResultViewModel> results, DateTime timestamp)> _searchCache = new();
+        private readonly TimeSpan _cacheExpiry = TimeSpan.FromSeconds(30);
 
-        public bool IsIndexReady => !_indexDirty;
+        public bool IsIndexReady => _isIndexBuilt && !_indexDirty;
 
         public SearchService(
             NoteService noteService,
-            ConfigurationService configService, 
+            ConfigurationService configService,
+            FileWatcherService fileWatcher,
             IAppLogger logger)
         {
             _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
+            _fileWatcher = fileWatcher ?? throw new ArgumentNullException(nameof(fileWatcher));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
-            // Use existing SearchIndexService with current settings
             var contentWordLimit = _configService.Settings?.SearchIndexContentWordLimit ?? 500;
             _searchIndex = new SearchIndexService(contentWordLimit);
+            
+            // Subscribe to file changes for incremental updates
+            _fileWatcher.FileChanged += OnFileChanged;
+            _fileWatcher.FileCreated += OnFileCreated;
+            _fileWatcher.FileDeleted += OnFileDeleted;
+            _fileWatcher.FileRenamed += OnFileRenamed;
+            
+            // Build initial index in background
+            _ = Task.Run(async () => await BuildInitialIndexAsync());
         }
 
         public async Task<List<SearchResultViewModel>> SearchAsync(string query, CancellationToken cancellationToken = default)
@@ -53,70 +72,67 @@ namespace NoteNest.UI.Services
                 return new List<SearchResultViewModel>();
             }
 
+            // Check cache first
+            var cacheKey = query.ToLowerInvariant();
+            lock (_searchCache)
+            {
+                if (_searchCache.TryGetValue(cacheKey, out var cached))
+                {
+                    if (DateTime.Now - cached.timestamp < _cacheExpiry)
+                    {
+                        _logger.Debug($"Cache hit for query: '{query}'");
+                        return cached.results;
+                    }
+                    _searchCache.Remove(cacheKey);
+                }
+            }
+
+            // Ensure index is built
+            if (!_isIndexBuilt)
+            {
+                _logger.Info("Index not ready, building now...");
+                await BuildInitialIndexAsync();
+            }
+
             _logger.Debug($"Starting search for query: '{query}'");
 
             await _searchLock.WaitAsync(cancellationToken);
             try
             {
-                // Get all notes for simple search
-                var allNotes = await GetAllNotesAsync();
+                // USE THE SOPHISTICATED INDEX!
+                var searchResults = await Task.Run(() => 
+                    _searchIndex.Search(query, maxResults: 50), 
+                    cancellationToken);
                 
-                // Use simple search implementation to avoid hanging issue
-                _logger.Debug($"Using simple search with query: '{query}' on {allNotes.Count} notes");
-                
-                var results = new List<SearchIndexService.SearchResult>();
-                var queryLower = query.ToLowerInvariant();
-                
-                // Search through all notes directly
-                foreach (var note in allNotes)
-                {
-                    if (note.Title?.ToLowerInvariant().Contains(queryLower) == true ||
-                        note.Content?.ToLowerInvariant().Contains(queryLower) == true)
-                    {
-                        results.Add(new SearchIndexService.SearchResult
-                        {
-                            NoteId = note.Id,
-                            Title = note.Title,
-                            FilePath = note.FilePath,
-                            CategoryId = note.CategoryId,
-                            Preview = GetPreview(note.Content),
-                            Relevance = 1.0f
-                        });
-                    }
-                }
-                
-                _logger.Debug($"Simple search returned {results.Count} results");
-                
-                // Log first few results for debugging
-                foreach (var result in results.Take(3))
-                {
-                    _logger.Debug($"  Result: Title='{result.Title}', Preview='{result.Preview?.Substring(0, Math.Min(50, result.Preview?.Length ?? 0))}...', Relevance={result.Relevance}");
-                }
+                _logger.Debug($"Index search returned {searchResults.Count} results");
                 
                 // Convert to ViewModels
-                var viewModels = results.Select(r => new SearchResultViewModel
+                var viewModels = searchResults.Select(r => new SearchResultViewModel
                 {
                     NoteId = r.NoteId,
-                    Title = r.Title,
+                    Title = r.Title ?? "Untitled",
                     FilePath = r.FilePath,
                     CategoryId = r.CategoryId,
-                    Preview = r.Preview,
+                    Preview = r.Preview ?? "",
                     Relevance = r.Relevance,
                     ResultType = string.IsNullOrEmpty(r.NoteId) ? SearchResultType.Category : SearchResultType.Note
                 }).ToList();
                 
+                // Cache the results
+                lock (_searchCache)
+                {
+                    _searchCache[cacheKey] = (viewModels, DateTime.Now);
+                    
+                    // Limit cache size
+                    if (_searchCache.Count > 100)
+                    {
+                        var oldest = _searchCache.OrderBy(kvp => kvp.Value.timestamp).First().Key;
+                        _searchCache.Remove(oldest);
+                    }
+                }
+                
                 _logger.Debug($"Returning {viewModels.Count} search results for query: '{query}'");
                 return viewModels;
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.Debug("Search operation was cancelled");
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Search failed for query: {query}");
-                return new List<SearchResultViewModel>();
             }
             finally
             {
@@ -131,10 +147,13 @@ namespace NoteNest.UI.Services
 
             try
             {
-                // Simple suggestion based on recent searches and note titles
-                // This is a placeholder - can be enhanced later
+                // Use the sophisticated search for suggestions
                 var results = await SearchAsync(query.Trim());
-                return results.Take(maxResults).Select(r => r.Title).ToList();
+                return results
+                    .OrderByDescending(r => r.Relevance)
+                    .Take(maxResults)
+                    .Select(r => r.Title)
+                    .ToList();
             }
             catch (Exception ex)
             {
@@ -146,128 +165,108 @@ namespace NoteNest.UI.Services
         public void InvalidateIndex()
         {
             _indexDirty = true;
+            InvalidateCache();
             _logger.Debug("Search index invalidated");
         }
 
-        private async Task EnsureIndexAsync(CancellationToken cancellationToken = default)
+        private async Task BuildInitialIndexAsync()
         {
-            if (!_indexDirty && (DateTime.Now - _lastIndexTime).TotalMinutes < 5)
-            {
-                _logger.Debug("Index is up-to-date, skipping rebuild");
-                return; // Index is recent enough
-            }
-
-            _logger.Debug("Building search index...");
-            
+            await _indexBuildLock.WaitAsync();
             try
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                if (_isIndexBuilt && !_indexDirty) return;
                 
-                // Get all categories and notes - simplified approach
-                var allCategories = await GetAllCategoriesAsync();
-                _logger.Debug($"Loaded {allCategories.Count} categories");
+                _logger.Info("Building search index in background...");
+                var startTime = DateTime.Now;
                 
-                var allNotes = await GetAllNotesAsync();
-                _logger.Debug($"Loaded {allNotes.Count} notes total");
-                
-                // Log sample note details
-                if (allNotes.Any())
-                {
-                    var sampleNote = allNotes.First();
-                    _logger.Debug($"Sample note: Title='{sampleNote.Title}', Content length={sampleNote.Content?.Length ?? 0}, FilePath='{sampleNote.FilePath}'");
-                }
-                
-                cancellationToken.ThrowIfCancellationRequested();
-                
-                // Build index using existing logic (run on background thread)
-                try
-                {
-                    _logger.Debug($"About to build index with {allCategories.Count} categories and {allNotes.Count} notes");
-                    
-                    // Don't use Task.Run to avoid potential deadlock
-                    _searchIndex.BuildIndex(allCategories, allNotes);
-                    
-                    _logger.Debug("Index building completed");
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "Error during index building");
-                    throw;
-                }
-                
-                _indexDirty = false;
-                _lastIndexTime = DateTime.Now;
-                
-                _logger.Info($"Search index built successfully. {allNotes.Count} notes, {allCategories.Count} categories");
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.Debug("Index building was cancelled");
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to build search index");
-                throw;
-            }
-        }
-
-        private async Task<List<CategoryModel>> GetAllCategoriesAsync()
-        {
-            try
-            {
-                // Use existing NoteService to get categories
+                // Load categories and notes
                 var metadataPath = _configService.Settings.MetadataPath;
-                _logger.Debug($"Loading categories from metadata path: '{metadataPath}'");
-                
                 var categories = await _noteService.LoadCategoriesAsync(metadataPath) ?? new List<CategoryModel>();
-                _logger.Debug($"Successfully loaded {categories.Count} categories");
                 
-                return categories;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to load categories for search index");
-                return new List<CategoryModel>();
-            }
-        }
-
-        private async Task<List<NoteModel>> GetAllNotesAsync()
-        {
-            try
-            {
                 var allNotes = new List<NoteModel>();
-                var categories = await GetAllCategoriesAsync();
-                
                 foreach (var category in categories)
                 {
-                    // Get notes for each category using the correct async method
                     var categoryNotes = await _noteService.GetNotesInCategoryAsync(category);
                     allNotes.AddRange(categoryNotes);
                 }
                 
-                return allNotes;
+                _logger.Debug($"Loaded {allNotes.Count} notes from {categories.Count} categories");
+                
+                // Build index on background thread to avoid UI freeze
+                await Task.Run(() => _searchIndex.BuildIndex(categories, allNotes));
+                
+                _isIndexBuilt = true;
+                _indexDirty = false;
+                _lastIndexTime = DateTime.Now;
+                
+                var elapsed = DateTime.Now - startTime;
+                _logger.Info($"Search index built successfully in {elapsed.TotalSeconds:F2}s: {allNotes.Count} notes indexed");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to load notes for search index");
-                return new List<NoteModel>();
+                _logger.Error(ex, "Failed to build search index");
+                _isIndexBuilt = false;
+            }
+            finally
+            {
+                _indexBuildLock.Release();
             }
         }
-        
-        private string GetPreview(string content)
+
+        // File watcher event handlers
+        private async void OnFileChanged(object sender, FileChangedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(content))
-                return string.Empty;
-                
-            // Take first 150 characters
-            var preview = content.Length > 150 
-                ? content.Substring(0, 150) + "..." 
-                : content;
-                
-            // Remove newlines for cleaner preview
-            return preview.Replace("\r\n", " ").Replace("\n", " ").Trim();
+            if (!IsRelevantFile(e.FilePath)) return;
+            
+            _logger.Debug($"File changed: {e.FilePath}");
+            InvalidateCache();
+            
+            // For now, mark index as dirty and rebuild on next search
+            // TODO: Implement incremental update
+            _indexDirty = true;
         }
+
+        private async void OnFileCreated(object sender, FileChangedEventArgs e)
+        {
+            if (!IsRelevantFile(e.FilePath)) return;
+            
+            _logger.Debug($"File created: {e.FilePath}");
+            InvalidateCache();
+            _indexDirty = true;
+        }
+
+        private async void OnFileDeleted(object sender, FileChangedEventArgs e)
+        {
+            if (!IsRelevantFile(e.FilePath)) return;
+            
+            _logger.Debug($"File deleted: {e.FilePath}");
+            InvalidateCache();
+            _indexDirty = true;
+        }
+
+        private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
+        {
+            if (!IsRelevantFile(e.NewPath)) return;
+            
+            _logger.Debug($"File renamed: {e.OldPath} -> {e.NewPath}");
+            InvalidateCache();
+            _indexDirty = true;
+        }
+
+        private bool IsRelevantFile(string filePath)
+        {
+            var ext = Path.GetExtension(filePath)?.ToLowerInvariant();
+            return ext == ".md" || ext == ".txt" || ext == ".markdown";
+        }
+
+        private void InvalidateCache()
+        {
+            lock (_searchCache)
+            {
+                _searchCache.Clear();
+            }
+        }
+
     }
 
     public class SearchResultViewModel

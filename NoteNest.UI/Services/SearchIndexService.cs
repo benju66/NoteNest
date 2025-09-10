@@ -42,9 +42,15 @@ namespace NoteNest.Core.Services
                 
                 System.Diagnostics.Debug.WriteLine($"[SearchIndex] Building index with {allNotes.Count} notes and {categories.Count} categories");
 
+                // Use ParallelOptions to limit parallelism and prevent thread pool exhaustion
+                var parallelOptions = new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = Environment.ProcessorCount
+                };
+                
                 // Index all notes
                 var notesIndexed = 0;
-                Parallel.ForEach(allNotes, note =>
+                Parallel.ForEach(allNotes, parallelOptions, note =>
                 {
                     IndexNote(note);
                     System.Threading.Interlocked.Increment(ref notesIndexed);
@@ -52,7 +58,7 @@ namespace NoteNest.Core.Services
                 
                 System.Diagnostics.Debug.WriteLine($"[SearchIndex] Indexed {notesIndexed} notes");
 
-                // Index categories
+                // Index categories (sequential - they're usually few)
                 foreach (var category in categories)
                 {
                     IndexCategory(category);
@@ -60,12 +66,6 @@ namespace NoteNest.Core.Services
                 
                 System.Diagnostics.Debug.WriteLine($"[SearchIndex] Total index entries: {_searchIndex.Count}");
                 
-                // Log sample index entries
-                foreach (var kvp in _searchIndex.Take(5))
-                {
-                    System.Diagnostics.Debug.WriteLine($"[SearchIndex] Word '{kvp.Key}' has {kvp.Value.Count} results");
-                }
-
                 _lastIndexTime = DateTime.Now;
                 _indexDirty = false;
             }

@@ -106,7 +106,10 @@ namespace NoteNest.UI.Services
                     cleanupMinutes: s.ContentCacheCleanupMinutes);
             });
 
-            // Note: FileWatcherService is constructed lazily in MainViewModel with ConfigurationService injection.
+            // Register FileWatcherService for SearchService dependency injection
+            services.AddSingleton<FileWatcherService>(sp => new FileWatcherService(
+                sp.GetRequiredService<IAppLogger>(),
+                sp.GetRequiredService<ConfigurationService>()));
             services.AddSingleton<INoteOperationsService, NoteOperationsService>();
             services.AddSingleton<IWorkspaceService, WorkspaceService>();
             services.AddSingleton<ITabCloseService, TabCloseService>();
@@ -140,7 +143,14 @@ namespace NoteNest.UI.Services
             ));
 
             // Search services - lightweight, focused
-            services.AddSingleton<ISearchService, SearchService>();
+            services.AddSingleton<ISearchService>(provider =>
+            {
+                var noteService = provider.GetRequiredService<NoteService>();
+                var configService = provider.GetRequiredService<ConfigurationService>();
+                var fileWatcher = provider.GetRequiredService<FileWatcherService>();
+                var logger = provider.GetRequiredService<IAppLogger>();
+                return new SearchService(noteService, configService, fileWatcher, logger);
+            });
             services.AddTransient<SearchViewModel>(); // Transient for multiple instances
 
             return services;
