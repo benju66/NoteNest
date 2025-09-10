@@ -106,12 +106,16 @@ namespace NoteNest.UI.Services
                     var rootPath = _configService.Settings?.DefaultNotePath ?? PathService.ProjectsPath;
                     if (await _persistence.ValidateIndexAsync(persistedIndex, rootPath))
                     {
-                        _logger?.Info("Loaded valid persisted index, performing quick update...");
+                        _logger?.Info("Loaded valid persisted index, restoring content...");
                         await _searchIndex.LoadFromPersistedAsync(persistedIndex);
                         _isIndexBuilt = true;
                         
-                        // Do incremental update in background
-                        _ = Task.Run(async () => await UpdateIndexForModifiedFiles(persistedIndex));
+                        // If previews are empty, trigger background content load
+                        if (persistedIndex.Entries.Any(e => string.IsNullOrEmpty(e.ContentPreview)))
+                        {
+                            _logger?.Info("Some previews missing, loading content in background");
+                            _ = Task.Run(async () => await UpdateIndexForModifiedFiles(persistedIndex));
+                        }
                         
                         return true;
                     }
@@ -121,9 +125,24 @@ namespace NoteNest.UI.Services
                 _logger?.Info("Building fresh search index...");
                 var success = await BuildIndexAsync();
                 
-                // Persist the new index
                 if (success)
                 {
+                    // Wait for content to load (with timeout)
+                    _logger?.Info("Waiting for content to load...");
+                    var contentLoadTask = _searchIndex.WaitForContentAsync();
+                    var timeoutTask = Task.Delay(5000); // 5 second timeout
+                    
+                    var completedTask = await Task.WhenAny(contentLoadTask, timeoutTask);
+                    if (completedTask == timeoutTask)
+                    {
+                        _logger?.Warning("Content loading timed out after 5 seconds, search will use partial index");
+                    }
+                    else
+                    {
+                        _logger?.Info("Content loading completed");
+                    }
+                    
+                    // Persist the index regardless
                     await PersistCurrentIndexAsync();
                 }
                 
@@ -203,8 +222,14 @@ namespace NoteNest.UI.Services
         /// </summary>
         public async Task<List<SearchResultViewModel>> SearchAsync(string query, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(query))
+            // Validate minimum query length
+            if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2)
+            {
+                _logger?.Debug($"Query too short: '{query}'");
                 return new List<SearchResultViewModel>();
+            }
+            
+            query = query.Trim();
             
             // Check cache first
             if (_searchCache.TryGetValue(query, out var cached))
@@ -216,15 +241,16 @@ namespace NoteNest.UI.Services
             await _searchLock.WaitAsync(cancellationToken);
             try
             {
-                if (!_isIndexBuilt)
+                // If index isn't ready, use fallback search
+                if (!_isIndexBuilt || !_searchIndex.IsContentLoaded)
                 {
-                    _logger?.Warning("Search attempted before index ready");
-                    return new List<SearchResultViewModel>();
+                    _logger?.Warning($"Index not ready (built={_isIndexBuilt}, content={_searchIndex.IsContentLoaded}), using fallback search");
+                    return await FallbackFileSearchAsync(query, cancellationToken);
                 }
                 
                 var results = await SearchInternalAsync(query, cancellationToken);
                 
-                // Update cache
+                // Update cache only for fully indexed results
                 _searchCache.Set(query, results);
                 
                 return results;
@@ -268,7 +294,9 @@ namespace NoteNest.UI.Services
                 Preview = r.Preview ?? "",
                 Relevance = r.Relevance,
                 Score = CalculateScore(r, tokens, expandedQuery),
-                ResultType = string.IsNullOrEmpty(r.NoteId) ? SearchResultType.Category : SearchResultType.Note
+                ResultType = string.IsNullOrEmpty(r.NoteId) ? SearchResultType.Category : SearchResultType.Note,
+                SearchQuery = query, // Pass the original query for highlighting
+                LastModified = File.Exists(r.FilePath) ? File.GetLastWriteTime(r.FilePath) : DateTime.MinValue
             })
             .OrderByDescending(r => r.Score)
             .ThenByDescending(r => r.LastModified)
@@ -293,6 +321,111 @@ namespace NoteNest.UI.Services
             score += 1;
             
             return score;
+        }
+
+        /// <summary>
+        /// Fallback search when index isn't ready - searches titles and recent files only
+        /// </summary>
+        private async Task<List<SearchResultViewModel>> FallbackFileSearchAsync(string query, CancellationToken cancellationToken)
+        {
+            _logger?.Info($"Performing fallback search for: {query}");
+            var results = new List<SearchResultViewModel>();
+            
+            try
+            {
+                // Load categories and notes quickly
+                var metadataPath = _configService.Settings?.MetadataPath ?? Path.Combine(PathService.ProjectsPath, ".notenest");
+                var categories = await _noteService.LoadCategoriesAsync(metadataPath) ?? new List<CategoryModel>();
+                
+                // Get all notes
+                var allNotes = new List<NoteModel>();
+                foreach (var category in categories)
+                {
+                    if (cancellationToken.IsCancellationRequested) break;
+                    
+                    var notes = await _noteService.GetNotesInCategoryAsync(category);
+                    if (notes != null)
+                    {
+                        allNotes.AddRange(notes);
+                    }
+                }
+                
+                // Generate word variants for better matching
+                var tokens = WordVariantProcessor.TokenizeQuery(query);
+                var searchTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var token in tokens)
+                {
+                    var variants = WordVariantProcessor.GenerateVariants(token);
+                    searchTerms.UnionWith(variants);
+                }
+                
+                // Search through notes (title and filename only for speed)
+                foreach (var note in allNotes)
+                {
+                    if (cancellationToken.IsCancellationRequested) break;
+                    
+                    bool matches = false;
+                    int score = 0;
+                    
+                    // Check title
+                    if (!string.IsNullOrWhiteSpace(note.Title))
+                    {
+                        foreach (var term in searchTerms)
+                        {
+                            if (note.Title.Contains(term, StringComparison.OrdinalIgnoreCase))
+                            {
+                                matches = true;
+                                score += 10; // Title matches are worth more
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Check filename
+                    if (!matches && !string.IsNullOrWhiteSpace(note.FilePath))
+                    {
+                        var fileName = Path.GetFileNameWithoutExtension(note.FilePath);
+                        foreach (var term in searchTerms)
+                        {
+                            if (fileName?.Contains(term, StringComparison.OrdinalIgnoreCase) == true)
+                            {
+                                matches = true;
+                                score += 5;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (matches)
+                    {
+                        results.Add(new SearchResultViewModel
+                        {
+                            NoteId = note.Id,
+                            Title = note.Title ?? "Untitled",
+                            FilePath = note.FilePath ?? "",
+                            Preview = "Content loading...", // Indicate content is being loaded
+                            Score = score,
+                            LastModified = note.LastModified,
+                            ResultType = SearchResultType.Note,
+                            SearchQuery = query
+                        });
+                    }
+                }
+                
+                // Sort by score
+                results = results.OrderByDescending(r => r.Score)
+                                .ThenByDescending(r => r.LastModified)
+                                .Take(20) // Limit results
+                                .ToList();
+                
+                _logger?.Info($"Fallback search found {results.Count} results");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Fallback search failed");
+            }
+            
+            return results;
         }
 
         /// <summary>
@@ -414,20 +547,90 @@ namespace NoteNest.UI.Services
 
     public class SearchResultViewModel
     {
+        private string _searchQuery = string.Empty;
+        
         public string NoteId { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public string FilePath { get; set; } = string.Empty;
         public string CategoryId { get; set; } = string.Empty;
         public string Preview { get; set; } = string.Empty;
         public float Relevance { get; set; }
-        public int Score { get; set; } // NEW: Add scoring for relevance
-        public DateTime LastModified { get; set; } // NEW: Add LastModified for sorting
+        public int Score { get; set; }
+        public DateTime LastModified { get; set; }
         public SearchResultType ResultType { get; set; }
+        
+        // Store the search query for highlighting
+        public string SearchQuery 
+        { 
+            get => _searchQuery;
+            set => _searchQuery = value ?? string.Empty;
+        }
         
         // UI-friendly properties
         public string DisplayTitle => !string.IsNullOrEmpty(Title) ? Title : "Untitled";
-        public string DisplayPreview => !string.IsNullOrEmpty(Preview) ? Preview : "No content preview";
+        
+        public string DisplayPreview 
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Preview))
+                    return "No content preview";
+                    
+                // Return highlighted preview if we have a search query
+                if (!string.IsNullOrEmpty(SearchQuery))
+                    return HighlightTerms(Preview, SearchQuery);
+                    
+                return Preview;
+            }
+        }
+        
+        public string HighlightedTitle
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Title))
+                    return "Untitled";
+                    
+                if (!string.IsNullOrEmpty(SearchQuery))
+                    return HighlightTerms(Title, SearchQuery);
+                    
+                return Title;
+            }
+        }
+        
         public string ResultIcon => ResultType == SearchResultType.Note ? "📄" : "📁";
+        
+        /// <summary>
+        /// Highlights search terms in text by wrapping them with markdown bold
+        /// </summary>
+        private string HighlightTerms(string text, string query)
+        {
+            if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(query))
+                return text;
+            
+            try
+            {
+                // Split query into terms
+                var terms = query.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                
+                foreach (var term in terms)
+                {
+                    if (term.Length < 2) continue; // Skip single characters
+                    
+                    // Use regex to wrap matches in bold markdown
+                    // (?i) makes it case-insensitive, \b ensures word boundaries
+                    var pattern = $@"\b({System.Text.RegularExpressions.Regex.Escape(term)}[a-z]*)\b";
+                    text = System.Text.RegularExpressions.Regex.Replace(text, pattern, "**$1**", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                }
+                
+                return text;
+            }
+            catch
+            {
+                // If highlighting fails, return original text
+                return text;
+            }
+        }
         
         // Override ToString to prevent "SearchResultViewModel" from appearing in search box
         public override string ToString()

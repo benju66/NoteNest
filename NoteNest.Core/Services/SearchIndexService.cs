@@ -24,8 +24,13 @@ namespace NoteNest.Core.Services
         private DateTime _lastIndexTime;
         private bool _indexDirty = true;
         private volatile bool _contentLoadingComplete = false;
+        private volatile int _contentLoadProgress = 0;
+        private volatile int _totalNotesToLoad = 0;
+        private TaskCompletionSource<bool> _contentLoadingTask = new();
 
         public bool IsContentLoaded => _contentLoadingComplete;
+        public Task<bool> WaitForContentAsync() => _contentLoadingTask.Task;
+        public int ContentLoadProgress => _totalNotesToLoad > 0 ? (_contentLoadProgress * 100 / _totalNotesToLoad) : 0;
         public bool NeedsReindex => _indexDirty || (DateTime.Now - _lastIndexTime).TotalMinutes > 30;
 
         public class SearchResult
@@ -204,71 +209,103 @@ namespace NoteNest.Core.Services
         }
 
         /// <summary>
-        /// Loads note content asynchronously in the background
+        /// Loads note content asynchronously in parallel for better performance
         /// </summary>
         private async Task LoadContentInBackgroundAsync(List<NoteModel> notes)
         {
-            _logger?.Debug("[SearchIndex] Starting background content loading");
+            _logger?.Debug("[SearchIndex] Starting parallel background content loading");
+            _totalNotesToLoad = notes.Count;
+            _contentLoadProgress = 0;
+            _contentLoadingTask = new TaskCompletionSource<bool>();
+            
             int loadedCount = 0;
             int failedCount = 0;
             int skippedCount = 0;
-
+            
+            // Use SemaphoreSlim to limit concurrent file operations
+            using var semaphore = new SemaphoreSlim(4, 4); // Max 4 concurrent file reads
+            var loadTasks = new List<Task>();
+            
             foreach (var note in notes)
             {
                 if (note == null || string.IsNullOrWhiteSpace(note.FilePath))
                 {
-                    skippedCount++;
+                    Interlocked.Increment(ref skippedCount);
+                    Interlocked.Increment(ref _contentLoadProgress);
                     continue;
                 }
-
-                try
+                
+                var loadTask = Task.Run(async () =>
                 {
-                    // Check if file exists
-                    bool fileExists = _fileSystem != null 
-                        ? await _fileSystem.ExistsAsync(note.FilePath)
-                        : File.Exists(note.FilePath);
-
-                    if (!fileExists)
+                    await semaphore.WaitAsync();
+                    try
                     {
-                        _logger?.Debug($"[SearchIndex] File not found: {note.FilePath}");
-                        skippedCount++;
-                        continue;
-                    }
+                        // Check if file exists
+                        bool fileExists = _fileSystem != null 
+                            ? await _fileSystem.ExistsAsync(note.FilePath)
+                            : File.Exists(note.FilePath);
 
-                    // Load content from file
-                    string content = await LoadNoteContentAsync(note.FilePath);
-                    if (!string.IsNullOrEmpty(content) && content != string.Empty)
-                    {
-                        // Cache the content
-                        lock (_contentCache)
+                        if (!fileExists)
                         {
-                            _contentCache[note.Id] = content;
+                            _logger?.Debug($"[SearchIndex] File not found: {note.FilePath}");
+                            Interlocked.Increment(ref skippedCount);
+                            return;
                         }
 
-                        // Index the content
-                        IndexNoteContent(note, content);
-                        loadedCount++;
+                        // Load content from file
+                        string content = await LoadNoteContentAsync(note.FilePath);
+                        if (!string.IsNullOrEmpty(content))
+                        {
+                            // Generate preview immediately
+                            var preview = GetPreview(content);
+                            
+                            // Update the search result with preview
+                            lock (_indexLock)
+                            {
+                                // Find and update existing search results for this note
+                                foreach (var termResults in _searchIndex.Values)
+                                {
+                                    var noteResult = termResults.FirstOrDefault(r => r.NoteId == note.Id);
+                                    if (noteResult != null)
+                                    {
+                                        noteResult.Preview = preview;
+                                    }
+                                }
+                                
+                                // Cache the content
+                                _contentCache[note.Id] = content;
+                            }
+                            
+                            // Index the full content for better search
+                            IndexNoteContent(note, content);
+                            Interlocked.Increment(ref loadedCount);
+                        }
+                        else
+                        {
+                            Interlocked.Increment(ref skippedCount);
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        skippedCount++;
+                        _logger?.Debug($"[SearchIndex] Failed to load content for {note.Title}: {ex.Message}");
+                        Interlocked.Increment(ref failedCount);
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger?.Debug($"[SearchIndex] Failed to load content for {note.Title}: {ex.Message}");
-                    failedCount++;
-                }
-
-                // Yield periodically to avoid blocking
-                if ((loadedCount + failedCount + skippedCount) % 10 == 0)
-                {
-                    await Task.Yield();
-                }
+                    finally
+                    {
+                        Interlocked.Increment(ref _contentLoadProgress);
+                        semaphore.Release();
+                    }
+                });
+                
+                loadTasks.Add(loadTask);
             }
-
+            
+            // Wait for all load tasks to complete
+            await Task.WhenAll(loadTasks);
+            
             _contentLoadingComplete = true;
-            _logger?.Info($"[SearchIndex] Background content loading complete: {loadedCount} loaded, {failedCount} failed, {skippedCount} skipped");
+            _contentLoadingTask.SetResult(true);
+            _logger?.Info($"[SearchIndex] Parallel content loading complete: {loadedCount} loaded, {failedCount} failed, {skippedCount} skipped");
         }
 
         /// <summary>
@@ -575,7 +612,7 @@ namespace NoteNest.Core.Services
         }
 
         /// <summary>
-        /// Creates a preview snippet from content
+        /// Creates a preview snippet from content with better list handling
         /// </summary>
         private string GetPreview(string content, int maxLength = 150)
         {
@@ -587,38 +624,61 @@ namespace NoteNest.Core.Services
 
             try
             {
-                // Clean up the content to create a readable preview
-                var preview = content;
+                // Split into lines first to preserve structure
+                var lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                var meaningfulLines = new List<string>();
                 
-                // Convert bullet points to readable format (matching NoteNest's FormattedTextEditor style)
-                preview = System.Text.RegularExpressions.Regex.Replace(preview, @"^\s*[-*+]\s+", "• ", System.Text.RegularExpressions.RegexOptions.Multiline);
+                foreach (var line in lines.Take(5)) // Take first 5 lines max
+                {
+                    var processed = line.Trim();
+                    
+                    // Skip empty lines
+                    if (string.IsNullOrWhiteSpace(processed))
+                        continue;
+                        
+                    // Convert markdown headers to plain text
+                    processed = System.Text.RegularExpressions.Regex.Replace(processed, @"^#+\s+", "", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    
+                    // Convert bullet points to readable format
+                    processed = System.Text.RegularExpressions.Regex.Replace(processed, @"^[\s]*[-*+]\s+", "• ", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    
+                    // Convert numbered lists
+                    processed = System.Text.RegularExpressions.Regex.Replace(processed, @"^[\s]*\d+\.\s+", "• ", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    
+                    // Remove excessive markdown formatting
+                    processed = System.Text.RegularExpressions.Regex.Replace(processed, @"\*\*(.+?)\*\*", "$1", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    processed = System.Text.RegularExpressions.Regex.Replace(processed, @"__(.+?)__", "$1", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    processed = System.Text.RegularExpressions.Regex.Replace(processed, @"\*(.+?)\*", "$1", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    processed = System.Text.RegularExpressions.Regex.Replace(processed, @"_(.+?)_", "$1", System.Text.RegularExpressions.RegexOptions.Multiline);
+                    
+                    if (!string.IsNullOrWhiteSpace(processed))
+                    {
+                        meaningfulLines.Add(processed);
+                    }
+                }
                 
-                // Convert nested bullet points (with indentation)
-                preview = System.Text.RegularExpressions.Regex.Replace(preview, @"^\s{2,}[-*+]\s+", " • ", System.Text.RegularExpressions.RegexOptions.Multiline);
-                
-                // Remove markdown headers
-                preview = System.Text.RegularExpressions.Regex.Replace(preview, @"^#+\s+", "", System.Text.RegularExpressions.RegexOptions.Multiline);
-                
-                // Convert line breaks to spaces for single-line preview
-                preview = System.Text.RegularExpressions.Regex.Replace(preview, @"\r?\n", " ");
+                // Join lines with space separator
+                var preview = string.Join(" ", meaningfulLines);
                 
                 // Remove excessive whitespace
                 preview = System.Text.RegularExpressions.Regex.Replace(preview, @"\s+", " ").Trim();
                 
-                _logger?.Debug($"[SearchIndex] GetPreview: original={content.Length} chars, normalized={preview.Length} chars");
-
+                _logger?.Debug($"[SearchIndex] GetPreview: generated {preview.Length} char preview from {content.Length} chars");
+                
                 if (string.IsNullOrWhiteSpace(preview))
                 {
-                    _logger?.Warning("[SearchIndex] GetPreview: preview is empty after processing");
-                    // Fallback: just take first line of original content
-                    var firstLine = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+                    // Fallback: just take first non-empty line
+                    var firstLine = lines.FirstOrDefault(l => !string.IsNullOrWhiteSpace(l))?.Trim();
                     if (!string.IsNullOrEmpty(firstLine))
                     {
-                        return firstLine.Length > maxLength ? firstLine.Substring(0, maxLength) + "..." : firstLine;
+                        return firstLine.Length > maxLength 
+                            ? firstLine.Substring(0, maxLength) + "..." 
+                            : firstLine;
                     }
                     return "Content available";
                 }
 
+                // Truncate if needed
                 if (preview.Length <= maxLength)
                     return preview;
 
@@ -630,17 +690,14 @@ namespace NoteNest.Core.Services
                     truncated = truncated.Substring(0, lastSpace);
                 }
 
-                return truncated + "...";
+                return truncated.Trim() + "...";
             }
             catch (Exception ex)
             {
                 _logger?.Warning($"[SearchIndex] GetPreview failed: {ex.Message}");
                 // Safe fallback
-                if (content.Length > maxLength) 
-                {
-                    return content.Substring(0, Math.Min(maxLength, content.Length)) + "...";
-                }
-                return content;
+                var safeLength = Math.Min(maxLength, content.Length);
+                return content.Substring(0, safeLength) + (content.Length > maxLength ? "..." : "");
             }
         }
 
@@ -680,7 +737,7 @@ namespace NoteNest.Core.Services
         #region Persistence Methods
 
         /// <summary>
-        /// Loads index from persisted data
+        /// Loads index from persisted data with proper preview restoration
         /// </summary>
         public Task LoadFromPersistedAsync(PersistedIndex persisted)
         {
@@ -688,9 +745,8 @@ namespace NoteNest.Core.Services
             {
                 _searchIndex.Clear();
                 _contentCache.Clear();
+                _contentLoadingComplete = false;
             }
-
-            var documents = new Dictionary<string, SearchDocument>();
             
             foreach (var entry in persisted.Entries)
             {
@@ -700,30 +756,11 @@ namespace NoteNest.Core.Services
                     Title = entry.Title,
                     FilePath = entry.RelativePath,
                     CategoryId = "", // Categories handled separately
-                    Preview = entry.ContentPreview,
+                    Preview = entry.ContentPreview ?? "", // Ensure preview is loaded
                     Relevance = 1.0f
                 };
-
-                // Index the persisted content
-                if (!string.IsNullOrWhiteSpace(entry.Title))
-                {
-                    var titleWords = TokenizeText(entry.Title);
-                    foreach (var word in titleWords)
-                    {
-                        AddToIndex(word, result, 2.0f); // Higher weight for title
-                    }
-                }
-
-                if (!string.IsNullOrWhiteSpace(entry.ContentPreview))
-                {
-                    var contentWords = TokenizeText(entry.ContentPreview);
-                    foreach (var word in contentWords)
-                    {
-                        AddToIndex(word, result, 1.0f);
-                    }
-                }
-
-                // Add to content cache
+                
+                // Cache the content preview if available
                 if (!string.IsNullOrEmpty(entry.ContentPreview))
                 {
                     lock (_contentCache)
@@ -731,16 +768,42 @@ namespace NoteNest.Core.Services
                         _contentCache[entry.Id] = entry.ContentPreview;
                     }
                 }
+                
+                // Index title words
+                if (!string.IsNullOrWhiteSpace(entry.Title))
+                {
+                    var titleWords = TokenizeText(entry.Title);
+                    foreach (var word in titleWords)
+                    {
+                        AddToIndex(word, result, 2.0f);
+                    }
+                }
+                
+                // Index content words from preview (for immediate searchability)
+                if (!string.IsNullOrWhiteSpace(entry.ContentPreview))
+                {
+                    var contentWords = TokenizeText(entry.ContentPreview);
+                    int wordCount = 0;
+                    foreach (var word in contentWords)
+                    {
+                        if (wordCount >= 100) break; // Limit preview indexing
+                        AddToIndex(word, result, 1.0f);
+                        wordCount++;
+                    }
+                }
             }
+            
+            // Mark content as loaded since we have previews
+            _contentLoadingComplete = true;
+            _contentLoadingTask.SetResult(true);
             
             lock (_indexLock)
             {
                 _lastIndexTime = persisted.CreatedAt;
                 _indexDirty = false;
-                _contentLoadingComplete = true;
             }
             
-            _logger?.Info($"Loaded {persisted.Entries.Count} documents from persisted index");
+            _logger?.Info($"[SearchIndex] Loaded {persisted.Entries.Count} entries from persistence with previews");
             return Task.CompletedTask;
         }
 
