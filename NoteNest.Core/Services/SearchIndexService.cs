@@ -8,6 +8,7 @@ using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Services.Search;
 
 namespace NoteNest.Core.Services
 {
@@ -29,14 +30,14 @@ namespace NoteNest.Core.Services
 
         public class SearchResult
         {
-            public string NoteId { get; set; }
-            public string Title { get; set; }
-            public string FilePath { get; set; }
-            public string CategoryId { get; set; }
-            public string Preview { get; set; }
+            public string NoteId { get; set; } = string.Empty;
+            public string Title { get; set; } = string.Empty;
+            public string FilePath { get; set; } = string.Empty;
+            public string CategoryId { get; set; } = string.Empty;
+            public string Preview { get; set; } = string.Empty;
             public float Relevance { get; set; }
             
-            public override bool Equals(object obj)
+            public override bool Equals(object? obj)
             {
                 if (obj is SearchResult other)
                 {
@@ -53,13 +54,13 @@ namespace NoteNest.Core.Services
 
         public SearchIndexService(
             int contentWordLimit = 500, 
-            IMarkdownService markdownService = null,
-            IFileSystemProvider fileSystem = null,
-            IAppLogger logger = null)
+            IMarkdownService? markdownService = null,
+            IFileSystemProvider? fileSystem = null,
+            IAppLogger? logger = null)
         {
             _searchIndex = new Dictionary<string, HashSet<SearchResult>>(StringComparer.OrdinalIgnoreCase);
             _contentWordLimit = contentWordLimit > 100 ? contentWordLimit : 500;
-            _markdownService = markdownService ?? new MarkdownService(null);
+            _markdownService = markdownService ?? new MarkdownService(logger ?? AppLogger.Instance);
             _fileSystem = fileSystem ?? new DefaultFileSystemProvider();
             _logger = logger ?? AppLogger.Instance;
         }
@@ -145,7 +146,7 @@ namespace NoteNest.Core.Services
                     {
                         _logger?.Error(ex, "[SearchIndex] Background content loading failed");
                     }
-                });
+                }).ConfigureAwait(false);
 
                 _logger?.Info($"[SearchIndex] Initial index built with {_searchIndex.Count} unique terms");
                 return true;
@@ -236,7 +237,7 @@ namespace NoteNest.Core.Services
 
                     // Load content from file
                     string content = await LoadNoteContentAsync(note.FilePath);
-                    if (!string.IsNullOrEmpty(content))
+                    if (!string.IsNullOrEmpty(content) && content != string.Empty)
                     {
                         // Cache the content
                         lock (_contentCache)
@@ -321,7 +322,7 @@ namespace NoteNest.Core.Services
                 }
             }
 
-            return null;
+            return string.Empty;
         }
 
         /// <summary>
@@ -345,7 +346,7 @@ namespace NoteNest.Core.Services
                 Title = note.Title ?? "Untitled",
                 FilePath = note.FilePath ?? "",
                 CategoryId = note.CategoryId ?? "",
-                Preview = preview,
+                Preview = preview ?? "",
                 Relevance = 1.0f
             };
 
@@ -654,7 +655,7 @@ namespace NoteNest.Core.Services
         /// <summary>
         /// Gets the cached content for a note (if available)
         /// </summary>
-        public string GetCachedContent(string noteId)
+        public string? GetCachedContent(string noteId)
         {
             lock (_contentCache)
             {
@@ -675,5 +676,333 @@ namespace NoteNest.Core.Services
                 _contentLoadingComplete = false;
             }
         }
+
+        #region Persistence Methods
+
+        /// <summary>
+        /// Loads index from persisted data
+        /// </summary>
+        public Task LoadFromPersistedAsync(PersistedIndex persisted)
+        {
+            lock (_indexLock)
+            {
+                _searchIndex.Clear();
+                _contentCache.Clear();
+            }
+
+            var documents = new Dictionary<string, SearchDocument>();
+            
+            foreach (var entry in persisted.Entries)
+            {
+                var result = new SearchResult
+                {
+                    NoteId = entry.Id,
+                    Title = entry.Title,
+                    FilePath = entry.RelativePath,
+                    CategoryId = "", // Categories handled separately
+                    Preview = entry.ContentPreview,
+                    Relevance = 1.0f
+                };
+
+                // Index the persisted content
+                if (!string.IsNullOrWhiteSpace(entry.Title))
+                {
+                    var titleWords = TokenizeText(entry.Title);
+                    foreach (var word in titleWords)
+                    {
+                        AddToIndex(word, result, 2.0f); // Higher weight for title
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.ContentPreview))
+                {
+                    var contentWords = TokenizeText(entry.ContentPreview);
+                    foreach (var word in contentWords)
+                    {
+                        AddToIndex(word, result, 1.0f);
+                    }
+                }
+
+                // Add to content cache
+                if (!string.IsNullOrEmpty(entry.ContentPreview))
+                {
+                    lock (_contentCache)
+                    {
+                        _contentCache[entry.Id] = entry.ContentPreview;
+                    }
+                }
+            }
+            
+            lock (_indexLock)
+            {
+                _lastIndexTime = persisted.CreatedAt;
+                _indexDirty = false;
+                _contentLoadingComplete = true;
+            }
+            
+            _logger?.Info($"Loaded {persisted.Entries.Count} documents from persisted index");
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Exports current index for persistence
+        /// </summary>
+        public Task<PersistedIndex> ExportForPersistenceAsync()
+        {
+            var index = new PersistedIndex
+            {
+                CreatedAt = DateTime.UtcNow,
+                Entries = new List<IndexEntry>()
+            };
+            
+            var processedNotes = new HashSet<string>();
+            
+            lock (_indexLock)
+            {
+                // Collect all unique notes from the search index
+                foreach (var resultSet in _searchIndex.Values)
+                {
+                    foreach (var result in resultSet)
+                    {
+                        if (!string.IsNullOrEmpty(result.NoteId) && !processedNotes.Contains(result.NoteId))
+                        {
+                            processedNotes.Add(result.NoteId);
+                            
+                            // Get cached content if available
+                            string? content = null;
+                            _contentCache.TryGetValue(result.NoteId, out content);
+                            
+                            index.Entries.Add(new IndexEntry
+                            {
+                                Id = result.NoteId,
+                                RelativePath = result.FilePath,
+                                Title = result.Title,
+                                ContentPreview = content?.Length > 500 
+                                    ? content.Substring(0, 500) 
+                                    : content ?? "",
+                                Tags = new List<string>(), // TODO: Add tags when available
+                                LastModified = File.Exists(result.FilePath) 
+                                    ? File.GetLastWriteTimeUtc(result.FilePath) 
+                                    : DateTime.UtcNow,
+                                FileSize = File.Exists(result.FilePath) 
+                                    ? new FileInfo(result.FilePath).Length 
+                                    : 0
+                            });
+                        }
+                    }
+                }
+            }
+            
+            return Task.FromResult(index);
+        }
+
+        /// <summary>
+        /// Updates index for a single file
+        /// </summary>
+        public async Task UpdateFileAsync(string filePath)
+        {
+            try
+            {
+                var content = await LoadNoteContentAsync(filePath);
+                var title = Path.GetFileNameWithoutExtension(filePath);
+                
+                var result = new SearchResult
+                {
+                    NoteId = Guid.NewGuid().ToString(),
+                    Title = title,
+                    FilePath = filePath,
+                    CategoryId = "",
+                    Preview = GetPreview(content),
+                    Relevance = 1.0f
+                };
+
+                // Remove existing entries for this file first
+                RemoveFile(filePath);
+                
+                // Index title words
+                if (!string.IsNullOrWhiteSpace(title))
+                {
+                    var titleWords = TokenizeText(title);
+                    foreach (var word in titleWords)
+                    {
+                        AddToIndex(word, result, 2.0f);
+                    }
+                }
+                
+                // Index content words
+                if (!string.IsNullOrEmpty(content))
+                {
+                    var contentWords = TokenizeText(content);
+                    foreach (var word in contentWords)
+                    {
+                        AddToIndex(word, result, 1.0f);
+                    }
+
+                    // Cache content
+                    lock (_contentCache)
+                    {
+                        _contentCache[result.NoteId] = content;
+                    }
+                }
+                
+                _logger?.Debug($"Updated index for file: {filePath}");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning($"Failed to update index for file {filePath}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Adds a new file to the index
+        /// </summary>
+        public async Task AddFileAsync(string filePath)
+        {
+            await UpdateFileAsync(filePath); // Same logic for add
+        }
+
+        /// <summary>
+        /// Removes a file from the index
+        /// </summary>
+        public void RemoveFile(string filePath)
+        {
+            lock (_indexLock)
+            {
+                var toRemove = new List<string>();
+                
+                foreach (var kvp in _searchIndex)
+                {
+                    var results = kvp.Value;
+                    var toRemoveFromSet = results.Where(r => r.FilePath == filePath).ToList();
+                    
+                    foreach (var result in toRemoveFromSet)
+                    {
+                        results.Remove(result);
+                        
+                        // Remove from content cache
+                        if (!string.IsNullOrEmpty(result.NoteId))
+                        {
+                            _contentCache.Remove(result.NoteId);
+                        }
+                    }
+                    
+                    if (!results.Any())
+                    {
+                        toRemove.Add(kvp.Key);
+                    }
+                }
+                
+                foreach (var key in toRemove)
+                {
+                    _searchIndex.Remove(key);
+                }
+            }
+            
+            _logger?.Debug($"Removed file from index: {filePath}");
+        }
+
+        /// <summary>
+        /// Renames a file in the index
+        /// </summary>
+        public void RenameFile(string oldPath, string newPath)
+        {
+            lock (_indexLock)
+            {
+                foreach (var resultSet in _searchIndex.Values)
+                {
+                    var matchingResults = resultSet.Where(r => r.FilePath == oldPath).ToList();
+                    foreach (var result in matchingResults)
+                    {
+                        result.FilePath = newPath;
+                        result.Title = Path.GetFileNameWithoutExtension(newPath);
+                    }
+                }
+            }
+            
+            _logger?.Debug($"Renamed file in index: {oldPath} -> {newPath}");
+        }
+
+        #endregion
+
+        #region Enhanced Search Methods
+
+        /// <summary>
+        /// Search with word variants support
+        /// </summary>
+        public Task<List<SearchResult>> SearchAsync(
+            HashSet<string> searchTerms, 
+            CancellationToken cancellationToken = default)
+        {
+            var results = new List<SearchResult>();
+            var resultScores = new Dictionary<string, (SearchResult result, float score)>();
+            
+            lock (_indexLock)
+            {
+                foreach (var term in searchTerms)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+                    
+                    // Exact match
+                    if (_searchIndex.TryGetValue(term.ToLowerInvariant(), out var exactMatches))
+                    {
+                        foreach (var result in exactMatches)
+                        {
+                            UpdateResultScore(resultScores, result, 1.0f);
+                        }
+                    }
+
+                    // Prefix match
+                    var prefixMatches = _searchIndex
+                        .Where(kvp => kvp.Key.StartsWith(term.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(kvp => kvp.Value);
+
+                    foreach (var result in prefixMatches)
+                    {
+                        UpdateResultScore(resultScores, result, 0.7f);
+                    }
+
+                    // Fuzzy match for longer terms
+                    if (term.Length >= 3)
+                    {
+                        var fuzzyMatches = _searchIndex
+                            .Where(kvp => kvp.Key.Contains(term.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase) 
+                                         && !kvp.Key.StartsWith(term.ToLowerInvariant(), StringComparison.OrdinalIgnoreCase))
+                            .SelectMany(kvp => kvp.Value);
+
+                        foreach (var result in fuzzyMatches)
+                        {
+                            UpdateResultScore(resultScores, result, 0.5f);
+                        }
+                    }
+                }
+            }
+            
+            // Sort by score and return results
+            results = resultScores
+                .OrderByDescending(kvp => kvp.Value.score)
+                .ThenBy(kvp => kvp.Value.result.Title)
+                .Take(50)
+                .Select(kvp => kvp.Value.result)
+                .ToList();
+            
+            return Task.FromResult(results);
+        }
+
+        #endregion
+
+        #region Helper Classes for Persistence
+
+        private class SearchDocument
+        {
+            public string Id { get; set; } = string.Empty;
+            public string Path { get; set; } = string.Empty;
+            public string Title { get; set; } = string.Empty;
+            public string Content { get; set; } = string.Empty;
+            public List<string>? Tags { get; set; }
+            public DateTime LastModified { get; set; }
+        }
+
+        #endregion
     }
 }

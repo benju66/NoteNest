@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Services.Search;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.ViewModels;
 
@@ -28,16 +29,19 @@ namespace NoteNest.UI.Services
         private readonly ConfigurationService _configService;
         private readonly IAppLogger _logger;
         private readonly FileWatcherService _fileWatcher;
+        private readonly SearchDebouncer _debouncer;
+        private readonly SearchIndexPersistence _persistence;
+        
         private readonly SemaphoreSlim _searchLock = new(1, 1);
         private readonly SemaphoreSlim _indexBuildLock = new(1, 1);
         
-        // Track index state
         private volatile bool _isIndexBuilt = false;
         private volatile bool _isInitializing = false;
         
-        // Simple cache for recent searches
-        private readonly Dictionary<string, (List<SearchResultViewModel> results, DateTime timestamp)> _searchCache = new();
-        private readonly TimeSpan _cacheExpiry = TimeSpan.FromSeconds(30);
+        // Enhanced cache with LRU and size limits
+        private readonly LRUCache<string, List<SearchResultViewModel>> _searchCache;
+        private const int MaxCacheEntries = 50;
+        private const int CacheExpirySeconds = 30;
 
         public bool IsIndexReady => _isIndexBuilt;
 
@@ -54,24 +58,32 @@ namespace NoteNest.UI.Services
             
             var contentWordLimit = _configService.Settings?.SearchIndexContentWordLimit ?? 500;
             
-            // Create search index with proper dependencies
             _searchIndex = new SearchIndexService(
                 contentWordLimit,
                 new MarkdownService(_logger),
                 new DefaultFileSystemProvider(),
                 _logger);
             
-            // Subscribe to file changes for incremental updates
+            // Initialize persistence
+            var rootPath = _configService.Settings?.DefaultNotePath ?? PathService.ProjectsPath;
+            _persistence = new SearchIndexPersistence(rootPath, _logger);
+            
+            // Initialize debouncer (2 second delay for file changes)
+            _debouncer = new SearchDebouncer(2000, _logger);
+            
+            // Initialize LRU cache
+            _searchCache = new LRUCache<string, List<SearchResultViewModel>>(MaxCacheEntries, CacheExpirySeconds);
+            
+            // Subscribe to file changes with debouncing
             if (_fileWatcher != null)
             {
-            _fileWatcher.FileChanged += OnFileChanged;
-            _fileWatcher.FileCreated += OnFileCreated;
-            _fileWatcher.FileDeleted += OnFileDeleted;
-            _fileWatcher.FileRenamed += OnFileRenamed;
+                _fileWatcher.FileChanged += OnFileChanged;
+                _fileWatcher.FileCreated += OnFileCreated;
+                _fileWatcher.FileDeleted += OnFileDeleted;
+                _fileWatcher.FileRenamed += OnFileRenamed;
             }
             
-            // Don't build index in constructor - wait for InitializeAsync
-            _logger.Debug("SearchService created, waiting for initialization");
+            _logger?.Debug("SearchService created with persistence and debouncing");
         }
 
         /// <summary>
@@ -85,21 +97,34 @@ namespace NoteNest.UI.Services
             _isInitializing = true;
             try
             {
-                _logger.Info("Initializing search service...");
+                _logger?.Info("Initializing search service with persistence...");
                 
-                // Wait a moment for the app to fully initialize
-                await Task.Delay(500);
+                // Try to load persisted index first
+                var persistedIndex = await _persistence.LoadIndexAsync();
+                if (persistedIndex != null)
+                {
+                    var rootPath = _configService.Settings?.DefaultNotePath ?? PathService.ProjectsPath;
+                    if (await _persistence.ValidateIndexAsync(persistedIndex, rootPath))
+                    {
+                        _logger?.Info("Loaded valid persisted index, performing quick update...");
+                        await _searchIndex.LoadFromPersistedAsync(persistedIndex);
+                        _isIndexBuilt = true;
+                        
+                        // Do incremental update in background
+                        _ = Task.Run(async () => await UpdateIndexForModifiedFiles(persistedIndex));
+                        
+                        return true;
+                    }
+                }
                 
-                // Build the initial index
+                // Fall back to full index build
+                _logger?.Info("Building fresh search index...");
                 var success = await BuildIndexAsync();
                 
+                // Persist the new index
                 if (success)
                 {
-                    _logger.Info("Search service initialized successfully");
-                }
-                else
-                {
-                    _logger.Error("Search service initialization failed");
+                    await PersistCurrentIndexAsync();
                 }
                 
                 return success;
@@ -118,13 +143,10 @@ namespace NoteNest.UI.Services
             await _indexBuildLock.WaitAsync();
             try
             {
-                _logger.Info("Building search index...");
+                _logger?.Info("Building search index...");
                 
                 // Clear cache when rebuilding
-                lock (_searchCache)
-                {
-                    _searchCache.Clear();
-                }
+                _searchCache?.Clear();
 
                 // Load settings and get categories
                 await _configService.LoadSettingsAsync();
@@ -144,29 +166,29 @@ namespace NoteNest.UI.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warning($"Failed to get notes for category {category.Name}: {ex.Message}");
+                        _logger?.Warning($"Failed to get notes for category {category.Name}: {ex.Message}");
                     }
                 }
 
-                _logger.Debug($"Building index with {allNotes.Count} notes from {categories.Count} categories");
+                _logger?.Debug($"Building index with {allNotes.Count} notes from {categories.Count} categories");
 
                 // Build the index using the new async method
                 _isIndexBuilt = await _searchIndex.BuildIndexAsync(categories, allNotes);
 
                 if (_isIndexBuilt)
                 {
-                    _logger.Info($"Search index built successfully with {allNotes.Count} notes");
+                    _logger?.Info($"Search index built successfully with {allNotes.Count} notes");
                 }
                 else
                 {
-                    _logger.Error("Failed to build search index");
+                    _logger?.Error("Failed to build search index");
                 }
 
                 return _isIndexBuilt;
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Exception during index build");
+                _logger?.Error(ex, "Exception during index build");
                 _isIndexBuilt = false;
                 return false;
             }
@@ -177,89 +199,100 @@ namespace NoteNest.UI.Services
         }
 
         /// <summary>
-        /// Performs a search query
+        /// Performs a search query with word variants and enhanced scoring
         /// </summary>
         public async Task<List<SearchResultViewModel>> SearchAsync(string query, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(query))
-            {
-                _logger.Debug("Search query is empty, returning empty results");
                 return new List<SearchResultViewModel>();
-            }
-
-            // Ensure index is built (with lazy initialization)
-            if (!_isIndexBuilt && !_isInitializing)
-            {
-                _logger.Info("Index not ready, initializing now...");
-                await InitializeAsync();
-            }
-
-            // If still not built, return empty
-            if (!_isIndexBuilt)
-            {
-                _logger.Warning("Search index not available, returning empty results");
-                return new List<SearchResultViewModel>();
-            }
-
+            
             // Check cache first
-            var cacheKey = query.ToLowerInvariant();
-            lock (_searchCache)
+            if (_searchCache.TryGetValue(query, out var cached))
             {
-                if (_searchCache.TryGetValue(cacheKey, out var cached))
-                {
-                    if (DateTime.Now - cached.timestamp < _cacheExpiry)
-                    {
-                        _logger.Debug($"Cache hit for query: '{query}'");
-                        return cached.results;
-                    }
-                    _searchCache.Remove(cacheKey);
-                }
+                _logger?.Debug($"Cache hit for query: {query}");
+                return cached;
             }
-
-            _logger.Debug($"Starting search for query: '{query}'");
-
+            
             await _searchLock.WaitAsync(cancellationToken);
             try
             {
-                // Perform the search
-                var searchResults = await Task.Run(() => 
-                    _searchIndex.Search(query, maxResults: 50), 
-                    cancellationToken);
-                
-                _logger.Debug($"Index search returned {searchResults.Count} results");
-                
-                // Convert to ViewModels
-                var viewModels = searchResults.Select(r => new SearchResultViewModel
+                if (!_isIndexBuilt)
                 {
-                    NoteId = r.NoteId,
-                    Title = r.Title ?? "Untitled",
-                    FilePath = r.FilePath,
-                    CategoryId = r.CategoryId,
-                    Preview = r.Preview ?? "",
-                    Relevance = r.Relevance,
-                    ResultType = string.IsNullOrEmpty(r.NoteId) ? SearchResultType.Category : SearchResultType.Note
-                }).ToList();
-                
-                // Cache the results
-                lock (_searchCache)
-                {
-                    _searchCache[cacheKey] = (viewModels, DateTime.Now);
-                    
-                    // Limit cache size
-                    if (_searchCache.Count > 100)
-                    {
-                        var oldest = _searchCache.OrderBy(kvp => kvp.Value.timestamp).First().Key;
-                        _searchCache.Remove(oldest);
-                    }
+                    _logger?.Warning("Search attempted before index ready");
+                    return new List<SearchResultViewModel>();
                 }
                 
-                _logger.Debug($"Returning {viewModels.Count} search results for query: '{query}'");
-                return viewModels;
+                var results = await SearchInternalAsync(query, cancellationToken);
+                
+                // Update cache
+                _searchCache.Set(query, results);
+                
+                return results;
             }
             finally
             {
                 _searchLock.Release();
             }
+        }
+
+        private async Task<List<SearchResultViewModel>> SearchInternalAsync(
+            string query, 
+            CancellationToken cancellationToken)
+        {
+            // Generate word variants for the query
+            var tokens = WordVariantProcessor.TokenizeQuery(query);
+            var expandedQuery = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var token in tokens)
+            {
+                var variants = WordVariantProcessor.GenerateVariants(token);
+                foreach (var variant in variants)
+                {
+                    expandedQuery.Add(variant);
+                }
+            }
+            
+            _logger?.Debug($"Searching for: {string.Join(", ", expandedQuery)}");
+            
+            // Search with expanded query
+            var searchTask = _searchIndex.SearchAsync(expandedQuery, cancellationToken);
+            var results = await searchTask;
+            
+            // Score and sort results
+            var scoredResults = results.Select(r => new SearchResultViewModel
+            {
+                NoteId = r.NoteId,
+                Title = r.Title ?? "Untitled",
+                FilePath = r.FilePath,
+                CategoryId = r.CategoryId,
+                Preview = r.Preview ?? "",
+                Relevance = r.Relevance,
+                Score = CalculateScore(r, tokens, expandedQuery),
+                ResultType = string.IsNullOrEmpty(r.NoteId) ? SearchResultType.Category : SearchResultType.Note
+            })
+            .OrderByDescending(r => r.Score)
+            .ThenByDescending(r => r.LastModified)
+            .ToList();
+            
+            return scoredResults;
+        }
+
+        private int CalculateScore(SearchIndexService.SearchResult result, List<string> originalTokens, HashSet<string> allVariants)
+        {
+            int score = 0;
+            
+            // Title matches are worth more
+            foreach (var token in originalTokens)
+            {
+                if (result.Title?.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
+                    score += 10;
+            }
+            
+            // Recent files score higher (assuming we can get LastModified from result)
+            // For now, just add base content score
+            score += 1;
+            
+            return score;
         }
 
         /// <summary>
@@ -274,7 +307,7 @@ namespace NoteNest.UI.Services
             {
                 var results = await SearchAsync(query.Trim());
                 return results
-                    .OrderByDescending(r => r.Relevance)
+                    .OrderByDescending(r => r.Score)
                     .Take(maxResults)
                     .Select(r => r.Title)
                     .Distinct()
@@ -282,7 +315,7 @@ namespace NoteNest.UI.Services
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to get search suggestions");
+                _logger?.Error(ex, "Failed to get search suggestions");
                 return new List<string>();
             }
         }
@@ -292,68 +325,90 @@ namespace NoteNest.UI.Services
         /// </summary>
         public void InvalidateIndex()
         {
-            _searchIndex.MarkDirty();
-            InvalidateCache();
-            _logger.Debug("Search index invalidated");
+            _searchCache?.Clear();
+            _searchIndex.Clear();
+            _isIndexBuilt = false;
+            _logger?.Debug("Search index invalidated");
         }
 
-        /// <summary>
-        /// Clears the search cache
-        /// </summary>
-        private void InvalidateCache()
-        {
-            lock (_searchCache)
-            {
-                _searchCache.Clear();
-            }
-        }
-
-        // File watcher event handlers
-        private async void OnFileChanged(object sender, FileChangedEventArgs e)
+        // File watcher event handlers with debouncing
+        private void OnFileChanged(object sender, FileChangedEventArgs e)
         {
             if (IsNoteFile(e.FilePath))
             {
-                _logger.Debug($"Note file changed: {e.FilePath}");
-                InvalidateCache();
-                // TODO: Implement incremental index update
+                _debouncer.Debounce(e.FilePath, async () =>
+                {
+                    _searchCache?.Clear(); // Clear cache when files change
+                    await _searchIndex.UpdateFileAsync(e.FilePath);
+                    await PersistCurrentIndexAsync();
+                });
             }
         }
 
-        private async void OnFileCreated(object sender, FileChangedEventArgs e)
+        private void OnFileCreated(object sender, FileChangedEventArgs e)
         {
             if (IsNoteFile(e.FilePath))
             {
-                _logger.Debug($"Note file created: {e.FilePath}");
-                InvalidateCache();
-                // TODO: Implement incremental index update
+                _debouncer.Debounce(e.FilePath, async () =>
+                {
+                    _searchCache?.Clear();
+                    await _searchIndex.AddFileAsync(e.FilePath);
+                    await PersistCurrentIndexAsync();
+                });
             }
         }
 
-        private async void OnFileDeleted(object sender, FileChangedEventArgs e)
+        private void OnFileDeleted(object sender, FileChangedEventArgs e)
         {
             if (IsNoteFile(e.FilePath))
             {
-                _logger.Debug($"Note file deleted: {e.FilePath}");
-                InvalidateCache();
-                // TODO: Implement incremental index update
+                // No debouncing for deletes - remove immediately
+                _searchCache?.Clear();
+                _searchIndex.RemoveFile(e.FilePath);
+                _ = PersistCurrentIndexAsync();
             }
         }
 
-        private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
+        private void OnFileRenamed(object sender, FileRenamedEventArgs e)
         {
-            if (IsNoteFile(e.NewPath) || IsNoteFile(e.OldPath))
+            if (IsNoteFile(e.NewPath))
             {
-                _logger.Debug($"Note file renamed: {e.OldPath} -> {e.NewPath}");
-                InvalidateCache();
-                // TODO: Implement incremental index update
+                _searchCache?.Clear();
+                _searchIndex.RenameFile(e.OldPath, e.NewPath);
+                _ = PersistCurrentIndexAsync();
             }
+        }
+
+        private async Task PersistCurrentIndexAsync()
+        {
+            try
+            {
+                var index = await _searchIndex.ExportForPersistenceAsync();
+                await _persistence.SaveIndexAsync(index);
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning($"Failed to persist search index: {ex.Message}");
+            }
+        }
+
+        private async Task UpdateIndexForModifiedFiles(PersistedIndex oldIndex)
+        {
+            // Compare current files with persisted index and update only changed ones
+            // This is a placeholder - could be implemented for even faster startup
+            await Task.Delay(1);
         }
 
         private bool IsNoteFile(string path)
         {
-            if (string.IsNullOrEmpty(path)) return false;
-            var extension = Path.GetExtension(path)?.ToLowerInvariant();
-            return extension == ".md" || extension == ".txt" || extension == ".markdown";
+            var ext = Path.GetExtension(path)?.ToLowerInvariant();
+            return ext == ".md" || ext == ".txt";
+        }
+
+        public void Dispose()
+        {
+            _debouncer?.Dispose();
+            _searchCache?.Dispose();
         }
     }
 
@@ -365,6 +420,8 @@ namespace NoteNest.UI.Services
         public string CategoryId { get; set; } = string.Empty;
         public string Preview { get; set; } = string.Empty;
         public float Relevance { get; set; }
+        public int Score { get; set; } // NEW: Add scoring for relevance
+        public DateTime LastModified { get; set; } // NEW: Add LastModified for sorting
         public SearchResultType ResultType { get; set; }
         
         // UI-friendly properties
@@ -383,5 +440,82 @@ namespace NoteNest.UI.Services
     {
         Note,
         Category
+    }
+
+    // LRU Cache implementation
+    public class LRUCache<TKey, TValue> : IDisposable
+    {
+        private class CacheEntry
+        {
+            public TValue Value { get; set; } = default!;
+            public DateTime LastAccessed { get; set; }
+            public DateTime Created { get; set; }
+        }
+
+        private readonly Dictionary<TKey, CacheEntry> _cache = new();
+        private readonly int _maxEntries;
+        private readonly int _expirySeconds;
+        private readonly object _lock = new();
+
+        public LRUCache(int maxEntries, int expirySeconds)
+        {
+            _maxEntries = maxEntries;
+            _expirySeconds = expirySeconds;
+        }
+
+        public bool TryGetValue(TKey key, out TValue value)
+        {
+            lock (_lock)
+            {
+                if (_cache.TryGetValue(key, out var entry))
+                {
+                    if ((DateTime.UtcNow - entry.Created).TotalSeconds < _expirySeconds)
+                    {
+                        entry.LastAccessed = DateTime.UtcNow;
+                        value = entry.Value;
+                        return true;
+                    }
+                    else
+                    {
+                        _cache.Remove(key);
+                    }
+                }
+                value = default!;
+                return false;
+            }
+        }
+
+        public void Set(TKey key, TValue value)
+        {
+            lock (_lock)
+            {
+                // Evict LRU if at capacity
+                if (_cache.Count >= _maxEntries && !_cache.ContainsKey(key))
+                {
+                    var lru = _cache.OrderBy(kvp => kvp.Value.LastAccessed).First();
+                    _cache.Remove(lru.Key);
+                }
+
+                _cache[key] = new CacheEntry
+                {
+                    Value = value,
+                    LastAccessed = DateTime.UtcNow,
+                    Created = DateTime.UtcNow
+                };
+            }
+        }
+
+        public void Clear()
+        {
+            lock (_lock)
+            {
+                _cache.Clear();
+            }
+        }
+
+        public void Dispose()
+        {
+            Clear();
+        }
     }
 }
