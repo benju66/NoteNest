@@ -51,7 +51,7 @@ namespace NoteNest.UI.ViewModels
         private readonly IWorkspaceService _workspaceService;
         private WorkspaceViewModel _workspaceViewModel;
         private DispatcherTimer _autoSaveTimer;
-        private readonly NoteNest.Core.Services.NotePinService _notePinService;
+        // NotePinService removed - will be reimplemented with better architecture later
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Task _initializationTask;
@@ -294,7 +294,7 @@ namespace NoteNest.UI.ViewModels
             IWorkspaceService workspaceService,
             ContentCache contentCache,
             ITabPersistenceService tabPersistence,
-            NoteNest.Core.Services.NotePinService notePinService,
+            // NotePinService removed - will be reimplemented later
             ISaveManager saveManager,
             IServiceProvider serviceProvider)
         {
@@ -309,7 +309,7 @@ namespace NoteNest.UI.ViewModels
             _workspaceService = workspaceService ?? throw new ArgumentNullException(nameof(workspaceService));
             _contentCache = contentCache ?? throw new ArgumentNullException(nameof(contentCache));
             _tabPersistence = tabPersistence ?? throw new ArgumentNullException(nameof(tabPersistence));
-            _notePinService = notePinService ?? throw new ArgumentNullException(nameof(notePinService));
+            // NotePinService initialization removed
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 
@@ -805,16 +805,13 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                _logger.Info("🔍 [DIAGNOSTIC] LoadCategoriesAsync started");
+                _logger.Debug("Loading categories...");
                 _stateManager.BeginOperation("Loading categories...");
                 
                 Categories.Clear();
                 PinnedCategories.Clear();
                 PinnedNotes.Clear();
-                _logger.Info("🔍 [DIAGNOSTIC] Collections cleared");
-
-                // Test: Use new TreeDataService to load and build tree structure
-                _logger.Info("🔍 [DIAGNOSTIC] About to call GetTreeDataService().LoadTreeDataAsync()");
+                _logger.Debug("Collections cleared, loading tree data...");
                 
                 var loadTask = GetTreeDataService().LoadTreeDataAsync();
                 var timeoutTask = Task.Delay(TimeSpan.FromSeconds(15));
@@ -822,14 +819,14 @@ namespace NoteNest.UI.ViewModels
                 
                 if (completedTask == timeoutTask)
                 {
-                    _logger.Error("❌ [DIAGNOSTIC] TreeDataService.LoadTreeDataAsync() timed out after 15 seconds!");
+                    _logger.Error("TreeDataService timed out after 15 seconds");
                     _stateManager.EndOperation("Error: TreeDataService timeout");
-                    _dialogService.ShowError("TreeDataService timed out after 15 seconds. Check logs for details.", "Loading Timeout");
+                    _dialogService.ShowError("TreeDataService timed out. Check logs for details.", "Loading Timeout");
                     return;
                 }
                 
                 var treeData = await loadTask;
-                _logger.Info($"🔍 [DIAGNOSTIC] TreeDataService completed: Success={treeData.Success}");
+                _logger.Debug($"TreeDataService completed: Success={treeData.Success}");
                 
                 if (!treeData.Success)
                 {
@@ -840,43 +837,36 @@ namespace NoteNest.UI.ViewModels
                 }
 
                 // Convert tree data to UI ViewModels using adapter
-                _logger.Info("🔍 [DIAGNOSTIC] About to call GetTreeViewModelAdapter().ConvertToUICollections()");
                 var uiCollections = GetTreeViewModelAdapter().ConvertToUICollections(treeData);
-                _logger.Info("🔍 [DIAGNOSTIC] TreeViewModelAdapter conversion completed");
 
                 // Apply tree data to UI collections
-                _logger.Info("🔍 [DIAGNOSTIC] About to populate UI collections via Dispatcher");
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    _logger.Info($"🔍 [DIAGNOSTIC] Adding {uiCollections.RootCategories.Count} root categories");
                     foreach (var item in uiCollections.RootCategories)
                     {
                         Categories.Add(item);
                     }
                     
                     // Set pinned collections from adapter results
-                    _logger.Info($"🔍 [DIAGNOSTIC] Setting {uiCollections.PinnedCategories.Count} pinned categories");
                     PinnedCategories.Clear();
                     foreach (var pinnedCategory in uiCollections.PinnedCategories)
                     {
                         PinnedCategories.Add(pinnedCategory);
                     }
                     
-                    _logger.Info($"🔍 [DIAGNOSTIC] Setting {uiCollections.PinnedNotes.Count} pinned notes");
                     PinnedNotes.Clear();
                     foreach (var pinnedNote in uiCollections.PinnedNotes)
                     {
                         PinnedNotes.Add(pinnedNote);
                     }
                 });
-                _logger.Info("🔍 [DIAGNOSTIC] UI collections populated successfully");
 
                 // Restore expansion state using TreeStateAdapter
-                _logger.Info("🔍 [DIAGNOSTIC] About to restore expansion state");
+                // Restore expansion state
                 try
                 {
                     // First collapse everything so restore is authoritative
-                    _logger.Info("🔍 [DIAGNOSTIC] Collapsing all categories");
+                    // First collapse everything so restore is authoritative
                     void CollapseAll(System.Collections.ObjectModel.ObservableCollection<CategoryTreeItem> items)
                     {
                         foreach (var i in items)
@@ -887,9 +877,7 @@ namespace NoteNest.UI.ViewModels
                     }
                     CollapseAll(Categories);
 
-                    _logger.Info("🔍 [DIAGNOSTIC] About to call GetTreeStateAdapter().LoadAndApplyExpansionStateAsync()");
                     var success = await GetTreeStateAdapter().LoadAndApplyExpansionStateAsync(Categories);
-                    _logger.Info($"🔍 [DIAGNOSTIC] TreeStateAdapter completed: Success={success}");
                     
                     if (success)
                     {
@@ -902,20 +890,19 @@ namespace NoteNest.UI.ViewModels
                 }
 
                 // Set up file watcher event handlers and metadata manager
-                _logger.Info("🔍 [DIAGNOSTIC] Setting up file watcher");
+                // Set up file watcher event handlers and metadata manager
                 var fileWatcher = GetFileWatcher();
                 fileWatcher.FileRenamed += OnFileRenamed;
                 fileWatcher.FileDeleted += OnFileDeleted;
                 _metadataManager ??= new NoteNest.Core.Services.NoteMetadataManager(_fileSystem, _logger);
                 fileWatcher.StartWatching(PathService.ProjectsPath, "*.*", includeSubdirectories: true);
-                _logger.Info("🔍 [DIAGNOSTIC] File watcher configured");
 
                 _stateManager.EndOperation($"Loaded {treeData.TotalCategoriesLoaded} categories");
-                _logger.Info($"🔍 [DIAGNOSTIC] LoadCategoriesAsync completed successfully - {treeData.TotalCategoriesLoaded} categories");
+                _logger.Debug($"LoadCategoriesAsync completed - {treeData.TotalCategoriesLoaded} categories");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "🔍 [DIAGNOSTIC] Exception in LoadCategoriesAsync");
+                _logger.Error(ex, "Exception in LoadCategoriesAsync");
                 _stateManager.EndOperation("Error loading categories");
                 _dialogService.ShowError($"Error loading categories: {ex.Message}", "Error");
             }
@@ -1315,7 +1302,7 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        // Tree helper methods delegated to TreeControllerAdapter
+        // Tree helper methods - simplified for UI use only
         private int CountAllCategories(ObservableCollection<CategoryTreeItem> nodes)
         {
             int count = nodes.Count;
@@ -1334,22 +1321,6 @@ namespace NoteNest.UI.ViewModels
                 count += CountAllNotes(sub);
             }
             return count;
-        }
-
-        private List<CategoryModel> GetAllCategoriesFlat()
-        {
-            // This is a local tree traversal, doesn't need to go through service
-            var list = new List<CategoryModel>();
-            void Walk(ObservableCollection<CategoryTreeItem> items)
-            {
-                foreach (var item in items)
-                {
-                    list.Add(item.Model);
-                    Walk(item.SubCategories);
-                }
-            }
-            Walk(Categories);
-            return list;
         }
 
 
@@ -1453,18 +1424,7 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        public async Task SaveExpansionStateAsync()
-        {
-            try
-            {
-                await GetTreeStateAdapter().SaveExpansionStateAsync(Categories);
-                _logger.Debug("TreeControllerAdapter: Successfully saved expansion state");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "TreeControllerAdapter: Failed to save expansion state");
-            }
-        }
+        // Expansion state saving now handled automatically by TreeController
 
         // Removed: OnOpenTabsChanged tracking; tracking handled by workspace service
 

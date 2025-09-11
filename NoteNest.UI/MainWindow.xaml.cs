@@ -993,7 +993,7 @@ namespace NoteNest.UI
             // Persist tree expansion state
             try
             {
-                await viewModel.SaveExpansionStateAsync();
+                // Expansion state now saved automatically by TreeController
             }
             catch { }
 

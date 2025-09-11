@@ -125,19 +125,7 @@ namespace NoteNest.UI.ViewModels
 
                 // Load notes for this category
                 var notes = await _noteService.GetNotesInCategoryAsync(_model);
-                // Order pinned notes first using NotePinService (if available via App DI)
-                try
-                {
-                    var pin = (System.Windows.Application.Current as NoteNest.UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.NotePinService)) as NoteNest.Core.Services.NotePinService;
-                    if (pin != null)
-                    {
-                        notes = notes
-                            .OrderByDescending(n => pin.IsPinned(n.FilePath))
-                            .ThenBy(n => n.Title)
-                            .ToList();
-                    }
-                }
-                catch { }
+                // Note pinning removed - will be reimplemented with better architecture later
 
                 // Defensive: ensure we don't add duplicates
                 var existingById = new HashSet<string>(Notes.Select(n => n.Model.Id), StringComparer.OrdinalIgnoreCase);
