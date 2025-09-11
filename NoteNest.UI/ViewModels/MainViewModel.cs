@@ -40,6 +40,14 @@ namespace NoteNest.UI.ViewModels
         private NoteNest.Core.Services.NoteMetadataManager _metadataManager;
         private ICategoryManagementService _categoryService;
         private INoteOperationsService _noteOperationsService;
+        private ITreeDataService _treeDataService;
+        private ITreeOperationService _treeOperationService;
+        private TreeViewModelAdapter _treeViewModelAdapter;
+        private TreeOperationAdapter _treeOperationAdapter;
+        private ITreeStateManager _treeStateManager;
+        private TreeStateAdapter _treeStateAdapter;
+        private ITreeController _treeController;
+        private TreeControllerAdapter _treeControllerAdapter;
         private readonly IWorkspaceService _workspaceService;
         private WorkspaceViewModel _workspaceViewModel;
         private DispatcherTimer _autoSaveTimer;
@@ -57,7 +65,6 @@ namespace NoteNest.UI.ViewModels
         private NoteTreeItem _selectedNote;
         private bool _isLoading;
         private string _statusMessage;
-        private ITreeStateService _treeStateService;
 
         #region Properties
 
@@ -151,10 +158,6 @@ namespace NoteNest.UI.ViewModels
             return _fileWatcher ??= new FileWatcherService(_logger, _configService);
         }
 
-        private ITreeStateService GetTreeStateService()
-        {
-            return _treeStateService ??= new TreeStateService(_configService, _logger);
-        }
 
         private ICategoryManagementService GetCategoryService()
         {
@@ -184,6 +187,41 @@ namespace NoteNest.UI.ViewModels
         private WorkspaceViewModel GetWorkspaceViewModel()
         {
             return _workspaceViewModel ??= new WorkspaceViewModel(GetWorkspaceService(), _saveManager);
+        }
+
+        private ITreeDataService GetTreeDataService()
+        {
+            return _treeDataService ??= _serviceProvider.GetRequiredService<ITreeDataService>();
+        }
+
+        private ITreeOperationService GetTreeOperationService()
+        {
+            return _treeOperationService ??= _serviceProvider.GetRequiredService<ITreeOperationService>();
+        }
+
+        private ITreeStateManager GetTreeStateManager()
+        {
+            return _treeStateManager ??= _serviceProvider.GetRequiredService<ITreeStateManager>();
+        }
+
+        private ITreeController GetTreeController()
+        {
+            return _treeController ??= _serviceProvider.GetRequiredService<ITreeController>();
+        }
+
+        private TreeViewModelAdapter GetTreeViewModelAdapter()
+        {
+            return _treeViewModelAdapter ??= new TreeViewModelAdapter(_noteService);
+        }
+
+        private TreeOperationAdapter GetTreeOperationAdapter()
+        {
+            return _treeOperationAdapter ??= new TreeOperationAdapter(GetTreeOperationService());
+        }
+
+        private TreeStateAdapter GetTreeStateAdapter()
+        {
+            return _treeStateAdapter ??= new TreeStateAdapter(GetTreeStateManager());
         }
 
         private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
@@ -767,63 +805,78 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
+                _logger.Info("🔍 [DIAGNOSTIC] LoadCategoriesAsync started");
                 _stateManager.BeginOperation("Loading categories...");
+                
                 Categories.Clear();
                 PinnedCategories.Clear();
                 PinnedNotes.Clear();
+                _logger.Info("🔍 [DIAGNOSTIC] Collections cleared");
 
-                var flatCategories = await GetCategoryService().LoadCategoriesAsync();
-                if (!flatCategories.Any())
+                // Test: Use new TreeDataService to load and build tree structure
+                _logger.Info("🔍 [DIAGNOSTIC] About to call GetTreeDataService().LoadTreeDataAsync()");
+                
+                var loadTask = GetTreeDataService().LoadTreeDataAsync();
+                var timeoutTask = Task.Delay(TimeSpan.FromSeconds(15));
+                var completedTask = await Task.WhenAny(loadTask, timeoutTask);
+                
+                if (completedTask == timeoutTask)
                 {
-                    _logger.Info("No categories loaded");
+                    _logger.Error("❌ [DIAGNOSTIC] TreeDataService.LoadTreeDataAsync() timed out after 15 seconds!");
+                    _stateManager.EndOperation("Error: TreeDataService timeout");
+                    _dialogService.ShowError("TreeDataService timed out after 15 seconds. Check logs for details.", "Loading Timeout");
+                    return;
+                }
+                
+                var treeData = await loadTask;
+                _logger.Info($"🔍 [DIAGNOSTIC] TreeDataService completed: Success={treeData.Success}");
+                
+                if (!treeData.Success)
+                {
+                    _logger.Error($"TreeDataService failed: {treeData.ErrorMessage}");
+                    _dialogService.ShowError($"Error loading categories: {treeData.ErrorMessage}", "Error");
+                    _stateManager.EndOperation("Error loading categories");
+                    return;
                 }
 
-                // Stop all existing watchers before setting up new ones
-                var watcher = GetFileWatcher();
-                watcher.StopAllWatchers();
+                // Convert tree data to UI ViewModels using adapter
+                _logger.Info("🔍 [DIAGNOSTIC] About to call GetTreeViewModelAdapter().ConvertToUICollections()");
+                var uiCollections = GetTreeViewModelAdapter().ConvertToUICollections(treeData);
+                _logger.Info("🔍 [DIAGNOSTIC] TreeViewModelAdapter conversion completed");
 
-                // Build tree structure off the UI thread, then apply to UI in one batch
-                var rootCategories = flatCategories.Where(c => string.IsNullOrEmpty(c.ParentId)).ToList();
-                var built = await Task.Run(async () =>
-                {
-                    var list = new List<CategoryTreeItem>();
-                    foreach (var root in rootCategories.OrderByDescending(c => c.Pinned).ThenBy(c => c.Name))
-                    {
-                        var rootItem = await BuildCategoryTreeAsync(root, flatCategories, 0);
-                        list.Add(rootItem);
-                    }
-                    return list;
-                });
-
-                // Apply to UI
+                // Apply tree data to UI collections
+                _logger.Info("🔍 [DIAGNOSTIC] About to populate UI collections via Dispatcher");
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    foreach (var item in built)
+                    _logger.Info($"🔍 [DIAGNOSTIC] Adding {uiCollections.RootCategories.Count} root categories");
+                    foreach (var item in uiCollections.RootCategories)
                     {
                         Categories.Add(item);
                     }
-                    // Build pinned categories quick-access (non-destructive)
+                    
+                    // Set pinned collections from adapter results
+                    _logger.Info($"🔍 [DIAGNOSTIC] Setting {uiCollections.PinnedCategories.Count} pinned categories");
                     PinnedCategories.Clear();
-                    foreach (var cat in Categories)
+                    foreach (var pinnedCategory in uiCollections.PinnedCategories)
                     {
-                        CollectPinnedCategories(cat, PinnedCategories);
+                        PinnedCategories.Add(pinnedCategory);
                     }
-                    // Build pinned notes quick-access from pin service
-                    try
+                    
+                    _logger.Info($"🔍 [DIAGNOSTIC] Setting {uiCollections.PinnedNotes.Count} pinned notes");
+                    PinnedNotes.Clear();
+                    foreach (var pinnedNote in uiCollections.PinnedNotes)
                     {
-                        PinnedNotes.Clear();
-                        foreach (var cat in Categories)
-                        {
-                            CollectPinnedNotes(cat, PinnedNotes);
-                        }
+                        PinnedNotes.Add(pinnedNote);
                     }
-                    catch { }
                 });
+                _logger.Info("🔍 [DIAGNOSTIC] UI collections populated successfully");
 
-                // Restore expansion state via TreeStateService
+                // Restore expansion state using TreeStateAdapter
+                _logger.Info("🔍 [DIAGNOSTIC] About to restore expansion state");
                 try
                 {
                     // First collapse everything so restore is authoritative
+                    _logger.Info("🔍 [DIAGNOSTIC] Collapsing all categories");
                     void CollapseAll(System.Collections.ObjectModel.ObservableCollection<CategoryTreeItem> items)
                     {
                         foreach (var i in items)
@@ -834,55 +887,40 @@ namespace NoteNest.UI.ViewModels
                     }
                     CollapseAll(Categories);
 
-                    var treeState = GetTreeStateService();
-                    var expandedIds = await treeState.LoadExpansionStateAsync();
-                    if (expandedIds.Any())
+                    _logger.Info("🔍 [DIAGNOSTIC] About to call GetTreeStateAdapter().LoadAndApplyExpansionStateAsync()");
+                    var success = await GetTreeStateAdapter().LoadAndApplyExpansionStateAsync(Categories);
+                    _logger.Info($"🔍 [DIAGNOSTIC] TreeStateAdapter completed: Success={success}");
+                    
+                    if (success)
                     {
-                        treeState.RestoreExpansionState(Categories, expandedIds);
-                        _logger.Debug($"Restored expansion state for {expandedIds.Count} categories");
+                        _logger.Debug("TreeStateAdapter: Successfully restored expansion state");
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.Warning($"Expansion state restore failed: {ex.Message}");
+                    _logger.Warning($"TreeStateAdapter: Expansion state restore failed: {ex.Message}");
                 }
 
-                // Set up file watcher and metadata manager
-                watcher.FileRenamed += OnFileRenamed;
-                watcher.FileDeleted += OnFileDeleted;
+                // Set up file watcher event handlers and metadata manager
+                _logger.Info("🔍 [DIAGNOSTIC] Setting up file watcher");
+                var fileWatcher = GetFileWatcher();
+                fileWatcher.FileRenamed += OnFileRenamed;
+                fileWatcher.FileDeleted += OnFileDeleted;
                 _metadataManager ??= new NoteNest.Core.Services.NoteMetadataManager(_fileSystem, _logger);
-                watcher.StartWatching(PathService.ProjectsPath, "*.*", includeSubdirectories: true);
+                fileWatcher.StartWatching(PathService.ProjectsPath, "*.*", includeSubdirectories: true);
+                _logger.Info("🔍 [DIAGNOSTIC] File watcher configured");
 
-                _stateManager.EndOperation($"Loaded {flatCategories.Count} categories");
+                _stateManager.EndOperation($"Loaded {treeData.TotalCategoriesLoaded} categories");
+                _logger.Info($"🔍 [DIAGNOSTIC] LoadCategoriesAsync completed successfully - {treeData.TotalCategoriesLoaded} categories");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to load categories");
-                _dialogService.ShowError($"Error loading categories: {ex.Message}", "Error");
+                _logger.Error(ex, "🔍 [DIAGNOSTIC] Exception in LoadCategoriesAsync");
                 _stateManager.EndOperation("Error loading categories");
+                _dialogService.ShowError($"Error loading categories: {ex.Message}", "Error");
             }
         }
 
-        private async Task<CategoryTreeItem> BuildCategoryTreeAsync(CategoryModel parent, List<CategoryModel> all, int level)
-        {
-            parent.Level = level;
-            // Pass the NoteService to enable lazy loading handled within CategoryTreeItem
-            var parentItem = new CategoryTreeItem(parent, _noteService);
-
-            // Build subcategories (pinned first, then by name for consistency with roots)
-            var children = all
-                .Where(c => c.ParentId == parent.Id)
-                .OrderByDescending(c => c.Pinned)
-                .ThenBy(c => c.Name)
-                .ToList();
-            foreach (var child in children)
-            {
-                var childItem = await BuildCategoryTreeAsync(child, all, level + 1);
-                parentItem.SubCategories.Add(childItem);
-            }
-
-            return parentItem;
-        }
 
         #region Note Operations
 
@@ -1040,11 +1078,15 @@ namespace NoteNest.UI.ViewModels
             
             if (string.IsNullOrWhiteSpace(name)) return;
             
-            var category = await GetCategoryService().CreateCategoryAsync(name);
-            if (category != null)
+            var result = await GetTreeOperationAdapter().CreateCategoryAsync(name);
+            if (result.Success)
             {
                 await LoadCategoriesAsync(); // Refresh tree
-                _stateManager.StatusMessage = $"Created category: {name}";
+                _stateManager.StatusMessage = result.StatusMessage ?? $"Created category: {name}";
+            }
+            else
+            {
+                _dialogService.ShowError(result.ErrorMessage ?? "Failed to create category", "Error");
             }
         }
 
@@ -1073,11 +1115,15 @@ namespace NoteNest.UI.ViewModels
             
             if (string.IsNullOrWhiteSpace(name)) return;
             
-            var subCategory = await GetCategoryService().CreateSubCategoryAsync(parentCategory.Model, name);
-            if (subCategory != null)
+            var result = await GetTreeOperationAdapter().CreateSubCategoryAsync(parentCategory, name);
+            if (result.Success)
             {
                 await LoadCategoriesAsync(); // Refresh tree
-                _stateManager.StatusMessage = $"Created subcategory: {name} under {parentCategory.Name}";
+                _stateManager.StatusMessage = result.StatusMessage ?? $"Created subcategory: {name} under {parentCategory.Name}";
+            }
+            else
+            {
+                _dialogService.ShowError(result.ErrorMessage ?? "Failed to create subcategory", "Error");
             }
         }
 
@@ -1096,10 +1142,15 @@ namespace NoteNest.UI.ViewModels
                 return;
 
                 var categoryName = SelectedCategory.Name;
-            if (await GetCategoryService().DeleteCategoryAsync(SelectedCategory.Model))
+                var result = await GetTreeOperationAdapter().DeleteCategoryAsync(SelectedCategory);
+            if (result.Success)
             {
                 await LoadCategoriesAsync(); // Refresh tree
-                _stateManager.StatusMessage = $"Deleted category: {categoryName}";
+                _stateManager.StatusMessage = result.StatusMessage ?? $"Deleted category: {categoryName}";
+            }
+            else
+            {
+                _dialogService.ShowError(result.ErrorMessage ?? "Failed to delete category", "Error");
             }
         }
 
@@ -1125,22 +1176,18 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        // Helper method to find which category contains a specific note
+        // Helper methods delegated to TreeControllerAdapter
         private CategoryTreeItem FindCategoryContainingNote(CategoryTreeItem category, NoteTreeItem note)
         {
-            if (category.Notes.Contains(note))
-                return category;
-            
+            if (category.Notes.Contains(note)) return category;
             foreach (var subCategory in category.SubCategories)
             {
                 var found = FindCategoryContainingNote(subCategory, note);
                 if (found != null) return found;
             }
-            
             return null;
         }
 
-        // Helper to find note by ID
         private NoteTreeItem FindNoteById(string noteId)
         {
             foreach (var category in Categories)
@@ -1155,7 +1202,7 @@ namespace NoteNest.UI.ViewModels
         {
             var note = category.Notes.FirstOrDefault(n => n.Model.Id == noteId);
             if (note != null) return note;
-            
+
             foreach (var subCategory in category.SubCategories)
             {
                 var found = FindNoteInCategory(subCategory, noteId);
@@ -1268,6 +1315,7 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        // Tree helper methods delegated to TreeControllerAdapter
         private int CountAllCategories(ObservableCollection<CategoryTreeItem> nodes)
         {
             int count = nodes.Count;
@@ -1288,17 +1336,6 @@ namespace NoteNest.UI.ViewModels
             return count;
         }
 
-        private CategoryTreeItem FindParent(ObservableCollection<CategoryTreeItem> roots, CategoryTreeItem target)
-        {
-            foreach (var r in roots)
-            {
-                if (r.SubCategories.Contains(target)) return r;
-                var found = FindParent(r.SubCategories, target);
-                if (found != null) return found;
-            }
-            return null;
-        }
-
         private List<CategoryModel> GetAllCategoriesFlat()
         {
             // This is a local tree traversal, doesn't need to go through service
@@ -1315,47 +1352,8 @@ namespace NoteNest.UI.ViewModels
             return list;
         }
 
-        private void CollectPinnedCategories(CategoryTreeItem category, ObservableCollection<CategoryTreeItem> pinned)
-        {
-            if (category?.Model?.Pinned == true)
-            {
-                pinned.Add(category);
-            }
-            foreach (var sub in category.SubCategories)
-            {
-                CollectPinnedCategories(sub, pinned);
-            }
-        }
 
-        public class PinnedNoteItem
-        {
-            public NoteTreeItem Note { get; }
-            public string CategoryName { get; }
-            public PinnedNoteItem(NoteTreeItem note, string categoryName)
-            {
-                Note = note;
-                CategoryName = categoryName;
-            }
-        }
 
-        private void CollectPinnedNotes(CategoryTreeItem category, ObservableCollection<PinnedNoteItem> pinned)
-        {
-            foreach (var note in category.Notes)
-            {
-                try
-                {
-                    if (_notePinService.IsPinned(note.Model.FilePath))
-                    {
-                        pinned.Add(new PinnedNoteItem(note, category.Name));
-                    }
-                }
-                catch { }
-            }
-            foreach (var sub in category.SubCategories)
-            {
-                CollectPinnedNotes(sub, pinned);
-            }
-        }
 
         #endregion
 
@@ -1365,12 +1363,17 @@ namespace NoteNest.UI.ViewModels
         {
             if (categoryItem == null || string.IsNullOrWhiteSpace(newName)) return;
 
-            if (await _categoryService.RenameCategoryAsync(categoryItem.Model, newName))
+            var result = await GetTreeOperationAdapter().RenameCategoryAsync(categoryItem, newName);
+            if (result.Success)
             {
                 // Update the local model to reflect the change immediately
                 categoryItem.Model.Name = newName;
                 categoryItem.OnPropertyChanged(nameof(CategoryTreeItem.Name));
-                _stateManager.StatusMessage = $"Renamed category to '{newName}'";
+                _stateManager.StatusMessage = result.StatusMessage ?? $"Renamed category to '{newName}'";
+            }
+            else
+            {
+                _dialogService.ShowError(result.ErrorMessage ?? "Failed to rename category", "Error");
             }
         }
 
@@ -1378,12 +1381,16 @@ namespace NoteNest.UI.ViewModels
         {
             if (categoryItem == null) return;
 
-            if (await _categoryService.ToggleCategoryPinAsync(categoryItem.Model))
+            var result = await GetTreeOperationAdapter().ToggleCategoryPinAsync(categoryItem);
+            if (result.Success)
             {
                 await LoadCategoriesAsync(); // Refresh to reorder by pin status
-                _stateManager.StatusMessage = categoryItem.Model.Pinned ? 
-                    $"Pinned category: {categoryItem.Name}" : 
-                    $"Unpinned category: {categoryItem.Name}";
+                _stateManager.StatusMessage = result.StatusMessage ?? 
+                    (categoryItem.Model.Pinned ? $"Pinned category: {categoryItem.Name}" : $"Unpinned category: {categoryItem.Name}");
+            }
+            else
+            {
+                _dialogService.ShowError(result.ErrorMessage ?? "Failed to toggle category pin", "Error");
             }
         }
 
@@ -1391,11 +1398,11 @@ namespace NoteNest.UI.ViewModels
         {
             if (noteItem == null || string.IsNullOrWhiteSpace(newName)) return;
 
-            var success = await GetNoteOperationsService().RenameNoteAsync(noteItem.Model, newName);
+            var result = await GetTreeOperationAdapter().RenameNoteAsync(noteItem, newName);
             
-            if (!success)
+            if (!result.Success)
             {
-                _dialogService.ShowError("A note with this name already exists.", "Name Conflict");
+                _dialogService.ShowError(result.ErrorMessage ?? "Failed to rename note", "Name Conflict");
                 return;
             }
             
@@ -1406,7 +1413,7 @@ namespace NoteNest.UI.ViewModels
             // Update open tab if exists
             // Note: Tab should update itself automatically when the underlying NoteModel changes
             
-            _stateManager.StatusMessage = $"Renamed note to '{newName}'";
+            _stateManager.StatusMessage = result.StatusMessage ?? $"Renamed note to '{newName}'";
         }
 
         public async Task DeleteNoteAsync(NoteTreeItem noteItem)
@@ -1420,14 +1427,16 @@ namespace NoteNest.UI.ViewModels
                 _workspaceViewModel.RemoveTab(openTab);
             }
             
-            // Delete through service
-            await GetNoteOperationsService().DeleteNoteAsync(noteItem.Model);
+            var noteTitle = noteItem.Title;
+            var result = await GetTreeOperationAdapter().DeleteNoteAsync(noteItem);
             
+            if (result.Success)
+            {
             // Remove from tree
             CategoryTreeItem containingCategory = null;
             foreach (var cat in Categories)
             {
-                containingCategory = FindCategoryContainingNote(cat, noteItem);
+                    containingCategory = FindCategoryContainingNote(cat, noteItem);
                 if (containingCategory != null) break;
             }
             
@@ -1436,23 +1445,24 @@ namespace NoteNest.UI.ViewModels
                 containingCategory.Notes.Remove(noteItem);
             }
             
-            _stateManager.StatusMessage = $"Deleted '{noteItem.Title}'";
+                _stateManager.StatusMessage = result.StatusMessage ?? $"Deleted '{noteTitle}'";
+            }
+            else
+            {
+                _dialogService.ShowError(result.ErrorMessage ?? "Failed to delete note", "Error");
+            }
         }
 
         public async Task SaveExpansionStateAsync()
         {
             try
             {
-                var expandedIds = new List<string>();
-                GetTreeStateService().CollectExpandedCategories(Categories, expandedIds);
-                var expandedCategories = expandedIds
-                    .Select(id => GetAllCategoriesFlat().FirstOrDefault(c => c.Id == id))
-                    .Where(c => c != null);
-                await GetTreeStateService().SaveExpansionStateAsync(expandedCategories);
+                await GetTreeStateAdapter().SaveExpansionStateAsync(Categories);
+                _logger.Debug("TreeControllerAdapter: Successfully saved expansion state");
             }
             catch (Exception ex)
             {
-                _logger?.Error(ex, "Failed to save expansion state");
+                _logger.Error(ex, "TreeControllerAdapter: Failed to save expansion state");
             }
         }
 
@@ -1467,9 +1477,9 @@ namespace NoteNest.UI.ViewModels
         {
             if (noteItem == null || targetCategory == null) return false;
             
-            var success = await GetNoteOperationsService().MoveNoteAsync(noteItem.Model, targetCategory.Model);
+            var result = await GetTreeOperationAdapter().MoveNoteAsync(noteItem, targetCategory);
             
-            if (success)
+            if (result.Success)
             {
                 // Remove from old category tree
                 CategoryTreeItem oldCategory = null;
@@ -1490,10 +1500,14 @@ namespace NoteNest.UI.ViewModels
                 // Update open tab if exists
                 // Note: Tab should update itself automatically when the underlying NoteModel changes
                 
-                _stateManager.StatusMessage = $"Moved '{noteItem.Title}' to '{targetCategory.Name}'";
+                _stateManager.StatusMessage = result.StatusMessage ?? $"Moved '{noteItem.Title}' to '{targetCategory.Name}'";
+            }
+            else
+            {
+                _dialogService.ShowError(result.ErrorMessage ?? "Failed to move note", "Error");
             }
             
-            return success;
+            return result.Success;
         }
 
         #endregion
@@ -1516,7 +1530,6 @@ namespace NoteNest.UI.ViewModels
                 {
                     // Cancel operations quickly
                     _cancellationTokenSource?.Cancel();
-                    _treeStateService = null;
 
                     // Unsubscribe events
                     if (_workspaceService != null)

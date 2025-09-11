@@ -210,9 +210,31 @@ namespace NoteNest.UI.ViewModels
             OnPropertyChanged(nameof(Children));
         }
 
+        private bool _eventsuspended = false;
+
         private void OnChildrenCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {
-            UpdateChildren();
+            if (!_eventsuspended)
+            {
+                UpdateChildren();
+            }
+        }
+
+        /// <summary>
+        /// Temporarily suspends collection change events to prevent UI storms during bulk operations
+        /// </summary>
+        public void SuspendCollectionEvents()
+        {
+            _eventsuspended = true;
+        }
+
+        /// <summary>
+        /// Resumes collection change events and triggers one update to sync everything
+        /// </summary>
+        public void ResumeCollectionEvents()
+        {
+            _eventsuspended = false;
+            UpdateChildren(); // Single update after all bulk operations complete
         }
 
         public void Dispose()

@@ -142,6 +142,50 @@ namespace NoteNest.UI.Services
                 null // Removed IWorkspaceStateService dependency
             ));
 
+            // Tree services - SRP-focused architecture
+            services.AddSingleton<ICategoryManagementService>(provider =>
+            {
+                var noteService = provider.GetRequiredService<NoteService>();
+                var configService = provider.GetRequiredService<ConfigurationService>();
+                var errorHandler = provider.GetRequiredService<IServiceErrorHandler>();
+                var logger = provider.GetRequiredService<IAppLogger>();
+                var fileSystem = provider.GetRequiredService<IFileSystemProvider>();
+                var eventBus = provider.GetService<IEventBus>();
+                return new CategoryManagementService(noteService, configService, errorHandler, logger, fileSystem, eventBus);
+            });
+
+            services.AddSingleton<ITreeDataService>(provider =>
+            {
+                var categoryService = provider.GetRequiredService<ICategoryManagementService>();
+                var noteService = provider.GetRequiredService<NoteService>();
+                var logger = provider.GetRequiredService<IAppLogger>();
+                return new TreeDataService(categoryService, noteService, logger);
+            });
+
+            services.AddSingleton<ITreeOperationService>(provider =>
+            {
+                var categoryService = provider.GetRequiredService<ICategoryManagementService>();
+                var noteOperationsService = provider.GetRequiredService<INoteOperationsService>();
+                var logger = provider.GetRequiredService<IAppLogger>();
+                return new TreeOperationService(categoryService, noteOperationsService, logger);
+            });
+
+            services.AddSingleton<ITreeStateManager>(provider =>
+            {
+                var configService = provider.GetRequiredService<ConfigurationService>();
+                var logger = provider.GetRequiredService<IAppLogger>();
+                return new TreeStateManager(configService, logger);
+            });
+
+            services.AddSingleton<ITreeController>(provider =>
+            {
+                var treeDataService = provider.GetRequiredService<ITreeDataService>();
+                var treeOperationService = provider.GetRequiredService<ITreeOperationService>();
+                var treeStateManager = provider.GetRequiredService<ITreeStateManager>();
+                var logger = provider.GetRequiredService<IAppLogger>();
+                return new TreeController(treeDataService, treeOperationService, treeStateManager, logger);
+            });
+
             // Search services - lightweight, focused
             services.AddSingleton<ISearchService>(provider =>
             {
