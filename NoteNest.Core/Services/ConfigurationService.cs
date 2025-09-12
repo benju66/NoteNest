@@ -275,6 +275,37 @@ namespace NoteNest.Core.Services
             {
                 await _fileSystem.CreateDirectoryAsync(_settings.MetadataPath);
             }
+
+            // Migrate old "Projects" folder to "Notes" folder if needed
+            await MigrateProjectsToNotesAsync();
+        }
+
+        private async Task MigrateProjectsToNotesAsync()
+        {
+            try
+            {
+                var oldProjectsPath = Path.Combine(_settings.DefaultNotePath, "Projects");
+                var newNotesPath = Path.Combine(_settings.DefaultNotePath, "Notes");
+                
+                // Only migrate if old exists and new doesn't
+                if (await _fileSystem.ExistsAsync(oldProjectsPath) && !await _fileSystem.ExistsAsync(newNotesPath))
+                {
+                    try 
+                    {
+                        Directory.Move(oldProjectsPath, newNotesPath);
+                        System.Diagnostics.Debug.WriteLine("Successfully migrated Projects folder to Notes folder");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Failed to migrate Projects to Notes: {ex.Message}");
+                        // Don't throw - let the app continue and create Notes folder normally
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error during Projects→Notes migration: {ex.Message}");
+            }
         }
 
         public void AddRecentFile(string filePath)

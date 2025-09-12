@@ -617,7 +617,7 @@ namespace NoteNest.UI.ViewModels
                     {
                         var selected = await _dialogService.ShowInputDialogAsync(
                             "Select Notes Folder",
-                            "Enter the full path to your notes root (contains Projects and .metadata):",
+                            "Enter the full path to your notes root (contains Notes and .metadata):",
                             _configService?.Settings?.DefaultNotePath ?? "",
                             path =>
                             {

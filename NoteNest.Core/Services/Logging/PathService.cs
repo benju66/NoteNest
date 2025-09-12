@@ -55,9 +55,9 @@ namespace NoteNest.Core.Services
         public static string MetadataPath => Path.Combine(RootPath, ".metadata");
 
         /// <summary>
-        /// Gets the projects directory path
+        /// Gets the notes directory path
         /// </summary>
-        public static string ProjectsPath => Path.Combine(RootPath, "Projects");
+        public static string ProjectsPath => Path.Combine(RootPath, "Notes");
 
         /// <summary>
         /// Gets the templates directory path
@@ -121,7 +121,7 @@ namespace NoteNest.Core.Services
             // Try to create each directory and collect errors
             TryCreateDirectory(RootPath, "Root", errors);
             TryCreateDirectory(MetadataPath, "Metadata", errors);
-            TryCreateDirectory(ProjectsPath, "Projects", errors);
+            TryCreateDirectory(ProjectsPath, "Notes", errors);
             TryCreateDirectory(TemplatesPath, "Templates", errors);
             TryCreateDirectory(AppDataPath, "AppData", errors);
 
