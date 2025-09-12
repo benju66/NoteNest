@@ -4,7 +4,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Threading;
 
-namespace NoteNest.UI.Controls
+namespace NoteNest.UI.Controls.Editor.Core
 {
     public partial class FormattedTextEditor
     {

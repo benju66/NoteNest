@@ -6,6 +6,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:ui="http://schemas.modernwpf.com/2019"
              xmlns:local="clr-namespace:NoteNest.UI.Controls"
+             xmlns:editor="clr-namespace:NoteNest.UI.Controls.Editor.Core"
+             xmlns:editorControls="clr-namespace:NoteNest.UI.Controls.Editor"
              xmlns:behaviors="clr-namespace:NoteNest.UI.Behaviors"
              mc:Ignorable="d">
     <UserControl.InputBindings>
@@ -127,55 +129,11 @@
                             </Grid.RowDefinitions>
 
                             <!-- Per-tab toolbar -->
-                            <ui:CommandBar Grid.Row="0" DefaultLabelPosition="Right" Focusable="False">
-                                <ui:AppBarButton Icon="ViewAll"
-                                                 Label="Split V"
-                                                 ToolTip="Split Vertical (Ctrl+\)"
-                                                 Command="{x:Static local:SplitWorkspace.SplitVerticalCommand}"
-                                                 CommandTarget="{Binding RelativeSource={RelativeSource AncestorType={x:Type local:SplitWorkspace}}}"/>
-                                <ui:AppBarSeparator/>
-                                <ui:AppBarButton Icon="Bold"
-                                                 Label="Bold"
-                                                 Command="{x:Static EditingCommands.ToggleBold}"
-                                                 CommandTarget="{Binding ElementName=FormattedEditor}"/>
-                                <ui:AppBarButton Icon="Italic"
-                                                 Label="Italic"
-                                                 Command="{x:Static EditingCommands.ToggleItalic}"
-                                                 CommandTarget="{Binding ElementName=FormattedEditor}"/>
-                                <ui:AppBarSeparator/>
-                                <ui:AppBarButton Icon="List"
-                                                 Label="Bullets"
-                                                 Click="Toolbar_BulletList_Click"/>
-                                <ui:AppBarButton Label="Numbers"
-                                                 Click="Toolbar_NumberedList_Click">
-                                    <ui:AppBarButton.Icon>
-                                        <ui:FontIcon Glyph="&#xE8BE;"/>
-                                    </ui:AppBarButton.Icon>
-                                </ui:AppBarButton>
-                                <ui:AppBarButton Label="Tasks" Click="Toolbar_TaskList_Click">
-                                    <ui:AppBarButton.Icon>
-                                        <ui:FontIcon Glyph="&#xE9D5;"/>
-                                    </ui:AppBarButton.Icon>
-                                </ui:AppBarButton>
-                                <ui:AppBarSeparator/>
-                                <ui:AppBarButton Label="Indent" 
-                                                 Click="Toolbar_Indent_Click"
-                                                 ToolTip="Increase indent (Tab)">
-                                    <ui:AppBarButton.Icon>
-                                        <ui:FontIcon Glyph="&#xE013;"/>
-                                    </ui:AppBarButton.Icon>
-                                </ui:AppBarButton>
-                                <ui:AppBarButton Label="Outdent" 
-                                                 Click="Toolbar_Outdent_Click"
-                                                 ToolTip="Decrease indent (Shift+Tab)">
-                                    <ui:AppBarButton.Icon>
-                                        <ui:FontIcon Glyph="&#xE012;"/>
-                                    </ui:AppBarButton.Icon>
-                                </ui:AppBarButton>
-                            </ui:CommandBar>
+                            <editorControls:EditorToolbar Grid.Row="0" 
+                                                          Editor="{Binding ElementName=FormattedEditor}"/>
 
                             <!-- Note content viewer: always-formatted editor -->
-                            <local:FormattedTextEditor x:Name="FormattedEditor"
+                            <editor:FormattedTextEditor x:Name="FormattedEditor"
                                                       Grid.Row="1"
                                                       VerticalScrollBarVisibility="Auto"
                                                       HorizontalScrollBarVisibility="Disabled"

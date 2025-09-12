@@ -15,15 +15,8 @@ namespace NoteNest.Core.Models
         public string MetadataPath { get; set; }
         public bool AutoSave { get; set; }
         public int AutoSaveInterval { get; set; } // in seconds
-        public bool WordWrap { get; set; }
         public string Theme { get; set; }
-        public int FontSize { get; set; }
-        public string FontFamily { get; set; }
-        public bool ShowLineNumbers { get; set; }
         public bool ShowStatusBar { get; set; }
-        public bool HighlightCurrentLine { get; set; }
-        public int TabSize { get; set; }
-        public bool InsertSpaces { get; set; }
         public bool CreateBackup { get; set; }
         public int MaxBackups { get; set; }
         public bool ShowWelcomeScreen { get; set; }
@@ -40,9 +33,6 @@ namespace NoteNest.Core.Models
         public bool AutoDetectFormat { get; set; } = true;
         public bool ConvertTxtToMdOnSave { get; set; } = false;
 
-        // Spell check settings
-        public bool EnableSpellCheck { get; set; } = true;
-        public string SpellCheckLanguage { get; set; } = "en-US";
 
         // Safety settings
         public bool RequireBackupBeforeConversion { get; set; } = true;
@@ -92,15 +82,13 @@ namespace NoteNest.Core.Models
         public bool AdaptiveAutoSaveEnabled { get; set; } = true;
         public string AdaptiveAutoSavePreset { get; set; } = "Balanced"; // Conservative | Balanced | Aggressive
 
-        // Editor UI
-        public bool ShowFormattingToolbar { get; set; } = true;
 
         // Session persistence
         public bool RestoreTabs { get; set; } = true;
         public List<string> ExpandedCategoryIds { get; set; } = new();
 
         // Feature flags
-        public bool EnhancedListHandlingEnabled { get; set; } = false;
+        public EditorSettings EditorSettings { get; set; } = new EditorSettings();
 
         public AppSettings()
         {

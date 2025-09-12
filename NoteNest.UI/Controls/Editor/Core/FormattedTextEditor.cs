@@ -4,15 +4,15 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Threading;
-using NoteNest.UI.Services;
+using NoteNest.UI.Controls.Editor.Converters;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
 using NoteNest.Core.Models;
-using NoteNest.UI.Controls.ListHandling;
+using NoteNest.UI.Controls.Editor.Support;
 
-namespace NoteNest.UI.Controls
+namespace NoteNest.UI.Controls.Editor.Core
 {
     public partial class FormattedTextEditor : RichTextBox
     {
@@ -44,6 +44,15 @@ namespace NoteNest.UI.Controls
         public void SetMetadataManager(NoteNest.Core.Services.NoteMetadataManager manager)
         {
             _metadataManager = manager;
+        }
+
+        private void ApplySettings(EditorSettings settings)
+        {
+            if (settings == null) return;
+            
+            Document.FontFamily = new System.Windows.Media.FontFamily(settings.FontFamily);
+            Document.FontSize = settings.FontSize;
+            // Apply other settings...
         }
 
         public FormattedTextEditor()
@@ -1619,9 +1628,10 @@ namespace NoteNest.UI.Controls
             {
                 var app = Application.Current as App;
                 var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
-                var fontFamily = config?.Settings?.FontFamily;
-                double? fontSize = config?.Settings?.FontSize;
-                bool enhancedLists = config?.Settings?.EnhancedListHandlingEnabled ?? false;
+                var editorSettings = config?.Settings?.EditorSettings;
+                var fontFamily = editorSettings?.FontFamily;
+                double? fontSize = editorSettings?.FontSize;
+                bool enhancedLists = editorSettings?.EnhancedListHandling ?? false;
 
                 // Preserve caret and avoid replacing the Document instance
                 var caret = CaretPosition;

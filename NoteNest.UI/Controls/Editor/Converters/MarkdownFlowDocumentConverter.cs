@@ -9,7 +9,7 @@ using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using System.Text.RegularExpressions;
 
-namespace NoteNest.UI.Services
+namespace NoteNest.UI.Controls.Editor.Converters
 {
     public class MarkdownFlowDocumentConverter
     {

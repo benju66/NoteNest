@@ -5,9 +5,9 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Threading;
-using NoteNest.UI.Controls.ListHandling;
+using NoteNest.UI.Controls.Editor.Support;
 
-namespace NoteNest.UI.Controls
+namespace NoteNest.UI.Controls.Editor.Core
 {
     public partial class FormattedTextEditor
     {
@@ -247,13 +247,13 @@ namespace NoteNest.UI.Controls
         }
 
         // Support for different numbering styles via toolbar or context menu
-        public void SetNumberingStyle(ListHandling.NumberingStyle style, int level = 0)
+        public void SetNumberingStyle(Support.NumberingStyle style, int level = 0)
         {
             // Create a custom scheme with the specified style
             var customScheme = new NumberingScheme
             {
                 Name = "Custom",
-                LevelStyles = new Dictionary<int, ListHandling.NumberingStyle>
+                LevelStyles = new Dictionary<int, Support.NumberingStyle>
                 {
                     { level, style }
                 }

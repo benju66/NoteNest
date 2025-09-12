@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace NoteNest.UI.Controls.ListHandling
+namespace NoteNest.UI.Controls.Editor.Support
 {
     public enum NumberingStyle
     {

@@ -167,11 +167,11 @@
                         <TextBlock Text="Editor Settings" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,16"/>
                         
                         <ui:ToggleSwitch Header="Enable word wrap" 
-                                        IsOn="{Binding Settings.WordWrap}"
+                                        IsOn="{Binding Settings.EditorSettings.WordWrap}"
                                         Margin="0,8"/>
                         
                         <ui:ToggleSwitch Header="Show line numbers" 
-                                        IsOn="{Binding Settings.ShowLineNumbers}"
+                                        IsOn="{Binding Settings.EditorSettings.ShowLineNumbers}"
                                         Margin="0,8"/>
                         
                         <ui:ToggleSwitch Header="Show status bar" 
@@ -179,14 +179,14 @@
                                         Margin="0,8"/>
                         
                         <ui:ToggleSwitch Header="Highlight current line" 
-                                        IsOn="{Binding Settings.HighlightCurrentLine}"
+                                        IsOn="{Binding Settings.EditorSettings.HighlightCurrentLine}"
                                         Margin="0,8"/>
                         
                         <TextBlock Text="Font" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,16,0,8"/>
 
                         <TextBlock Text="Font family" Style="{StaticResource BaseTextBlockStyle}"/>
                         <ComboBox 
-                                  SelectedItem="{Binding Settings.FontFamily}"
+                                  SelectedItem="{Binding Settings.EditorSettings.FontFamily}"
                                   Margin="0,8,0,0">
                             <ComboBoxItem>Consolas</ComboBoxItem>
                             <ComboBoxItem>Courier New</ComboBoxItem>
@@ -196,19 +196,19 @@
                         </ComboBox>
                         
                         <ui:NumberBox Header="Font size" 
-                                     Value="{Binding Settings.FontSize}"
+                                     Value="{Binding Settings.EditorSettings.FontSize}"
                                      Minimum="8" Maximum="32"
                                      Margin="0,8"/>
                         
                         <TextBlock Text="Tab Settings" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,16,0,8"/>
                         
                         <ui:NumberBox Header="Tab size" 
-                                     Value="{Binding Settings.TabSize}"
+                                     Value="{Binding Settings.EditorSettings.TabSize}"
                                      Minimum="2" Maximum="8"
                                      Margin="0,8"/>
                         
                         <ui:ToggleSwitch Header="Insert spaces instead of tabs" 
-                                        IsOn="{Binding Settings.InsertSpaces}"
+                                        IsOn="{Binding Settings.EditorSettings.InsertSpaces}"
                                         Margin="0,8"/>
                     </StackPanel>
                     
@@ -338,7 +338,7 @@
                         </StackPanel>
 
                         <ui:ToggleSwitch Header="Enable spell check (English)" 
-                                         IsOn="{Binding Settings.EnableSpellCheck}"
+                                         IsOn="{Binding Settings.EditorSettings.EnableSpellCheck}"
                                          Margin="0,4"/>
                         
                         <ui:ToggleSwitch Header="Enable Task Management" 

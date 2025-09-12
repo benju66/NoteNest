@@ -1,0 +1,52 @@
+<UserControl x:Class="NoteNest.UI.Controls.Editor.EditorToolbar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             xmlns:controls="clr-namespace:NoteNest.UI.Controls">
+    <ui:CommandBar DefaultLabelPosition="Right">
+        <ui:AppBarButton Icon="ViewAll"
+                         Label="Split V"
+                         ToolTip="Split Vertical (Ctrl+\)"
+                         Command="{x:Static controls:SplitWorkspace.SplitVerticalCommand}"
+                         CommandTarget="{Binding RelativeSource={RelativeSource AncestorType={x:Type controls:SplitWorkspace}}}"/>
+        <ui:AppBarSeparator/>
+        <ui:AppBarButton Icon="Bold"
+                         Label="Bold"
+                         Command="{x:Static EditingCommands.ToggleBold}"
+                         CommandTarget="{Binding ElementName=FormattedEditor}"/>
+        <ui:AppBarButton Icon="Italic"
+                         Label="Italic"
+                         Command="{x:Static EditingCommands.ToggleItalic}"
+                         CommandTarget="{Binding ElementName=FormattedEditor}"/>
+        <ui:AppBarSeparator/>
+        <ui:AppBarButton Icon="List"
+                         Label="Bullets"
+                         Click="BulletList_Click"/>
+        <ui:AppBarButton Label="Numbers"
+                         Click="NumberedList_Click">
+            <ui:AppBarButton.Icon>
+                <ui:FontIcon Glyph="&#xE8BE;"/>
+            </ui:AppBarButton.Icon>
+        </ui:AppBarButton>
+        <ui:AppBarButton Label="Tasks" Click="TaskList_Click">
+            <ui:AppBarButton.Icon>
+                <ui:FontIcon Glyph="&#xE9D5;"/>
+            </ui:AppBarButton.Icon>
+        </ui:AppBarButton>
+        <ui:AppBarSeparator/>
+        <ui:AppBarButton Label="Indent" 
+                         Click="Indent_Click"
+                         ToolTip="Increase indent (Tab)">
+            <ui:AppBarButton.Icon>
+                <ui:FontIcon Glyph="&#xE013;"/>
+            </ui:AppBarButton.Icon>
+        </ui:AppBarButton>
+        <ui:AppBarButton Label="Outdent" 
+                         Click="Outdent_Click"
+                         ToolTip="Decrease indent (Shift+Tab)">
+            <ui:AppBarButton.Icon>
+                <ui:FontIcon Glyph="&#xE012;"/>
+            </ui:AppBarButton.Icon>
+        </ui:AppBarButton>
+    </ui:CommandBar>
+</UserControl>

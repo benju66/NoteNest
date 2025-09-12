@@ -5,6 +5,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using NUnit.Framework;
 using NoteNest.UI.Controls;
+using NoteNest.UI.Controls.Editor.Core;
 
 namespace NoteNest.Tests.Controls
 {

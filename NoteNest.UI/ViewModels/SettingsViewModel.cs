@@ -405,15 +405,22 @@ namespace NoteNest.UI.ViewModels
                 MetadataPath = source.MetadataPath,
                 AutoSave = source.AutoSave,
                 AutoSaveInterval = source.AutoSaveInterval,
-                WordWrap = source.WordWrap,
                 Theme = source.Theme,
-                FontSize = source.FontSize,
-                FontFamily = source.FontFamily,
-                ShowLineNumbers = source.ShowLineNumbers,
                 ShowStatusBar = source.ShowStatusBar,
-                HighlightCurrentLine = source.HighlightCurrentLine,
-                TabSize = source.TabSize,
-                InsertSpaces = source.InsertSpaces,
+                EditorSettings = new EditorSettings
+                {
+                    WordWrap = source.EditorSettings.WordWrap,
+                    FontSize = source.EditorSettings.FontSize,
+                    FontFamily = source.EditorSettings.FontFamily,
+                    ShowLineNumbers = source.EditorSettings.ShowLineNumbers,
+                    HighlightCurrentLine = source.EditorSettings.HighlightCurrentLine,
+                    TabSize = source.EditorSettings.TabSize,
+                    InsertSpaces = source.EditorSettings.InsertSpaces,
+                    ShowFormattingToolbar = source.EditorSettings.ShowFormattingToolbar,
+                    EnhancedListHandling = source.EditorSettings.EnhancedListHandling,
+                    EnableSpellCheck = source.EditorSettings.EnableSpellCheck,
+                    SpellCheckLanguage = source.EditorSettings.SpellCheckLanguage
+                },
                 CreateBackup = source.CreateBackup,
                 MaxBackups = source.MaxBackups,
                 ShowWelcomeScreen = source.ShowWelcomeScreen,
@@ -462,15 +469,21 @@ namespace NoteNest.UI.ViewModels
             target.MetadataPath = source.MetadataPath;
             target.AutoSave = source.AutoSave;
             target.AutoSaveInterval = source.AutoSaveInterval;
-            target.WordWrap = source.WordWrap;
             target.Theme = source.Theme;
-            target.FontSize = source.FontSize;
-            target.FontFamily = source.FontFamily;
-            target.ShowLineNumbers = source.ShowLineNumbers;
             target.ShowStatusBar = source.ShowStatusBar;
-            target.HighlightCurrentLine = source.HighlightCurrentLine;
-            target.TabSize = source.TabSize;
-            target.InsertSpaces = source.InsertSpaces;
+            
+            // Copy editor settings
+            target.EditorSettings.WordWrap = source.EditorSettings.WordWrap;
+            target.EditorSettings.FontSize = source.EditorSettings.FontSize;
+            target.EditorSettings.FontFamily = source.EditorSettings.FontFamily;
+            target.EditorSettings.ShowLineNumbers = source.EditorSettings.ShowLineNumbers;
+            target.EditorSettings.HighlightCurrentLine = source.EditorSettings.HighlightCurrentLine;
+            target.EditorSettings.TabSize = source.EditorSettings.TabSize;
+            target.EditorSettings.InsertSpaces = source.EditorSettings.InsertSpaces;
+            target.EditorSettings.ShowFormattingToolbar = source.EditorSettings.ShowFormattingToolbar;
+            target.EditorSettings.EnhancedListHandling = source.EditorSettings.EnhancedListHandling;
+            target.EditorSettings.EnableSpellCheck = source.EditorSettings.EnableSpellCheck;
+            target.EditorSettings.SpellCheckLanguage = source.EditorSettings.SpellCheckLanguage;
             target.CreateBackup = source.CreateBackup;
             target.MaxBackups = source.MaxBackups;
             target.ShowWelcomeScreen = source.ShowWelcomeScreen;

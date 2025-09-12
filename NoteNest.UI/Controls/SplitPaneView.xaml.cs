@@ -8,6 +8,7 @@ using System.Windows.Documents;
 using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Controls;
+using NoteNest.UI.Controls.Editor.Core;
 using NoteNest.Core.Events;
 using NoteNest.Core.Services;
 using System.Windows.Input;
@@ -297,9 +298,9 @@ namespace NoteNest.UI.Controls
                     // Apply editor settings
                     if (config?.Settings != null)
                     {
-                        try { SpellCheck.SetIsEnabled(editor, config.Settings.EnableSpellCheck); } catch { }
-                        try { editor.Document.FontFamily = new System.Windows.Media.FontFamily(config.Settings.FontFamily); } catch { }
-                        try { editor.Document.FontSize = config.Settings.FontSize > 0 ? config.Settings.FontSize : editor.Document.FontSize; } catch { }
+                        try { SpellCheck.SetIsEnabled(editor, config.Settings.EditorSettings.EnableSpellCheck); } catch { }
+                        try { editor.Document.FontFamily = new System.Windows.Media.FontFamily(config.Settings.EditorSettings.FontFamily); } catch { }
+                        try { editor.Document.FontSize = config.Settings.EditorSettings.FontSize > 0 ? config.Settings.EditorSettings.FontSize : editor.Document.FontSize; } catch { }
                     }
                     
                     // Wire up metadata manager and current note
@@ -779,84 +780,6 @@ namespace NoteNest.UI.Controls
             }
         }
 
-        // Per-tab toolbar handlers
-        private void Toolbar_BulletList_Click(object sender, RoutedEventArgs e)
-        {
-            var editor = ResolveEditorFromSender(sender as DependencyObject)
-                         ?? ResolveEditorFromSelectedTab()
-                         ?? FindVisualChild<FormattedTextEditor>(this);
-            editor?.Focus();
-            editor?.InsertBulletList();
-        }
-        private void Toolbar_NumberedList_Click(object sender, RoutedEventArgs e)
-        {
-            var editor = ResolveEditorFromSender(sender as DependencyObject)
-                         ?? ResolveEditorFromSelectedTab()
-                         ?? FindVisualChild<FormattedTextEditor>(this);
-            editor?.Focus();
-            editor?.InsertNumberedList();
-        }
-
-        private FormattedTextEditor? ResolveEditorFromSender(DependencyObject? sender)
-        {
-            if (sender == null) return null;
-            var current = sender;
-            // Walk up until we find the FormattedTextEditor within the same tab content
-            while (current != null)
-            {
-                if (current is FormattedTextEditor fe) return fe;
-                // If we hit the content presenter of the tab content, try to find editor within
-                if (current is ContentPresenter cp)
-                {
-                    var fe2 = FindVisualChild<FormattedTextEditor>(cp);
-                    if (fe2 != null) return fe2;
-                }
-                try { current = System.Windows.Media.VisualTreeHelper.GetParent(current); }
-                catch { break; }
-            }
-            return null;
-        }
-
-        private FormattedTextEditor? ResolveEditorFromSelectedTab()
-        {
-            var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
-            var presenter = FindVisualChild<ContentPresenter>(container);
-            var editor = FindVisualChild<FormattedTextEditor>(presenter)
-                         ?? FindVisualChild<FormattedTextEditor>(container);
-            return editor;
-        }
-        private void Toolbar_TaskList_Click(object sender, RoutedEventArgs e)
-        {
-            // Task list support not yet implemented for formatted editor
-        }
-        private void Toolbar_Indent_Click(object sender, RoutedEventArgs e)
-        {
-            var editor = ResolveEditorFromSender(sender as DependencyObject)
-                         ?? ResolveEditorFromSelectedTab()
-                         ?? FindVisualChild<FormattedTextEditor>(this);
-            editor?.Focus();
-            editor?.IndentSelection();
-        }
-        private void Toolbar_Outdent_Click(object sender, RoutedEventArgs e)
-        {
-            var editor = ResolveEditorFromSender(sender as DependencyObject)
-                         ?? ResolveEditorFromSelectedTab()
-                         ?? FindVisualChild<FormattedTextEditor>(this);
-            editor?.Focus();
-            editor?.OutdentSelection();
-        }
-        private void Toolbar_Bold_Click(object sender, RoutedEventArgs e)
-        {
-            // Not used in formatted mode; bound through EditingCommands in XAML
-        }
-        private void Toolbar_Italic_Click(object sender, RoutedEventArgs e)
-        {
-            // Not used in formatted mode; bound through EditingCommands in XAML
-        }
-        private void Toolbar_Underline_Click(object sender, RoutedEventArgs e)
-        {
-            // Not used in formatted mode
-        }
 
     }
 }

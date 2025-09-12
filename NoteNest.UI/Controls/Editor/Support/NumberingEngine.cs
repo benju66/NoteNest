@@ -5,7 +5,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Documents;
 
-namespace NoteNest.UI.Controls.ListHandling
+namespace NoteNest.UI.Controls.Editor.Support
 {
     public class NumberingEngine
     {

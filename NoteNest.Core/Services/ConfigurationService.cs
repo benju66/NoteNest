@@ -132,11 +132,11 @@ namespace NoteNest.Core.Services
             }
 
             if (_settings.AutoSaveInterval == 0) _settings.AutoSaveInterval = 30;
-            if (_settings.FontSize == 0) _settings.FontSize = 14;
-            if (_settings.TabSize == 0) _settings.TabSize = 4;
+            if (_settings.EditorSettings.FontSize == 0) _settings.EditorSettings.FontSize = 14;
+            if (_settings.EditorSettings.TabSize == 0) _settings.EditorSettings.TabSize = 4;
             if (_settings.MaxBackups == 0) _settings.MaxBackups = 5;
             if (string.IsNullOrEmpty(_settings.Theme)) _settings.Theme = "System";
-            if (string.IsNullOrEmpty(_settings.FontFamily)) _settings.FontFamily = "Consolas";
+            if (string.IsNullOrEmpty(_settings.EditorSettings.FontFamily)) _settings.EditorSettings.FontFamily = "Consolas";
             // Default format enum handled by AppSettings default value
             if (string.IsNullOrEmpty(_settings.QuickNoteHotkey)) _settings.QuickNoteHotkey = "Win+N";
             if (string.IsNullOrEmpty(_settings.QuickTaskHotkey)) _settings.QuickTaskHotkey = "Win+T";
