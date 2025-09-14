@@ -133,16 +133,17 @@
                                                           Editor="{Binding ElementName=FormattedEditor}"/>
 
                             <!-- Note content viewer: always-formatted editor -->
-                            <editor:FormattedTextEditor x:Name="FormattedEditor"
-                                                      Grid.Row="1"
-                                                      VerticalScrollBarVisibility="Auto"
-                                                      HorizontalScrollBarVisibility="Disabled"
-                                                      Focusable="True"
-                                                      IsDocumentEnabled="True"
-                                                      IsHitTestVisible="True"
-                                                      Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                                                      MarkdownContent="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                      TextChanged="SmartEditor_TextChanged"/>
+                             <editor:FormattedTextEditor x:Name="FormattedEditor"
+                                                       Grid.Row="1"
+                                                       VerticalScrollBarVisibility="Auto"
+                                                       HorizontalScrollBarVisibility="Disabled"
+                                                       Focusable="True"
+                                                       IsDocumentEnabled="True"
+                                                       IsHitTestVisible="True"
+                                                       Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                                       Loaded="FormattedEditor_Loaded"
+                                                       Unloaded="FormattedEditor_Unloaded"
+                                                       DataContextChanged="SmartEditor_DataContextChanged"/>
                         </Grid>
                     </DataTemplate>
                 </local:DraggableTabControl.ContentTemplate>

@@ -10,30 +10,33 @@ using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
 using NoteNest.Core.Models;
-using NoteNest.UI.Controls.Editor.Support;
+// Removed: using NoteNest.UI.Controls.Editor.Support (deleted in new architecture)
 
 namespace NoteNest.UI.Controls.Editor.Core
 {
     public partial class FormattedTextEditor : RichTextBox
     {
-        private bool _isUpdating;
         private readonly MarkdownFlowDocumentConverter _converter;
-        private readonly ListStateTracker _listTracker = new ListStateTracker();
         private NoteModel _currentNote;
         private NoteNest.Core.Services.NoteMetadataManager _metadataManager;
+        
+        // New architecture - FlowDocument is single source of truth during editing
+        private bool _isDirty = false;
+        private string _originalMarkdown = string.Empty;
+        
+        // Lightweight markdown cache for WAL protection
+        private string _cachedMarkdown = "";
+        private DateTime _lastCacheTime = DateTime.MinValue;
+        
+        // Event for external coordination
+        public event EventHandler DocumentModified;
 
-        public static readonly DependencyProperty MarkdownContentProperty =
-            DependencyProperty.Register(
-                nameof(MarkdownContent),
-                typeof(string),
-                typeof(FormattedTextEditor),
-                new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, OnMarkdownContentChanged));
-
-        public string MarkdownContent
-        {
-            get => (string)GetValue(MarkdownContentProperty);
-            set => SetValue(MarkdownContentProperty, value);
-        }
+        // Removed: MarkdownContentProperty with two-way binding
+        // New architecture: Use LoadFromMarkdown() and SaveToMarkdown() instead
+        
+        public bool IsDirty => _isDirty;
+        
+        public string OriginalMarkdown => _originalMarkdown;
 
         public NoteModel CurrentNote 
         {
@@ -92,16 +95,12 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
             catch { }
 
-            // Simple text changed - no debouncing
-            TextChanged += (s, e) =>
+            // New architecture: Only track dirty state, NO real-time conversion
+            // Note: TextChanged is on RichTextBox, not FlowDocument
+            TextChanged += (s, e) => 
             {
-                if (!_isUpdating)
-                {
-                    _isUpdating = true;
-                    var markdown = _converter.ConvertToMarkdown(Document);
-                    SetCurrentValue(MarkdownContentProperty, markdown);
-                    _isUpdating = false;
-                }
+                MarkDirty();
+                DocumentModified?.Invoke(this, EventArgs.Empty);
             };
             GotFocus += (s, e) => Keyboard.Focus(this);
 
@@ -112,8 +111,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             // Register custom command bindings
             RegisterCommandBindings();
             
-            // Initialize numbering system
-            InitializeNumberingSystem();
+            // Removed: Complex numbering system initialization
 
             // Smart list behaviors
             PreviewKeyDown += OnPreviewKeyDown;
@@ -122,8 +120,7 @@ namespace NoteNest.UI.Controls.Editor.Core
 
         private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
-            // Don't process if we're already updating
-            if (_isUpdating) return;
+            // Removed: _isUpdating check (no longer needed)
             
             switch (e.Key)
             {
@@ -241,7 +238,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             if (currentPara.Parent is not ListItem li || li.Parent is not List list) 
                 return false;
 
-                _isUpdating = true;
+                // Removed: _isUpdating flag
                 try
                 {
                 var text = new TextRange(currentPara.ContentStart, currentPara.ContentEnd).Text;
@@ -306,18 +303,13 @@ namespace NoteNest.UI.Controls.Editor.Core
                 // Position caret at start of new item
                     CaretPosition = newPara.ContentStart;
                     
-                    // After creating new list item
-                    if (list.MarkerStyle == TextMarkerStyle.Decimal)
-                    {
-                        // Schedule renumbering for numbered lists
-                        ScheduleRenumbering();
-                    }
+                    // Removed: ScheduleRenumbering (part of deleted numbering system)
                     
                 return true;
                 }
                 finally
                 {
-                    _isUpdating = false;
+                    // Removed: _isUpdating flag
                 }
         }
 
@@ -336,7 +328,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             if (para?.Parent is not ListItem li || li.Parent is not List list) 
                 return;
 
-                _isUpdating = true;
+                // Removed: _isUpdating flag
                 try
                 {
                 // SAFETY CHECK: Only remove if this is a single-paragraph list item
@@ -441,7 +433,7 @@ namespace NoteNest.UI.Controls.Editor.Core
                 }
                 finally
                 {
-                    _isUpdating = false;
+                    // Removed: _isUpdating flag
                     // Debouncing removed - content updates immediately
             }
         }
@@ -453,7 +445,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             // Trigger renumbering if it's a numbered list
             if (list?.MarkerStyle == TextMarkerStyle.Decimal)
             {
-                ScheduleRenumbering();
+                // Removed: ScheduleRenumbering (part of deleted numbering system)
             }
         }
 
@@ -668,7 +660,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             if (para.Parent is not ListItem li) return false;
             if (li.Parent is not List parentList) return false;
 
-            _isUpdating = true;
+            // Removed: _isUpdating flag
             try
             {
                 if (outdent)
@@ -682,7 +674,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
             finally
             {
-                _isUpdating = false;
+                // Removed: _isUpdating flag
                 // Debouncing removed - content updates immediately
             }
         }
@@ -758,7 +750,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             // Trigger renumbering if it's a numbered list
             if (parentList?.MarkerStyle == TextMarkerStyle.Decimal)
             {
-                ScheduleRenumbering();
+                // Removed: ScheduleRenumbering (part of deleted numbering system)
             }
             
             return true;
@@ -801,7 +793,7 @@ namespace NoteNest.UI.Controls.Editor.Core
                     // Trigger renumbering if it's a numbered list
                     if (grandParentList?.MarkerStyle == TextMarkerStyle.Decimal)
                     {
-                        ScheduleRenumbering();
+                        // Removed: ScheduleRenumbering (part of deleted numbering system)
                     }
                     
                     return true;
@@ -1064,7 +1056,7 @@ namespace NoteNest.UI.Controls.Editor.Core
         {
             if (para?.Parent is not ListItem li || li.Parent is not List list) return;
 
-            _isUpdating = true;
+            // Removed: _isUpdating flag
             try
             {
                 var parentBlocks = GetParentBlockCollection(list);
@@ -1169,7 +1161,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
             finally
             {
-                _isUpdating = false;
+                // Removed: _isUpdating flag
                 // Debouncing removed - content updates immediately
             }
         }
@@ -1329,7 +1321,7 @@ namespace NoteNest.UI.Controls.Editor.Core
         {
             if (para?.Parent is not ListItem li || li.Parent is not List list) return;
 
-            _isUpdating = true;
+            // Removed: _isUpdating flag
             try
             {
                 var parentBlocks = GetParentBlockCollection(list);
@@ -1404,7 +1396,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
             finally
             {
-                _isUpdating = false;
+                // Removed: _isUpdating flag
                 // Debouncing removed - content updates immediately
             }
         }
@@ -1613,78 +1605,121 @@ namespace NoteNest.UI.Controls.Editor.Core
             return false;
         }
 
-        private static void OnMarkdownContentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        /// <summary>
+        /// NEW ARCHITECTURE: Load markdown content into FlowDocument (load boundary only)
+        /// </summary>
+        public void LoadFromMarkdown(string markdown)
         {
-            var editor = (FormattedTextEditor)d;
-            if (editor._isUpdating) return;
-            editor.UpdateDocumentFromMarkdown(e.NewValue as string ?? string.Empty);
-        }
-
-
-        private void UpdateDocumentFromMarkdown(string markdown)
-        {
-            _isUpdating = true;
             try
             {
+                markdown = markdown ?? string.Empty;
+                _originalMarkdown = markdown;
+                _isDirty = false;
+
                 var app = Application.Current as App;
                 var config = app?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
                 var editorSettings = config?.Settings?.EditorSettings;
                 var fontFamily = editorSettings?.FontFamily;
                 double? fontSize = editorSettings?.FontSize;
-                bool enhancedLists = editorSettings?.EnhancedListHandling ?? false;
 
-                // Preserve caret and avoid replacing the Document instance
-                var caret = CaretPosition;
+                // Convert markdown to FlowDocument
                 var flow = _converter.ConvertToFlowDocument(markdown, fontFamily, fontSize);
-                try
+                
+                // Clear and populate document
+                Document.Blocks.Clear();
+                
+                // Ensure document has proper styles for lists
+                var listStyle = new Style(typeof(List));
+                listStyle.Setters.Add(new Setter(List.MarginProperty, new Thickness(0, 2, 0, 2)));
+                listStyle.Setters.Add(new Setter(List.PaddingProperty, new Thickness(20, 0, 0, 0)));
+                Document.Resources[typeof(List)] = listStyle;
+                
+                var listItemStyle = new Style(typeof(ListItem));
+                listItemStyle.Setters.Add(new Setter(ListItem.MarginProperty, new Thickness(0, 1, 0, 1)));
+                Document.Resources[typeof(ListItem)] = listItemStyle;
+                
+                // Move blocks from converter document to this document
+                foreach (var block in flow.Blocks.ToList())
                 {
-                    Document.Blocks.Clear();
-                    
-                    // Ensure document has proper styles for lists
-                    var listStyle = new Style(typeof(List));
-                    listStyle.Setters.Add(new Setter(List.MarginProperty, new Thickness(0, 2, 0, 2)));
-                    listStyle.Setters.Add(new Setter(List.PaddingProperty, new Thickness(20, 0, 0, 0)));
-                    Document.Resources[typeof(List)] = listStyle;
-                    
-                    var listItemStyle = new Style(typeof(ListItem));
-                    listItemStyle.Setters.Add(new Setter(ListItem.MarginProperty, new Thickness(0, 1, 0, 1)));
-                    Document.Resources[typeof(ListItem)] = listItemStyle;
-                    
-                    foreach (var block in flow.Blocks.ToList())
-                    {
-                        flow.Blocks.Remove(block);
-                        Document.Blocks.Add(block);
-                    }
+                    flow.Blocks.Remove(block);
+                    Document.Blocks.Add(block);
                 }
-                catch { /* ignore copy failures */ }
-                try { CaretPosition = Document?.ContentEnd ?? caret; } catch { }
-
-                // Load and apply list formatting metadata if available
-                if (_currentNote != null && _metadataManager != null)
-                {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            var listFormatting = await _metadataManager.LoadListFormattingAsync(_currentNote);
-                            if (!string.IsNullOrEmpty(listFormatting))
-                            {
-                                await Dispatcher.InvokeAsync(() =>
-                                {
-                                    ApplyListFormattingMetadata(listFormatting);
-                                });
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"Failed to load list formatting: {ex.Message}");
-                        }
-                    });
-                }
+                
+                // Position caret at start
+                CaretPosition = Document.ContentStart;
+                
+                System.Diagnostics.Debug.WriteLine($"[EDITOR] Loaded {markdown.Length} chars, IsDirty: {_isDirty}");
             }
-            finally
+            catch (Exception ex)
             {
-                _isUpdating = false;
+                System.Diagnostics.Debug.WriteLine($"[ERROR] LoadFromMarkdown failed: {ex.Message}");
+                // Create empty document on error
+                Document.Blocks.Clear();
+                Document.Blocks.Add(new Paragraph());
+            }
+        }
+
+        /// <summary>
+        /// Get quick markdown with caching for WAL protection (avoids repeated conversions)
+        /// </summary>
+        public string GetQuickMarkdown()
+        {
+            // Cache for 100ms to avoid repeated conversions during rapid operations
+            if ((DateTime.Now - _lastCacheTime).TotalMilliseconds < 100)
+                return _cachedMarkdown;
+            
+            try
+            {
+                _cachedMarkdown = _converter.ConvertToMarkdown(Document);
+                _lastCacheTime = DateTime.Now;
+                return _cachedMarkdown;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[EDITOR] GetQuickMarkdown failed: {ex.Message}");
+                return _originalMarkdown ?? "";
+            }
+        }
+
+        /// <summary>
+        /// NEW ARCHITECTURE: Convert FlowDocument to markdown (save boundary only)
+        /// </summary>
+        public string SaveToMarkdown()
+        {
+            try
+            {
+                var markdown = _converter.ConvertToMarkdown(Document);
+                _originalMarkdown = markdown;
+                _cachedMarkdown = markdown;  // Update cache
+                _lastCacheTime = DateTime.Now;
+                System.Diagnostics.Debug.WriteLine($"[EDITOR] Converted to {markdown?.Length ?? 0} chars markdown");
+                return markdown ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] SaveToMarkdown failed: {ex.Message}");
+                return _originalMarkdown ?? ""; // Return original as fallback
+            }
+        }
+
+        /// <summary>
+        /// Mark content as clean after successful save
+        /// </summary>
+        public void MarkClean()
+        {
+            _isDirty = false;
+            System.Diagnostics.Debug.WriteLine($"[EDITOR] Marked clean");
+        }
+
+        /// <summary>
+        /// Mark content as dirty (internal use)
+        /// </summary>
+        private void MarkDirty()
+        {
+            if (!_isDirty)
+            {
+                _isDirty = true;
+                System.Diagnostics.Debug.WriteLine($"[EDITOR] Marked dirty");
             }
         }
 
@@ -1703,7 +1738,7 @@ namespace NoteNest.UI.Controls.Editor.Core
 
         private void WrapSelectionInList(TextMarkerStyle markerStyle)
         {
-            _isUpdating = true;
+            // Removed: _isUpdating flag
             try
             {
                 var startPara = Selection.Start?.Paragraph ?? CaretPosition?.Paragraph;
@@ -1755,7 +1790,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
             finally
             {
-                _isUpdating = false;
+                // Removed: _isUpdating flag
                 // Debouncing removed - content updates immediately
             }
         }
@@ -1951,7 +1986,7 @@ namespace NoteNest.UI.Controls.Editor.Core
 
         private void SmartToggleList(TextMarkerStyle markerStyle)
         {
-            _isUpdating = true;
+            // Removed: _isUpdating flag
             try
             {
                 var selection = GetSelectedParagraphs();
@@ -2027,7 +2062,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
             finally
             {
-                _isUpdating = false;
+                // Removed: _isUpdating flag
                 // Debouncing removed - content updates immediately
             }
         }
@@ -2090,33 +2125,25 @@ namespace NoteNest.UI.Controls.Editor.Core
             BeginChange();
             try
             {
-                _isUpdating = true;
+                // Removed: _isUpdating flag
                 updateAction();
             }
             finally
             {
-                _isUpdating = false;
+                // Removed: _isUpdating flag
                 EndChange();
             }
         }
 
+        // Removed: List formatting methods (part of deleted list tracking system)
         public string GetListFormatting()
         {
-            try
-            {
-                return _listTracker.SerializeState(Document) ?? string.Empty;
-            }
-            catch { return string.Empty; }
+            return string.Empty; // Simplified - no complex list formatting
         }
 
         public void RestoreListFormatting(string formatting)
         {
-            if (string.IsNullOrWhiteSpace(formatting)) return;
-            try
-            {
-                _listTracker.RestoreState(Document, formatting);
-            }
-            catch { }
+            // Simplified - no complex list formatting restoration needed
         }
 
         #region Debug Helper

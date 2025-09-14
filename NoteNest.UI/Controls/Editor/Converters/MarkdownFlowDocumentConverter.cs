@@ -11,14 +11,21 @@ using System.Text.RegularExpressions;
 
 namespace NoteNest.UI.Controls.Editor.Converters
 {
+    /// <summary>
+    /// SIMPLIFIED converter for new editor architecture
+    /// - Only converts at load/save boundaries (not real-time)
+    /// - Supports bullets, numbers, bold, italic, headers
+    /// - No task lists, no complex numbering
+    /// - Optimized for single-pass conversion
+    /// </summary>
     public class MarkdownFlowDocumentConverter
     {
         private readonly MarkdownPipeline _pipeline;
 
         public MarkdownFlowDocumentConverter()
         {
+            // Simplified pipeline - removed task lists, kept core features  
             _pipeline = new MarkdownPipelineBuilder()
-                .UseTaskLists()
                 .UseEmphasisExtras()
                 .UseListExtras()
                 .UseAutoLinks()
@@ -183,18 +190,11 @@ namespace NoteNest.UI.Controls.Editor.Converters
                 if (item is ListItemBlock listItem)
                 {
                     var li = new ListItem();
+                    // Simplified: no task list support, just convert blocks normally
                     foreach (var block in listItem)
                     {
-                        // Detect task list pattern like [ ] or [x] at the start of the first paragraph
-                        if (block is ParagraphBlock paraBlock && IsTaskListParagraph(paraBlock))
-                        {
-                            li.Blocks.Add(CreateTaskParagraph(paraBlock));
-                        }
-                        else
-                        {
-                            var fb = ConvertBlock(block);
-                            if (fb != null) li.Blocks.Add(fb);
-                        }
+                        var fb = ConvertBlock(block);
+                        if (fb != null) li.Blocks.Add(fb);
                     }
                     list.ListItems.Add(li);
                 }
@@ -202,25 +202,8 @@ namespace NoteNest.UI.Controls.Editor.Converters
             return list;
         }
 
-        private bool IsTaskListParagraph(ParagraphBlock paragraph)
-        {
-            var text = GetParagraphText(paragraph);
-            return Regex.IsMatch(text, "^\\s*\\[( |x|X)\\]\\s+");
-        }
-
-        private Paragraph CreateTaskParagraph(ParagraphBlock paragraph)
-        {
-            var text = GetParagraphText(paragraph);
-            var match = Regex.Match(text, "^\\s*\\[( |x|X)\\]\\s+(.*)$");
-            bool isChecked = match.Success && (match.Groups[1].Value.Equals("x", StringComparison.OrdinalIgnoreCase));
-            string remainder = match.Success ? match.Groups[2].Value : text;
-
-            var p = new Paragraph();
-            var cb = new CheckBox { IsChecked = isChecked, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0,0,5,0) };
-            p.Inlines.Add(new InlineUIContainer(cb));
-            p.Inlines.Add(new Run(remainder));
-            return p;
-        }
+        // Removed: Task list methods (IsTaskListParagraph, CreateTaskParagraph)
+        // Simplified architecture only supports bullets and numbers
 
         private string GetParagraphText(ParagraphBlock paragraph)
         {
@@ -359,10 +342,7 @@ namespace NoteNest.UI.Controls.Editor.Converters
                     if (ital) return WrapWithMarkers(text, "*", "*");
                     return text;
                 case InlineUIContainer ui:
-                    if (ui.Child is CheckBox cb)
-                    {
-                        return cb.IsChecked == true ? "[x] " : "[ ] ";
-                    }
+                    // Removed: checkbox support for simplified architecture
                     return string.Empty;
                 case Hyperlink link:
                     var linkText = new TextRange(link.ContentStart, link.ContentEnd).Text;

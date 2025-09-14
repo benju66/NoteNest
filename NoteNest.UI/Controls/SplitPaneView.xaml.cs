@@ -20,9 +20,11 @@ namespace NoteNest.UI.Controls
     {
         public SplitPane? Pane { get; private set; }
         public event EventHandler<ITabItem>? SelectedTabChanged;
-        private System.Windows.Threading.DispatcherTimer? _idleSaveTimer;
-        private DateTime _lastTextChangedAt;
-        private int _typingBurstCount;
+        
+        // Combined Option A+B: Single adaptive timer for save coordination
+        private System.Windows.Threading.DispatcherTimer _saveTimer;
+        private DateTime _lastModification;
+        private bool _walSaved;
         private bool _isDropHighlight;
         
         public static readonly DependencyProperty IsActiveProperty =
@@ -49,6 +51,13 @@ namespace NoteNest.UI.Controls
         public SplitPaneView()
         {
             InitializeComponent();
+            
+            // Initialize single adaptive timer for save coordination
+            _saveTimer = new System.Windows.Threading.DispatcherTimer 
+            { 
+                Interval = TimeSpan.FromMilliseconds(100) // 100ms heartbeat
+            };
+            _saveTimer.Tick += SaveTimer_Tick;
             try
             {
                 var bus = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IEventBus)) as IEventBus;
@@ -207,9 +216,8 @@ namespace NoteNest.UI.Controls
         {
             if (Pane != null && PaneTabControl.SelectedItem is ITabItem newTab)
             {
-                // Auto-save previous tab if it was dirty
-                var workspaceService = _workspaceService;
-                // StateService removed - SaveManager handles saves automatically
+                // Stop current save timer - we'll handle tab switch saves manually
+                _saveTimer.Stop();
                 
                 // Find the previously selected tab from the old selection
                 ITabItem? oldTab = null;
@@ -218,41 +226,36 @@ namespace NoteNest.UI.Controls
                     oldTab = removedTab;
                 }
                 
-                // Auto-save old tab if it was dirty - handled automatically by SaveManager
+                // Handle old tab save if dirty (Combined approach)
                 if (oldTab != null && oldTab.IsDirty)
                 {
                     try
                     {
-                        System.Diagnostics.Debug.WriteLine($"[UI] Tab switch auto-save START from={oldTab?.Title} to={newTab?.Title} at={DateTime.Now:HH:mm:ss.fff}");
-                        // Flush binding from editor to Content (which updates state via NoteTabItem setter)
-                        try
+                        System.Diagnostics.Debug.WriteLine($"[UI] Tab switch save: {oldTab.Title} → {newTab.Title}");
+                        
+                        // Force immediate save before switch
+                        var oldEditor = GetEditorForTab(oldTab);
+                        if (oldEditor != null)
                         {
-                            var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(oldTab) as TabItem;
-                            var presenter = FindVisualChild<ContentPresenter>(container);
-                            var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                            var content = oldEditor.SaveToMarkdown();
+                            if (oldTab is NoteTabItem nti)
+                            {
+                                nti.UpdateContent(content);
+                                oldEditor.MarkClean();
+                            }
                             
-                            // Content should be up-to-date since debouncing was removed
-                            
-                            var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
-                            binding?.UpdateSource();
+                            System.Diagnostics.Debug.WriteLine($"[UI] Tab switch save completed for {oldTab.Title}");
                         }
-                        catch (Exception ex)
-                        {
-                            try { _logger?.Warning($"Failed to flush binding on tab switch: {ex.Message}"); } catch { }
-                        }
-                        // Content updates handled automatically by SaveManager
-                        // Auto-save is handled automatically by SaveManager's 2-second debounce
-                        try
-                        {
-                            _logger?.Info($"Tab switch - auto-save handled by SaveManager: {oldTab?.Title}");
-                        }
-                        catch { }
                     }
-                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[UI][ERROR] Tab switch auto-save failed: {ex.Message}"); /* continue */ }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[UI] Tab switch save failed: {ex.Message}");
+                    }
                 }
 
                 // Update pane and workspace state
                 Pane.SelectedTab = newTab;
+                var workspaceService = _workspaceService;
                 if (workspaceService != null)
                 {
                     workspaceService.SelectedTab = newTab;
@@ -271,7 +274,7 @@ namespace NoteNest.UI.Controls
                         {
                             var presenterNew = FindVisualChild<ContentPresenter>(PaneTabControl.ItemContainerGenerator.ContainerFromItem(newTab) as TabItem);
                             var editorNew = FindVisualChild<FormattedTextEditor>(presenterNew);
-                            var shownLen = editorNew?.MarkdownContent?.Length ?? -1;
+                            var shownLen = editorNew?.IsDirty == true ? -1 : 0; // Track dirty state instead
                             // State tracking removed - SaveManager handles content
                             System.Diagnostics.Debug.WriteLine($"[UI] Switched TO tab id={newTab.Note.Id} shownLen={shownLen}");
                         }
@@ -509,7 +512,7 @@ namespace NoteNest.UI.Controls
                     
                     // Content should be up-to-date since debouncing was removed
                     
-                    var content = editor?.MarkdownContent ?? nti.Content ?? string.Empty;
+                    var content = editor?.SaveToMarkdown() ?? nti.Content ?? string.Empty;
                     nti.Content = content;
                     // Content updates handled automatically by SaveManager via NoteTabItem
                 }
@@ -544,72 +547,200 @@ namespace NoteNest.UI.Controls
             catch { }
         }
 
-        private void SmartEditor_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        /// <summary>
+        /// NEW ARCHITECTURE: Initialize editor when loaded
+        /// </summary>
+        private void FormattedEditor_Loaded(object sender, RoutedEventArgs e)
         {
-            var configService = _configService;
-            if (configService?.Settings?.AutoSaveIdleMs > 0)
+            if (sender is FormattedTextEditor editor)
             {
-                _idleSaveTimer ??= new System.Windows.Threading.DispatcherTimer();
-                // Smart idle interval: base on settings, adapt on rapid typing and large notes
-                var baseMs = configService.Settings.AutoSaveIdleMs;
-                var now = DateTime.UtcNow;
-                var sinceLast = (now - _lastTextChangedAt).TotalMilliseconds;
-                var adaptiveEnabled = configService.Settings.AdaptiveAutoSaveEnabled;
+                LoadContentIntoEditor(editor, "Loaded");
+            }
+        }
 
-                if (adaptiveEnabled && sinceLast < 500)
+        /// <summary>
+        /// Clean up editor when unloaded
+        /// </summary>
+        private void FormattedEditor_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is FormattedTextEditor editor)
+            {
+                // Clean up event handler
+                editor.DocumentModified -= Editor_DocumentModified;
+                
+                // Stop timer if this was the active editor
+                if (editor == GetActiveEditor())
                 {
-                    _typingBurstCount = Math.Min(_typingBurstCount + 1, 5);
+                    _saveTimer.Stop();
+                    System.Diagnostics.Debug.WriteLine("[SAVE] Timer stopped - editor unloaded");
+                }
+            }
+        }
+
+        /// <summary>
+        /// NEW ARCHITECTURE: Load content when DataContext changes (tab switching)
+        /// </summary>
+        private void SmartEditor_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (sender is FormattedTextEditor editor && e.NewValue is NoteTabItem)
+            {
+                LoadContentIntoEditor(editor, "DataContextChanged");
+            }
+        }
+
+        /// <summary>
+        /// Shared logic for loading content into editor
+        /// </summary>
+        private void LoadContentIntoEditor(FormattedTextEditor editor, string trigger)
+        {
+            try
+            {
+                // Get the data context (should be NoteTabItem)
+                if (editor.DataContext is NoteTabItem tabItem)
+                {
+                    var content = tabItem.Content ?? string.Empty;
+                    editor.LoadFromMarkdown(content);
+                    
+                    // Option A: Wire up using existing method
+                    editor.DocumentModified -= Editor_DocumentModified;
+                    editor.DocumentModified += Editor_DocumentModified;
+                    
+                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] {trigger}: Loaded {content.Length} chars into editor for tab: {tabItem.Title}");
                 }
                 else
                 {
-                    _typingBurstCount = 0;
+                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] {trigger}: DataContext is not NoteTabItem");
                 }
-
-                var adaptiveMs = baseMs;
-                // If rapidly typing, extend debounce modestly
-                if (adaptiveEnabled && _typingBurstCount >= 2)
-                {
-                    var preset = (configService.Settings.AdaptiveAutoSavePreset ?? "Balanced").ToLowerInvariant();
-                    var bump = preset == "aggressive" ? 150 : preset == "conservative" ? 500 : 300;
-                    adaptiveMs += bump;
-                }
-
-                // If note is very large, increase debounce
-                try
-                {
-                    var tab = Pane?.SelectedTab;
-                    var contentLen = tab?.Content?.Length ?? 0;
-                    if (adaptiveEnabled)
-                    {
-                        if (contentLen > 50000) adaptiveMs = (int)(adaptiveMs * 1.5);
-                        if (contentLen > 200000) adaptiveMs = (int)(adaptiveMs * 2);
-                    }
-                }
-                catch { }
-
-                // Clamp interval
-                if (adaptiveMs < 250) adaptiveMs = 250;
-                if (adaptiveMs > 60000) adaptiveMs = 60000;
-
-                _idleSaveTimer.Interval = TimeSpan.FromMilliseconds(adaptiveMs);
-                // Timer handlers removed - auto-save now handled by SaveManager
-                _idleSaveTimer.Stop();
-                _idleSaveTimer.Start();
-                _lastTextChangedAt = now;
-            }
-            // Do not push content here; rely on binding to NoteTabItem.Content to update state.
-            try
-            {
-                var workspaceService = _workspaceService;
-                var tab = Pane?.SelectedTab ?? workspaceService?.SelectedTab;
-                // SaveManager automatically tracks open notes
-                
-                // Content buffering removed - SaveManager handles this automatically
             }
             catch (Exception ex)
             {
-                try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"TextChanged inspection failed: {ex.Message}"); } catch { }
+                System.Diagnostics.Debug.WriteLine($"[ERROR] LoadContentIntoEditor ({trigger}) failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Handle document modifications to trigger save coordination
+        /// </summary>
+        private void Editor_DocumentModified(object sender, EventArgs e)
+        {
+            _lastModification = DateTime.Now;
+            _walSaved = false;
+            
+            // Option B: Single timer with dual behavior
+            if (!_saveTimer.IsEnabled)
+            {
+                _saveTimer.Start();
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[SAVE] Document modified, timer started");
+        }
+
+        /// <summary>
+        /// Combined Option A+B: Single adaptive timer with two-phase save protection
+        /// </summary>
+        private void SaveTimer_Tick(object sender, EventArgs e)
+        {
+            var elapsed = (DateTime.Now - _lastModification).TotalMilliseconds;
+            
+            // Phase 1: WAL protection at 500ms
+            if (!_walSaved && elapsed >= 500)
+            {
+                UpdateWAL();
+                _walSaved = true;
+                System.Diagnostics.Debug.WriteLine($"[SAVE] WAL protection triggered at {elapsed}ms");
+            }
+            
+            // Phase 2: Full auto-save at 2000ms
+            if (elapsed >= 2000)
+            {
+                PerformAutoSave();
+                _saveTimer.Stop();
+                System.Diagnostics.Debug.WriteLine($"[SAVE] Auto-save completed at {elapsed}ms, timer stopped");
+            }
+        }
+
+        /// <summary>
+        /// Update WAL for crash protection (quick markdown)
+        /// </summary>
+        private void UpdateWAL()
+        {
+            try
+            {
+                var editor = GetActiveEditor();
+                var tab = Pane?.SelectedTab as NoteTabItem;
+                if (editor?.IsDirty == true && tab != null)
+                {
+                    var content = editor.GetQuickMarkdown();
+                    var saveManager = GetSaveManager();
+                    saveManager?.UpdateContent(tab.NoteId, content);
+                    
+                    System.Diagnostics.Debug.WriteLine($"[WAL] Protected content for {tab.Title} ({content.Length} chars)");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[WAL] Update failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Perform full auto-save (accurate markdown)
+        /// </summary>
+        private void PerformAutoSave()
+        {
+            try
+            {
+                var editor = GetActiveEditor();
+                var tab = Pane?.SelectedTab as NoteTabItem;
+                if (editor?.IsDirty == true && tab != null)
+                {
+                    var content = editor.SaveToMarkdown();
+                    tab.UpdateContent(content);
+                    editor.MarkClean();
+                    
+                    System.Diagnostics.Debug.WriteLine($"[AUTOSAVE] Saved {tab.Title} ({content.Length} chars)");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[AUTOSAVE] Failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Get the currently active editor for this pane
+        /// </summary>
+        private FormattedTextEditor GetActiveEditor()
+        {
+            var tab = Pane?.SelectedTab;
+            if (tab == null) return null;
+            
+            var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
+            if (container == null) return null;
+            
+            var presenter = FindVisualChild<ContentPresenter>(container);
+            return FindVisualChild<FormattedTextEditor>(presenter);
+        }
+
+        /// <summary>
+        /// Get SaveManager service
+        /// </summary>
+        private ISaveManager GetSaveManager()
+        {
+            return (Application.Current as App)?.ServiceProvider
+                ?.GetService(typeof(ISaveManager)) as ISaveManager;
+        }
+
+        /// <summary>
+        /// Get editor for a specific tab (used in tab switching)
+        /// </summary>
+        private FormattedTextEditor GetEditorForTab(ITabItem tab)
+        {
+            var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
+            if (container == null) return null;
+            
+            var presenter = FindVisualChild<ContentPresenter>(container);
+            return FindVisualChild<FormattedTextEditor>(presenter);
         }
 
 
@@ -683,9 +814,12 @@ namespace NoteNest.UI.Controls
                         
                         // Content should be up-to-date since debouncing was removed
                         
-                        // Then flush binding
-                        var binding = editor?.GetBindingExpression(FormattedTextEditor.MarkdownContentProperty);
-                        binding?.UpdateSource();
+                        // NEW ARCHITECTURE: Get content from editor and save it
+                        if (editor != null && tab is NoteTabItem nti)
+                        {
+                            var content = editor.SaveToMarkdown();
+                            nti.UpdateContent(content);
+                        }
                         System.Diagnostics.Debug.WriteLine($"[UI] CloseTab force flush for noteId={tab?.Note?.Id} at={DateTime.Now:HH:mm:ss.fff}");
                     }
                 }
@@ -703,7 +837,7 @@ namespace NoteNest.UI.Controls
                         var editor = FindVisualChild<FormattedTextEditor>(presenter);
                         if (editor != null)
                         {
-                            editor.TextChanged -= SmartEditor_TextChanged;
+                            // Removed: old TextChanged handler (no longer needed in new architecture)
                         }
                     }
                     catch (Exception ex)
