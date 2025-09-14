@@ -565,28 +565,16 @@ namespace NoteNest.UI.Controls
 
         /// <summary>
         /// PROPER ARCHITECTURE: Load content when DataContext changes (tab switching)
-        /// Only load if editor is empty to prevent content loss
+        /// Always load content when switching to different tab - this fixes content sharing bug
         /// </summary>
         private void SmartEditor_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             if (sender is FormattedTextEditor editor && e.NewValue is NoteTabItem tabItem)
             {
-                // Check if editor already has content
-                if (!editor.Document.Blocks.Any() || 
-                    (editor.Document.Blocks.FirstBlock is Paragraph p && 
-                     string.IsNullOrEmpty(new System.Windows.Documents.TextRange(p.ContentStart, p.ContentEnd).Text)))
-                {
-                    // Editor is empty - safe to load
-                    LoadContentIntoEditor(editor, "DataContextChanged-Empty");
-                }
-                else
-                {
-                    // Editor has content - just wire up TextChanged handler (simple)
-                    editor.TextChanged -= Editor_TextChanged;
-                    editor.TextChanged += Editor_TextChanged;
-                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] DataContextChanged: Skipped reload - editor has content for {tabItem.Title}");
-                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] TextChanged handler attached for {tabItem.Title} (DataContextChanged)");
-                }
+                // CRITICAL FIX: Always load content when DataContext changes to different tab
+                // The "content sharing" bug was caused by being too conservative about reloading
+                LoadContentIntoEditor(editor, "DataContextChanged");
+                System.Diagnostics.Debug.WriteLine($"[SPLITPANE] DataContextChanged: Loaded content for {tabItem.Title}");
             }
         }
 
@@ -601,13 +589,16 @@ namespace NoteNest.UI.Controls
                 if (editor.DataContext is NoteTabItem tabItem)
                 {
                     var content = tabItem.Content ?? string.Empty;
+                    
+                    // CRITICAL: Always clear editor before loading new content to prevent content mixing
+                    editor.Document.Blocks.Clear();
                     editor.LoadFromMarkdown(content);
                     
                     // CLEAN ARCHITECTURE: Direct method call instead of complex event wiring
                     editor.TextChanged -= Editor_TextChanged; // Prevent duplicates
                     editor.TextChanged += Editor_TextChanged;  // Simple, direct connection
                     
-                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] {trigger}: Loaded {content.Length} chars into editor for tab: {tabItem.Title}");
+                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] {trigger}: Cleared editor and loaded {content.Length} chars for tab: {tabItem.Title}");
                     System.Diagnostics.Debug.WriteLine($"[SPLITPANE] TextChanged handler attached for {tabItem.Title}");
                 }
                 else
