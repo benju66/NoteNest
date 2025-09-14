@@ -228,7 +228,9 @@ namespace NoteNest.UI.ViewModels
                 }
                 catch (Exception ex)
                 {
+                    // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
                     System.Diagnostics.Debug.WriteLine($"[NoteTabItem] WAL protection failed for {Note.Title}: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] WAL error details: {ex.StackTrace}");
                 }
             }
         }
@@ -252,13 +254,17 @@ namespace NoteNest.UI.ViewModels
                     }
                     catch (Exception ex)
                     {
+                        // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
                         System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save failed for {Note.Title}: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save error details: {ex.StackTrace}");
                     }
                 });
             }
             catch (Exception ex)
             {
+                // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
                 System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save timer failed for {Note.Title}: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Timer error details: {ex.StackTrace}");
             }
         }
 

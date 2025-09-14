@@ -1,0 +1,16 @@
+<UserControl x:Class="NoteNest.UI.Controls.NoteEditorContainer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:editor="clr-namespace:NoteNest.UI.Controls.Editor.Core">
+    <Grid>
+        <editor:FormattedTextEditor x:Name="Editor"
+                                   VerticalScrollBarVisibility="Auto"
+                                   HorizontalScrollBarVisibility="Disabled"
+                                   Focusable="True"
+                                   IsDocumentEnabled="True"
+                                   IsHitTestVisible="True"
+                                   Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                                   Loaded="Editor_Loaded"
+                                   Unloaded="Editor_Unloaded"/>
+    </Grid>
+</UserControl>

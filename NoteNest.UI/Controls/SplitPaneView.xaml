@@ -131,20 +131,11 @@
 
                             <!-- Per-tab toolbar -->
                             <editorControls:EditorToolbar Grid.Row="0" 
-                                                          Editor="{Binding ElementName=FormattedEditor}"/>
+                                                          Editor="{Binding ElementName=EditorContainer, Path=UnderlyingEditor}"/>
 
-                            <!-- Note content viewer: always-formatted editor -->
-                             <editor:FormattedTextEditor x:Name="FormattedEditor"
-                                                       Grid.Row="1"
-                                                       VerticalScrollBarVisibility="Auto"
-                                                       HorizontalScrollBarVisibility="Disabled"
-                                                       Focusable="True"
-                                                       IsDocumentEnabled="True"
-                                                       IsHitTestVisible="True"
-                                                       Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                                                       Loaded="FormattedEditor_Loaded"
-                                                       Unloaded="FormattedEditor_Unloaded"
-                                                       DataContextChanged="SmartEditor_DataContextChanged"/>
+                            <!-- OPTION B: Custom UserControl with complete isolation -->
+                            <!-- Each tab gets its own NoteEditorContainer instance - no cross-contamination possible -->
+                             <local:NoteEditorContainer x:Name="EditorContainer" Grid.Row="1" />
                         </Grid>
                     </DataTemplate>
                 </local:DraggableTabControl.ContentTemplate>
