@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Specialized;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -20,11 +21,6 @@ namespace NoteNest.UI.Controls
     {
         public SplitPane? Pane { get; private set; }
         public event EventHandler<ITabItem>? SelectedTabChanged;
-        
-        // Combined Option A+B: Single adaptive timer for save coordination
-        private System.Windows.Threading.DispatcherTimer _saveTimer;
-        private DateTime _lastModification;
-        private bool _walSaved;
         private bool _isDropHighlight;
         
         public static readonly DependencyProperty IsActiveProperty =
@@ -51,13 +47,6 @@ namespace NoteNest.UI.Controls
         public SplitPaneView()
         {
             InitializeComponent();
-            
-            // Initialize single adaptive timer for save coordination
-            _saveTimer = new System.Windows.Threading.DispatcherTimer 
-            { 
-                Interval = TimeSpan.FromMilliseconds(100) // 100ms heartbeat
-            };
-            _saveTimer.Tick += SaveTimer_Tick;
             try
             {
                 var bus = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IEventBus)) as IEventBus;
@@ -216,8 +205,7 @@ namespace NoteNest.UI.Controls
         {
             if (Pane != null && PaneTabControl.SelectedItem is ITabItem newTab)
             {
-                // Stop current save timer - we'll handle tab switch saves manually
-                _saveTimer.Stop();
+                // PROPER ARCHITECTURE: Tab switching without complex timer coordination
                 
                 // Find the previously selected tab from the old selection
                 ITabItem? oldTab = null;
@@ -226,22 +214,26 @@ namespace NoteNest.UI.Controls
                     oldTab = removedTab;
                 }
                 
-                // Handle old tab save if dirty (Combined approach)
+                // PROPER ARCHITECTURE: Force save old tab before switch (if dirty)
                 if (oldTab != null && oldTab.IsDirty)
                 {
                     try
                     {
                         System.Diagnostics.Debug.WriteLine($"[UI] Tab switch save: {oldTab.Title} → {newTab.Title}");
                         
-                        // Force immediate save before switch
+                        // Get fresh content from editor and save immediately
                         var oldEditor = GetEditorForTab(oldTab);
-                        if (oldEditor != null)
+                        if (oldEditor != null && oldTab is NoteTabItem oldTabItem)
                         {
                             var content = oldEditor.SaveToMarkdown();
-                            if (oldTab is NoteTabItem nti)
+                            oldTabItem.UpdateContentFromEditor(content);
+                            oldEditor.MarkClean();
+                            
+                            // Force immediate save (bypass timers for tab switches)
+                            var saveManager = GetSaveManager();
+                            if (saveManager != null)
                             {
-                                nti.UpdateContent(content);
-                                oldEditor.MarkClean();
+                                _ = Task.Run(async () => await saveManager.SaveNoteAsync(oldTab.NoteId));
                             }
                             
                             System.Diagnostics.Debug.WriteLine($"[UI] Tab switch save completed for {oldTab.Title}");
@@ -559,37 +551,47 @@ namespace NoteNest.UI.Controls
         }
 
         /// <summary>
-        /// Clean up editor when unloaded
+        /// PROPER ARCHITECTURE: Clean up editor when unloaded
         /// </summary>
         private void FormattedEditor_Unloaded(object sender, RoutedEventArgs e)
         {
             if (sender is FormattedTextEditor editor)
             {
-                // Clean up event handler
-                editor.DocumentModified -= Editor_DocumentModified;
-                
-                // Stop timer if this was the active editor
-                if (editor == GetActiveEditor())
+                // Clean up simple TextChanged handler
+                editor.TextChanged -= Editor_TextChanged;
+                System.Diagnostics.Debug.WriteLine("[SPLITPANE] Editor unloaded, TextChanged handler removed");
+            }
+        }
+
+        /// <summary>
+        /// PROPER ARCHITECTURE: Load content when DataContext changes (tab switching)
+        /// Only load if editor is empty to prevent content loss
+        /// </summary>
+        private void SmartEditor_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            if (sender is FormattedTextEditor editor && e.NewValue is NoteTabItem tabItem)
+            {
+                // Check if editor already has content
+                if (!editor.Document.Blocks.Any() || 
+                    (editor.Document.Blocks.FirstBlock is Paragraph p && 
+                     string.IsNullOrEmpty(new System.Windows.Documents.TextRange(p.ContentStart, p.ContentEnd).Text)))
                 {
-                    _saveTimer.Stop();
-                    System.Diagnostics.Debug.WriteLine("[SAVE] Timer stopped - editor unloaded");
+                    // Editor is empty - safe to load
+                    LoadContentIntoEditor(editor, "DataContextChanged-Empty");
+                }
+                else
+                {
+                    // Editor has content - just wire up TextChanged handler (simple)
+                    editor.TextChanged -= Editor_TextChanged;
+                    editor.TextChanged += Editor_TextChanged;
+                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] DataContextChanged: Skipped reload - editor has content for {tabItem.Title}");
+                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] TextChanged handler attached for {tabItem.Title} (DataContextChanged)");
                 }
             }
         }
 
         /// <summary>
-        /// NEW ARCHITECTURE: Load content when DataContext changes (tab switching)
-        /// </summary>
-        private void SmartEditor_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
-        {
-            if (sender is FormattedTextEditor editor && e.NewValue is NoteTabItem)
-            {
-                LoadContentIntoEditor(editor, "DataContextChanged");
-            }
-        }
-
-        /// <summary>
-        /// Shared logic for loading content into editor
+        /// PROPER ARCHITECTURE: Load content and set up direct save coordination
         /// </summary>
         private void LoadContentIntoEditor(FormattedTextEditor editor, string trigger)
         {
@@ -601,11 +603,12 @@ namespace NoteNest.UI.Controls
                     var content = tabItem.Content ?? string.Empty;
                     editor.LoadFromMarkdown(content);
                     
-                    // Option A: Wire up using existing method
-                    editor.DocumentModified -= Editor_DocumentModified;
-                    editor.DocumentModified += Editor_DocumentModified;
+                    // CLEAN ARCHITECTURE: Direct method call instead of complex event wiring
+                    editor.TextChanged -= Editor_TextChanged; // Prevent duplicates
+                    editor.TextChanged += Editor_TextChanged;  // Simple, direct connection
                     
                     System.Diagnostics.Debug.WriteLine($"[SPLITPANE] {trigger}: Loaded {content.Length} chars into editor for tab: {tabItem.Title}");
+                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] TextChanged handler attached for {tabItem.Title}");
                 }
                 else
                 {
@@ -619,93 +622,31 @@ namespace NoteNest.UI.Controls
         }
 
         /// <summary>
-        /// Handle document modifications to trigger save coordination
+        /// PROPER ARCHITECTURE: Simple TextChanged handler with direct method calls
         /// </summary>
-        private void Editor_DocumentModified(object sender, EventArgs e)
-        {
-            _lastModification = DateTime.Now;
-            _walSaved = false;
-            
-            // Option B: Single timer with dual behavior
-            if (!_saveTimer.IsEnabled)
-            {
-                _saveTimer.Start();
-            }
-            
-            System.Diagnostics.Debug.WriteLine($"[SAVE] Document modified, timer started");
-        }
-
-        /// <summary>
-        /// Combined Option A+B: Single adaptive timer with two-phase save protection
-        /// </summary>
-        private void SaveTimer_Tick(object sender, EventArgs e)
-        {
-            var elapsed = (DateTime.Now - _lastModification).TotalMilliseconds;
-            
-            // Phase 1: WAL protection at 500ms
-            if (!_walSaved && elapsed >= 500)
-            {
-                UpdateWAL();
-                _walSaved = true;
-                System.Diagnostics.Debug.WriteLine($"[SAVE] WAL protection triggered at {elapsed}ms");
-            }
-            
-            // Phase 2: Full auto-save at 2000ms
-            if (elapsed >= 2000)
-            {
-                PerformAutoSave();
-                _saveTimer.Stop();
-                System.Diagnostics.Debug.WriteLine($"[SAVE] Auto-save completed at {elapsed}ms, timer stopped");
-            }
-        }
-
-        /// <summary>
-        /// Update WAL for crash protection (quick markdown)
-        /// </summary>
-        private void UpdateWAL()
+        private void Editor_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
             try
             {
-                var editor = GetActiveEditor();
-                var tab = Pane?.SelectedTab as NoteTabItem;
-                if (editor?.IsDirty == true && tab != null)
+                if (sender is FormattedTextEditor editor && editor.DataContext is NoteTabItem tabItem)
                 {
-                    var content = editor.GetQuickMarkdown();
-                    var saveManager = GetSaveManager();
-                    saveManager?.UpdateContent(tab.NoteId, content);
+                    // Direct method call - no complex event coordination needed
+                    tabItem.NotifyContentChanged();
                     
-                    System.Diagnostics.Debug.WriteLine($"[WAL] Protected content for {tab.Title} ({content.Length} chars)");
+                    // Extract current content for immediate WAL/save operations
+                    var currentContent = editor.GetQuickMarkdown();
+                    tabItem.UpdateContentFromEditor(currentContent);
+                    
+                    System.Diagnostics.Debug.WriteLine($"[SPLITPANE] Content changed for {tabItem.Title}, tab notified");
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[WAL] Update failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Editor_TextChanged failed: {ex.Message}");
             }
         }
 
-        /// <summary>
-        /// Perform full auto-save (accurate markdown)
-        /// </summary>
-        private void PerformAutoSave()
-        {
-            try
-            {
-                var editor = GetActiveEditor();
-                var tab = Pane?.SelectedTab as NoteTabItem;
-                if (editor?.IsDirty == true && tab != null)
-                {
-                    var content = editor.SaveToMarkdown();
-                    tab.UpdateContent(content);
-                    editor.MarkClean();
-                    
-                    System.Diagnostics.Debug.WriteLine($"[AUTOSAVE] Saved {tab.Title} ({content.Length} chars)");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[AUTOSAVE] Failed: {ex.Message}");
-            }
-        }
+        // Removed: Old timer coordination methods (moved to NoteTabItem for proper architecture)
 
         /// <summary>
         /// Get the currently active editor for this pane
@@ -818,7 +759,7 @@ namespace NoteNest.UI.Controls
                         if (editor != null && tab is NoteTabItem nti)
                         {
                             var content = editor.SaveToMarkdown();
-                            nti.UpdateContent(content);
+                            nti.UpdateContentFromEditor(content);
                         }
                         System.Diagnostics.Debug.WriteLine($"[UI] CloseTab force flush for noteId={tab?.Note?.Id} at={DateTime.Now:HH:mm:ss.fff}");
                     }

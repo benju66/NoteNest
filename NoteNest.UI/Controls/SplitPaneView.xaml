@@ -18,10 +18,11 @@
             BorderThickness="2" 
             BorderBrush="Transparent">
         <Grid>
-            <local:DraggableTabControl x:Name="PaneTabControl"
-                        behaviors:TabOverflowBehavior.EnableOverflow="True"
-                        SelectionChanged="TabControl_SelectionChanged"
-                        GotFocus="TabControl_GotFocus">
+             <local:DraggableTabControl x:Name="PaneTabControl"
+                         behaviors:TabOverflowBehavior.EnableOverflow="True"
+                         SelectionChanged="TabControl_SelectionChanged"
+                         GotFocus="TabControl_GotFocus"
+                         VirtualizingPanel.IsVirtualizing="False">
                 <local:DraggableTabControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal"

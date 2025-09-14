@@ -27,9 +27,6 @@ namespace NoteNest.UI.Controls.Editor.Core
         // Lightweight markdown cache for WAL protection
         private string _cachedMarkdown = "";
         private DateTime _lastCacheTime = DateTime.MinValue;
-        
-        // Event for external coordination
-        public event EventHandler DocumentModified;
 
         // Removed: MarkdownContentProperty with two-way binding
         // New architecture: Use LoadFromMarkdown() and SaveToMarkdown() instead
@@ -95,13 +92,9 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
             catch { }
 
-            // New architecture: Only track dirty state, NO real-time conversion
-            // Note: TextChanged is on RichTextBox, not FlowDocument
-            TextChanged += (s, e) => 
-            {
-                MarkDirty();
-                DocumentModified?.Invoke(this, EventArgs.Empty);
-            };
+            // PROPER ARCHITECTURE: Simple dirty tracking only
+            // SplitPaneView will attach direct TextChanged handler for save coordination
+            TextChanged += (s, e) => MarkDirty();
             GotFocus += (s, e) => Keyboard.Focus(this);
 
             // Editing command keybindings
