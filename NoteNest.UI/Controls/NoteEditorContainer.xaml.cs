@@ -1,154 +1,123 @@
 using System;
-using System.Linq;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Documents;
+using NoteNest.UI.Controls.Editor;
 using NoteNest.UI.Controls.Editor.Core;
 using NoteNest.UI.ViewModels;
 
 namespace NoteNest.UI.Controls
 {
     /// <summary>
-    /// OPTION B: Custom UserControl for complete editor isolation
-    /// Each tab gets its own instance - no cross-contamination possible
+    /// Container that hosts the appropriate editor based on file format
     /// </summary>
-    public partial class NoteEditorContainer : UserControl
+    public partial class NoteEditorContainer : UserControl, INotifyPropertyChanged
     {
-        private bool _isLoading;
+        private INotesEditor _editor;
         private NoteTabItem _currentTabItem;
-
+        private bool _isLoading;
+        
+        // Property for toolbar binding
+        public INotesEditor UnderlyingEditor => _editor;
+        
+        public event PropertyChangedEventHandler PropertyChanged;
+        
         public NoteEditorContainer()
         {
             InitializeComponent();
-            
-            // Wire up data context change detection
             DataContextChanged += OnDataContextChanged;
         }
-
-        /// <summary>
-        /// Handle DataContext changes (when tab switches or new tab loads)
-        /// </summary>
+        
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            // ZERO-RISK IMPROVEMENT: Always clean up old connection first
-            if (_currentTabItem != null)
+            // Clean up old editor
+            if (_editor != null)
             {
-                Editor.TextChanged -= OnEditorTextChanged;
-                _currentTabItem = null;
+                _editor.ContentChanged -= OnEditorContentChanged;
+                if (_editor is UIElement element)
+                {
+                    EditorHost.Children.Remove(element);
+                }
+                _editor = null;
             }
-
-            if (e.NewValue is NoteTabItem newTabItem)
+            
+            // Set up new editor
+            if (e.NewValue is NoteTabItem tabItem)
             {
-                _currentTabItem = newTabItem;
-                
-                // Load content for this tab
-                LoadTabContent();
-                
-                // Wire up change notifications for this tab
-                Editor.TextChanged += OnEditorTextChanged;
-                
-                System.Diagnostics.Debug.WriteLine($"[CONTAINER] Bound to tab: {newTabItem.Title}");
-            }
-            else if (e.NewValue == null)
-            {
-                // ZERO-RISK IMPROVEMENT: Handle null DataContext gracefully
-                System.Diagnostics.Debug.WriteLine($"[CONTAINER] DataContext cleared (null)");
-            }
-            else
-            {
-                // ZERO-RISK IMPROVEMENT: Handle unexpected DataContext types
-                System.Diagnostics.Debug.WriteLine($"[CONTAINER] Unexpected DataContext type: {e.NewValue?.GetType().Name}");
+                _currentTabItem = tabItem;
+                CreateEditorForTab(tabItem);
+                LoadContent(tabItem);
             }
         }
-
-        /// <summary>
-        /// Load content into this editor instance (complete isolation)
-        /// </summary>
-        private void LoadTabContent()
+        
+        private void CreateEditorForTab(NoteTabItem tabItem)
         {
-            if (_currentTabItem == null) return;
-
+            // Determine format from file path
+            var format = EditorFactory.DetectFormat(tabItem.Note.FilePath);
+            
+            // Create appropriate editor
+            _editor = EditorFactory.CreateEditor(format);
+            
+            // Wire up events
+            _editor.ContentChanged += OnEditorContentChanged;
+            
+            // Add to visual tree
+            if (_editor is UIElement element)
+            {
+                EditorHost.Children.Clear();
+                EditorHost.Children.Add(element);
+                
+                // Raise property change for toolbar binding
+                OnPropertyChanged(nameof(UnderlyingEditor));
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[CONTAINER] Created {format} editor for: {tabItem.Title}");
+        }
+        
+        private void LoadContent(NoteTabItem tabItem)
+        {
+            if (_editor == null || tabItem == null) return;
+            
             _isLoading = true;
             try
             {
-                var content = _currentTabItem.Content ?? string.Empty;
+                var content = tabItem.Content ?? string.Empty;
+                _editor.LoadContent(content);
+                _editor.MarkClean();
                 
-                // COMPLETE ISOLATION: Each container loads its own content
-                Editor.Document.Blocks.Clear();
-                Editor.LoadFromMarkdown(content);
-                Editor.MarkClean();
-                
-                System.Diagnostics.Debug.WriteLine($"[CONTAINER] Loaded {content.Length} chars for: {_currentTabItem.Title}");
+                System.Diagnostics.Debug.WriteLine($"[CONTAINER] Loaded {content.Length} chars into {_editor.Format} editor");
             }
             catch (Exception ex)
             {
-                // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load content for {_currentTabItem?.Title}: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Stack trace: {ex.StackTrace}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to load content: {ex.Message}");
             }
             finally
             {
                 _isLoading = false;
             }
         }
-
-        /// <summary>
-        /// Handle editor changes and notify the tab's save system
-        /// </summary>
-        private void OnEditorTextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        
+        private void OnEditorContentChanged(object sender, EventArgs e)
         {
-            // Don't process changes during loading
-            if (_isLoading || _currentTabItem == null) return;
-
+            if (_isLoading || _currentTabItem == null || _editor == null) return;
+            
             try
             {
-                // Get current content and notify the tab
-                var content = Editor.SaveToMarkdown();
+                var content = _editor.SaveContent();
                 _currentTabItem.UpdateContentFromEditor(content);
-                
-                // Trigger the tab's save coordination system
                 _currentTabItem.NotifyContentChanged();
                 
-                System.Diagnostics.Debug.WriteLine($"[CONTAINER] Content changed in: {_currentTabItem.Title} ({content.Length} chars)");
+                System.Diagnostics.Debug.WriteLine($"[CONTAINER] Content changed, saved {content.Length} chars");
             }
             catch (Exception ex)
             {
-                // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to handle content change for {_currentTabItem?.Title}: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"[ERROR] Stack trace: {ex.StackTrace}");
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Failed to save content: {ex.Message}");
             }
         }
-
-        /// <summary>
-        /// Editor loaded - ready for use
-        /// </summary>
-        private void Editor_Loaded(object sender, RoutedEventArgs e)
+        
+        protected virtual void OnPropertyChanged(string propertyName)
         {
-            System.Diagnostics.Debug.WriteLine($"[CONTAINER] Editor loaded");
-            
-            // Load content if we have a tab
-            if (_currentTabItem != null)
-            {
-                LoadTabContent();
-            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-
-        /// <summary>
-        /// Clean up when editor is unloaded
-        /// </summary>
-        private void Editor_Unloaded(object sender, RoutedEventArgs e)
-        {
-            // ZERO-RISK IMPROVEMENT: Fix memory leak by removing DataContext event handler
-            DataContextChanged -= OnDataContextChanged;
-            Editor.TextChanged -= OnEditorTextChanged;
-            _currentTabItem = null;
-            
-            System.Diagnostics.Debug.WriteLine($"[CONTAINER] Editor unloaded and cleaned up (memory leak fixed)");
-        }
-
-        /// <summary>
-        /// Public property to access the underlying editor (for advanced scenarios)
-        /// </summary>
-        public FormattedTextEditor UnderlyingEditor => Editor;
     }
 }

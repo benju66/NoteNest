@@ -20,6 +20,7 @@ namespace NoteNest.Core.Services
 			{
 				NoteFormat.Markdown => ".md",
 				NoteFormat.PlainText => ".txt",
+				NoteFormat.RTF => ".rtf",
 				_ => ".txt"
 			};
 		}
@@ -35,6 +36,7 @@ namespace NoteNest.Core.Services
 				".md" => NoteFormat.Markdown,
 				".markdown" => NoteFormat.Markdown,
 				".mdown" => NoteFormat.Markdown,
+				".rtf" => NoteFormat.RTF,
 				".txt" => NoteFormat.PlainText,
 				".text" => NoteFormat.PlainText,
 				_ => NoteFormat.PlainText

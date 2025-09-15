@@ -212,6 +212,28 @@ namespace NoteNest.Core.Services
 			plain = Regex.Replace(plain, @"^\s+", string.Empty, RegexOptions.Multiline);
 			return plain.Trim();
 		}
+
+		/// <summary>
+		/// Strip RTF formatting for search indexing
+		/// </summary>
+		public string StripRTFForIndex(string rtfContent)
+		{
+			if (string.IsNullOrEmpty(rtfContent)) return string.Empty;
+
+			// Remove RTF control words (e.g., \rtf1, \ansi, \b, \par)
+			var plain = Regex.Replace(rtfContent, @"\\[a-z]+[-]?\d*[ ]?", " ");
+
+			// Remove RTF control symbols
+			plain = Regex.Replace(plain, @"\\['\n\r\\{}]", "");
+
+			// Remove curly braces
+			plain = Regex.Replace(plain, @"[{}]", "");
+
+			// Clean up extra whitespace
+			plain = Regex.Replace(plain, @"\s+", " ");
+
+			return plain.Trim();
+		}
 	}
 }
 

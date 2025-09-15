@@ -15,7 +15,7 @@ using NoteNest.Core.Models;
 
 namespace NoteNest.UI.Controls.Editor.Core
 {
-    public partial class FormattedTextEditor : RichTextBox
+    public partial class FormattedTextEditor : RichTextBox, INotesEditor
     {
         private readonly MarkdownFlowDocumentConverter _converter;
         private NoteModel _currentNote;
@@ -43,6 +43,19 @@ namespace NoteNest.UI.Controls.Editor.Core
         public bool IsDirty => _isDirty;
         
         public string OriginalMarkdown => _originalMarkdown;
+
+        // INotesEditor interface implementation
+        public NoteFormat Format => NoteFormat.Markdown;
+        public event EventHandler ContentChanged;
+        public string OriginalContent => _originalMarkdown;
+        
+        // Interface methods that delegate to existing implementations
+        public void LoadContent(string content) => LoadFromMarkdown(content);
+        public string SaveContent() => SaveToMarkdown();
+        public string GetQuickContent() => GetQuickMarkdown();
+        
+        public void ToggleBold() => EditingCommands.ToggleBold.Execute(null, this);
+        public void ToggleItalic() => EditingCommands.ToggleItalic.Execute(null, this);
 
         public NoteModel CurrentNote 
         {
@@ -1872,9 +1885,9 @@ namespace NoteNest.UI.Controls.Editor.Core
         }
 
         /// <summary>
-        /// Mark content as dirty (internal use)
+        /// Mark content as dirty
         /// </summary>
-        private void MarkDirty()
+        public void MarkDirty()
         {
             if (!_isDirty)
             {
