@@ -18,6 +18,7 @@ namespace NoteNest.UI.Services
         Task<List<SearchResultViewModel>> SearchAsync(string query, CancellationToken cancellationToken = default);
         Task<List<string>> GetSuggestionsAsync(string query, int maxResults = 10);
         void InvalidateIndex();
+        Task<bool> ForceRebuildAsync();  // For RTF support and stale index recovery
         bool IsIndexReady { get; }
         Task<bool> InitializeAsync();
     }
@@ -104,7 +105,33 @@ namespace NoteNest.UI.Services
                 if (persistedIndex != null)
                 {
                     var rootPath = _configService.Settings?.DefaultNotePath ?? PathService.ProjectsPath;
-                    if (await _persistence.ValidateIndexAsync(persistedIndex, rootPath))
+                    
+                    // Enhanced validation: Check if RTF files exist but missing from index
+                    bool indexValid = await _persistence.ValidateIndexAsync(persistedIndex, rootPath);
+                    bool hasRTFFiles = false;
+                    bool indexHasRTF = false;
+                    
+                    try
+                    {
+                        // Check for RTF files on disk
+                        var rtfFiles = Directory.GetFiles(rootPath, "*.rtf", SearchOption.AllDirectories);
+                        hasRTFFiles = rtfFiles.Length > 0;
+                        
+                        // Check if index contains RTF files
+                        indexHasRTF = persistedIndex.Entries.Any(e => e.RelativePath.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase));
+                        
+                        if (hasRTFFiles && !indexHasRTF)
+                        {
+                            _logger?.Info($"Found {rtfFiles.Length} RTF files on disk but none in index - forcing rebuild for RTF support");
+                            indexValid = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Debug($"RTF file detection failed: {ex.Message}");
+                    }
+                    
+                    if (indexValid)
                     {
                         _logger?.Info("Loaded valid persisted index, restoring content...");
                         await _searchIndex.LoadFromPersistedAsync(persistedIndex);
@@ -118,6 +145,10 @@ namespace NoteNest.UI.Services
                         }
                         
                         return true;
+                    }
+                    else
+                    {
+                        _logger?.Info("Index validation failed or RTF support needed - rebuilding");
                     }
                 }
                 
@@ -464,6 +495,36 @@ namespace NoteNest.UI.Services
             _logger?.Debug("Search index invalidated");
         }
 
+        /// <summary>
+        /// Forces a complete search index rebuild - includes RTF files and clears stale index
+        /// </summary>
+        public async Task<bool> ForceRebuildAsync()
+        {
+            _logger?.Info("Forcing complete search index rebuild for RTF support");
+            
+            // Clear in-memory state
+            InvalidateIndex();
+            
+            // Delete persisted index to force fresh build with RTF files
+            try
+            {
+                var rootPath = _configService.Settings?.DefaultNotePath ?? PathService.ProjectsPath;
+                var indexPath = Path.Combine(rootPath, ".notenest", "search-index.json");
+                if (File.Exists(indexPath))
+                {
+                    File.Delete(indexPath);
+                    _logger?.Info("Deleted stale search index to include RTF files");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning($"Failed to delete old search index: {ex.Message}");
+            }
+            
+            // Force fresh build that will include RTF files
+            return await InitializeAsync();
+        }
+
         // File watcher event handlers with debouncing
         private void OnFileChanged(object sender, FileChangedEventArgs e)
         {
@@ -535,7 +596,7 @@ namespace NoteNest.UI.Services
         private bool IsNoteFile(string path)
         {
             var ext = Path.GetExtension(path)?.ToLowerInvariant();
-            return ext == ".md" || ext == ".txt";
+            return ext == ".md" || ext == ".txt" || ext == ".rtf";  // BULLETPROOF RTF SUPPORT
         }
 
         public void Dispose()
