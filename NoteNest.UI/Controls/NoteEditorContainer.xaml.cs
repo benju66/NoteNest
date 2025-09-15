@@ -30,9 +30,15 @@ namespace NoteNest.UI.Controls
         
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
-            // Clean up old editor
+            // Clean up old editor - force save before switching
             if (_editor != null)
             {
+                // Force immediate content notification for tab switch (prevents data loss)
+                if (_editor is RTFTextEditor rtfEditor && _editor.IsDirty)
+                {
+                    rtfEditor.ForceContentNotification();
+                }
+                
                 _editor.ContentChanged -= OnEditorContentChanged;
                 if (_editor is UIElement element)
                 {

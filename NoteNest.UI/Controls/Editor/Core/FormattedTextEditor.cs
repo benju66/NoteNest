@@ -56,6 +56,16 @@ namespace NoteNest.UI.Controls.Editor.Core
         
         public void ToggleBold() => EditingCommands.ToggleBold.Execute(null, this);
         public void ToggleItalic() => EditingCommands.ToggleItalic.Execute(null, this);
+        
+        /// <summary>
+        /// Force immediate content notification - FormattedTextEditor doesn't need debouncing
+        /// since it uses NoteTabItem timer coordination
+        /// </summary>
+        public void ForceContentNotification()
+        {
+            // FormattedTextEditor already uses proper timing via NoteTabItem
+            // No action needed - this is for RTF editor compatibility
+        }
 
         public NoteModel CurrentNote 
         {

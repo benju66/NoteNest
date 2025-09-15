@@ -74,6 +74,12 @@ namespace NoteNest.UI.Controls.Editor
             if (Editor is UIElement element)
                 element.Focus();
             Editor?.InsertBulletList();
+            
+            // Force immediate content notification for list changes to ensure save
+            if (Editor is RTFTextEditor rtfEditor)
+            {
+                rtfEditor.ForceContentNotification();
+            }
         }
 
         private void NumberedList_Click(object sender, RoutedEventArgs e)
@@ -81,6 +87,12 @@ namespace NoteNest.UI.Controls.Editor
             if (Editor is UIElement element)
                 element.Focus();
             Editor?.InsertNumberedList();
+            
+            // Force immediate content notification for list changes to ensure save
+            if (Editor is RTFTextEditor rtfEditor)
+            {
+                rtfEditor.ForceContentNotification();
+            }
         }
 
         private void TaskList_Click(object sender, RoutedEventArgs e)
@@ -91,11 +103,23 @@ namespace NoteNest.UI.Controls.Editor
         private void Bold_Click(object sender, RoutedEventArgs e)
         {
             Editor?.ToggleBold();
+            
+            // Force immediate content notification for formatting changes to ensure save
+            if (Editor is RTFTextEditor rtfEditor)
+            {
+                rtfEditor.ForceContentNotification();
+            }
         }
 
         private void Italic_Click(object sender, RoutedEventArgs e)
         {
             Editor?.ToggleItalic();
+            
+            // Force immediate content notification for formatting changes to ensure save
+            if (Editor is RTFTextEditor rtfEditor)
+            {
+                rtfEditor.ForceContentNotification();
+            }
         }
 
         private void Indent_Click(object sender, RoutedEventArgs e)

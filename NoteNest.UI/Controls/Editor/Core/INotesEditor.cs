@@ -22,6 +22,9 @@ namespace NoteNest.UI.Controls.Editor.Core
         void MarkClean();
         void MarkDirty();
         
+        // Save coordination
+        void ForceContentNotification(); // For immediate saves (tab switches, manual saves)
+        
         // Formatting operations
         void InsertBulletList();
         void InsertNumberedList();
