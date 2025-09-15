@@ -20,7 +20,6 @@ namespace NoteNest.UI.Controls.Editor.Core
         private bool _isDirty = false;
         private string _originalContent = string.Empty;
         private readonly DispatcherTimer _stateUpdateTimer;
-        private readonly DispatcherTimer _contentChangeTimer;
         
         // Performance optimization: Content caching with longer timeout for debouncing
         private string _cachedContent;
@@ -68,21 +67,11 @@ namespace NoteNest.UI.Controls.Editor.Core
             };
             _stateUpdateTimer.Tick += UpdateListState;
             
-            // Initialize content change timer for proper debouncing (matches FormattedTextEditor pattern)
-            _contentChangeTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(250) // Debounce content notifications
-            };
-            _contentChangeTimer.Tick += OnContentChangeTimerTick;
+            // Content change timer removed - using immediate ContentChanged for WAL protection
             
-            // Handle save shortcut - but don't trigger immediate ContentChanged
+            // Handle save shortcut
             CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, 
-                (s, e) => 
-                {
-                    // Force immediate save via timer trigger
-                    _contentChangeTimer.Stop();
-                    OnContentChangeTimerTick(this, EventArgs.Empty);
-                }));
+                (s, e) => ContentChanged?.Invoke(this, EventArgs.Empty)));
         }
         
         public void LoadContent(string content)
@@ -161,18 +150,14 @@ namespace NoteNest.UI.Controls.Editor.Core
         {
             _isDirty = false;
             _originalContent = SaveContent();
-            
-            // Stop any pending content change notifications since we're clean
-            _contentChangeTimer.Stop();
         }
         
         /// <summary>
-        /// Force immediate content change notification (bypasses debouncing)
-        /// Used for manual saves, tab switches, etc.
+        /// Force immediate content change notification
+        /// Now that ContentChanged fires immediately, this is just for consistency
         /// </summary>
         public void ForceContentNotification()
         {
-            _contentChangeTimer.Stop();
             ContentChanged?.Invoke(this, EventArgs.Empty);
             System.Diagnostics.Debug.WriteLine($"[RTF] Forced immediate content notification");
         }
@@ -182,7 +167,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             if (!_isDirty)
             {
                 _isDirty = true;
-                // DON'T fire ContentChanged immediately - use debounced timer instead
+                // ContentChanged is now fired immediately in OnTextChanged for WAL protection
             }
         }
         
@@ -190,15 +175,15 @@ namespace NoteNest.UI.Controls.Editor.Core
         {
             MarkDirty();
             
-            // Start debounced timers - this prevents save-while-typing
+            // Fire ContentChanged immediately for bulletproof WAL protection
+            ContentChanged?.Invoke(this, EventArgs.Empty);
+            
+            // Keep state update timer for toolbar button updates only
             _stateUpdateTimer.Stop();
             _stateUpdateTimer.Start();
             
-            _contentChangeTimer.Stop();
-            _contentChangeTimer.Start();
-            
-            // Cache invalidation delayed to allow reuse during rapid typing
-            _ = Task.Delay(50).ContinueWith(_ => _cachedContent = null);
+            // Invalidate cache immediately - no delay needed with immediate saves
+            _cachedContent = null;
         }
         
         private void OnSelectionChanged(object sender, RoutedEventArgs e)
@@ -207,18 +192,6 @@ namespace NoteNest.UI.Controls.Editor.Core
             _stateUpdateTimer.Start();
         }
         
-        /// <summary>
-        /// Debounced content change notification - prevents save-while-typing
-        /// </summary>
-        private void OnContentChangeTimerTick(object sender, EventArgs e)
-        {
-            _contentChangeTimer.Stop();
-            
-            // Fire ContentChanged only after user stops typing for 250ms
-            ContentChanged?.Invoke(this, EventArgs.Empty);
-            
-            System.Diagnostics.Debug.WriteLine($"[RTF] Debounced content change notification fired");
-        }
         
         // Formatting Methods - RichTextBox handles these natively!
         

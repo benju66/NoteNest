@@ -110,9 +110,12 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
             catch { }
 
-            // PROPER ARCHITECTURE: Simple dirty tracking only
-            // SplitPaneView will attach direct TextChanged handler for save coordination
-            TextChanged += (s, e) => MarkDirty();
+            // PROPER ARCHITECTURE: Immediate save coordination via ContentChanged event
+            // Container listens to ContentChanged for immediate WAL protection
+            TextChanged += (s, e) => {
+                MarkDirty();
+                ContentChanged?.Invoke(this, EventArgs.Empty); // Fire immediately for WAL protection
+            };
             GotFocus += (s, e) => Keyboard.Focus(this);
             
             // PERFORMANCE: Initialize debounced state update timer

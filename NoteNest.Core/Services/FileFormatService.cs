@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using NoteNest.Core.Interfaces;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services.Logging;
 
@@ -69,6 +73,37 @@ namespace NoteNest.Core.Services
 		public bool IsTextFile(string path)
 		{
 			return DetectFormatFromPath(path) == NoteFormat.PlainText;
+		}
+
+		/// <summary>
+		/// Dynamically discover all supported note files in a directory
+		/// Future-proof: automatically includes any new formats added to NoteFormat enum
+		/// </summary>
+		public async Task<List<string>> GetAllNoteFilesAsync(IFileSystemProvider fileSystem, string directoryPath)
+		{
+			var allFiles = new List<string>();
+			var supportedFormats = Enum.GetValues<NoteFormat>();
+			
+			foreach (var format in supportedFormats)
+			{
+				try 
+				{
+					var extension = GetExtensionForFormat(format);
+					var pattern = $"*{extension}";
+					var formatFiles = await fileSystem.GetFilesAsync(directoryPath, pattern);
+					allFiles.AddRange(formatFiles);
+					
+					_logger.Debug($"Found {formatFiles.Count()} {format} files in {directoryPath}");
+				}
+				catch (Exception ex)
+				{
+					_logger.Debug($"Failed to scan for {format} files in {directoryPath}: {ex.Message}");
+					// Continue with other formats - don't fail completely
+				}
+			}
+			
+			_logger.Debug($"Total files discovered: {allFiles.Count} in {directoryPath}");
+			return allFiles;
 		}
 	}
 }

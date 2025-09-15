@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Documents;
 using NoteNest.Core.Models;
@@ -225,7 +226,7 @@ namespace NoteNest.UI.Controls
                         var oldEditor = GetEditorForTab(oldTab);
                         if (oldEditor != null && oldTab is NoteTabItem oldTabItem)
                         {
-                            var content = oldEditor.SaveToMarkdown();
+                            var content = oldEditor.SaveContent(); // Use interface method
                             oldTabItem.UpdateContentFromEditor(content);
                             oldEditor.MarkClean();
                             
@@ -285,26 +286,25 @@ namespace NoteNest.UI.Controls
             try
             {
                 var config = _configService;
-                var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
-                var presenter = FindVisualChild<ContentPresenter>(container);
-                var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                var editor = GetActiveEditor();
+                
                 if (editor != null)
                 {
-                    // Apply editor settings
+                    // Apply editor settings using interface
                     if (config?.Settings != null)
                     {
-                        try { SpellCheck.SetIsEnabled(editor, config.Settings.EditorSettings.EnableSpellCheck); } catch { }
+                        try { SpellCheck.SetIsEnabled(editor as TextBoxBase, config.Settings.EditorSettings.EnableSpellCheck); } catch { }
                         try { editor.Document.FontFamily = new System.Windows.Media.FontFamily(config.Settings.EditorSettings.FontFamily); } catch { }
                         try { editor.Document.FontSize = config.Settings.EditorSettings.FontSize > 0 ? config.Settings.EditorSettings.FontSize : editor.Document.FontSize; } catch { }
                     }
                     
-                    // Wire up metadata manager and current note
-                    if (_metadataManager != null && Pane?.SelectedTab?.Note != null)
+                    // Wire up metadata manager and current note (FormattedTextEditor specific)
+                    if (_metadataManager != null && Pane?.SelectedTab?.Note != null && editor is FormattedTextEditor formattedEditor)
                     {
                         try
                         {
-                            editor.SetMetadataManager(_metadataManager);
-                            editor.CurrentNote = Pane.SelectedTab.Note;
+                            formattedEditor.SetMetadataManager(_metadataManager);
+                            formattedEditor.CurrentNote = Pane.SelectedTab.Note;
                         }
                         catch { }
                     }
@@ -498,15 +498,14 @@ namespace NoteNest.UI.Controls
             {
                 if (tab is NoteNest.UI.ViewModels.NoteTabItem nti)
                 {
-                    var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(nti) as TabItem;
-                    var presenter = FindVisualChild<ContentPresenter>(container);
-                    var editor = FindVisualChild<FormattedTextEditor>(presenter);
-                    
-                    // Content should be up-to-date since debouncing was removed
-                    
-                    var content = editor?.SaveToMarkdown() ?? nti.Content ?? string.Empty;
-                    nti.Content = content;
-                    // Content updates handled automatically by SaveManager via NoteTabItem
+                    // Use interface-based editor access for all editor types
+                    var editor = GetEditorForTab(tab);
+                    if (editor != null)
+                    {
+                        var content = editor.SaveContent(); // Works for both RTF and Markdown
+                        nti.UpdateContentFromEditor(content);
+                        editor.MarkClean();
+                    }
                 }
                 var saveManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
                 var success = saveManager != null && await saveManager.SaveNoteAsync(tab.NoteId);
@@ -552,9 +551,9 @@ namespace NoteNest.UI.Controls
         // Removed: Old timer coordination methods (moved to NoteTabItem for proper architecture)
 
         /// <summary>
-        /// Get the currently active editor for this pane
+        /// Get the currently active editor for this pane (interface-based)
         /// </summary>
-        private FormattedTextEditor GetActiveEditor()
+        private NoteNest.UI.Controls.Editor.Core.INotesEditor GetActiveEditor()
         {
             var tab = Pane?.SelectedTab;
             if (tab == null) return null;
@@ -563,8 +562,10 @@ namespace NoteNest.UI.Controls
             if (container == null) return null;
             
             var presenter = FindVisualChild<ContentPresenter>(container);
-            return FindVisualChild<FormattedTextEditor>(presenter);
+            var editorContainer = FindVisualChild<NoteEditorContainer>(presenter);
+            return editorContainer?.UnderlyingEditor;
         }
+
 
         /// <summary>
         /// Get SaveManager service
@@ -576,15 +577,18 @@ namespace NoteNest.UI.Controls
         }
 
         /// <summary>
-        /// Get editor for a specific tab (used in tab switching)
+        /// Get editor for a specific tab (interface-based for all editor types)
         /// </summary>
-        private FormattedTextEditor GetEditorForTab(ITabItem tab)
+        private NoteNest.UI.Controls.Editor.Core.INotesEditor GetEditorForTab(ITabItem tab)
         {
+            if (tab == null) return null;
+            
             var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
             if (container == null) return null;
             
             var presenter = FindVisualChild<ContentPresenter>(container);
-            return FindVisualChild<FormattedTextEditor>(presenter);
+            var editorContainer = FindVisualChild<NoteEditorContainer>(presenter);
+            return editorContainer?.UnderlyingEditor;
         }
 
 
@@ -650,22 +654,15 @@ namespace NoteNest.UI.Controls
                 // Force flush any pending content from the editor
                 try
                 {
-                    var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
-                    if (container != null)
+                    // Use interface-based editor access for all editor types
+                    var editor = GetEditorForTab(tab);
+                    if (editor != null && tab is NoteTabItem nti)
                     {
-                        var presenter = FindVisualChild<ContentPresenter>(container);
-                        var editor = FindVisualChild<FormattedTextEditor>(presenter);
-                        
-                        // Content should be up-to-date since debouncing was removed
-                        
-                        // NEW ARCHITECTURE: Get content from editor and save it
-                        if (editor != null && tab is NoteTabItem nti)
-                        {
-                            var content = editor.SaveToMarkdown();
-                            nti.UpdateContentFromEditor(content);
-                        }
-                        System.Diagnostics.Debug.WriteLine($"[UI] CloseTab force flush for noteId={tab?.Note?.Id} at={DateTime.Now:HH:mm:ss.fff}");
+                        var content = editor.SaveContent(); // Works for both RTF and Markdown
+                        nti.UpdateContentFromEditor(content);
+                        editor.MarkClean();
                     }
+                    System.Diagnostics.Debug.WriteLine($"[UI] CloseTab force flush for noteId={tab?.Note?.Id} at={DateTime.Now:HH:mm:ss.fff}");
                 }
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[UI][WARN] CloseTab flush failed: {ex.Message}"); }
 

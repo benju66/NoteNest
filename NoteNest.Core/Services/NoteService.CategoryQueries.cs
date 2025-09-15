@@ -23,9 +23,9 @@ namespace NoteNest.Core.Services
                 }
 
                 var notes = new List<NoteModel>();
-                var txtFiles = await _fileSystem.GetFilesAsync(category.Path, "*.txt");
-                var mdFiles = await _fileSystem.GetFilesAsync(category.Path, "*.md");
-                var files = txtFiles.Concat(mdFiles);
+                
+                // Use dynamic file discovery - future-proof for any supported format
+                var files = await _formatService.GetAllNoteFilesAsync(_fileSystem, category.Path);
 
                 foreach (var file in files)
                 {
