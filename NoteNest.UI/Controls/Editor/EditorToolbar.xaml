@@ -19,15 +19,17 @@
                          Command="{x:Static EditingCommands.ToggleItalic}"
                          CommandTarget="{Binding ElementName=FormattedEditor}"/>
         <ui:AppBarSeparator/>
-        <ui:AppBarButton Icon="List"
-                         Label="Bullets"
-                         Click="BulletList_Click"/>
-        <ui:AppBarButton Label="Numbers"
-                         Click="NumberedList_Click">
-            <ui:AppBarButton.Icon>
+        <ui:AppBarToggleButton x:Name="BulletButton"
+                              Icon="List"
+                              Label="Bullets"
+                              Click="BulletList_Click"/>
+        <ui:AppBarToggleButton x:Name="NumberedButton"
+                              Label="Numbers"
+                              Click="NumberedList_Click">
+            <ui:AppBarToggleButton.Icon>
                 <ui:FontIcon Glyph="&#xE8BE;"/>
-            </ui:AppBarButton.Icon>
-        </ui:AppBarButton>
+            </ui:AppBarToggleButton.Icon>
+        </ui:AppBarToggleButton>
         <ui:AppBarButton Label="Tasks" Click="TaskList_Click">
             <ui:AppBarButton.Icon>
                 <ui:FontIcon Glyph="&#xE9D5;"/>

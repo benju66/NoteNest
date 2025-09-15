@@ -28,6 +28,14 @@ namespace NoteNest.UI.Controls.Editor.Core
         // Lightweight markdown cache for WAL protection
         private string _cachedMarkdown = "";
         private DateTime _lastCacheTime = DateTime.MinValue;
+        
+        // UX POLISH: Event for toolbar button state feedback
+        public event EventHandler<ListStateChangedEventArgs>? ListStateChanged;
+        private ListState _currentListState = new ListState();
+        
+        // PERFORMANCE: Debounced state change notifications
+        private readonly DispatcherTimer _stateUpdateTimer;
+        private bool _stateUpdatePending = false;
 
         // Removed: MarkdownContentProperty with two-way binding
         // New architecture: Use LoadFromMarkdown() and SaveToMarkdown() instead
@@ -83,6 +91,25 @@ namespace NoteNest.UI.Controls.Editor.Core
             // SplitPaneView will attach direct TextChanged handler for save coordination
             TextChanged += (s, e) => MarkDirty();
             GotFocus += (s, e) => Keyboard.Focus(this);
+            
+            // PERFORMANCE: Initialize debounced state update timer
+            _stateUpdateTimer = new DispatcherTimer 
+            { 
+                Interval = TimeSpan.FromMilliseconds(50) // Debounce rapid changes
+            };
+            _stateUpdateTimer.Tick += (s, e) => {
+                _stateUpdateTimer.Stop();
+                _stateUpdatePending = false;
+                CheckAndNotifyListStateChange();
+            };
+            
+            // UX POLISH: Monitor caret position changes with performance optimization
+            SelectionChanged += (s, e) => {
+                if (!_stateUpdatePending) {
+                    _stateUpdatePending = true;
+                    _stateUpdateTimer.Start();
+                }
+            };
 
             // Editing command keybindings
             InputBindings.Add(new KeyBinding(EditingCommands.ToggleBold, Key.B, ModifierKeys.Control));
@@ -2124,32 +2151,52 @@ namespace NoteNest.UI.Controls.Editor.Core
             {
                 var selection = GetSelectedParagraphs();
                 
-                // Check if ALL selected paragraphs are in lists of this type
-                bool allInList = selection.All(p => 
-                    p.Parent is ListItem li && 
-                    li.Parent is List list && 
-                    list.MarkerStyle == markerStyle);
+                // ENHANCED: Analyze selection for intelligent mixed-type handling
+                var selectionState = AnalyzeSelection(selection, markerStyle);
                 
-                if (allInList)
+                System.Diagnostics.Debug.WriteLine($"[EDITOR] Selection analysis: Action={selectionState.DominantAction}, Mixed={selectionState.HasMixedListTypes}, NonList={selectionState.HasNonListContent}");
+                
+                if (selectionState.AllInTargetList)
                 {
-                    // Remove list formatting
+                    // All selected paragraphs are already in target list type - remove formatting
                     foreach (var para in selection)
                     {
                         ConvertListItemToParagraph(para, false);
                     }
+                    return;
                 }
-                else
+                
+                // Handle mixed selections intelligently based on dominant action
+                switch (selectionState.DominantAction)
                 {
-                    // HYBRID APPROACH: Simplified marker style logic (safer)
-                    var effectiveMarkerStyle = markerStyle;
+                    case ListAction.RemoveAllLists:
+                        foreach (var para in selection)
+                        {
+                            if (para.Parent is ListItem)
+                            {
+                                ConvertListItemToParagraph(para, false);
+                            }
+                        }
+                        return;
+                        
+                    case ListAction.ConvertToTarget:
+                        // Convert all list items to target type, add list formatting to plain paragraphs
+                        break; // Continue with normal formatting logic
+                        
+                    case ListAction.AddToTarget:
+                        // Add target list formatting to all paragraphs
+                        break; // Continue with normal formatting logic
+                }
+                
+                // Continue with enhanced list formatting
+                {
+                    // PROFESSIONAL: Enhanced nested list support with alternating patterns
                     var currentPara = CaretPosition?.Paragraph;
+                    var effectiveMarkerStyle = GetEffectiveMarkerStyle(markerStyle, currentPara);
                     
-                    // Simple nested list conversion: if already in a list and requesting numbered, use bullets instead
-                    if (markerStyle == TextMarkerStyle.Decimal && currentPara?.Parent is ListItem)
+                    if (effectiveMarkerStyle != markerStyle)
                     {
-                        // Simple rule: nested numbered lists become bullets (no complex level checking)
-                        effectiveMarkerStyle = TextMarkerStyle.Disc;
-                        System.Diagnostics.Debug.WriteLine($"[EDITOR] Using bullets for nested list (simplified logic)");
+                        System.Diagnostics.Debug.WriteLine($"[EDITOR] Professional nesting: {markerStyle} → {effectiveMarkerStyle}");
                     }
                     
                     // Apply list formatting with improved caret handling
@@ -2402,7 +2449,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             {
                 // Convert current list item to regular paragraph
                 ConvertListItemToParagraph(para, true);
-                System.Diagnostics.Debug.WriteLine("[EDITOR] Exited list (empty item)");
+                System.Diagnostics.Debug.WriteLine("[EDITOR] Exited list (empty item - double Enter)");
             }
         }
         
@@ -2411,7 +2458,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             var para = CaretPosition?.Paragraph;
             if (para != null && TryContinueList(para))
             {
-                System.Diagnostics.Debug.WriteLine("[EDITOR] Created new list item");
+                System.Diagnostics.Debug.WriteLine("[EDITOR] Created new list item (Enter with content)");
             }
         }
         
@@ -2451,25 +2498,72 @@ namespace NoteNest.UI.Controls.Editor.Core
         private bool TryMergeWithNextListItem()
         {
             var para = CaretPosition?.Paragraph;
-            if (para?.Parent is ListItem listItem && listItem.Parent is List list)
+            if (para?.Parent is not ListItem currentItem || 
+                currentItem.Parent is not List list) return false;
+            
+            // Begin undoable transaction for bulletproof safety
+            BeginChange();
+            try
             {
-                int index = GetListItemIndex(list, listItem);
+                int index = GetListItemIndex(list, currentItem);
                 var nextItem = GetListItemAt(list, index + 1);
                 
-                if (nextItem?.Blocks.FirstBlock is Paragraph nextPara)
+                if (nextItem?.Blocks.FirstBlock is not Paragraph nextPara) return false;
+                
+                // Save merge point for precise caret restoration
+                var mergePoint = para.ContentEnd;
+                
+                // BULLETPROOF: Use WPF's TextRange for proper formatting preservation
+                var sourceRange = new TextRange(nextPara.ContentStart, nextPara.ContentEnd);
+                var targetRange = new TextRange(mergePoint, mergePoint);
+                
+                // Preserve all formatting during merge using XAML serialization
+                using (var stream = new System.IO.MemoryStream())
                 {
-                    // Merge content from next item to current
-                    var nextText = new TextRange(nextPara.ContentStart, nextPara.ContentEnd).Text;
-                    CaretPosition.InsertTextInRun(nextText);
-                    
-                    // Remove the next item
-                    list.ListItems.Remove(nextItem);
-                    
-                    System.Diagnostics.Debug.WriteLine("[EDITOR] Merged with next list item");
-                    return true;
+                    try
+                    {
+                        sourceRange.Save(stream, DataFormats.Xaml);
+                        stream.Position = 0;
+                        targetRange.Load(stream, DataFormats.Xaml);
+                    }
+                    catch
+                    {
+                        // Fallback to plain text if XAML fails
+                        var text = sourceRange.Text;
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            targetRange.Text = text;
+                        }
+                    }
                 }
+                
+                // Handle remaining blocks in next item (nested lists, images, etc.)
+                var remainingBlocks = nextItem.Blocks.Skip(1).ToList();
+                foreach (var block in remainingBlocks)
+                {
+                    nextItem.Blocks.Remove(block);
+                    currentItem.Blocks.Add(block);
+                }
+                
+                // Remove merged item safely
+                list.ListItems.Remove(nextItem);
+                
+                // Position caret at merge boundary with safety checks
+                var newCaretPosition = mergePoint.GetPositionAtOffset(0, LogicalDirection.Forward) ?? mergePoint;
+                CaretPosition = newCaretPosition;
+                
+                System.Diagnostics.Debug.WriteLine("[EDITOR] Safely merged with next list item (formatting preserved)");
+                return true;
             }
-            return false;
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Safe merge failed: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                EndChange(); // Ensures undo support and document consistency
+            }
         }
 
         // Removed: List formatting methods (part of deleted list tracking system)
@@ -2519,6 +2613,208 @@ namespace NoteNest.UI.Controls.Editor.Core
             // to restore custom list formatting from metadata.
         }
         #endregion
+        
+        /// <summary>
+        /// UX POLISH: Get current list state for toolbar feedback
+        /// </summary>
+        public ListState GetCurrentListState()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is ListItem listItem && listItem.Parent is List list)
+            {
+                return new ListState
+                {
+                    IsInList = true,
+                    IsInBulletList = list.MarkerStyle == TextMarkerStyle.Disc,
+                    IsInNumberedList = list.MarkerStyle == TextMarkerStyle.Decimal,
+                    NestingLevel = GetSimpleNestingLevel(list)
+                };
+            }
+            
+            return new ListState { IsInList = false };
+        }
+        
+        /// <summary>
+        /// UX POLISH: Simple, safe nesting level calculation (no infinite loops)
+        /// </summary>
+        private int GetSimpleNestingLevel(List list)
+        {
+            int level = 1;
+            var current = list.Parent;
+            int maxChecks = 10; // Safety limit
+            
+            while (current != null && maxChecks-- > 0)
+            {
+                if (current is ListItem listItem && listItem.Parent is List parentList)
+                {
+                    level++;
+                    current = parentList.Parent;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            
+            return level;
+        }
+        
+        /// <summary>
+        /// PROFESSIONAL: Determine optimal marker style based on nesting level and user intent
+        /// </summary>
+        private TextMarkerStyle GetEffectiveMarkerStyle(TextMarkerStyle requestedStyle, Paragraph currentPara)
+        {
+            if (currentPara?.Parent is not ListItem parentListItem || 
+                parentListItem.Parent is not List parentList) 
+                return requestedStyle;
+            
+            var nestingLevel = GetSimpleNestingLevel(parentList);
+            
+            // Professional alternating pattern based on nesting depth
+            return (requestedStyle, nestingLevel) switch
+            {
+                // Numbered list professional hierarchy
+                (TextMarkerStyle.Decimal, 1) => TextMarkerStyle.Decimal,      // 1. Top level numbers
+                (TextMarkerStyle.Decimal, 2) => TextMarkerStyle.LowerLatin,   // a. Second level letters  
+                (TextMarkerStyle.Decimal, 3) => TextMarkerStyle.LowerRoman,   // i. Third level roman
+                (TextMarkerStyle.Decimal, _) => TextMarkerStyle.Disc,         // • Deep nesting fallback
+                
+                // Bullet list professional hierarchy
+                (TextMarkerStyle.Disc, 1) => TextMarkerStyle.Disc,            // • Top level bullets
+                (TextMarkerStyle.Disc, 2) => TextMarkerStyle.Circle,          // ○ Second level circles
+                (TextMarkerStyle.Disc, 3) => TextMarkerStyle.Square,          // ▪ Third level squares  
+                (TextMarkerStyle.Disc, _) => TextMarkerStyle.Disc,            // • Deep nesting fallback
+                
+                // Handle other marker styles gracefully
+                _ => requestedStyle
+            };
+        }
+        
+        /// <summary>
+        /// ENHANCED: Analyze mixed selection for smart list handling
+        /// </summary>
+        private ListSelectionState AnalyzeSelection(List<Paragraph> selection, TextMarkerStyle targetStyle)
+        {
+            int totalParagraphs = selection.Count;
+            int inTargetList = 0, inOtherList = 0, notInList = 0;
+            var listTypes = new HashSet<TextMarkerStyle>();
+            
+            foreach (var para in selection)
+            {
+                if (para.Parent is ListItem li && li.Parent is List list)
+                {
+                    listTypes.Add(list.MarkerStyle);
+                    if (list.MarkerStyle == targetStyle)
+                        inTargetList++;
+                    else
+                        inOtherList++;
+                }
+                else
+                {
+                    notInList++;
+                }
+            }
+            
+            return new ListSelectionState
+            {
+                AllInTargetList = inTargetList == totalParagraphs,
+                AllInList = (inTargetList + inOtherList) == totalParagraphs,
+                HasMixedListTypes = listTypes.Count > 1,
+                HasNonListContent = notInList > 0,
+                DominantAction = DetermineDominantAction(inTargetList, inOtherList, notInList, targetStyle)
+            };
+        }
+
+        /// <summary>
+        /// ENHANCED: Determine best action for mixed selections using smart heuristics
+        /// </summary>
+        private ListAction DetermineDominantAction(int target, int other, int none, TextMarkerStyle targetStyle)
+        {
+            // Smart heuristics for mixed selections
+            if (target > (other + none)) return ListAction.RemoveAllLists;  // Mostly target → remove
+            if ((target + other) < none) return ListAction.AddToTarget;     // Mostly plain → add
+            return ListAction.ConvertToTarget;  // Mixed → standardize to target
+        }
+        
+        /// <summary>
+        /// UX POLISH: Check for list state changes and notify toolbar
+        /// </summary>
+        private void CheckAndNotifyListStateChange()
+        {
+            var newState = GetCurrentListState();
+            
+            if (!_currentListState.Equals(newState))
+            {
+                _currentListState = newState;
+                ListStateChanged?.Invoke(this, new ListStateChangedEventArgs(newState));
+                
+                System.Diagnostics.Debug.WriteLine($"[EDITOR] List state changed: InList={newState.IsInList}, Bullets={newState.IsInBulletList}, Numbers={newState.IsInNumberedList}");
+            }
+        }
+    }
+    
+    /// <summary>
+    /// UX POLISH: Event args for list state changes
+    /// </summary>
+    public class ListStateChangedEventArgs : EventArgs
+    {
+        public ListState State { get; }
+        
+        public ListStateChangedEventArgs(ListState state)
+        {
+            State = state;
+        }
+    }
+    
+    /// <summary>
+    /// UX POLISH: Represents current list formatting state with proper equality implementation
+    /// </summary>
+    public class ListState : IEquatable<ListState>
+    {
+        public bool IsInList { get; set; }
+        public bool IsInBulletList { get; set; }
+        public bool IsInNumberedList { get; set; }
+        public int NestingLevel { get; set; }
+        
+        public bool Equals(ListState? other)
+        {
+            return other != null &&
+                   IsInList == other.IsInList &&
+                   IsInBulletList == other.IsInBulletList &&
+                   IsInNumberedList == other.IsInNumberedList &&
+                   NestingLevel == other.NestingLevel;
+        }
+        
+        public override bool Equals(object? obj) => Equals(obj as ListState);
+        
+        public override int GetHashCode() => HashCode.Combine(IsInList, IsInBulletList, IsInNumberedList, NestingLevel);
+        
+        public static bool operator ==(ListState? left, ListState? right) => 
+            ReferenceEquals(left, right) || (left?.Equals(right) == true);
+            
+        public static bool operator !=(ListState? left, ListState? right) => !(left == right);
+    }
+    
+    /// <summary>
+    /// ENHANCED: Represents the state of a mixed selection for intelligent list handling
+    /// </summary>
+    public class ListSelectionState
+    {
+        public bool AllInTargetList { get; set; }
+        public bool AllInList { get; set; }
+        public bool HasMixedListTypes { get; set; }
+        public bool HasNonListContent { get; set; }
+        public ListAction DominantAction { get; set; }
+    }
+    
+    /// <summary>
+    /// ENHANCED: Actions that can be taken on mixed list selections
+    /// </summary>
+    public enum ListAction
+    {
+        RemoveAllLists,    // Remove list formatting from all paragraphs
+        ConvertToTarget,   // Convert all lists to target type  
+        AddToTarget        // Add list formatting of target type
     }
 }
 

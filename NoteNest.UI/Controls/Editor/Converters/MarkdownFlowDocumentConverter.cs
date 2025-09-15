@@ -493,31 +493,100 @@ namespace NoteNest.UI.Controls.Editor.Converters
                     sb.AppendLine();
                     break;
                 case List l:
-                    int i = 1;
-                    foreach (var item in l.ListItems)
-                    {
-                        foreach (var b in item.Blocks)
-                        {
-                            if (b is List nested)
-                            {
-                                // Nested list: do not create an extra parent marker; indent child list
-                                var nestedText = ConvertBlockToMarkdown(nested).TrimEnd();
-                                var indented = IndentLines(nestedText, 2);
-                                sb.AppendLine(indented);
-                            }
-                            else
-                            {
-                                sb.Append(l.MarkerStyle == TextMarkerStyle.Decimal ? $"{i}. " : "- ");
-                                // Preserve inner whitespace; only trim end so we don't break inline markers
-                                sb.Append(ConvertBlockToMarkdown(b).TrimEnd());
-                                sb.AppendLine();
-                            }
-                        }
-                        i++;
-                    }
+                    sb.Append(ConvertListToMarkdown(l, 0));
                     break;
             }
             return sb.ToString();
+        }
+        
+        /// <summary>
+        /// ENHANCED: Convert list to markdown with proper nesting support and accurate indentation
+        /// </summary>
+        private string ConvertListToMarkdown(List list, int nestingLevel)
+        {
+            var sb = new StringBuilder();
+            var indent = new string(' ', nestingLevel * 2); // Proper nesting calculation
+            int itemNumber = 1;
+            
+            foreach (var item in list.ListItems)
+            {
+                var marker = GetMarkerForStyle(list.MarkerStyle, itemNumber);
+                var hasContent = false;
+                
+                foreach (var block in item.Blocks)
+                {
+                    switch (block)
+                    {
+                        case Paragraph p:
+                            sb.Append($"{indent}{marker}");
+                            sb.AppendLine(ConvertParagraphContentToMarkdown(p));
+                            hasContent = true;
+                            marker = new string(' ', marker.Length); // Continuation indent for multi-block items
+                            break;
+                            
+                        case List nestedList:
+                            if (!hasContent) {
+                                sb.AppendLine($"{indent}{marker}"); // Empty parent item
+                                hasContent = true;
+                            }
+                            sb.Append(ConvertListToMarkdown(nestedList, nestingLevel + 1));
+                            break;
+                    }
+                }
+                itemNumber++;
+            }
+            return sb.ToString();
+        }
+        
+        /// <summary>
+        /// ENHANCED: Get appropriate marker for different list styles
+        /// </summary>
+        private string GetMarkerForStyle(TextMarkerStyle style, int itemNumber)
+        {
+            return style switch
+            {
+                TextMarkerStyle.Decimal => $"{itemNumber}. ",
+                TextMarkerStyle.LowerLatin => $"{(char)('a' + itemNumber - 1)}. ",
+                TextMarkerStyle.UpperLatin => $"{(char)('A' + itemNumber - 1)}. ",
+                TextMarkerStyle.LowerRoman => $"{ToRoman(itemNumber).ToLower()}. ",
+                TextMarkerStyle.UpperRoman => $"{ToRoman(itemNumber)}. ",
+                TextMarkerStyle.Circle => "○ ",
+                TextMarkerStyle.Square => "▪ ",
+                _ => "- " // Default to bullet for Disc and others
+            };
+        }
+        
+        /// <summary>
+        /// ENHANCED: Convert paragraph content to markdown preserving inline formatting
+        /// </summary>
+        private string ConvertParagraphContentToMarkdown(Paragraph p)
+        {
+            var sb = new StringBuilder();
+            foreach (var inline in p.Inlines)
+            {
+                sb.Append(ConvertInlineToMarkdown(inline));
+            }
+            return sb.ToString().TrimEnd();
+        }
+        
+        /// <summary>
+        /// ENHANCED: Convert integer to roman numerals for proper list formatting
+        /// </summary>
+        private string ToRoman(int number)
+        {
+            var values = new[] { 1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1 };
+            var literals = new[] { "M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I" };
+            
+            var result = new StringBuilder();
+            for (int i = 0; i < values.Length; i++)
+            {
+                while (number >= values[i])
+                {
+                    number -= values[i];
+                    result.Append(literals[i]);
+                }
+            }
+            return result.ToString();
         }
 
         private static string IndentLines(string text, int spaces)
