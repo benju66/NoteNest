@@ -28,6 +28,7 @@ namespace NoteNest.Core.Interfaces.Services
 
 		// Search optimization
 		string StripMarkdownForIndex(string markdown);
+		string StripRTFForIndex(string rtfContent);
 
 		// Performance
 		string GetCachedProcessedContent(string content, string cacheKey);

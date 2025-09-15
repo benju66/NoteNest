@@ -2,18 +2,20 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using NoteNest.UI.Controls.Editor.Core;
+using NoteNest.Core.Models;
 
 namespace NoteNest.UI.Controls.Editor
 {
     public partial class EditorToolbar : UserControl
     {
+        // Change from FormattedTextEditor to INotesEditor interface
         public static readonly DependencyProperty EditorProperty =
-            DependencyProperty.Register(nameof(Editor), typeof(FormattedTextEditor),
+            DependencyProperty.Register(nameof(Editor), typeof(INotesEditor),
                 typeof(EditorToolbar), new PropertyMetadata(null, OnEditorChanged));
 
-        public FormattedTextEditor Editor
+        public INotesEditor Editor
         {
-            get => (FormattedTextEditor)GetValue(EditorProperty);
+            get => (INotesEditor)GetValue(EditorProperty);
             set => SetValue(EditorProperty, value);
         }
 
@@ -25,18 +27,24 @@ namespace NoteNest.UI.Controls.Editor
             if (d is EditorToolbar toolbar)
             {
                 // Unwire old editor
-                if (e.OldValue is FormattedTextEditor oldEditor)
+                if (e.OldValue is INotesEditor oldEditor)
                 {
                     oldEditor.ListStateChanged -= toolbar.OnListStateChanged;
                 }
                 
                 // Wire up new editor
-                if (e.NewValue is FormattedTextEditor newEditor)
+                if (e.NewValue is INotesEditor newEditor)
                 {
                     newEditor.ListStateChanged += toolbar.OnListStateChanged;
                     
+                    // Update button visibility based on format
+                    toolbar.UpdateToolbarVisibility();
+                    
                     // Update initial state
-                    toolbar.UpdateButtonStates(newEditor.GetCurrentListState());
+                    if (newEditor is FormattedTextEditor formattedEditor)
+                    {
+                        toolbar.UpdateButtonStates(formattedEditor.GetCurrentListState());
+                    }
                 }
             }
         }
@@ -46,16 +54,32 @@ namespace NoteNest.UI.Controls.Editor
             InitializeComponent();
         }
 
-        // Move all toolbar click handlers from SplitPaneView here
+        private void UpdateToolbarVisibility()
+        {
+            // Only reference buttons that actually exist
+            var taskButton = FindName("TaskListButton") as Button;
+            if (taskButton != null)
+            {
+                taskButton.Visibility = Editor?.Format == NoteFormat.RTF ? 
+                    Visibility.Collapsed : Visibility.Visible;
+            }
+            
+            // Could add more format-specific UI adaptations here
+            System.Diagnostics.Debug.WriteLine($"[TOOLBAR] Updated visibility for {Editor?.Format} editor");
+        }
+
+        // Update all click handlers to work with interface
         private void BulletList_Click(object sender, RoutedEventArgs e)
         {
-            Editor?.Focus();
+            if (Editor is UIElement element)
+                element.Focus();
             Editor?.InsertBulletList();
         }
 
         private void NumberedList_Click(object sender, RoutedEventArgs e)
         {
-            Editor?.Focus();
+            if (Editor is UIElement element)
+                element.Focus();
             Editor?.InsertNumberedList();
         }
 
@@ -64,15 +88,27 @@ namespace NoteNest.UI.Controls.Editor
             // Task list not yet implemented
         }
 
+        private void Bold_Click(object sender, RoutedEventArgs e)
+        {
+            Editor?.ToggleBold();
+        }
+
+        private void Italic_Click(object sender, RoutedEventArgs e)
+        {
+            Editor?.ToggleItalic();
+        }
+
         private void Indent_Click(object sender, RoutedEventArgs e)
         {
-            Editor?.Focus();
+            if (Editor is UIElement element)
+                element.Focus();
             Editor?.IndentSelection();
         }
 
         private void Outdent_Click(object sender, RoutedEventArgs e)
         {
-            Editor?.Focus();
+            if (Editor is UIElement element)
+                element.Focus();
             Editor?.OutdentSelection();
         }
         

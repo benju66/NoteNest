@@ -16,6 +16,7 @@ namespace NoteNest.Core.Services
 
             try
             {
+                // Get user's preferred format from settings
                 NoteFormat format = _configService.Settings?.DefaultNoteFormat ?? NoteFormat.Markdown;
 
                 var extension = _formatService.GetExtensionForFormat(format);
@@ -34,13 +35,22 @@ namespace NoteNest.Core.Services
                     filePath = Path.Combine(category.Path, fileName);
                 }
 
+                // Create initial content based on format
+                string initialContent = format switch
+                {
+                    NoteFormat.RTF => @"{\rtf1\ansi\deff0 {\fonttbl {\f0 Calibri;}}{\colortbl ;}{\*\generator NoteNest;}\f0\fs24\par}",
+                    NoteFormat.PlainText => content ?? "",
+                    _ => content ?? "" // Markdown starts with provided content or empty
+                };
+
                 var note = new NoteModel
                 {
                     Title = title,
                     FilePath = filePath,
-                    Content = content,
+                    Content = initialContent,
                     CategoryId = category.Id,
-                    LastModified = DateTime.Now
+                    LastModified = DateTime.Now,
+                    Format = format // Set the format
                 };
 
                 await SaveNoteAsync(note);

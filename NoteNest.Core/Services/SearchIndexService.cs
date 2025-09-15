@@ -400,6 +400,17 @@ namespace NoteNest.Core.Services
                     _logger?.Debug($"[SearchIndex] Markdown stripping failed for {note.Title}: {ex.Message}");
                 }
             }
+            else if (note.Format == NoteFormat.RTF && _markdownService != null)
+            {
+                try
+                {
+                    contentToIndex = _markdownService.StripRTFForIndex(contentToIndex);
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Debug($"[SearchIndex] RTF stripping failed for {note.Title}: {ex.Message}");
+                }
+            }
 
             // Index content words
             var contentWords = TokenizeText(contentToIndex);

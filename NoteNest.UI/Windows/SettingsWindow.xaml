@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.modernwpf.com/2019"
         xmlns:converters="clr-namespace:NoteNest.UI.Converters"
+        xmlns:models="clr-namespace:NoteNest.Core.Models;assembly=NoteNest.Core"
         ui:WindowHelper.UseModernWindowStyle="True"
         Title="Settings" Height="550" Width="750"
         WindowStartupLocation="CenterOwner"
@@ -330,12 +331,49 @@
                         <TextBlock Text="Features" Style="{StaticResource TitleTextBlockStyle}" 
                                    Margin="0,0,0,16"/>
                         
-                        <TextBlock Text="Default file format" Style="{StaticResource BaseTextBlockStyle}" 
-                                   Margin="0,0,0,4"/>
-                        <StackPanel Orientation="Vertical" Margin="0,0,0,12">
-                            <RadioButton Content="Markdown (.md)" IsChecked="{Binding UseMarkdownFormat}"/>
-                            <RadioButton Content="Plain Text (.txt)" IsChecked="{Binding UsePlainTextFormat}"/>
-                        </StackPanel>
+                        <TextBlock Text="Default Format for New Notes" 
+                                   Style="{StaticResource SubtitleTextBlockStyle}" 
+                                   Margin="0,16,0,8"/>
+
+                        <ComboBox SelectedValue="{Binding Settings.DefaultNoteFormat}"
+                                  Width="400"
+                                  HorizontalAlignment="Left"
+                                  Margin="0,8">
+                            <ComboBox.ItemsSource>
+                                <x:Array Type="{x:Type models:NoteFormat}">
+                                    <models:NoteFormat>Markdown</models:NoteFormat>
+                                    <models:NoteFormat>RTF</models:NoteFormat>
+                                    <models:NoteFormat>PlainText</models:NoteFormat>
+                                </x:Array>
+                            </ComboBox.ItemsSource>
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding}" Value="Markdown">
+                                                        <Setter Property="Text" Value="Markdown (.md) - Lightweight with conversion"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="RTF">
+                                                        <Setter Property="Text" Value="Rich Text Format (.rtf) - Full formatting, no conversion"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="PlainText">
+                                                        <Setter Property="Text" Value="Plain Text (.txt) - No formatting"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <TextBlock Text="Note: This only affects new notes. Existing notes keep their current format." 
+                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                   FontStyle="Italic"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,0"/>
 
                         <ui:ToggleSwitch Header="Enable spell check (English)" 
                                          IsOn="{Binding Settings.EditorSettings.EnableSpellCheck}"
