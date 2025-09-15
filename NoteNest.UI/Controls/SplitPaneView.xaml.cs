@@ -290,21 +290,38 @@ namespace NoteNest.UI.Controls
                 
                 if (editor != null)
                 {
-                    // Apply editor settings using interface
+                    // Apply editor settings using interface for all editor types
                     if (config?.Settings != null)
                     {
-                        try { SpellCheck.SetIsEnabled(editor as TextBoxBase, config.Settings.EditorSettings.EnableSpellCheck); } catch { }
-                        try { editor.Document.FontFamily = new System.Windows.Media.FontFamily(config.Settings.EditorSettings.FontFamily); } catch { }
-                        try { editor.Document.FontSize = config.Settings.EditorSettings.FontSize > 0 ? config.Settings.EditorSettings.FontSize : editor.Document.FontSize; } catch { }
+                        // RTF editor has ApplySettings method, FormattedTextEditor uses manual application
+                        if (editor is RTFTextEditor rtfEditor)
+                        {
+                            try { rtfEditor.ApplySettings(config.Settings.EditorSettings); } catch { }
+                        }
+                        else
+                        {
+                            // Manual settings for FormattedTextEditor (legacy approach)
+                            try { SpellCheck.SetIsEnabled(editor as TextBoxBase, config.Settings.EditorSettings.EnableSpellCheck); } catch { }
+                            try { editor.Document.FontFamily = new System.Windows.Media.FontFamily(config.Settings.EditorSettings.FontFamily); } catch { }
+                            try { editor.Document.FontSize = config.Settings.EditorSettings.FontSize > 0 ? config.Settings.EditorSettings.FontSize : editor.Document.FontSize; } catch { }
+                        }
                     }
                     
-                    // Wire up metadata manager and current note (FormattedTextEditor specific)
-                    if (_metadataManager != null && Pane?.SelectedTab?.Note != null && editor is FormattedTextEditor formattedEditor)
+                    // Wire up metadata manager and current note for both editor types
+                    if (_metadataManager != null && Pane?.SelectedTab?.Note != null)
                     {
                         try
                         {
-                            formattedEditor.SetMetadataManager(_metadataManager);
-                            formattedEditor.CurrentNote = Pane.SelectedTab.Note;
+                            if (editor is FormattedTextEditor formattedEditor)
+                            {
+                                formattedEditor.SetMetadataManager(_metadataManager);
+                                formattedEditor.CurrentNote = Pane.SelectedTab.Note;
+                            }
+                            else if (editor is RTFTextEditor rtfEditor)
+                            {
+                                rtfEditor.SetMetadataManager(_metadataManager);
+                                rtfEditor.CurrentNote = Pane.SelectedTab.Note;
+                            }
                         }
                         catch { }
                     }
