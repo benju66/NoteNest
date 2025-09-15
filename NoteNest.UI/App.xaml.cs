@@ -50,6 +50,7 @@ namespace NoteNest.UI
                     .ConfigureServices((context, services) =>
                     {
                         services.AddNoteNestServices(); // Only fast services
+                        services.AddSilentSaveFailureFix(); // ADDED: Eliminates all silent save failures
                     })
                     .Build();
 

@@ -12,6 +12,7 @@ namespace NoteNest.UI.ViewModels
     public class NoteTabItem : ViewModelBase, ITabItem, IDisposable
     {
         private readonly ISaveManager _saveManager;
+        private readonly ISupervisedTaskRunner _taskRunner;
         private readonly string _noteId;
         private string _content;
         private bool _isSaving;
@@ -92,13 +93,14 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        public NoteTabItem(NoteModel note, ISaveManager saveManager)
+        public NoteTabItem(NoteModel note, ISaveManager saveManager, ISupervisedTaskRunner taskRunner = null)
         {
             var instanceId = this.GetHashCode();
             System.Diagnostics.Debug.WriteLine($"[NoteTabItem] NEW INSTANCE {instanceId}: note.Id={note?.Id}, note.Title={note?.Title}, saveManager={saveManager != null}");
             
             Note = note ?? throw new ArgumentNullException(nameof(note));
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
+            _taskRunner = taskRunner; // Allow null for backward compatibility 
             _noteId = note.Id;
             _content = note.Content ?? "";
             
@@ -244,21 +246,45 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
-                // Trigger full save (would need fresh content from editor)
-                _ = Task.Run(async () =>
+                // FIXED: No more silent auto-save failures 
+                if (_taskRunner != null)
                 {
-                    try
+                    _ = _taskRunner.RunAsync(
+                        async () =>
+                        {
+                            await _saveManager.SaveNoteAsync(_noteId);
+                            
+                            // Update UI state on success
+                            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                IsDirty = false;
+                                IsSaving = false;
+                            });
+                            
+                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save completed for {Note.Title}");
+                        },
+                        $"Auto-save for {Note.Title}",
+                        NoteNest.Core.Services.OperationType.AutoSave
+                    );
+                }
+                else
+                {
+                    // Fallback for backward compatibility
+                    _ = Task.Run(async () =>
                     {
-                        await _saveManager.SaveNoteAsync(_noteId);
-                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save completed for {Note.Title}");
-                    }
-                    catch (Exception ex)
-                    {
-                        // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
-                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save failed for {Note.Title}: {ex.Message}");
-                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save error details: {ex.StackTrace}");
-                    }
-                });
+                        try
+                        {
+                            await _saveManager.SaveNoteAsync(_noteId);
+                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save completed for {Note.Title}");
+                        }
+                        catch (Exception ex)
+                        {
+                            // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
+                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save failed for {Note.Title}: {ex.Message}");
+                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save error details: {ex.StackTrace}");
+                        }
+                    });
+                }
             }
             catch (Exception ex)
             {

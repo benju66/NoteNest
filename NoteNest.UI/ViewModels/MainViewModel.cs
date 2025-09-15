@@ -1307,26 +1307,48 @@ namespace NoteNest.UI.ViewModels
 
         private void AutoSaveTimer_Tick(object sender, EventArgs e)
         {
-            // Execute auto-save on background thread to avoid blocking UI
-            _ = Task.Run(async () =>
+            // FIXED: No more silent global auto-save failures - Execute auto-save on background thread to avoid blocking UI
+            var taskRunner = (Application.Current as App)?.ServiceProvider
+                ?.GetService(typeof(ISupervisedTaskRunner)) as ISupervisedTaskRunner;
+                
+            if (taskRunner != null)
             {
-                try
-                {
-                    if (!_cancellationTokenSource.Token.IsCancellationRequested)
+                _ = taskRunner.RunAsync(
+                    async () =>
                     {
-                        System.Diagnostics.Debug.WriteLine($"[VM] AutoSaveTimer tick at={DateTime.Now:HH:mm:ss.fff}");
-                        await AutoSaveAsync();
+                        if (!_cancellationTokenSource.Token.IsCancellationRequested)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[VM] AutoSaveTimer tick at={DateTime.Now:HH:mm:ss.fff}");
+                            await AutoSaveAsync();
+                        }
+                    },
+                    "Global auto-save timer",
+                    NoteNest.Core.Services.OperationType.AutoSave
+                );
+            }
+            else
+            {
+                // Fallback for backward compatibility
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        if (!_cancellationTokenSource.Token.IsCancellationRequested)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[VM] AutoSaveTimer tick at={DateTime.Now:HH:mm:ss.fff}");
+                            await AutoSaveAsync();
+                        }
                     }
-                }
-                catch (OperationCanceledException)
-                {
-                    // Expected during shutdown
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "Auto-save timer error");
-                }
-            }, _cancellationTokenSource.Token);
+                    catch (OperationCanceledException)
+                    {
+                        // Expected during shutdown
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, "Auto-save timer error");
+                    }
+                });
+            }
         }
 
         private async Task AutoSaveAsync()

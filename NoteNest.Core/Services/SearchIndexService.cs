@@ -22,6 +22,21 @@ namespace NoteNest.Core.Services
         private readonly int _contentWordLimit;
         private readonly IMarkdownService _markdownService;
         private DateTime _lastIndexTime;
+        
+        private readonly ISupervisedTaskRunner? _taskRunner;
+        
+        /// <summary>
+        /// Constructor that optionally accepts SupervisedTaskRunner
+        /// </summary>
+        public SearchIndexService(int contentWordLimit = 500, 
+                                  IMarkdownService? markdownService = null,
+                                  IFileSystemProvider? fileSystem = null,
+                                  IAppLogger? logger = null,
+                                  ISupervisedTaskRunner? taskRunner = null)
+            : this(contentWordLimit, markdownService, fileSystem, logger)
+        {
+            _taskRunner = taskRunner;
+        }
         private bool _indexDirty = true;
         private volatile bool _contentLoadingComplete = false;
         private volatile int _contentLoadProgress = 0;
@@ -140,18 +155,30 @@ namespace NoteNest.Core.Services
                     _indexDirty = false;
                 }
 
-                // Phase 2: Load content in background (non-blocking)
-                _ = Task.Run(async () => 
+                // FIXED: No more silent content loading failures - Phase 2: Load content in background (non-blocking)
+                if (_taskRunner != null)
                 {
-                    try
+                    _ = _taskRunner.RunAsync(
+                        async () => await LoadContentInBackgroundAsync(allNotes),
+                        "Background content loading for search index",
+                        NoteNest.Core.Services.OperationType.SearchIndex
+                    );
+                }
+                else
+                {
+                    // Fallback for backward compatibility
+                    _ = Task.Run(async () => 
                     {
-                        await LoadContentInBackgroundAsync(allNotes);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.Error(ex, "[SearchIndex] Background content loading failed");
-                    }
-                }).ConfigureAwait(false);
+                        try
+                        {
+                            await LoadContentInBackgroundAsync(allNotes);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.Error(ex, "[SearchIndex] Background content loading failed");
+                        }
+                    }).ConfigureAwait(false);
+                }
 
                 _logger?.Info($"[SearchIndex] Initial index built with {_searchIndex.Count} unique terms");
                 return true;

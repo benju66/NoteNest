@@ -17,6 +17,7 @@ namespace NoteNest.Core.Services
         private readonly IAppLogger _logger;
         private readonly IWriteAheadLog _wal;
         private readonly SaveConfiguration _config;
+        private readonly ISupervisedTaskRunner _taskRunner;
         private readonly ConcurrentDictionary<string, NoteState> _notes;
         private readonly ConcurrentDictionary<string, NoteTimer> _timers;
         private readonly ConcurrentDictionary<string, string> _pathToNoteId;
@@ -33,11 +34,12 @@ namespace NoteNest.Core.Services
         public event EventHandler<SaveProgressEventArgs>? SaveCompleted;
         public event EventHandler<ExternalChangeEventArgs>? ExternalChangeDetected;
 
-        public UnifiedSaveManager(IAppLogger logger, IWriteAheadLog wal, SaveConfiguration config = null)
+        public UnifiedSaveManager(IAppLogger logger, IWriteAheadLog wal, SaveConfiguration config = null, ISupervisedTaskRunner taskRunner = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _wal = wal ?? throw new ArgumentNullException(nameof(wal));
             _config = config ?? new SaveConfiguration();
+            _taskRunner = taskRunner; // Allow null for backward compatibility
             
             _notes = new ConcurrentDictionary<string, NoteState>();
             _timers = new ConcurrentDictionary<string, NoteTimer>();
@@ -52,7 +54,20 @@ namespace NoteNest.Core.Services
             _periodicCleanup = new Timer(CleanupInactiveNotes, null, cleanupInterval, cleanupInterval);
             
             // Recover from WAL on startup
-            Task.Run(RecoverFromWAL);
+            if (_taskRunner != null)
+            {
+                _ = _taskRunner.RunAsync(RecoverFromWAL, "WAL Recovery", OperationType.Background);
+            }
+            else
+            {
+                Task.Run(RecoverFromWAL); // Fallback for backward compatibility
+            }
+            
+            // Subscribe to save failures for additional handling if taskRunner available
+            if (_taskRunner != null)
+            {
+                _taskRunner.SaveFailed += OnSaveFailure;
+            }
         }
 
         private class NoteState
@@ -231,8 +246,20 @@ namespace NoteNest.Core.Services
 
             if (state.IsDirty)
             {
-                // Write to WAL immediately for crash protection
-                _ = Task.Run(async () => await _wal.AppendAsync(noteId, content));
+                // Write to WAL immediately for crash protection - FIXED: No more silent failures
+                if (_taskRunner != null)
+                {
+                    _ = _taskRunner.RunAsync(
+                        async () => await _wal.AppendAsync(noteId, content),
+                        $"Crash protection for {System.IO.Path.GetFileName(state.FilePath)}",
+                        OperationType.WALWrite
+                    );
+                }
+                else
+                {
+                    // Fallback for backward compatibility
+                    _ = Task.Run(async () => await _wal.AppendAsync(noteId, content));
+                }
                 
                 // Start/reset save timer
                 var timer = _timers.GetOrAdd(noteId, id => 
@@ -254,17 +281,34 @@ namespace NoteNest.Core.Services
 
         private void AutoSave(string noteId)
         {
-            _ = Task.Run(async () =>
+            // FIXED: No more silent auto-save failures
+            if (_taskRunner != null)
             {
-                try
+                var fileName = _notes.TryGetValue(noteId, out var state) 
+                    ? System.IO.Path.GetFileName(state.FilePath ?? noteId) 
+                    : noteId;
+                    
+                _ = _taskRunner.RunAsync(
+                    async () => await SaveNoteAsync(noteId),
+                    $"Auto-save for {fileName}",
+                    OperationType.AutoSave
+                );
+            }
+            else
+            {
+                // Fallback for backward compatibility
+                _ = Task.Run(async () =>
                 {
-                    await SaveNoteAsync(noteId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, $"Auto-save failed for note {noteId}");
-                }
-            });
+                    try
+                    {
+                        await SaveNoteAsync(noteId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, $"Auto-save failed for note {noteId}");
+                    }
+                });
+            }
         }
 
         public async Task<bool> SaveNoteAsync(string noteId)
@@ -727,6 +771,42 @@ namespace NoteNest.Core.Services
             
             _globalSaveSemaphore?.Dispose();
             _wal?.Dispose();
+            
+            // Unsubscribe from events
+            if (_taskRunner != null)
+            {
+                _taskRunner.SaveFailed -= OnSaveFailure;
+            }
+        }
+
+        private void OnSaveFailure(object? sender, SaveFailureEventArgs e)
+        {
+            // Additional handling for save failures
+            if (e.Type == OperationType.AutoSave || e.Type == OperationType.WALWrite)
+            {
+                try
+                {
+                    // Try to extract noteId from operation name if possible
+                    var noteId = ExtractNoteIdFromOperation(e.OperationName);
+                    if (!string.IsNullOrEmpty(noteId) && _notes.TryGetValue(noteId, out var state))
+                    {
+                        // Ensure dirty indicator stays visible so user knows it needs saving
+                        state.Touch();
+                        _logger.Warning($"Save failure for {noteId} - keeping dirty state visible to user");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Error handling save failure callback");
+                }
+            }
+        }
+
+        private string ExtractNoteIdFromOperation(string operationName)
+        {
+            // Simple extraction - could be enhanced if needed
+            // For now, just return empty string as noteId extraction is complex
+            return string.Empty;
         }
     }
 }

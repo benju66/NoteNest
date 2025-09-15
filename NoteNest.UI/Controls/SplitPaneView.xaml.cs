@@ -230,11 +230,25 @@ namespace NoteNest.UI.Controls
                             oldTabItem.UpdateContentFromEditor(content);
                             oldEditor.MarkClean();
                             
-                            // Force immediate save (bypass timers for tab switches)
+                            // FIXED: No more silent tab switch save failures
                             var saveManager = GetSaveManager();
+                            var taskRunner = GetSupervisedTaskRunner();
+                            
                             if (saveManager != null)
                             {
-                                _ = Task.Run(async () => await saveManager.SaveNoteAsync(oldTab.NoteId));
+                                if (taskRunner != null)
+                                {
+                                    _ = taskRunner.RunAsync(
+                                        async () => await saveManager.SaveNoteAsync(oldTab.NoteId),
+                                        $"Tab switch save for {oldTab.Title}",
+                                        NoteNest.Core.Services.OperationType.TabSwitchSave
+                                    );
+                                }
+                                else
+                                {
+                                    // Fallback for backward compatibility
+                                    _ = Task.Run(async () => await saveManager.SaveNoteAsync(oldTab.NoteId));
+                                }
                             }
                             
                             System.Diagnostics.Debug.WriteLine($"[UI] Tab switch save completed for {oldTab.Title}");
@@ -591,6 +605,15 @@ namespace NoteNest.UI.Controls
         {
             return (Application.Current as App)?.ServiceProvider
                 ?.GetService(typeof(ISaveManager)) as ISaveManager;
+        }
+        
+        /// <summary>
+        /// Get SupervisedTaskRunner service for preventing silent save failures
+        /// </summary>
+        private ISupervisedTaskRunner GetSupervisedTaskRunner()
+        {
+            return (Application.Current as App)?.ServiceProvider
+                ?.GetService(typeof(ISupervisedTaskRunner)) as ISupervisedTaskRunner;
         }
 
         /// <summary>
