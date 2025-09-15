@@ -35,14 +35,18 @@ namespace NoteNest.UI.Services
 			var owner = GetSafeOwner();
 			if (owner == null) return null;
 
-			var dialog = new InputDialog(title, prompt, defaultValue)
+			// Use ModernInputDialog for enhanced UX
+			var dialog = new ModernInputDialog(title, prompt, defaultValue)
 			{
-				Owner = owner
+				Owner = owner,
+				ShowRealTimeValidation = validationFunction != null,
+				AllowEmpty = false // Generally don't allow empty names
 			};
+			
 			if (validationFunction != null)
 			{
-				// InputDialog expects Func<string, string> where empty string means valid
-				dialog.ValidationFunction = (value) => validationFunction(value) ?? string.Empty;
+				// ModernInputDialog expects Func<string, string> where null/empty means valid
+				dialog.ValidationFunction = (value) => validationFunction(value);
 			}
 			
 			if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.ResponseText))

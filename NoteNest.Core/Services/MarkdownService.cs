@@ -115,20 +115,21 @@ namespace NoteNest.Core.Services
 			foreach (var key in expired) _cache.TryRemove(key, out _);
 		}
 
-		public NoteFormat DetectFormat(string filePath)
+	public NoteFormat DetectFormat(string filePath)
+	{
+		if (string.IsNullOrEmpty(filePath)) return NoteFormat.Markdown;
+		var ext = Path.GetExtension(filePath)?.ToLowerInvariant();
+		return ext switch
 		{
-			if (string.IsNullOrEmpty(filePath)) return NoteFormat.Markdown;
-			var ext = Path.GetExtension(filePath)?.ToLowerInvariant();
-			return ext switch
-			{
-				".md" => NoteFormat.Markdown,
-				".markdown" => NoteFormat.Markdown,
-				".mdown" => NoteFormat.Markdown,
-				".txt" => NoteFormat.PlainText,
-				".text" => NoteFormat.PlainText,
-				_ => DetectFormatFromContent(File.Exists(filePath) ? File.ReadAllText(filePath) : string.Empty)
-			};
-		}
+			".md" => NoteFormat.Markdown,
+			".markdown" => NoteFormat.Markdown,
+			".mdown" => NoteFormat.Markdown,
+			".rtf" => NoteFormat.RTF,  // BULLETPROOF RTF SUPPORT - matches FileFormatService
+			".txt" => NoteFormat.PlainText,
+			".text" => NoteFormat.PlainText,
+			_ => DetectFormatFromContent(File.Exists(filePath) ? File.ReadAllText(filePath) : string.Empty)
+		};
+	}
 
 		public NoteFormat DetectFormatFromContent(string content)
 		{
@@ -214,25 +215,63 @@ namespace NoteNest.Core.Services
 		}
 
 		/// <summary>
-		/// Strip RTF formatting for search indexing
+		/// Strip RTF formatting for search indexing - ENHANCED for bulletproof RTF priority
 		/// </summary>
 		public string StripRTFForIndex(string rtfContent)
 		{
 			if (string.IsNullOrEmpty(rtfContent)) return string.Empty;
 
-			// Remove RTF control words (e.g., \rtf1, \ansi, \b, \par)
-			var plain = Regex.Replace(rtfContent, @"\\[a-z]+[-]?\d*[ ]?", " ");
+			try
+			{
+				var plain = rtfContent;
 
-			// Remove RTF control symbols
-			plain = Regex.Replace(plain, @"\\['\n\r\\{}]", "");
+				// ENHANCED REGEX-BASED RTF STRIPPING (RTF PRIORITY)
+				
+				// Remove RTF document structure elements
+				plain = Regex.Replace(plain, @"\\rtf\d+", "", RegexOptions.IgnoreCase);
+				plain = Regex.Replace(plain, @"\\ansi", "", RegexOptions.IgnoreCase);
+				plain = Regex.Replace(plain, @"\\deff\d+", "", RegexOptions.IgnoreCase);
+				
+				// Remove font table and color table completely
+				plain = Regex.Replace(plain, @"\\fonttbl[^}]*}", "", RegexOptions.IgnoreCase);
+				plain = Regex.Replace(plain, @"\\colortbl[^}]*}", "", RegexOptions.IgnoreCase);
+				plain = Regex.Replace(plain, @"\\stylesheet[^}]*}", "", RegexOptions.IgnoreCase);
+				
+				// Remove all RTF control words with optional parameters
+				plain = Regex.Replace(plain, @"\\[a-z]+[-]?\d*[ ]?", " ", RegexOptions.IgnoreCase);
+				
+				// Remove RTF control symbols and escape sequences
+				plain = Regex.Replace(plain, @"\\['\n\r\\{}~\-_]", "");
+				
+				// Remove all curly braces (RTF grouping)
+				plain = Regex.Replace(plain, @"[{}]", "");
+				
+				// Remove RTF hexadecimal codes (\0x patterns)
+				plain = Regex.Replace(plain, @"\\0x[0-9a-f]+", "", RegexOptions.IgnoreCase);
+				
+				// Remove generator information and other metadata
+				plain = Regex.Replace(plain, @"\\[\*]\\[^}]*}", "", RegexOptions.IgnoreCase);
+				
+				// Clean up paragraph markers and line breaks
+				plain = Regex.Replace(plain, @"\\par\b", "\n", RegexOptions.IgnoreCase);
+				plain = Regex.Replace(plain, @"\\line\b", "\n", RegexOptions.IgnoreCase);
+				plain = Regex.Replace(plain, @"\\tab\b", " ", RegexOptions.IgnoreCase);
+				
+				// Normalize whitespace and line breaks
+				plain = Regex.Replace(plain, @"\s+", " ");
+				plain = Regex.Replace(plain, @"\n\s*\n", "\n");
+				plain = Regex.Replace(plain, @"^\s+", "", RegexOptions.Multiline);
+				plain = Regex.Replace(plain, @"\s+$", "", RegexOptions.Multiline);
 
-			// Remove curly braces
-			plain = Regex.Replace(plain, @"[{}]", "");
-
-			// Clean up extra whitespace
-			plain = Regex.Replace(plain, @"\s+", " ");
-
-			return plain.Trim();
+				var result = plain.Trim();
+				_logger.Debug($"Enhanced RTF extraction: {rtfContent.Length} RTF chars → {result.Length} searchable text chars");
+				return result;
+			}
+			catch (Exception ex)
+			{
+				_logger.Warning($"RTF text extraction failed: {ex.Message}");
+				return string.Empty;
+			}
 		}
 	}
 }

@@ -808,6 +808,21 @@ namespace NoteNest.UI.ViewModels
                 _logger.Debug("Loading categories...");
                 _stateManager.BeginOperation("Loading categories...");
                 
+                // SAVE CURRENT EXPANSION STATE BEFORE CLEARING
+                // This preserves what the user currently has expanded
+                if (Categories != null && Categories.Count > 0)
+                {
+                    try
+                    {
+                        await GetTreeStateAdapter().SaveExpansionStateAsync(Categories);
+                        _logger.Debug("Saved current expansion state before tree rebuild");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning($"Failed to save current expansion state: {ex.Message}");
+                    }
+                }
+                
                 Categories.Clear();
                 PinnedCategories.Clear();
                 PinnedNotes.Clear();
@@ -975,10 +990,77 @@ namespace NoteNest.UI.ViewModels
             SelectedCategory.IsExpanded = true;
             
             SelectedNote = noteItem;
+            
             // Route open via split-pane exclusive flow
             NoteOpenRequested?.Invoke(noteItem);
             
-            _stateManager.StatusMessage = $"Created: {note.Title}";
+            // TRIGGER IMMEDIATE RENAME for better UX
+            // Give user chance to provide proper name right away
+            Application.Current.Dispatcher.BeginInvoke(new Action(async () =>
+            {
+                try
+                {
+                    await Task.Delay(100); // Let UI update
+                    await TriggerRenameNoteAsync(noteItem, "New Note");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning($"Failed to trigger immediate rename: {ex.Message}");
+                    _stateManager.StatusMessage = $"Created: {note.Title}";
+                }
+            }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        /// <summary>
+        /// Triggers an immediate rename dialog for a note with enhanced UX
+        /// </summary>
+        private async Task TriggerRenameNoteAsync(NoteTreeItem noteItem, string placeholder)
+        {
+            if (noteItem == null) return;
+            
+            try
+            {
+                var currentName = noteItem.Title;
+                var isNewNote = currentName.StartsWith("New Note", StringComparison.OrdinalIgnoreCase);
+                
+                // Use enhanced dialog approach (will create ModernInputDialog in Phase 2)
+                var newName = await _dialogService.ShowInputDialogAsync(
+                    "Rename Note",
+                    isNewNote ? "Enter a name for your new note:" : "Enter new name:",
+                    isNewNote ? string.Empty : currentName, // Empty for new notes, current name for existing
+                    text =>
+                    {
+                        if (string.IsNullOrWhiteSpace(text)) return "Note name cannot be empty.";
+                        if (text.Equals(currentName, StringComparison.OrdinalIgnoreCase)) return null; // No change
+                        
+                        // Check for duplicates in the same category
+                        if (SelectedCategory?.Notes?.Any(n => n != noteItem && 
+                            string.Equals(n.Title, text, StringComparison.OrdinalIgnoreCase)) == true)
+                        {
+                            return "A note with this name already exists in this category.";
+                        }
+                        return null; // Valid
+                    });
+                
+                if (!string.IsNullOrWhiteSpace(newName) && newName != currentName)
+                {
+                    await RenameNoteAsync(noteItem, newName);
+                }
+                else if (isNewNote && string.IsNullOrWhiteSpace(newName))
+                {
+                    // User cancelled rename of new note - keep original name but show message
+                    _stateManager.StatusMessage = $"Created: {currentName} - press F2 to rename";
+                }
+                else
+                {
+                    _stateManager.StatusMessage = $"Created: {currentName}";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to trigger rename dialog");
+                _stateManager.StatusMessage = $"Created: {noteItem.Title}";
+            }
         }
 
 		// Removed: OpenNoteAsync - opening is handled exclusively by split-pane layer

@@ -387,9 +387,27 @@ namespace NoteNest.Core.Services
                 Relevance = 1.0f
             };
 
-            // Process content based on format
+            // Process content based on format - RTF PRIORITY implementation
             var contentToIndex = content;
-            if (note.Format == NoteFormat.Markdown && _markdownService != null)
+            if (note.Format == NoteFormat.RTF && _markdownService != null)
+            {
+                // RTF PRIORITY: Process RTF files first with enhanced extraction
+                try
+                {
+                    contentToIndex = _markdownService.StripRTFForIndex(contentToIndex);
+                    _logger?.Debug($"[SearchIndex] RTF content processed for {note.Title}: {content.Length} → {contentToIndex.Length} chars");
+                    
+                    // RTF PRIORITY: Give RTF content higher search relevance
+                    result.Relevance = 1.2f; // 20% boost for RTF content
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Warning($"[SearchIndex] RTF stripping failed for {note.Title}: {ex.Message}");
+                    // Keep original content as fallback
+                    contentToIndex = content;
+                }
+            }
+            else if (note.Format == NoteFormat.Markdown && _markdownService != null)
             {
                 try
                 {
@@ -398,17 +416,6 @@ namespace NoteNest.Core.Services
                 catch (Exception ex)
                 {
                     _logger?.Debug($"[SearchIndex] Markdown stripping failed for {note.Title}: {ex.Message}");
-                }
-            }
-            else if (note.Format == NoteFormat.RTF && _markdownService != null)
-            {
-                try
-                {
-                    contentToIndex = _markdownService.StripRTFForIndex(contentToIndex);
-                }
-                catch (Exception ex)
-                {
-                    _logger?.Debug($"[SearchIndex] RTF stripping failed for {note.Title}: {ex.Message}");
                 }
             }
 

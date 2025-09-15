@@ -63,7 +63,9 @@
     <Style x:Key="ModernTreeViewItemStyle" TargetType="TreeViewItem">
         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
         <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
-        <Setter Property="Padding" Value="2"/>
+        <Setter Property="Padding" Value="4,2"/>
+        <Setter Property="Margin" Value="0,1"/>
+        <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TreeViewItem">
@@ -74,39 +76,70 @@
                         </Grid.RowDefinitions>
                         <Border x:Name="Bd" 
                                 Grid.Row="0"
-                                Background="{TemplateBinding Background}" 
-                                BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="{TemplateBinding BorderThickness}" 
-                                Padding="{TemplateBinding Padding}">
+                                Background="Transparent" 
+                                BorderBrush="Transparent"
+                                BorderThickness="0" 
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="3"
+                                Margin="1,0">
                             <ContentPresenter x:Name="PART_Header" ContentSource="Header" 
-                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalAlignment="Center"/>
                         </Border>
-                        <ItemsPresenter x:Name="ItemsHost" Grid.Row="1" Visibility="Collapsed"/>
+                        <ItemsPresenter x:Name="ItemsHost" Grid.Row="1" Visibility="Collapsed" Margin="16,0,0,0"/>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <!-- Expand/collapse -->
                         <Trigger Property="IsExpanded" Value="true">
                             <Setter TargetName="ItemsHost" Property="Visibility" Value="Visible"/>
                         </Trigger>
-                        <Trigger Property="IsSelected" Value="true">
-                            <Setter TargetName="Bd" Property="Background" 
-                                    Value="{DynamicResource SystemControlHighlightListAccentLowBrush}"/>
-                            <Setter Property="Foreground" 
-                                    Value="{DynamicResource SystemControlHighlightAltBaseHighBrush}"/>
+                        
+                        <!-- Hover state (lightest highlight) -->
+                        <Trigger Property="IsMouseOver" Value="true">
+                            <Setter TargetName="Bd" Property="Background" Value="#10000000"/>
                         </Trigger>
+                        
+                        <!-- Inactive selection (medium gray highlight) - when TreeView loses focus -->
                         <MultiTrigger>
                             <MultiTrigger.Conditions>
                                 <Condition Property="IsSelected" Value="true"/>
                                 <Condition Property="IsSelectionActive" Value="false"/>
                             </MultiTrigger.Conditions>
-                            <Setter TargetName="Bd" Property="Background" 
-                                    Value="{DynamicResource SystemControlHighlightListAccentLowBrush}"/>
-                            <Setter Property="Foreground" 
-                                    Value="{DynamicResource SystemControlHighlightAltBaseHighBrush}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="#FFE6E6E6"/>
+                            <Setter Property="Foreground" Value="#FF000000"/>
                         </MultiTrigger>
-                        <Trigger Property="IsMouseOver" Value="true">
-                            <Setter TargetName="Bd" Property="Background" 
-                                    Value="{DynamicResource SystemControlHighlightListLowBrush}"/>
-                        </Trigger>
+                        
+                        <!-- Active selection (strong blue highlight) - when TreeView has focus -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="true"/>
+                                <Condition Property="IsSelectionActive" Value="true"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="#FF0078D4"/>
+                            <Setter Property="Foreground" Value="#FFFFFFFF"/>
+                        </MultiTrigger>
+                        
+                        <!-- Hover over selected item -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="true"/>
+                                <Condition Property="IsSelectionActive" Value="true"/>
+                                <Condition Property="IsMouseOver" Value="true"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="#FF106EBE"/>
+                            <Setter Property="Foreground" Value="#FFFFFFFF"/>
+                        </MultiTrigger>
+                        
+                        <!-- Hover over inactive selected item -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="true"/>
+                                <Condition Property="IsSelectionActive" Value="false"/>
+                                <Condition Property="IsMouseOver" Value="true"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="#FFDADADA"/>
+                            <Setter Property="Foreground" Value="#FF000000"/>
+                        </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
