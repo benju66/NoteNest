@@ -373,22 +373,10 @@ namespace NoteNest.Core.Services
                 return;
             }
 
-            // Debug preview generation for bulleted content
-            var preview = GetPreview(content);
-            _logger?.Debug($"[SearchIndex] Content length: {content.Length}, Preview: '{preview?.Substring(0, Math.Min(50, preview?.Length ?? 0)) ?? "NULL"}'");
-
-            var result = new SearchResult
-            {
-                NoteId = note.Id,
-                Title = note.Title ?? "Untitled",
-                FilePath = note.FilePath ?? "",
-                CategoryId = note.CategoryId ?? "",
-                Preview = preview ?? "",
-                Relevance = 1.0f
-            };
-
-            // Process content based on format - RTF PRIORITY implementation
+            // Process content based on format FIRST - RTF PRIORITY implementation
             var contentToIndex = content;
+            float relevanceBoost = 1.0f;
+            
             if (note.Format == NoteFormat.RTF && _markdownService != null)
             {
                 // RTF PRIORITY: Process RTF files first with enhanced extraction
@@ -398,7 +386,7 @@ namespace NoteNest.Core.Services
                     _logger?.Debug($"[SearchIndex] RTF content processed for {note.Title}: {content.Length} → {contentToIndex.Length} chars");
                     
                     // RTF PRIORITY: Give RTF content higher search relevance
-                    result.Relevance = 1.2f; // 20% boost for RTF content
+                    relevanceBoost = 1.2f; // 20% boost for RTF content
                 }
                 catch (Exception ex)
                 {
@@ -418,6 +406,20 @@ namespace NoteNest.Core.Services
                     _logger?.Debug($"[SearchIndex] Markdown stripping failed for {note.Title}: {ex.Message}");
                 }
             }
+
+            // FIXED: Generate preview from PROCESSED content (clean text, not raw RTF codes)
+            var preview = GetPreview(contentToIndex);
+            _logger?.Debug($"[SearchIndex] Preview generated from processed content for {note.Title}: '{preview?.Substring(0, Math.Min(50, preview?.Length ?? 0)) ?? "NULL"}'");
+
+            var result = new SearchResult
+            {
+                NoteId = note.Id,
+                Title = note.Title ?? "Untitled",
+                FilePath = note.FilePath ?? "",
+                CategoryId = note.CategoryId ?? "",
+                Preview = preview ?? "",
+                Relevance = relevanceBoost
+            };
 
             // Index content words
             var contentWords = TokenizeText(contentToIndex);

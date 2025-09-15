@@ -118,11 +118,36 @@ namespace NoteNest.UI.Services
                         hasRTFFiles = rtfFiles.Length > 0;
                         
                         // Check if index contains RTF files
-                        indexHasRTF = persistedIndex.Entries.Any(e => e.RelativePath.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase));
+                        var rtfEntries = persistedIndex.Entries.Where(e => e.RelativePath.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase)).ToList();
+                        indexHasRTF = rtfEntries.Any();
+                        
+                        // BULLETPROOF: Check for corrupted RTF previews with raw formatting codes
+                        bool rtfPreviewsCorrupted = false;
+                        if (indexHasRTF)
+                        {
+                            foreach (var rtfEntry in rtfEntries.Take(5)) // Check first 5 RTF entries as sample
+                            {
+                                if (!string.IsNullOrEmpty(rtfEntry.ContentPreview) && 
+                                    (rtfEntry.ContentPreview.StartsWith("{\\rtf1") || 
+                                     rtfEntry.ContentPreview.Contains("\\ansi") ||
+                                     rtfEntry.ContentPreview.Contains("\\deff0") ||
+                                     rtfEntry.ContentPreview.Contains("\\fonttbl")))
+                                {
+                                    _logger?.Info($"Detected corrupted RTF preview in cached index for: {rtfEntry.Title}");
+                                    rtfPreviewsCorrupted = true;
+                                    break;
+                                }
+                            }
+                        }
                         
                         if (hasRTFFiles && !indexHasRTF)
                         {
                             _logger?.Info($"Found {rtfFiles.Length} RTF files on disk but none in index - forcing rebuild for RTF support");
+                            indexValid = false;
+                        }
+                        else if (rtfPreviewsCorrupted)
+                        {
+                            _logger?.Info("Found RTF files with corrupted previews (raw formatting codes) - forcing rebuild for clean previews");
                             indexValid = false;
                         }
                     }
