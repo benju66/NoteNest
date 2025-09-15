@@ -18,6 +18,10 @@ namespace NoteNest.Core.Services
 		Task<TabPersistenceState?> LoadAsync();
 		Task SaveAsync(IEnumerable<ITabItem> tabs, string? activeTabId, string? embeddedActiveContent);
 		void MarkChanged();
+		/// <summary>
+		/// Force immediate save without debouncing - used for RTF tab close operations to prevent race conditions
+		/// </summary>
+		Task ForceSaveAsync(IEnumerable<ITabItem> tabs, string? activeTabId, string? embeddedActiveContent);
 	}
 
 	public sealed class TabPersistenceService : ITabPersistenceService
@@ -140,6 +144,87 @@ namespace NoteNest.Core.Services
 			var json = JsonSerializer.Serialize(state, _jsonOptions);
 			await File.WriteAllTextAsync(path, json);
 			_changed = false;
+		}
+		finally
+		{
+			_saveLock.Release();
+		}
+	}
+
+	/// <summary>
+	/// Force immediate save bypassing debouncing - critical for RTF tab close operations
+	/// </summary>
+	public async Task ForceSaveAsync(IEnumerable<ITabItem> tabs, string? activeTabId, string? embeddedActiveContent)
+	{
+		await _saveLock.WaitAsync();
+		try
+		{
+			// Cancel any pending debounced save
+			_debounceTimer?.Dispose();
+			_changed = false; // Reset since we're saving immediately
+			
+			_logger.Debug("Force saving tab persistence state for RTF tab close operation");
+			
+			// Reuse the same logic as SaveAsync but without debouncing
+			var path = GetStateFilePath();
+			var dir = Path.GetDirectoryName(path) ?? string.Empty;
+			if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+			var tabList = tabs?.ToList() ?? new List<ITabItem>();
+			
+			var state = new TabPersistenceState
+			{
+				Tabs = new List<TabInfo>(),
+				ActiveTabId = activeTabId,
+				LastSaved = DateTime.UtcNow
+			};
+			
+			foreach (var tab in tabList)
+			{
+				var info = new TabInfo
+				{
+					Id = tab.Note?.Id ?? string.Empty,
+					Path = tab.Note?.FilePath ?? string.Empty,
+					Title = tab.Note?.Title ?? string.Empty,
+					IsDirty = tab.IsDirty
+				};
+				
+				// Only store dirty content and hash for RTF content
+				if (tab.IsDirty && _saveManager != null && !string.IsNullOrEmpty(tab.NoteId))
+				{
+					info.DirtyContent = _saveManager.GetContent(tab.NoteId);
+						
+					// Hash the current file content (not saved content)
+					if (File.Exists(info.Path))
+					{
+						try
+						{
+							var fileContent = await File.ReadAllTextAsync(info.Path);
+							using (var sha256 = SHA256.Create())
+							{
+								var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(fileContent));
+								info.FileContentHash = Convert.ToBase64String(bytes);
+							}
+						}
+						catch (Exception ex)
+						{
+							_logger?.Warning($"Failed to hash RTF file content: {info.Path} - {ex.Message}");
+						}
+					}
+				}
+				
+				state.Tabs.Add(info);
+			}
+
+			var json = JsonSerializer.Serialize(state, _jsonOptions);
+			await File.WriteAllTextAsync(path, json);
+			
+			_logger.Info($"Force saved tab persistence state with {state.Tabs.Count} RTF tabs");
+		}
+		catch (Exception ex)
+		{
+			_logger.Error(ex, "Force save of tab persistence state failed");
+			throw;
 		}
 		finally
 		{

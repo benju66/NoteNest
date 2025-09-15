@@ -215,22 +215,22 @@ namespace NoteNest.UI.Controls
                     oldTab = removedTab;
                 }
                 
-                // PROPER ARCHITECTURE: Force save old tab before switch (if dirty)
+                // RTF-FOCUSED: Force save old RTF tab before switch (if dirty)
                 if (oldTab != null && oldTab.IsDirty)
                 {
                     try
                     {
-                        System.Diagnostics.Debug.WriteLine($"[UI] Tab switch save: {oldTab.Title} → {newTab.Title}");
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Tab switch save: {oldTab.Title} → {newTab.Title}");
                         
-                        // Get fresh content from editor and save immediately
-                        var oldEditor = GetEditorForTab(oldTab);
-                        if (oldEditor != null && oldTab is NoteTabItem oldTabItem)
+                        // Get fresh content from RTF editor and save immediately
+                        var oldRTFEditor = GetRTFEditorForTab(oldTab);
+                        if (oldRTFEditor != null && oldTab is NoteTabItem oldTabItem)
                         {
-                            var content = oldEditor.SaveContent(); // Use interface method
+                            var content = oldRTFEditor.SaveContent(); // Direct RTF method call
                             oldTabItem.UpdateContentFromEditor(content);
-                            oldEditor.MarkClean();
+                            oldRTFEditor.MarkClean();
                             
-                            // FIXED: No more silent tab switch save failures
+                            // BULLETPROOF: Use WriteAheadLog + SupervisedTaskRunner for RTF saves
                             var saveManager = GetSaveManager();
                             var taskRunner = GetSupervisedTaskRunner();
                             
@@ -240,23 +240,24 @@ namespace NoteNest.UI.Controls
                                 {
                                     _ = taskRunner.RunAsync(
                                         async () => await saveManager.SaveNoteAsync(oldTab.NoteId),
-                                        $"Tab switch save for {oldTab.Title}",
+                                        $"RTF tab switch save for {oldTab.Title}",
                                         NoteNest.Core.Services.OperationType.TabSwitchSave
                                     );
                                 }
                                 else
                                 {
-                                    // Fallback for backward compatibility
+                                    // Fallback - still bulletproof through SaveManager → WriteAheadLog
                                     _ = Task.Run(async () => await saveManager.SaveNoteAsync(oldTab.NoteId));
                                 }
                             }
                             
-                            System.Diagnostics.Debug.WriteLine($"[UI] Tab switch save completed for {oldTab.Title}");
+                            System.Diagnostics.Debug.WriteLine($"[RTF] RTF tab switch save completed for {oldTab.Title}");
                         }
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[UI] Tab switch save failed: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"[RTF] RTF tab switch save failed: {ex.Message}");
+                        _logger?.Error(ex, $"RTF tab switch save failed: {oldTab.Title}");
                     }
                 }
 
@@ -468,10 +469,16 @@ namespace NoteNest.UI.Controls
             catch (Exception ex) { try { _logger?.Error(ex, "Failed to close all tabs"); } catch { } }
         }
 
+        /// <summary>
+        /// RTF-FOCUSED: Close other tabs with atomic persistence
+        /// </summary>
         private async void CloseOthers_Click(object sender, RoutedEventArgs e)
         {
             if (Pane == null) return;
             if (sender is not MenuItem mi || mi.Tag is not ITabItem keepTab) return;
+            
+            System.Diagnostics.Debug.WriteLine($"[RTF] CloseOthers START, keeping: {keepTab.Title}");
+            
             try
             {
                 var dialog = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.IDialogService)) as NoteNest.UI.Services.IDialogService;
@@ -479,9 +486,29 @@ namespace NoteNest.UI.Controls
 
                 var others = Pane.Tabs.Where(t => !ReferenceEquals(t, keepTab)).ToList();
                 var dirty = others.Where(t => t.IsDirty).ToList();
+                
+                // RTF-SPECIFIC: Flush content from RTF editors before checking dirty state
+                foreach (var dirtyTab in dirty)
+                {
+                    try
+                    {
+                        var rtfEditor = GetRTFEditorForTab(dirtyTab);
+                        if (rtfEditor != null && dirtyTab is NoteTabItem nti)
+                        {
+                            var content = rtfEditor.SaveContent();
+                            nti.UpdateContentFromEditor(content);
+                            rtfEditor.MarkClean();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Warning($"RTF content flush failed for {dirtyTab.Title}: {ex.Message}");
+                    }
+                }
+                
                 if (dirty.Any())
                 {
-                    var result = await dialog.ShowYesNoCancelAsync($"Do you want to save changes to {dirty.Count} modified file(s)?", "Save Changes");
+                    var result = await dialog.ShowYesNoCancelAsync($"Do you want to save changes to {dirty.Count} modified RTF file(s)?", "Save RTF Changes");
                     if (result == null) return;
                     if (result == true)
                     {
@@ -493,30 +520,94 @@ namespace NoteNest.UI.Controls
                                 try
                                 {
                                     await saveManager.SaveNoteAsync(t.NoteId);
+                                    System.Diagnostics.Debug.WriteLine($"[RTF] Saved RTF tab before closing: {t.Title}");
                                 }
-                                catch { }
+                                catch (Exception ex)
+                                {
+                                    _logger?.Error(ex, $"Failed to save RTF tab {t.Title} before closing others");
+                                }
                             }
                         }
                     }
                 }
+                
+                // Remove tabs from UI
                 foreach (var t in others)
                 {
                     Pane.Tabs.Remove(t);
                 }
+                
+                // BULLETPROOF: Force immediate persistence save for RTF close others operation
+                try
+                {
+                    var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
+                    var workspaceService = _workspaceService;
+                    
+                    if (persistence != null && workspaceService != null)
+                    {
+                        var remainingTabs = workspaceService.OpenTabs;
+                        var activeTabId = workspaceService.SelectedTab?.Note?.Id;
+                        var activeContent = workspaceService.SelectedTab?.Content;
+                        
+                        await persistence.ForceSaveAsync(remainingTabs, activeTabId, activeContent);
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Force persistence save completed for RTF close others");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Error(ex, "Force persistence save failed after RTF close others");
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[RTF] CloseOthers COMPLETED, {others.Count} RTF tabs closed");
             }
-            catch (Exception ex) { try { _logger?.Error(ex, "Failed to close other tabs"); } catch { } }
+            catch (Exception ex) 
+            { 
+                _logger?.Error(ex, "Failed to close other RTF tabs"); 
+                System.Diagnostics.Debug.WriteLine($"[RTF] CloseOthers FAILED: {ex.Message}");
+            }
         }
 
+        /// <summary>
+        /// RTF-FOCUSED: Save RTF tab with content flush
+        /// </summary>
         private async void SaveTab_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem mi && mi.Tag is ITabItem tab)
             {
-                var saveManager = (Application.Current as App)?.ServiceProvider
-                    ?.GetService(typeof(ISaveManager)) as ISaveManager;
+                System.Diagnostics.Debug.WriteLine($"[RTF] SaveTab START: {tab.Title}");
                 
-                if (saveManager != null)
+                try
                 {
-                    await saveManager.SaveNoteAsync(tab.NoteId);
+                    // RTF-SPECIFIC: Flush content from RTF editor first
+                    var rtfEditor = GetRTFEditorForTab(tab);
+                    if (rtfEditor != null && tab is NoteTabItem nti)
+                    {
+                        var content = rtfEditor.SaveContent();
+                        nti.UpdateContentFromEditor(content);
+                        rtfEditor.MarkClean();
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Content flushed for RTF save: {tab.Title}");
+                    }
+                    
+                    var saveManager = (Application.Current as App)?.ServiceProvider
+                        ?.GetService(typeof(ISaveManager)) as ISaveManager;
+                    
+                    if (saveManager != null)
+                    {
+                        var success = await saveManager.SaveNoteAsync(tab.NoteId);
+                        if (success)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[RTF] RTF tab saved successfully: {tab.Title}");
+                        }
+                        else
+                        {
+                            _logger?.Warning($"RTF tab save returned false: {tab.Title}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Error(ex, $"RTF tab save failed: {tab.Title}");
+                    System.Diagnostics.Debug.WriteLine($"[RTF] SaveTab FAILED: {ex.Message}");
                 }
             }
         }
@@ -631,6 +722,21 @@ namespace NoteNest.UI.Controls
             return editorContainer?.UnderlyingEditor;
         }
 
+        /// <summary>
+        /// Get RTF editor for a specific tab - RTF-only focused approach
+        /// </summary>
+        private RTFTextEditor GetRTFEditorForTab(ITabItem tab)
+        {
+            if (tab == null) return null;
+            
+            var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
+            if (container == null) return null;
+            
+            var presenter = FindVisualChild<ContentPresenter>(container);
+            var editorContainer = FindVisualChild<NoteEditorContainer>(presenter);
+            return editorContainer?.UnderlyingEditor as RTFTextEditor;
+        }
+
 
         public void SelectTab(ITabItem tab)
         {
@@ -687,94 +793,110 @@ namespace NoteNest.UI.Controls
             return null;
         }
 
+        /// <summary>
+        /// BULLETPROOF RTF-FOCUSED TAB CLOSE: Atomic operation with force persistence
+        /// </summary>
         private async void CloseTab_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button button && button.Tag is ITabItem tab)
             {
-                // Force flush any pending content from the editor
+                System.Diagnostics.Debug.WriteLine($"[RTF] CloseTab START id={tab?.Note?.Id} title={tab?.Title}");
+                
+                // PHASE 1: RTF-SPECIFIC CONTENT FLUSH
                 try
                 {
-                    // Use interface-based editor access for all editor types
-                    var editor = GetEditorForTab(tab);
-                    if (editor != null && tab is NoteTabItem nti)
+                    var rtfEditor = GetRTFEditorForTab(tab);
+                    if (rtfEditor != null && tab is NoteTabItem nti)
                     {
-                        var content = editor.SaveContent(); // Works for both RTF and Markdown
+                        // RTF-specific content save - no abstraction needed
+                        var content = rtfEditor.SaveContent();
                         nti.UpdateContentFromEditor(content);
-                        editor.MarkClean();
+                        rtfEditor.MarkClean();
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Content flushed for RTF tab: {tab.Title}");
                     }
-                    System.Diagnostics.Debug.WriteLine($"[UI] CloseTab force flush for noteId={tab?.Note?.Id} at={DateTime.Now:HH:mm:ss.fff}");
                 }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[UI][WARN] CloseTab flush failed: {ex.Message}"); }
+                catch (Exception ex) 
+                { 
+                    System.Diagnostics.Debug.WriteLine($"[RTF][WARN] RTF content flush failed: {ex.Message}"); 
+                    _logger?.Warning($"RTF content flush failed for {tab?.Title}: {ex.Message}");
+                }
 
+                // PHASE 2: COORDINATED CLOSE WITH FORCE PERSISTENCE
                 var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
                 if (closeService != null)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[UI] CloseTab START id={tab?.Note?.Id} title={tab?.Title}");
-                    // Detach TextChanged to avoid post-close events during template teardown
-                    try
-                    {
-                        var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
-                        var presenter = FindVisualChild<ContentPresenter>(container);
-                        var editor = FindVisualChild<FormattedTextEditor>(presenter);
-                        if (editor != null)
-                        {
-                            // Removed: old TextChanged handler (no longer needed in new architecture)
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"Failed to detach TextChanged on close: {ex.Message}"); } catch { }
-                    }
-                    
-                    // ROBUST FIX: Close through service first (proper architecture)
                     var closed = await closeService.CloseTabWithPromptAsync(tab);
                     if (closed)
                     {
                         // Remove from UI pane collection
                         Pane?.Tabs.Remove(tab);
-                        System.Diagnostics.Debug.WriteLine($"[UI] CloseTab REMOVED id={tab?.Note?.Id}");
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Tab removed from UI: {tab?.Title}");
                         
-                        // ROBUSTNESS: Ensure persistence is notified even if events are missed
+                        // BULLETPROOF: Force immediate persistence save (no debouncing)
                         try
                         {
                             var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
-                            persistence?.MarkChanged();
-                            System.Diagnostics.Debug.WriteLine($"[UI] CloseTab persistence marked changed");
+                            var workspaceService = _workspaceService;
+                            
+                            if (persistence != null && workspaceService != null)
+                            {
+                                // Force save bypassing debouncing for RTF tab close
+                                var remainingTabs = workspaceService.OpenTabs;
+                                var activeTabId = workspaceService.SelectedTab?.Note?.Id;
+                                var activeContent = workspaceService.SelectedTab?.Content;
+                                
+                                await persistence.ForceSaveAsync(remainingTabs, activeTabId, activeContent);
+                                System.Diagnostics.Debug.WriteLine($"[RTF] Force persistence save completed for RTF tab close");
+                            }
                         }
                         catch (Exception ex)
                         {
-                            System.Diagnostics.Debug.WriteLine($"[UI] CloseTab persistence notification failed: {ex.Message}");
+                            System.Diagnostics.Debug.WriteLine($"[RTF] Force persistence save failed: {ex.Message}");
+                            _logger?.Error(ex, $"Force persistence save failed after RTF tab close: {tab?.Title}");
+                            
+                            // Fallback to regular marking
+                            try
+                            {
+                                var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
+                                persistence?.MarkChanged();
+                            }
+                            catch { }
                         }
 
-                        // If this was the last tab, optionally close empty pane
-                        var workspaceService = _workspaceService;
-                        if (Pane?.Tabs.Count == 0 && workspaceService != null && workspaceService.Panes.Count > 1)
+                        // Auto-close empty pane if needed  
+                        if (Pane?.Tabs.Count == 0 && _workspaceService != null && _workspaceService.Panes.Count > 1)
                         {
-                            _ = workspaceService.ClosePaneAsync(Pane);
+                            _ = _workspaceService.ClosePaneAsync(Pane);
+                            System.Diagnostics.Debug.WriteLine($"[RTF] Empty pane closed after last RTF tab removal");
                         }
                     }
                 }
                 else
                 {
-                    // FALLBACK: If TabCloseService is missing, at least remove from UI 
-                    System.Diagnostics.Debug.WriteLine($"[UI] CloseTab FALLBACK - TabCloseService missing, removing from UI only");
+                    // ENHANCED FALLBACK: RTF-aware fallback handling
+                    System.Diagnostics.Debug.WriteLine($"[RTF] FALLBACK - TabCloseService missing for RTF tab");
+                    _logger?.Warning("TabCloseService missing during RTF tab close - using fallback");
+                    
                     Pane?.Tabs.Remove(tab);
                     
-                    // Try to notify workspace service directly
+                    // Try workspace service directly
                     try
                     {
                         var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
                         if (workspaceService != null)
                         {
                             _ = Task.Run(async () => await workspaceService.CloseTabAsync(tab));
-                            System.Diagnostics.Debug.WriteLine($"[UI] CloseTab FALLBACK - called workspace service directly");
+                            System.Diagnostics.Debug.WriteLine($"[RTF] FALLBACK - workspace service called directly");
                         }
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[UI] CloseTab FALLBACK failed: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"[RTF] FALLBACK failed: {ex.Message}");
+                        _logger?.Error(ex, $"RTF tab close fallback failed: {tab?.Title}");
                     }
                 }
+                
+                System.Diagnostics.Debug.WriteLine($"[RTF] CloseTab COMPLETED for RTF tab: {tab?.Title}");
             }
         }
         

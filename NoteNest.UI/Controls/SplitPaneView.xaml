@@ -25,10 +25,16 @@
                          VirtualizingPanel.IsVirtualizing="False">
                 <local:DraggableTabControl.ItemTemplate>
                     <DataTemplate>
-                        <StackPanel Orientation="Horizontal"
-                                    PreviewMouseDown="TabHeader_PreviewMouseDown"
-                                    ToolTip="{Binding Note.FilePath}">
-                            <StackPanel.ContextMenu>
+                        <!-- BULLETPROOF TAB LAYOUT: Grid ensures close button is always accessible -->
+                        <Grid MaxWidth="200" 
+                              PreviewMouseDown="TabHeader_PreviewMouseDown"
+                              ToolTip="{Binding Note.FilePath}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>        <!-- RTF title area - takes available space -->
+                                <ColumnDefinition Width="Auto"/>     <!-- Dirty indicator -->  
+                                <ColumnDefinition Width="24"/>       <!-- Fixed space for close button -->
+                            </Grid.ColumnDefinitions>
+                            <Grid.ContextMenu>
                                 <ContextMenu>
                                     <MenuItem Header="_Rename..."
                                               Click="RenameTab_Click"
@@ -92,10 +98,22 @@
                                         </MenuItem.Icon>
                                     </MenuItem>
                                 </ContextMenu>
-                            </StackPanel.ContextMenu>
-                            <TextBlock Margin="5,2" VerticalAlignment="Center" Text="{Binding Note.Title}" 
+                            </Grid.ContextMenu>
+                            
+                            <!-- RTF Title with ellipsis truncation -->
+                            <TextBlock Grid.Column="0"
+                                       Margin="5,2,2,2" 
+                                       VerticalAlignment="Center" 
+                                       Text="{Binding Note.Title}"
+                                       TextTrimming="CharacterEllipsis"
                                        Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
-                            <TextBlock Text="·" Margin="2,2,0,2" Foreground="{DynamicResource SystemControlForegroundAccentBrush}" VerticalAlignment="Center">
+                            
+                            <!-- Dirty indicator -->
+                            <TextBlock Grid.Column="1" 
+                                       Text="·" 
+                                       Margin="2,2,2,2" 
+                                       Foreground="{DynamicResource SystemControlForegroundAccentBrush}" 
+                                       VerticalAlignment="Center">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -107,18 +125,22 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
-                            <Button Content="×" 
+                            
+                            <!-- Always-accessible close button -->
+                            <Button Grid.Column="2"
+                                    Content="×" 
                                     Click="CloseTab_Click"
                                     Tag="{Binding}"
+                                    Width="20" Height="20"
+                                    Margin="2,1"
                                     Background="Transparent"
                                     BorderThickness="0"
-                                    Padding="5,0"
-                                    Margin="3,0,0,0"
                                     FontSize="14"
                                     FontWeight="Bold"
                                     Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                                    Cursor="Hand"/>
-                        </StackPanel>
+                                    Cursor="Hand"
+                                    ToolTip="Close tab"/>
+                        </Grid>
                     </DataTemplate>
                 </local:DraggableTabControl.ItemTemplate>
                 <local:DraggableTabControl.ContentTemplate>
