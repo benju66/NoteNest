@@ -237,8 +237,17 @@ namespace NoteNest.Core.Services
 				plain = Regex.Replace(plain, @"\\colortbl[^}]*}", "", RegexOptions.IgnoreCase);
 				plain = Regex.Replace(plain, @"\\stylesheet[^}]*}", "", RegexOptions.IgnoreCase);
 				
-				// Remove all RTF control words with optional parameters
-				plain = Regex.Replace(plain, @"\\[a-z]+[-]?\d*[ ]?", " ", RegexOptions.IgnoreCase);
+				// ENHANCED: Remove specific encoding artifacts like "cpg1252"
+				plain = Regex.Replace(plain, @"\\?cpg\d+", "", RegexOptions.IgnoreCase);
+				
+				// ENHANCED: Remove common font family names that slip through
+				plain = Regex.Replace(plain, @"\b(Calibri|Segoe\s+UI|Arial|Times|Verdana|Tahoma|Georgia|Comic\s+Sans)\b", "", RegexOptions.IgnoreCase);
+				
+				// ENHANCED: Remove font declarations and references
+				plain = Regex.Replace(plain, @"\\f\d+\s*[A-Za-z\s]*", "", RegexOptions.IgnoreCase);
+				
+				// Remove all RTF control words with optional parameters (more aggressive)
+				plain = Regex.Replace(plain, @"\\[a-z]+[-]?\d*\s*", " ", RegexOptions.IgnoreCase);
 				
 				// Remove RTF control symbols and escape sequences
 				plain = Regex.Replace(plain, @"\\['\n\r\\{}~\-_]", "");
@@ -262,6 +271,10 @@ namespace NoteNest.Core.Services
 				plain = Regex.Replace(plain, @"\n\s*\n", "\n");
 				plain = Regex.Replace(plain, @"^\s+", "", RegexOptions.Multiline);
 				plain = Regex.Replace(plain, @"\s+$", "", RegexOptions.Multiline);
+				
+				// ENHANCED: Final cleanup - remove any remaining leading artifacts
+				plain = Regex.Replace(plain, @"^[\s\W]*(?=[A-Za-z])", ""); // Remove leading non-word chars before first letter
+				plain = Regex.Replace(plain, @"^\s*[^\w]*\s*", ""); // Clean any remaining prefix junk
 
 				var result = plain.Trim();
 				_logger.Debug($"Enhanced RTF extraction: {rtfContent.Length} RTF chars → {result.Length} searchable text chars");

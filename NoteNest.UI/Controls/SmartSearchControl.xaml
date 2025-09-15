@@ -4,11 +4,14 @@
              xmlns:ui="http://schemas.modernwpf.com/2019"
              xmlns:vm="clr-namespace:NoteNest.UI.ViewModels"
              xmlns:services="clr-namespace:NoteNest.UI.Services"
+             xmlns:converters="clr-namespace:NoteNest.UI.Converters"
              x:Name="SearchControlRoot">
     
     <UserControl.Resources>
         <!-- Converter for boolean to visibility -->
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <!-- Converter for highlighted text -->
+        <converters:HighlightedTextConverter x:Key="HighlightedTextConverter"/>
     </UserControl.Resources>
     
     <Grid ClipToBounds="False" Background="Transparent">
@@ -182,13 +185,18 @@
                                       FontWeight="SemiBold" 
                                       FontSize="14"
                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding DisplayPreview}" 
-                                      FontSize="12" 
-                                      Opacity="0.7"
-                                      TextTrimming="CharacterEllipsis"
-                                                      MaxHeight="32"
-                                                      TextWrapping="Wrap"
-                                                      Margin="0,2,0,0"/>
+                            <ContentPresenter Content="{Binding DisplayPreview, Converter={StaticResource HighlightedTextConverter}}" 
+                                            MaxHeight="32"
+                                            Margin="0,2,0,0">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="Opacity" Value="0.7"/>
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                        <Setter Property="TextWrapping" Value="Wrap"/>
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
                         </StackPanel>
                         
                                         <!-- Keyboard hint (shows when selected) -->

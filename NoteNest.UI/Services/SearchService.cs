@@ -687,7 +687,7 @@ namespace NoteNest.UI.Services
         public string ResultIcon => ResultType == SearchResultType.Note ? "📄" : "📁";
         
         /// <summary>
-        /// Highlights search terms in text by wrapping them with markdown bold
+        /// Highlights search terms in text using special markers for UI rendering
         /// </summary>
         private string HighlightTerms(string text, string query)
         {
@@ -703,10 +703,10 @@ namespace NoteNest.UI.Services
                 {
                     if (term.Length < 2) continue; // Skip single characters
                     
-                    // Use regex to wrap matches in bold markdown
-                    // (?i) makes it case-insensitive, \b ensures word boundaries
+                    // Use special markers that can be rendered as bold in UI
+                    // Using ◆◆term◆◆ instead of **term** for better UI control
                     var pattern = $@"\b({System.Text.RegularExpressions.Regex.Escape(term)}[a-z]*)\b";
-                    text = System.Text.RegularExpressions.Regex.Replace(text, pattern, "**$1**", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    text = System.Text.RegularExpressions.Regex.Replace(text, pattern, "◆◆$1◆◆", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 }
                 
                 return text;
