@@ -725,11 +725,26 @@ namespace NoteNest.UI.Controls
                     {
                         try { var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger; logger?.Warning($"Failed to detach TextChanged on close: {ex.Message}"); } catch { }
                     }
+                    
+                    // ROBUST FIX: Close through service first (proper architecture)
                     var closed = await closeService.CloseTabWithPromptAsync(tab);
                     if (closed)
                     {
+                        // Remove from UI pane collection
                         Pane?.Tabs.Remove(tab);
                         System.Diagnostics.Debug.WriteLine($"[UI] CloseTab REMOVED id={tab?.Note?.Id}");
+                        
+                        // ROBUSTNESS: Ensure persistence is notified even if events are missed
+                        try
+                        {
+                            var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
+                            persistence?.MarkChanged();
+                            System.Diagnostics.Debug.WriteLine($"[UI] CloseTab persistence marked changed");
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[UI] CloseTab persistence notification failed: {ex.Message}");
+                        }
 
                         // If this was the last tab, optionally close empty pane
                         var workspaceService = _workspaceService;
@@ -737,6 +752,27 @@ namespace NoteNest.UI.Controls
                         {
                             _ = workspaceService.ClosePaneAsync(Pane);
                         }
+                    }
+                }
+                else
+                {
+                    // FALLBACK: If TabCloseService is missing, at least remove from UI 
+                    System.Diagnostics.Debug.WriteLine($"[UI] CloseTab FALLBACK - TabCloseService missing, removing from UI only");
+                    Pane?.Tabs.Remove(tab);
+                    
+                    // Try to notify workspace service directly
+                    try
+                    {
+                        var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                        if (workspaceService != null)
+                        {
+                            _ = Task.Run(async () => await workspaceService.CloseTabAsync(tab));
+                            System.Diagnostics.Debug.WriteLine($"[UI] CloseTab FALLBACK - called workspace service directly");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[UI] CloseTab FALLBACK failed: {ex.Message}");
                     }
                 }
             }

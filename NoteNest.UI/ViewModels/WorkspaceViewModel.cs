@@ -140,9 +140,23 @@ namespace NoteNest.UI.ViewModels
                             }
                             else
                             {
-                                // Fallback for non-NoteTabItem types (shouldn't happen with new architecture)
-                                _uiTabs.Add(new NoteTabItem(tab.Note, _saveManager));
-                                System.Diagnostics.Debug.WriteLine($"[VM] FALLBACK: Created new NoteTabItem for: {tab.GetType().Name}");
+                                // FIXED: Use factory for consistent tab creation instead of direct constructor
+                                var factory = ((System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabFactory)) as ITabFactory);
+                                if (factory != null)
+                                {
+                                    var newTab = factory.CreateTab(tab.Note, tab.NoteId);
+                                    if (newTab is NoteTabItem noteTab)
+                                    {
+                                        _uiTabs.Add(noteTab);
+                                        System.Diagnostics.Debug.WriteLine($"[VM] FIXED: Created tab via factory for: {tab.GetType().Name}");
+                                    }
+                                }
+                                else
+                                {
+                                    // Last resort fallback (should not happen)
+                                    _uiTabs.Add(new NoteTabItem(tab.Note, _saveManager));
+                                    System.Diagnostics.Debug.WriteLine($"[VM] FALLBACK: Direct creation for: {tab.GetType().Name}");
+                                }
                             }
                         }
                     }

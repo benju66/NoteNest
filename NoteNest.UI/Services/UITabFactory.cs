@@ -8,10 +8,12 @@ namespace NoteNest.UI.Services
     public class UITabFactory : ITabFactory
     {
         private readonly ISaveManager _saveManager;
+        private readonly NoteNest.Core.Services.ISupervisedTaskRunner _taskRunner;
         
-        public UITabFactory(ISaveManager saveManager)
+        public UITabFactory(ISaveManager saveManager, NoteNest.Core.Services.ISupervisedTaskRunner taskRunner = null)
         {
             _saveManager = saveManager;
+            _taskRunner = taskRunner; // Allow null for backward compatibility
         }
         
         public ITabItem CreateTab(NoteModel note, string noteId)
@@ -23,7 +25,7 @@ namespace NoteNest.UI.Services
             System.Diagnostics.Debug.WriteLine($"[UITabFactory] Note.Id synchronized to: {note.Id}");
             
             // Always create NoteTabItem which integrates with SaveManager
-            var tabItem = new NoteTabItem(note, _saveManager);
+            var tabItem = new NoteTabItem(note, _saveManager, _taskRunner);
             System.Diagnostics.Debug.WriteLine($"[UITabFactory] NoteTabItem created: tabNoteId={tabItem.NoteId}");
             
             return tabItem;

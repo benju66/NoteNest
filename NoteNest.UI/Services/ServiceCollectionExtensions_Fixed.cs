@@ -21,7 +21,14 @@ namespace NoteNest.UI.Services
         {
             // Core Infrastructure Services
             services.AddSingleton<IAppLogger>(AppLogger.Instance);
-            services.AddSingleton<ConfigurationService>();
+            services.AddSingleton<ConfigurationService>(serviceProvider =>
+            {
+                // CRITICAL FIX: Provide proper dependencies to ConfigurationService
+                return new ConfigurationService(
+                    serviceProvider.GetRequiredService<IFileSystemProvider>(),
+                    serviceProvider.GetRequiredService<IEventBus>()
+                );
+            });
             services.AddSingleton<IStateManager, NoteNest.Core.Services.Implementation.StateManager>();
             services.AddSingleton<IServiceErrorHandler, NoteNest.Core.Services.Implementation.ServiceErrorHandler>();
             services.AddSingleton<IFileSystemProvider, DefaultFileSystemProvider>();
@@ -91,6 +98,18 @@ namespace NoteNest.UI.Services
             });
             services.AddSingleton<ToastNotificationService>();
             
+            // CRITICAL FIX: Register ITabCloseService - was missing!
+            services.AddSingleton<ITabCloseService>(serviceProvider =>
+            {
+                return new TabCloseService(
+                    serviceProvider.GetRequiredService<INoteOperationsService>(),
+                    serviceProvider.GetRequiredService<IWorkspaceService>(),
+                    serviceProvider.GetRequiredService<IDialogService>(),
+                    serviceProvider.GetRequiredService<IAppLogger>(),
+                    serviceProvider.GetRequiredService<ISaveManager>()
+                );
+            });
+            
             // Content and Search Services
             services.AddSingleton<ContentCache>(serviceProvider =>
             {
@@ -126,8 +145,14 @@ namespace NoteNest.UI.Services
                 );
             });
             
-            // Tab and Workspace Services
-            services.AddSingleton<ITabFactory, UITabFactory>();
+            // Tab and Workspace Services - Register UITabFactory with proper constructor
+            services.AddSingleton<ITabFactory>(serviceProvider =>
+            {
+                return new UITabFactory(
+                    serviceProvider.GetRequiredService<ISaveManager>(),
+                    serviceProvider.GetService<NoteNest.Core.Services.ISupervisedTaskRunner>()
+                );
+            });
             services.AddSingleton<ITabPersistenceService, TabPersistenceService>();
             services.AddSingleton<IWorkspaceService, NoteNest.Core.Services.Implementation.WorkspaceService>();
             
@@ -220,9 +245,10 @@ namespace NoteNest.UI.Services
                 }
             }
 
+            // Re-register UITabFactory with SupervisedTaskRunner instead of using separate EnhancedTabFactory
             services.AddSingleton<ITabFactory>(serviceProvider =>
             {
-                return new EnhancedTabFactory(
+                return new UITabFactory(
                     serviceProvider.GetRequiredService<ISaveManager>(),
                     serviceProvider.GetService<NoteNest.Core.Services.ISupervisedTaskRunner>()
                 );
