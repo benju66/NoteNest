@@ -71,8 +71,9 @@ namespace NoteNest.UI.Controls.Editor.Core
             
             // Initialize document with proper defaults
             Document = new FlowDocument();
-            Document.PagePadding = new Thickness(8);
-            Document.LineHeight = 1.4 * 14; // Match FormattedTextEditor
+            
+            // Initialize professional document styles (copied from FormattedTextEditor)
+            InitializeRTFDocumentStyles();
             
             // Wire up events
             TextChanged += OnTextChanged;
@@ -95,8 +96,8 @@ namespace NoteNest.UI.Controls.Editor.Core
             RegisterCommandBindings();
             RegisterKeyboardBehaviors();
             
-            // Enable comprehensive spell check configuration
-            InitializeSpellCheck();
+            // Enable theme-aware spell check configuration
+            InitializeSpellCheckWithThemeAwareness();
         }
         
         /// <summary>
@@ -159,6 +160,147 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
         }
         
+        #region Document Style Infrastructure (SRP: Document Formatting)
+        
+        /// <summary>
+        /// Initialize professional RTF document styles for consistent spacing and formatting
+        /// Single Responsibility: Document style management
+        /// Copied from FormattedTextEditor for proven reliability
+        /// </summary>
+        private void InitializeRTFDocumentStyles()
+        {
+            try
+            {
+                if (Document == null) return;
+                
+                // Clean page layout (no padding)
+                Document.PagePadding = new Thickness(0);
+                
+                // CRITICAL: Enhanced paragraph styles with single-line spacing
+                var paragraphStyle = new Style(typeof(Paragraph));
+                paragraphStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0, 0, 0, 0))); // SINGLE SPACING: No bottom margin
+                paragraphStyle.Setters.Add(new Setter(Paragraph.ForegroundProperty, new DynamicResourceExtension("SystemControlForegroundBaseHighBrush")));
+                paragraphStyle.Setters.Add(new Setter(Paragraph.LineHeightProperty, double.NaN)); // Use default single line height
+                Document.Resources[typeof(Paragraph)] = paragraphStyle;
+                
+                // Professional hanging indent list styles (copied from FormattedTextEditor)
+                var listStyle = new Style(typeof(List));
+                listStyle.Setters.Add(new Setter(List.MarginProperty, new Thickness(0, 4, 0, 4)));        // Professional spacing
+                listStyle.Setters.Add(new Setter(List.PaddingProperty, new Thickness(28, 0, 0, 0)));      // Perfect hanging indent
+                listStyle.Setters.Add(new Setter(List.ForegroundProperty, new DynamicResourceExtension("SystemControlForegroundBaseHighBrush")));
+                Document.Resources[typeof(List)] = listStyle;
+                
+                // List items with minimal spacing
+                var listItemStyle = new Style(typeof(ListItem));
+                listItemStyle.Setters.Add(new Setter(ListItem.MarginProperty, new Thickness(0, 0, 0, 0))); // SINGLE SPACING: Minimal margins
+                Document.Resources[typeof(ListItem)] = listItemStyle;
+                
+                // Headers with consistent spacing (for potential future use)
+                var headerBaseStyle = new Style(typeof(Paragraph));
+                headerBaseStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0, 8, 0, 4))); // Header spacing
+                headerBaseStyle.Setters.Add(new Setter(Paragraph.FontWeightProperty, FontWeights.Bold));
+                headerBaseStyle.Setters.Add(new Setter(Paragraph.ForegroundProperty, new DynamicResourceExtension("SystemControlForegroundBaseHighBrush")));
+                // Note: Headers applied dynamically when needed
+                
+                System.Diagnostics.Debug.WriteLine("[RTF] Professional document styles initialized with single-line spacing");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Document style initialization failed: {ex.Message}");
+                // Fallback to basic document setup
+                if (Document != null)
+                {
+                    Document.PagePadding = new Thickness(0);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Refresh document styles after content loading to ensure consistent formatting
+        /// Single Responsibility: Post-load style application
+        /// </summary>
+        private void RefreshDocumentStylesAfterLoad()
+        {
+            try
+            {
+                // RTF loading can override document styles - reapply them
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        // Reapply all document styles to ensure consistency
+                        InitializeRTFDocumentStyles();
+                        
+                        // Apply current theme if available
+                        var isDarkMode = IsCurrentThemeDark();
+                        UpdateDocumentThemeStylesOnly(isDarkMode);
+                        
+                        System.Diagnostics.Debug.WriteLine("[RTF] Document styles refreshed after content load");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Style refresh after load failed: {ex.Message}");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Normal);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Style refresh setup failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Update only theme-related document styles without affecting spell check or other styling
+        /// Single Responsibility: Theme-only document style updates
+        /// </summary>
+        private void UpdateDocumentThemeStylesOnly(bool isDarkMode)
+        {
+            try
+            {
+                if (Document == null) return;
+                
+                var targetBrush = new DynamicResourceExtension("SystemControlForegroundBaseHighBrush");
+                
+                // Update paragraph style theme colors only (preserve spacing and other properties)
+                if (Document.Resources[typeof(Paragraph)] is Style paraStyle)
+                {
+                    var foregroundSetter = paraStyle.Setters.OfType<Setter>()
+                        .FirstOrDefault(s => s.Property == Paragraph.ForegroundProperty);
+                    if (foregroundSetter != null)
+                    {
+                        foregroundSetter.Value = targetBrush;
+                    }
+                    else
+                    {
+                        paraStyle.Setters.Add(new Setter(Paragraph.ForegroundProperty, targetBrush));
+                    }
+                }
+                
+                // Update list style theme colors only (preserve spacing and other properties)
+                if (Document.Resources[typeof(List)] is Style listStyle)
+                {
+                    var foregroundSetter = listStyle.Setters.OfType<Setter>()
+                        .FirstOrDefault(s => s.Property == List.ForegroundProperty);
+                    if (foregroundSetter != null)
+                    {
+                        foregroundSetter.Value = targetBrush;
+                    }
+                    else
+                    {
+                        listStyle.Setters.Add(new Setter(List.ForegroundProperty, targetBrush));
+                    }
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[RTF] Document theme styles updated for {(isDarkMode ? "dark" : "light")} mode");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Document theme style update failed: {ex.Message}");
+            }
+        }
+        
+        #endregion
+        
         public void LoadContent(string content)
         {
             if (string.IsNullOrEmpty(content))
@@ -212,6 +354,9 @@ namespace NoteNest.UI.Controls.Editor.Core
             
             // Re-enable spell check after content loading (RTF loading can reset spell check settings)
             RefreshSpellCheckAfterLoad();
+            
+            // Refresh document styles after content loading (RTF loading can override document styles)
+            RefreshDocumentStylesAfterLoad();
         }
         
         /// <summary>
@@ -262,6 +407,147 @@ namespace NoteNest.UI.Controls.Editor.Core
             }
         }
         
+        #region Spell Check Style Preservation (SRP: Spell Check Management)
+        
+        /// <summary>
+        /// Enhanced spell check initialization with theme-aware configuration
+        /// Single Responsibility: Spell check visual management
+        /// </summary>
+        private void InitializeSpellCheckWithThemeAwareness()
+        {
+            try
+            {
+                // Step 1: Basic spell check setup
+                SpellCheck.SetIsEnabled(this, true);
+                SpellCheck.SetSpellingReform(this, SpellingReform.PreAndPostreform);
+                Language = System.Windows.Markup.XmlLanguage.GetLanguage("en-US");
+                
+                if (Document != null)
+                {
+                    Document.Language = System.Windows.Markup.XmlLanguage.GetLanguage("en-US");
+                }
+                
+                // Step 2: CRITICAL - Clear any potential style conflicts that could hide spell check underlines
+                try
+                {
+                    // Remove any custom adorner decorations that might conflict
+                    this.Resources.Remove(typeof(System.Windows.Documents.Adorner));
+                    
+                    // Ensure spell check adorner layer is not being overridden
+                    if (Document != null)
+                    {
+                        Document.Resources.Remove("SpellCheckError");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[RTF] Adorner cleanup failed (non-critical): {ex.Message}");
+                }
+                
+                // Step 3: Force visual refresh with minimal disruption
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        // Re-enable spell check to ensure it's active
+                        SpellCheck.SetIsEnabled(this, true);
+                        
+                        // Force spell check visual refresh by changing focus briefly
+                        if (Document != null && !string.IsNullOrEmpty(new TextRange(Document.ContentStart, Document.ContentEnd).Text))
+                        {
+                            var currentFocus = Keyboard.FocusedElement;
+                            this.Focus();
+                            
+                            // Minimal text manipulation to trigger spell check
+                            var currentSelection = Selection;
+                            CaretPosition = Document.ContentEnd;
+                            CaretPosition.InsertTextInRun(" ");
+                            var newEnd = CaretPosition;
+                            new TextRange(newEnd.GetPositionAtOffset(-1), newEnd).Text = "";
+                            
+                            // Restore original selection/focus
+                            Selection.Select(currentSelection.Start, currentSelection.End);
+                            if (currentFocus is UIElement element)
+                            {
+                                element.Focus();
+                            }
+                        }
+                        
+                        System.Diagnostics.Debug.WriteLine("[RTF] Theme-aware spell check initialized - red underlines should be visible in both themes");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Theme-aware spell check setup failed: {ex.Message}");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Background);
+                
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Spell check initialization failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Preserve spell check styles during theme changes
+        /// Single Responsibility: Spell check preservation during theming
+        /// </summary>
+        private void PreserveSpellCheckDuringThemeChange()
+        {
+            try
+            {
+                // Store current spell check state before theme changes
+                var spellCheckEnabled = SpellCheck.GetIsEnabled(this);
+                var currentLanguage = this.Language;
+                
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        // Restore spell check configuration after theme changes
+                        SpellCheck.SetIsEnabled(this, spellCheckEnabled);
+                        this.Language = currentLanguage;
+                        
+                        // CRITICAL: Force spell check underline refresh without content disruption
+                        if (spellCheckEnabled && Document != null)
+                        {
+                            // Method 1: Focus change to trigger spell check refresh
+                            var hadFocus = this.IsFocused;
+                            this.Focus();
+                            
+                            // Method 2: Force adorner layer refresh by briefly disabling/enabling
+                            SpellCheck.SetIsEnabled(this, false);
+                            SpellCheck.SetIsEnabled(this, true);
+                            
+                            // Restore focus state
+                            if (!hadFocus)
+                            {
+                                Keyboard.ClearFocus();
+                            }
+                        }
+                        
+                        System.Diagnostics.Debug.WriteLine("[RTF] Spell check preserved and refreshed during theme change");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Spell check preservation failed: {ex.Message}");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Normal);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Spell check preservation setup failed: {ex.Message}");
+            }
+        }
+        
+        #endregion
+        
+        #region Format Fidelity Manager (SRP: Save/Load Consistency)
+        
+        /// <summary>
+        /// Save RTF content with enhanced format preservation
+        /// Single Responsibility: RTF content serialization with style preservation
+        /// </summary>
         public string SaveContent()
         {
             // Use cache for performance (important for auto-save)
@@ -273,22 +559,96 @@ namespace NoteNest.UI.Controls.Editor.Core
             
             try
             {
+                // Preserve document styles before saving
+                PreserveDocumentStylesForSave();
+                
                 var range = new TextRange(Document.ContentStart, Document.ContentEnd);
                 using (var stream = new MemoryStream())
                 {
                     range.Save(stream, DataFormats.Rtf);
                     _cachedContent = Encoding.UTF8.GetString(stream.ToArray());
                     _lastCacheTime = DateTime.Now;
+                    
+                    // Enhanced RTF content with style preservation
+                    _cachedContent = EnhanceRTFFormatConsistency(_cachedContent);
+                    
+                    System.Diagnostics.Debug.WriteLine($"[RTF] Saved with enhanced format preservation: {_cachedContent.Length} chars");
                     return _cachedContent;
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[RTF] Save failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[RTF] Enhanced save failed: {ex.Message}");
                 // Fallback to plain text
                 return new TextRange(Document.ContentStart, Document.ContentEnd).Text;
             }
         }
+        
+        /// <summary>
+        /// Preserve document styles before save operation
+        /// Single Responsibility: Pre-save style preservation
+        /// </summary>
+        private void PreserveDocumentStylesForSave()
+        {
+            try
+            {
+                if (Document == null) return;
+                
+                // Ensure all our custom styles are properly applied before saving
+                InitializeRTFDocumentStyles();
+                
+                // Apply current theme to ensure consistent appearance
+                var isDarkMode = IsCurrentThemeDark();
+                UpdateDocumentThemeStylesOnly(isDarkMode);
+                
+                System.Diagnostics.Debug.WriteLine("[RTF] Document styles preserved for save operation");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Style preservation for save failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Enhance RTF content for better format consistency across save/load cycles
+        /// Single Responsibility: RTF format optimization
+        /// </summary>
+        private string EnhanceRTFFormatConsistency(string rtfContent)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(rtfContent)) return rtfContent;
+                
+                var enhanced = rtfContent;
+                
+                // Ensure consistent line spacing in RTF output
+                // Add specific RTF control words for single line spacing
+                if (!enhanced.Contains("\\sl0"))
+                {
+                    // Insert single line spacing control after RTF header
+                    enhanced = System.Text.RegularExpressions.Regex.Replace(enhanced, 
+                        @"(\\rtf1[^}]*})", 
+                        "$1\\sl0\\slmult0", // Single line spacing
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                }
+                
+                // Ensure paragraph spacing consistency
+                enhanced = System.Text.RegularExpressions.Regex.Replace(enhanced,
+                    @"\\sb\d+|\\sa\d+", // Remove existing spacing before/after paragraphs
+                    "",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                
+                System.Diagnostics.Debug.WriteLine("[RTF] Format consistency enhancements applied");
+                return enhanced;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Format enhancement failed: {ex.Message}");
+                return rtfContent; // Return original if enhancement fails
+            }
+        }
+        
+        #endregion
         
         public string GetQuickContent()
         {
@@ -1492,7 +1852,8 @@ namespace NoteNest.UI.Controls.Editor.Core
         }
         
         /// <summary>
-        /// Apply theme-aware colors to RTF editor and existing content
+        /// Apply theme-aware colors to RTF editor while preserving spell check underlines
+        /// Enhanced to prevent spell check visibility issues
         /// </summary>
         public void ApplyTheme(bool isDarkMode)
         {
@@ -1500,30 +1861,95 @@ namespace NoteNest.UI.Controls.Editor.Core
             
             try
             {
-                // Update editor-level theme colors
+                // STEP 1: Preserve spell check state before theme changes
+                PreserveSpellCheckDuringThemeChange();
+                
+                // STEP 2: Update editor-level theme colors
                 var foregroundBrush = isDarkMode 
                     ? new SolidColorBrush(Colors.White) 
                     : new SolidColorBrush(Colors.Black);
                 
                 this.Foreground = foregroundBrush;
                 
-                // Update document-level theme colors for existing content
+                // STEP 3: Apply ONLY theme-related styles (avoid spell check interference)
                 if (Document != null)
                 {
-                    // Apply theme colors to all runs in the document
-                    ApplyThemeToDocumentContent(isDarkMode);
+                    // Use careful theme application that preserves spell check
+                    UpdateDocumentThemeStylesOnly(isDarkMode);
                     
-                    // Update default paragraph and list styles
-                    var defaultColor = isDarkMode ? Colors.White : Colors.Black;
-                    UpdateDocumentDefaultStyles(defaultColor);
+                    // Apply limited content theming that won't interfere with spell check
+                    ApplyMinimalContentTheming(isDarkMode);
                 }
                 
-                System.Diagnostics.Debug.WriteLine($"[RTF] Applied {(isDarkMode ? "dark" : "light")} theme to RTF editor");
+                System.Diagnostics.Debug.WriteLine($"[RTF] Applied {(isDarkMode ? "dark" : "light")} theme with spell check preservation");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[RTF] Theme application failed: {ex.Message}");
             }
+        }
+        
+        /// <summary>
+        /// Apply minimal content theming that won't interfere with spell check underlines
+        /// Single Responsibility: Careful content theming
+        /// </summary>
+        private void ApplyMinimalContentTheming(bool isDarkMode)
+        {
+            try
+            {
+                // Only update content colors for very problematic cases (black text on dark theme, white text on light theme)
+                var targetColor = isDarkMode ? Colors.White : Colors.Black;
+                var targetBrush = new SolidColorBrush(targetColor);
+                
+                // Walk through content carefully - only update obvious problematic colors
+                var walker = Document.ContentStart;
+                while (walker != null && walker.CompareTo(Document.ContentEnd) < 0)
+                {
+                    if (walker.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.ElementStart)
+                    {
+                        var element = walker.GetAdjacentElement(LogicalDirection.Forward);
+                        if (element is Run run && IsObviouslyProblematicColor(run, isDarkMode))
+                        {
+                            // Only update very problematic colors that would be completely invisible
+                            run.Foreground = targetBrush;
+                        }
+                    }
+                    
+                    walker = walker.GetNextContextPosition(LogicalDirection.Forward);
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[RTF] Minimal content theming applied for {(isDarkMode ? "dark" : "light")} theme");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Minimal content theming failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Check if a color is obviously problematic (completely invisible) in current theme
+        /// Single Responsibility: Problematic color detection
+        /// </summary>
+        private bool IsObviouslyProblematicColor(Run run, bool isDarkMode)
+        {
+            if (run.Foreground is SolidColorBrush brush)
+            {
+                var color = brush.Color;
+                var luminance = (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255.0;
+                
+                if (isDarkMode)
+                {
+                    // Only convert pure black or extremely dark colors (luminance < 0.1)
+                    return luminance < 0.1;
+                }
+                else
+                {
+                    // Only convert pure white or extremely light colors (luminance > 0.9)
+                    return luminance > 0.9;
+                }
+            }
+            
+            return false;
         }
         
         /// <summary>
