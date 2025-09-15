@@ -225,9 +225,33 @@ namespace NoteNest.Core.Services
 			{
 				var plain = rtfContent;
 
-				// ENHANCED REGEX-BASED RTF STRIPPING (RTF PRIORITY)
+				// ENHANCED REGEX-BASED RTF STRIPPING WITH BULLETED LIST PRIORITY
 				
-				// Remove RTF document structure elements
+				// STEP 1: Extract meaningful text from bulleted lists first (before stripping everything)
+				var listItems = new List<string>();
+				var listMatches = Regex.Matches(plain, @"\\bullet\s*([^\\]+?)(?=\\|$)", RegexOptions.IgnoreCase);
+				foreach (Match match in listMatches)
+				{
+					var item = match.Groups[1].Value.Trim();
+					if (!string.IsNullOrEmpty(item))
+					{
+						listItems.Add(item);
+					}
+				}
+				
+				// STEP 2: Look for alternative bulleted list patterns
+				// Pattern: text followed by \par (common in Word-generated RTF)
+				var textBlocks = Regex.Matches(plain, @"[A-Za-z0-9\-_]+(?:\s+[A-Za-z0-9\-_]+)*(?=\\par|\\line|$)", RegexOptions.IgnoreCase);
+				foreach (Match match in textBlocks)
+				{
+					var text = match.Value.Trim();
+					if (text.Length > 1 && !text.StartsWith("\\") && Regex.IsMatch(text, @"^[A-Za-z0-9\-_\s]+$"))
+					{
+						listItems.Add(text);
+					}
+				}
+				
+				// Remove RTF document structure elements  
 				plain = Regex.Replace(plain, @"\\rtf\d+", "", RegexOptions.IgnoreCase);
 				plain = Regex.Replace(plain, @"\\ansi", "", RegexOptions.IgnoreCase);
 				plain = Regex.Replace(plain, @"\\deff\d+", "", RegexOptions.IgnoreCase);
@@ -277,7 +301,18 @@ namespace NoteNest.Core.Services
 				plain = Regex.Replace(plain, @"^\s*[^\w]*\s*", ""); // Clean any remaining prefix junk
 
 				var result = plain.Trim();
-				_logger.Debug($"Enhanced RTF extraction: {rtfContent.Length} RTF chars → {result.Length} searchable text chars");
+				
+				// BULLETED LIST PRIORITY: If regular extraction failed or is mostly junk, use extracted list items
+				if (listItems.Count > 0 && (string.IsNullOrEmpty(result) || result.Length < 10 || ContainsMostlyJunk(result)))
+				{
+					result = string.Join(" • ", listItems.Take(5)); // Take first 5 items, join with bullets
+					_logger.Debug($"Enhanced RTF extraction (list priority): {rtfContent.Length} RTF chars → {result.Length} searchable text chars from {listItems.Count} list items");
+				}
+				else
+				{
+					_logger.Debug($"Enhanced RTF extraction: {rtfContent.Length} RTF chars → {result.Length} searchable text chars");
+				}
+				
 				return result;
 			}
 			catch (Exception ex)
@@ -285,6 +320,43 @@ namespace NoteNest.Core.Services
 				_logger.Warning($"RTF text extraction failed: {ex.Message}");
 				return string.Empty;
 			}
+		}
+		
+		/// <summary>
+		/// Detects if extracted RTF text contains mostly formatting artifacts or junk
+		/// </summary>
+		private bool ContainsMostlyJunk(string text)
+		{
+			if (string.IsNullOrEmpty(text)) return true;
+			
+			// Check for high percentage of non-alphabetic characters
+			var letterCount = text.Count(char.IsLetter);
+			var totalCount = text.Length;
+			var letterPercentage = (double)letterCount / totalCount;
+			
+			// If less than 40% letters, likely mostly junk
+			if (letterPercentage < 0.4) return true;
+			
+			// Check for common RTF artifacts that slip through
+			var junkPatterns = new[]
+			{
+				@"\\[a-z]+\d*",  // RTF control words
+				@"[{}]+",         // Curly braces
+				@"cpg\d+",        // Code page references
+				@"charset\d+",    // Character set references
+				@"Times\s+New\s+Roman", // Font names
+				@"Calibri|Arial|Segoe"
+			};
+			
+			foreach (var pattern in junkPatterns)
+			{
+				if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase))
+				{
+					return true;
+				}
+			}
+			
+			return false;
 		}
 	}
 }
