@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using NoteNest.UI.Controls.Editor.Converters;
 using System.Collections.Generic;
@@ -73,21 +74,7 @@ namespace NoteNest.UI.Controls.Editor.Core
             {
                 if (Document != null)
                 {
-                    Document.PagePadding = new Thickness(0);
-                    var pStyle = new Style(typeof(Paragraph));
-                    pStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0, 0, 0, 1)));
-                    pStyle.Setters.Add(new Setter(Paragraph.ForegroundProperty, new DynamicResourceExtension("SystemControlForegroundBaseHighBrush")));
-                    Document.Resources[typeof(Paragraph)] = pStyle;
-                    
-                    // Add explicit styles for List elements to ensure proper block-level rendering
-                    var listStyle = new Style(typeof(List));
-                    listStyle.Setters.Add(new Setter(List.MarginProperty, new Thickness(0, 2, 0, 2)));
-                    listStyle.Setters.Add(new Setter(List.PaddingProperty, new Thickness(20, 0, 0, 0)));
-                    Document.Resources[typeof(List)] = listStyle;
-                    
-                    var listItemStyle = new Style(typeof(ListItem));
-                    listItemStyle.Setters.Add(new Setter(ListItem.MarginProperty, new Thickness(0, 1, 0, 1)));
-                    Document.Resources[typeof(ListItem)] = listItemStyle;
+                    InitializeDocumentStyles(Document);
                 }
             }
             catch { }
@@ -109,64 +96,85 @@ namespace NoteNest.UI.Controls.Editor.Core
             // Smart list behaviors
             PreviewKeyDown += OnPreviewKeyDown;
             PreviewKeyUp += OnPreviewKeyUp;
+            
+            // PHASE 1.5: Clean paste behavior - always paste as plain text
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Paste, OnPreviewPaste));
         }
 
+        /// <summary>
+        /// PHASE 2: Perfect predictable key handlers for professional editing experience
+        /// </summary>
         private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
-            // Removed: _isUpdating check (no longer needed)
-            
             switch (e.Key)
             {
                 case Key.Enter:
                     if (Keyboard.Modifiers == ModifierKeys.Shift)
                     {
-                        // Shift+Enter: soft line break
+                        // Shift+Enter: soft line break (always)
                         e.Handled = true;
                         EditingCommands.EnterLineBreak.Execute(null, this);
                         return;
                     }
                     
-                var para = CaretPosition?.Paragraph;
-                    if (para != null && TryContinueList(para))
+                    // PHASE 2: Predictable list behavior per original plan
+                    if (IsInList())
                     {
+                        if (CurrentListItemIsEmpty())
+                        {
+                            ExitList();  // Empty item = exit list
+                        }
+                        else
+                        {
+                            CreateNewListItem();  // Continue list
+                        }
                         e.Handled = true;
-                        return;
+                    }
+                    break;
+                    
+                case Key.Tab:
+                    // HYBRID APPROACH: Use reliable WPF commands, no arbitrary limits
+                    if (IsInList())
+                    {
+                        try
+                        {
+                            if (Keyboard.Modifiers == ModifierKeys.Shift)
+                            {
+                                EditingCommands.DecreaseIndentation.Execute(null, this);
+                                System.Diagnostics.Debug.WriteLine("[EDITOR] Outdented using WPF command (reliable)");
+                            }
+                            else
+                            {
+                                EditingCommands.IncreaseIndentation.Execute(null, this);
+                                System.Diagnostics.Debug.WriteLine("[EDITOR] Indented using WPF command (reliable)");
+                            }
+                            e.Handled = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[ERROR] Tab operation failed: {ex.Message}");
+                            // Don't handle the event, let WPF try default behavior
+                        }
                     }
                     break;
                     
                 case Key.Back:
-                    HandleBackspaceKey(e);
+                    // PHASE 2: Predictable backspace behavior
+                    if (IsInList() && IsAtStartOfListItem())
+                    {
+                        RemoveListFormattingFromCurrentItem();
+                        e.Handled = true;
+                    }
                     break;
                     
                 case Key.Delete:
-                    para = CaretPosition?.Paragraph;
-                    if (para?.Parent is ListItem && IsAtListItemEnd())
+                    // Enhanced delete behavior for lists
+                    if (IsInList() && IsAtEndOfListItem())
                     {
-                        if (TryDeleteMergeAtEnd(para))
-                    {
-                        e.Handled = true;
-                        return;
-                    }
-                }
-                    break;
-                    
-                case Key.Tab:
-                    para = CaretPosition?.Paragraph;
-                    if (para?.Parent is ListItem)
-                    {
-                        e.Handled = true;
-                        
-                        if (Keyboard.Modifiers == ModifierKeys.Shift)
+                        if (TryMergeWithNextListItem())
                         {
-                            // Outdent
-                            OutdentListCommand.Execute(null, this);
+                            e.Handled = true;
                         }
-                        else
-                        {
-                            // Indent - use built-in command
-                            EditingCommands.IncreaseIndentation.Execute(null, this);
-                        }
-                        return;
                     }
                     break;
             }
@@ -175,6 +183,121 @@ namespace NoteNest.UI.Controls.Editor.Core
         private void OnPreviewKeyUp(object sender, KeyEventArgs e)
         {
             // No longer tracking double-enter behavior
+        }
+        
+        /// <summary>
+        /// PHASE 1.5: Clean paste handler - strips all external formatting
+        /// </summary>
+        private void OnPreviewPaste(object sender, ExecutedRoutedEventArgs e)
+        {
+            if (e.Command == ApplicationCommands.Paste)
+            {
+                PerformCleanPaste();
+                e.Handled = true;
+            }
+        }
+        
+        /// <summary>
+        /// PHASE 2: Enhanced clean paste - strips ALL external formatting
+        /// Handles text from Word, web pages, other rich editors
+        /// </summary>
+        private void PerformCleanPaste()
+        {
+            try
+            {
+                string plainText = null;
+                
+                // PHASE 2: Try multiple clipboard formats to ensure we get clean text
+                if (Clipboard.ContainsText(TextDataFormat.UnicodeText))
+                {
+                    plainText = Clipboard.GetText(TextDataFormat.UnicodeText);
+                }
+                else if (Clipboard.ContainsText(TextDataFormat.Text))
+                {
+                    plainText = Clipboard.GetText(TextDataFormat.Text);
+                }
+                else if (Clipboard.ContainsText())
+                {
+                    plainText = Clipboard.GetText(); // Default format
+                }
+                
+                if (!string.IsNullOrEmpty(plainText))
+                {
+                    // PHASE 2: Clean the text thoroughly
+                    plainText = CleanPastedText(plainText);
+                    
+                    // Insert plain text at current selection
+                    if (Selection != null && !Selection.IsEmpty)
+                    {
+                        Selection.Text = plainText;
+                    }
+                    else
+                    {
+                        // Insert at caret position
+                        var currentPos = CaretPosition;
+                        if (currentPos != null)
+                        {
+                            currentPos.InsertTextInRun(plainText);
+                        }
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine($"[EDITOR] Clean paste: {plainText.Length} chars as clean plain text");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Graceful fallback to default paste behavior
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Clean paste failed, using default: {ex.Message}");
+                try
+                {
+                    ApplicationCommands.Paste.Execute(null, this);
+                }
+                catch
+                {
+                    // Last resort - do nothing rather than crash
+                    System.Diagnostics.Debug.WriteLine("[ERROR] Even default paste failed");
+                }
+            }
+        }
+        
+        /// <summary>
+        /// PHASE 2: Clean pasted text - remove problematic characters and normalize
+        /// </summary>
+        private string CleanPastedText(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return text;
+            
+            try
+            {
+                // Remove common problematic characters from rich text sources
+                text = text.Replace("\r\n", "\n")      // Normalize line endings
+                          .Replace("\r", "\n")         // Handle Mac line endings
+                          .Replace("\u00A0", " ")      // Non-breaking space -> regular space
+                          .Replace("\u2028", "\n")     // Line separator -> newline
+                          .Replace("\u2029", "\n\n");  // Paragraph separator -> double newline
+                
+                // Remove zero-width characters that can cause issues
+                text = text.Replace("\u200B", "")      // Zero-width space
+                          .Replace("\u200C", "")       // Zero-width non-joiner
+                          .Replace("\u200D", "")       // Zero-width joiner
+                          .Replace("\uFEFF", "");      // Byte order mark
+                
+                // Normalize multiple consecutive spaces (common in HTML/Word)
+                while (text.Contains("  "))
+                {
+                    text = text.Replace("  ", " ");
+                }
+                
+                // Clean up excessive newlines (more than 2 consecutive)
+                text = System.Text.RegularExpressions.Regex.Replace(text, @"\n{3,}", "\n\n");
+                
+                return text;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Text cleaning failed: {ex.Message}");
+                return text; // Return original if cleaning fails
+            }
         }
 
         // SIMPLIFIED: Replace HandleBackspaceKey
@@ -656,24 +779,31 @@ namespace NoteNest.UI.Controls.Editor.Core
             // Removed: _isUpdating flag
             try
             {
+                // HYBRID APPROACH: Use reliable WPF commands instead of complex custom logic
                 if (outdent)
                 {
-                    return TryOutdentListItem(li, parentList);
+                    EditingCommands.DecreaseIndentation.Execute(null, this);
+                    System.Diagnostics.Debug.WriteLine("[EDITOR] Outdented using reliable WPF command");
                 }
                 else
                 {
-                    return TryIndentListItem(li, parentList);
+                    EditingCommands.IncreaseIndentation.Execute(null, this);
+                    System.Diagnostics.Debug.WriteLine("[EDITOR] Indented using reliable WPF command");
                 }
+                return true;
             }
-            finally
+            catch (Exception ex)
             {
-                // Removed: _isUpdating flag
-                // Debouncing removed - content updates immediately
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Indent/Outdent operation failed: {ex.Message}");
+                return false;
             }
         }
 
         private bool TryIndentListItem(ListItem item, List parentList)
         {
+            // HYBRID APPROACH: Removed complex nesting level checking
+            // Now relying on WPF's natural behavior without artificial limits
+            
             // Save current caret position relative to the paragraph
             int caretOffset = 0;
             if (item.Blocks.FirstBlock is Paragraph itemPara && CaretPosition != null)
@@ -710,10 +840,20 @@ namespace NoteNest.UI.Controls.Editor.Core
             
             if (nestedList == null)
             {
+                // PHASE 2: Smart marker style for nested lists per original plan
+                var nestedMarkerStyle = parentList.MarkerStyle;
+                
+                // Convert numbered lists to bullets when nested
+                if (parentList.MarkerStyle == TextMarkerStyle.Decimal)
+                {
+                    nestedMarkerStyle = TextMarkerStyle.Disc;
+                    System.Diagnostics.Debug.WriteLine($"[EDITOR] Creating nested list: numbered -> bullets (per original plan)");
+                }
+                
                 // Create new nested list
                 nestedList = new List 
                 { 
-                    MarkerStyle = parentList.MarkerStyle, 
+                    MarkerStyle = nestedMarkerStyle, 
                     Margin = new Thickness(0, 0, 0, 0)
                 };
                 containerItem.Blocks.Add(nestedList);
@@ -2000,8 +2140,19 @@ namespace NoteNest.UI.Controls.Editor.Core
                 }
                 else
                 {
-                    // Apply list formatting - fix caret for both empty and non-empty paragraphs
+                    // HYBRID APPROACH: Simplified marker style logic (safer)
+                    var effectiveMarkerStyle = markerStyle;
                     var currentPara = CaretPosition?.Paragraph;
+                    
+                    // Simple nested list conversion: if already in a list and requesting numbered, use bullets instead
+                    if (markerStyle == TextMarkerStyle.Decimal && currentPara?.Parent is ListItem)
+                    {
+                        // Simple rule: nested numbered lists become bullets (no complex level checking)
+                        effectiveMarkerStyle = TextMarkerStyle.Disc;
+                        System.Diagnostics.Debug.WriteLine($"[EDITOR] Using bullets for nested list (simplified logic)");
+                    }
+                    
+                    // Apply list formatting with improved caret handling
                     var caretOffset = 0;
                     bool shouldRestoreCaret = false;
                     
@@ -2013,7 +2164,7 @@ namespace NoteNest.UI.Controls.Editor.Core
                         shouldRestoreCaret = true;
                     }
                     
-                    ApplyListToSelection(selection, markerStyle);
+                    ApplyListToSelection(selection, effectiveMarkerStyle);
                     
                     // Restore caret position after list formatting
                     if (shouldRestoreCaret && currentPara != null)
@@ -2078,40 +2229,34 @@ namespace NoteNest.UI.Controls.Editor.Core
 
         public void IndentSelection()
         {
-            var para = CaretPosition?.Paragraph;
-            if (para?.Parent is ListItem)
+            try
             {
-                TryChangeListIndent(para, false); // false = indent
+                // HYBRID APPROACH: Use reliable WPF command for all indentation
+                EditingCommands.IncreaseIndentation.Execute(null, this);
+                System.Diagnostics.Debug.WriteLine("[EDITOR] Indented using reliable WPF command");
             }
-            else if (para != null)
+            catch (Exception ex)
             {
-                // Regular paragraph - add left margin
-                para.Margin = new Thickness(
-                    para.Margin.Left + 20, 
-                    para.Margin.Top, 
-                    para.Margin.Right, 
-                    para.Margin.Bottom);
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Indent failed: {ex.Message}");
             }
         }
 
         public void OutdentSelection()
         {
-            var para = CaretPosition?.Paragraph;
-            if (para?.Parent is ListItem)
+            try
             {
-                TryChangeListIndent(para, true); // true = outdent
+                // HYBRID APPROACH: Use reliable WPF command for all outdentation  
+                EditingCommands.DecreaseIndentation.Execute(null, this);
+                System.Diagnostics.Debug.WriteLine("[EDITOR] Outdented using reliable WPF command");
             }
-            else if (para != null)
+            catch (Exception ex)
             {
-                // Regular paragraph - reduce left margin
-                var newMargin = Math.Max(0, para.Margin.Left - 20);
-                para.Margin = new Thickness(
-                    newMargin, 
-                    para.Margin.Top, 
-                    para.Margin.Right, 
-                    para.Margin.Bottom);
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Outdent failed: {ex.Message}");
             }
         }
+        
+        // REMOVED: Complex nesting level calculation and custom indent/outdent methods
+        // Now using reliable WPF EditingCommands for all indent/outdent operations
 
         public void BatchUpdate(Action updateAction)
         {
@@ -2126,6 +2271,205 @@ namespace NoteNest.UI.Controls.Editor.Core
                 // Removed: _isUpdating flag
                 EndChange();
             }
+        }
+        
+        /// <summary>
+        /// PHASE 2: Initialize consistent document styles for professional appearance
+        /// </summary>
+        private void InitializeDocumentStyles(FlowDocument document)
+        {
+            try
+            {
+                document.PagePadding = new Thickness(0);
+                
+                // PHASE 2: Enhanced paragraph styles with consistent spacing
+                var paragraphStyle = new Style(typeof(Paragraph));
+                paragraphStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0, 0, 0, 8))); // 8px bottom margin
+                paragraphStyle.Setters.Add(new Setter(Paragraph.ForegroundProperty, new DynamicResourceExtension("SystemControlForegroundBaseHighBrush")));
+                paragraphStyle.Setters.Add(new Setter(Paragraph.LineHeightProperty, document.FontSize * 1.5)); // Consistent line height
+                document.Resources[typeof(Paragraph)] = paragraphStyle;
+                
+                // PHASE 2: Perfect hanging indent list styles  
+                var listStyle = new Style(typeof(List));
+                listStyle.Setters.Add(new Setter(List.MarginProperty, new Thickness(0, 4, 0, 4)));        // Professional spacing
+                listStyle.Setters.Add(new Setter(List.PaddingProperty, new Thickness(28, 0, 0, 0)));      // Perfect hanging indent
+                listStyle.Setters.Add(new Setter(List.ForegroundProperty, new DynamicResourceExtension("SystemControlForegroundBaseHighBrush")));
+                document.Resources[typeof(List)] = listStyle;
+                
+                // List items with minimal spacing
+                var listItemStyle = new Style(typeof(ListItem));
+                listItemStyle.Setters.Add(new Setter(ListItem.MarginProperty, new Thickness(0, 1, 0, 1)));
+                document.Resources[typeof(ListItem)] = listItemStyle;
+                
+                // PHASE 2: Headers with consistent spacing and professional appearance
+                var headerBaseStyle = new Style(typeof(Paragraph));
+                headerBaseStyle.Setters.Add(new Setter(Paragraph.MarginProperty, new Thickness(0, 16, 0, 8))); // More space before headers
+                headerBaseStyle.Setters.Add(new Setter(Paragraph.FontWeightProperty, FontWeights.Bold));
+                headerBaseStyle.Setters.Add(new Setter(Paragraph.ForegroundProperty, new DynamicResourceExtension("SystemControlForegroundBaseHighBrush")));
+                // Headers will be applied dynamically based on FontSize in ConvertBlock
+                
+                System.Diagnostics.Debug.WriteLine("[EDITOR] Document styles initialized for consistent, professional formatting");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Document style initialization failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// PHASE 2: Apply theme-aware formatting (per original plan)
+        /// </summary>
+        public void ApplyTheme(bool isDarkMode)
+        {
+            try
+            {
+                // Update document-level theme colors
+                if (Document != null)
+                {
+                    // Theme-aware foreground color
+                    var foregroundBrush = isDarkMode 
+                        ? new SolidColorBrush(Colors.White) 
+                        : new SolidColorBrush(Colors.Black);
+                    
+                    // Update all paragraph styles to use theme-appropriate colors
+                    if (Document.Resources[typeof(Paragraph)] is Style paraStyle)
+                    {
+                        // Update existing setters or add new ones
+                        var foregroundSetter = paraStyle.Setters.OfType<Setter>()
+                            .FirstOrDefault(s => s.Property == Paragraph.ForegroundProperty);
+                        if (foregroundSetter != null)
+                        {
+                            foregroundSetter.Value = foregroundBrush;
+                        }
+                        else
+                        {
+                            paraStyle.Setters.Add(new Setter(Paragraph.ForegroundProperty, foregroundBrush));
+                        }
+                    }
+                    
+                    // Update list styles for theme
+                    if (Document.Resources[typeof(List)] is Style listStyle)
+                    {
+                        var foregroundSetter = listStyle.Setters.OfType<Setter>()
+                            .FirstOrDefault(s => s.Property == List.ForegroundProperty);
+                        if (foregroundSetter != null)
+                        {
+                            foregroundSetter.Value = foregroundBrush;
+                        }
+                        else
+                        {
+                            listStyle.Setters.Add(new Setter(List.ForegroundProperty, foregroundBrush));
+                        }
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine($"[EDITOR] Applied {(isDarkMode ? "dark" : "light")} theme to document");
+                }
+                
+                // Update editor foreground (background handled by container/theme system)
+                this.Foreground = isDarkMode 
+                    ? new SolidColorBrush(Colors.White) 
+                    : new SolidColorBrush(Colors.Black);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Theme application failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// PHASE 2: Helper methods for predictable key behavior (per original plan)
+        /// </summary>
+        private bool IsInList()
+        {
+            return CaretPosition?.Paragraph?.Parent is ListItem;
+        }
+        
+        private bool CurrentListItemIsEmpty()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is ListItem)
+            {
+                var range = new TextRange(para.ContentStart, para.ContentEnd);
+                return string.IsNullOrWhiteSpace(range.Text);
+            }
+            return false;
+        }
+        
+        private void ExitList()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is ListItem listItem)
+            {
+                // Convert current list item to regular paragraph
+                ConvertListItemToParagraph(para, true);
+                System.Diagnostics.Debug.WriteLine("[EDITOR] Exited list (empty item)");
+            }
+        }
+        
+        private void CreateNewListItem()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para != null && TryContinueList(para))
+            {
+                System.Diagnostics.Debug.WriteLine("[EDITOR] Created new list item");
+            }
+        }
+        
+        // REMOVED: Complex helper methods that caused infinite loops
+        // Now using simple, reliable WPF commands directly
+        
+        private bool IsAtStartOfListItem()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is ListItem && CaretPosition != null)
+            {
+                return CaretPosition.CompareTo(para.ContentStart) == 0;
+            }
+            return false;
+        }
+        
+        private bool IsAtEndOfListItem()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is ListItem && CaretPosition != null)
+            {
+                return CaretPosition.CompareTo(para.ContentEnd) == 0;
+            }
+            return false;
+        }
+        
+        private void RemoveListFormattingFromCurrentItem()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is ListItem)
+            {
+                ConvertListItemToParagraph(para, true);
+                System.Diagnostics.Debug.WriteLine("[EDITOR] Removed list formatting (backspace at start)");
+            }
+        }
+        
+        private bool TryMergeWithNextListItem()
+        {
+            var para = CaretPosition?.Paragraph;
+            if (para?.Parent is ListItem listItem && listItem.Parent is List list)
+            {
+                int index = GetListItemIndex(list, listItem);
+                var nextItem = GetListItemAt(list, index + 1);
+                
+                if (nextItem?.Blocks.FirstBlock is Paragraph nextPara)
+                {
+                    // Merge content from next item to current
+                    var nextText = new TextRange(nextPara.ContentStart, nextPara.ContentEnd).Text;
+                    CaretPosition.InsertTextInRun(nextText);
+                    
+                    // Remove the next item
+                    list.ListItems.Remove(nextItem);
+                    
+                    System.Diagnostics.Debug.WriteLine("[EDITOR] Merged with next list item");
+                    return true;
+                }
+            }
+            return false;
         }
 
         // Removed: List formatting methods (part of deleted list tracking system)

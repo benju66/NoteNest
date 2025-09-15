@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -49,10 +51,14 @@ namespace NoteNest.UI.Controls.Editor.Converters
                 return document;
             }
 
-            var md = Markdown.Parse(markdown, _pipeline);
+            // PHASE 2: Pre-process markdown to extract and parse metadata comments
+            var (cleanMarkdown, metadataMap) = ExtractMetadataComments(markdown);
+            
+            var md = Markdown.Parse(cleanMarkdown, _pipeline);
             
             // Track if we need to add spacing between blocks
             MarkdownObject? previousBlock = null;
+            int blockIndex = 0;
             
             foreach (var block in md)
             {
@@ -70,10 +76,17 @@ namespace NoteNest.UI.Controls.Editor.Converters
                 var flowBlock = ConvertBlock(block);
                 if (flowBlock != null)
                 {
+                    // PHASE 2: Apply metadata if available for this block
+                    if (metadataMap.TryGetValue(blockIndex, out var metadata))
+                    {
+                        ApplyMetadataToBlock(flowBlock, metadata);
+                    }
+                    
                     document.Blocks.Add(flowBlock);
                 }
                 
                 previousBlock = block;
+                blockIndex++;
             }
 
             if (document.Blocks.Count == 0)
@@ -246,17 +259,219 @@ namespace NoteNest.UI.Controls.Editor.Converters
         {
             var markdown = new StringBuilder();
             bool isFirstBlock = true;
+            System.Windows.Documents.Block? previousBlock = null;
+            
             foreach (var block in document.Blocks)
             {
+                // PHASE 2: Add metadata preservation comments
+                var metadata = ExtractBlockMetadata(block, previousBlock);
+                if (!string.IsNullOrEmpty(metadata))
+                {
+                    markdown.AppendLine(metadata);
+                }
+                
                 if (!isFirstBlock && block is Paragraph)
                 {
                     // Preserve paragraph spacing - add blank line before each paragraph (except first)
                     markdown.AppendLine();
                 }
+                
                 markdown.Append(ConvertBlockToMarkdown(block));
+                
+                previousBlock = block;
                 isFirstBlock = false;
             }
             return markdown.ToString().TrimEnd();
+        }
+        
+        /// <summary>
+        /// PHASE 2: Extract metadata from block elements for preservation
+        /// </summary>
+        private string ExtractBlockMetadata(System.Windows.Documents.Block block, System.Windows.Documents.Block? previousBlock)
+        {
+            var metadata = new List<string>();
+            
+            try
+            {
+                // Extract spacing metadata
+                if (block is Paragraph para)
+                {
+                    // Preserve custom margins
+                    if (para.Margin.Top > 1.0)
+                        metadata.Add($"space-before:{para.Margin.Top:F0}");
+                    if (para.Margin.Bottom > 1.0)
+                        metadata.Add($"space-after:{para.Margin.Bottom:F0}");
+                    if (para.Margin.Left > 0)
+                        metadata.Add($"indent:{para.Margin.Left:F0}");
+                }
+                else if (block is List list)
+                {
+                    // Preserve list-specific spacing and indentation
+                    if (list.Margin.Top > 2.0 || list.Margin.Bottom > 2.0)
+                        metadata.Add($"list-spacing:{list.Margin.Top:F0},{list.Margin.Bottom:F0}");
+                    if (list.Padding.Left != 28.0) // 28 is our default
+                        metadata.Add($"list-indent:{list.Padding.Left:F0}");
+                    
+                    metadata.Add($"hanging:true"); // Mark as hanging indent list
+                }
+                
+                // Only output metadata comment if we have any metadata
+                if (metadata.Count > 0)
+                {
+                    return $"<!-- nm:{string.Join(" ", metadata)} -->";
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Metadata extraction failed: {ex.Message}");
+            }
+            
+            return string.Empty;
+        }
+        
+        /// <summary>
+        /// PHASE 2: Extract HTML metadata comments from markdown and return clean markdown + metadata map
+        /// </summary>
+        private (string cleanMarkdown, Dictionary<int, Dictionary<string, string>> metadataMap) ExtractMetadataComments(string markdown)
+        {
+            var metadataMap = new Dictionary<int, Dictionary<string, string>>();
+            var lines = markdown.Split('\n');
+            var cleanLines = new List<string>();
+            int blockIndex = 0;
+            
+            try
+            {
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i];
+                    
+                    // Check if this line is a metadata comment
+                    if (line.Trim().StartsWith("<!-- nm:") && line.Trim().EndsWith("-->"))
+                    {
+                        // Parse metadata comment
+                        var metadataContent = line.Trim().Substring(8, line.Trim().Length - 11); // Remove <!-- nm: and -->
+                        var metadata = ParseMetadata(metadataContent);
+                        
+                        if (metadata.Count > 0)
+                        {
+                            metadataMap[blockIndex] = metadata;
+                        }
+                        
+                        // Don't include the metadata comment in clean markdown
+                        continue;
+                    }
+                    
+                    cleanLines.Add(line);
+                    
+                    // Increment block index for content lines (not blank lines)
+                    if (!string.IsNullOrWhiteSpace(line))
+                    {
+                        blockIndex++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Metadata extraction failed: {ex.Message}");
+                // Return original markdown if parsing fails
+                return (markdown, new Dictionary<int, Dictionary<string, string>>());
+            }
+            
+            return (string.Join("\n", cleanLines), metadataMap);
+        }
+        
+        /// <summary>
+        /// PHASE 2: Parse metadata string into key-value pairs
+        /// </summary>
+        private Dictionary<string, string> ParseMetadata(string metadataContent)
+        {
+            var metadata = new Dictionary<string, string>();
+            
+            try
+            {
+                var parts = metadataContent.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                
+                foreach (var part in parts)
+                {
+                    if (part.Contains(':'))
+                    {
+                        var keyValue = part.Split(':', 2);
+                        if (keyValue.Length == 2)
+                        {
+                            metadata[keyValue[0].Trim()] = keyValue[1].Trim();
+                        }
+                    }
+                    else
+                    {
+                        // Boolean flags like "hanging"
+                        metadata[part.Trim()] = "true";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Metadata parsing failed: {ex.Message}");
+            }
+            
+            return metadata;
+        }
+        
+        /// <summary>
+        /// PHASE 2: Apply preserved metadata to a FlowDocument block
+        /// </summary>
+        private void ApplyMetadataToBlock(System.Windows.Documents.Block block, Dictionary<string, string> metadata)
+        {
+            try
+            {
+                if (block is Paragraph para)
+                {
+                    // Apply paragraph-specific metadata
+                    if (metadata.TryGetValue("space-before", out var spaceBefore) && 
+                        double.TryParse(spaceBefore, out var beforeValue))
+                    {
+                        para.Margin = new Thickness(para.Margin.Left, beforeValue, para.Margin.Right, para.Margin.Bottom);
+                    }
+                    
+                    if (metadata.TryGetValue("space-after", out var spaceAfter) && 
+                        double.TryParse(spaceAfter, out var afterValue))
+                    {
+                        para.Margin = new Thickness(para.Margin.Left, para.Margin.Top, para.Margin.Right, afterValue);
+                    }
+                    
+                    if (metadata.TryGetValue("indent", out var indent) && 
+                        double.TryParse(indent, out var indentValue))
+                    {
+                        para.Margin = new Thickness(indentValue, para.Margin.Top, para.Margin.Right, para.Margin.Bottom);
+                    }
+                }
+                else if (block is List list)
+                {
+                    // Apply list-specific metadata
+                    if (metadata.TryGetValue("list-spacing", out var listSpacing))
+                    {
+                        var parts = listSpacing.Split(',');
+                        if (parts.Length == 2 && 
+                            double.TryParse(parts[0], out var topSpacing) && 
+                            double.TryParse(parts[1], out var bottomSpacing))
+                        {
+                            list.Margin = new Thickness(list.Margin.Left, topSpacing, list.Margin.Right, bottomSpacing);
+                        }
+                    }
+                    
+                    if (metadata.TryGetValue("list-indent", out var listIndent) && 
+                        double.TryParse(listIndent, out var indentValue))
+                    {
+                        list.Padding = new Thickness(indentValue, list.Padding.Top, list.Padding.Right, list.Padding.Bottom);
+                    }
+                    
+                    // Note: "hanging:true" is informational - our lists are already hanging by default
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ERROR] Metadata application failed: {ex.Message}");
+                // Continue without metadata if application fails
+            }
         }
 
         private string ConvertBlockToMarkdown(System.Windows.Documents.Block block)
