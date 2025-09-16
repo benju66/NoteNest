@@ -150,8 +150,11 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
-                            <!-- RTF-only: Direct RTF editor embedding -->
-                            <!-- Clean architecture - no containers needed -->
+                            <!-- RTF Formatting Toolbar - positioned just below tabs -->
+                            <rtf:RTFToolbar Grid.Row="0" 
+                                           TargetEditor="{Binding ElementName=RTFEditor}"/>
+                            
+                            <!-- RTF Editor - main editing area -->
                             <rtf:RTFEditor x:Name="RTFEditor" Grid.Row="1" />
                         </Grid>
                     </DataTemplate>

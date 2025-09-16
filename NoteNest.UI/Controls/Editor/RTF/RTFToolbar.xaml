@@ -1,0 +1,112 @@
+<UserControl x:Class="NoteNest.UI.Controls.Editor.RTF.RTFToolbar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d">
+    
+    <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="8,4">
+        
+        <StackPanel Orientation="Horizontal">
+            
+            <!-- Text Formatting Group -->
+            <StackPanel Orientation="Horizontal">
+                <Button Name="BoldButton" 
+                        ToolTip="Bold (Ctrl+B)"
+                        MinWidth="32" MinHeight="28"
+                        Padding="6,2"
+                        Margin="0,0,2,0"
+                        FontWeight="Bold"
+                        Content="B"
+                        Click="BoldButton_Click"/>
+                
+                <Button Name="ItalicButton" 
+                        ToolTip="Italic (Ctrl+I)"
+                        MinWidth="32" MinHeight="28"
+                        Padding="6,2"
+                        Margin="0,0,2,0"
+                        FontStyle="Italic"
+                        Content="I"
+                        Click="ItalicButton_Click"/>
+                
+                <Button Name="UnderlineButton" 
+                        ToolTip="Underline (Ctrl+U)"
+                        MinWidth="32" MinHeight="28"
+                        Padding="6,2"
+                        Margin="0,0,4,0"
+                        Click="UnderlineButton_Click">
+                    <TextBlock Text="U" TextDecorations="Underline"/>
+                </Button>
+            </StackPanel>
+            
+            <Separator Margin="4,0"/>
+            
+            <!-- Highlight Group -->
+            <Button Name="HighlightButton" 
+                    ToolTip="Cycle Highlight (Ctrl+H)"
+                    MinWidth="32" MinHeight="28"
+                    Padding="6,2"
+                    Margin="0,0,4,0"
+                    Click="HighlightButton_Click">
+                <Border Background="{Binding HighlightColor, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                        Width="20" Height="20" 
+                        CornerRadius="2"
+                        BorderBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                        BorderThickness="1">
+                    <TextBlock Text="H" 
+                               HorizontalAlignment="Center" 
+                               VerticalAlignment="Center"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </Border>
+            </Button>
+            
+            <Separator Margin="4,0"/>
+            
+            <!-- List Group -->
+            <StackPanel Orientation="Horizontal">
+                <Button Name="BulletListButton" 
+                        ToolTip="Bullet List"
+                        MinWidth="32" MinHeight="28"
+                        Padding="6,2"
+                        Margin="0,0,2,0"
+                        Content="•"
+                        FontSize="16"
+                        Click="BulletListButton_Click"/>
+                
+                <Button Name="NumberedListButton" 
+                        ToolTip="Numbered List"
+                        MinWidth="32" MinHeight="28"
+                        Padding="6,2"
+                        Margin="0,0,4,0"
+                        Content="1."
+                        Click="NumberedListButton_Click"/>
+            </StackPanel>
+            
+            <Separator Margin="4,0"/>
+            
+            <!-- Indent Group -->
+            <StackPanel Orientation="Horizontal">
+                <Button Name="IndentButton" 
+                        ToolTip="Increase Indent"
+                        MinWidth="32" MinHeight="28"
+                        Padding="6,2"
+                        Margin="0,0,2,0"
+                        Content="→"
+                        Click="IndentButton_Click"/>
+                
+                <Button Name="OutdentButton" 
+                        ToolTip="Decrease Indent"
+                        MinWidth="32" MinHeight="28"
+                        Padding="6,2"
+                        Content="←"
+                        Click="OutdentButton_Click"/>
+            </StackPanel>
+            
+        </StackPanel>
+    </Border>
+</UserControl>
