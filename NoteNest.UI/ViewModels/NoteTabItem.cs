@@ -22,8 +22,11 @@ namespace NoteNest.UI.ViewModels
         private string _content;
         private bool _isSaving;
         private bool _localIsDirty;
-        private bool _contentLoaded = false;
-        private bool _disposed = false;
+        private volatile bool _contentLoaded = false;
+        private volatile bool _disposed = false;
+        
+        // PHASE 1A: Thread safety
+        private readonly object _contentLock = new object();
         
         // PROPER ARCHITECTURE: Each tab manages its own save timing
         private DispatcherTimer _walTimer;
@@ -56,14 +59,35 @@ namespace NoteNest.UI.ViewModels
             }
         }
         
+        // PHASE 1A: Interface contract fix - backward compatible Content property
         public string Content
         {
-            get => _content;
+            get 
+            {
+                // Extract current content from editor when requested
+                if (!_disposed && _editor != null)
+                {
+                    try
+                    {
+                        var currentContent = _editor.SaveContent();
+                        if (!string.IsNullOrEmpty(currentContent))
+                        {
+                            return currentContent;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        HandleTabError("Content Extraction", ex);
+                    }
+                }
+                return _content ?? "";
+            }
             set
             {
-                if (SetProperty(ref _content, value))
+                var newValue = value ?? "";
+                if (SetProperty(ref _content, newValue))
                 {
-                    UpdateContent(value);
+                    UpdateContent(newValue);
                 }
             }
         }
@@ -295,30 +319,39 @@ namespace NoteNest.UI.ViewModels
                 
                 System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Editor content changed for {Note.Title}: {content?.Length ?? 0} chars");
             }
+            catch (ObjectDisposedException)
+            {
+                // Expected during shutdown, ignore
+                return;
+            }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Editor content change failed: {ex.Message}");
+                HandleTabError("Editor Content Change", ex);
             }
         }
         
         // ENHANCED: Lazy content loading (called when tab becomes visible)
         public void EnsureContentLoaded()
         {
-            if (!_contentLoaded && _saveManager != null)
+            lock (_contentLock)  // ✅ Thread safety fix
             {
-                try
+                if (!_contentLoaded && _saveManager != null && !_disposed)
                 {
-                    var content = _saveManager.GetContent(_noteId) ?? "";
-                    _editor.LoadContent(content);
-                    _editor.MarkClean();
-                    _contentLoaded = true;
-                    _localIsDirty = false;
-                    
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content loaded for {Note.Title}: {content.Length} chars");
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content load failed for {Note.Title}: {ex.Message}");
+                    try
+                    {
+                        var content = _saveManager.GetContent(_noteId) ?? "";
+                        _editor?.LoadContent(content);
+                        _editor?.MarkClean();
+                        _contentLoaded = true;
+                        _localIsDirty = false;
+                        
+                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content loaded for {Note.Title}: {content.Length} chars");
+                    }
+                    catch (Exception ex)
+                    {
+                        HandleTabError("Content Loading", ex);
+                        // Don't set _contentLoaded = true on failure, allow retry
+                    }
                 }
             }
         }
@@ -406,9 +439,7 @@ namespace NoteNest.UI.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] WAL protection failed for {Note.Title}: {ex.Message}");
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] WAL error details: {ex.StackTrace}");
+                    HandleTabError("WAL Protection", ex);
                 }
             }
         }
@@ -455,18 +486,14 @@ namespace NoteNest.UI.ViewModels
                         }
                         catch (Exception ex)
                         {
-                            // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
-                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save failed for {Note.Title}: {ex.Message}");
-                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save error details: {ex.StackTrace}");
+                            HandleTabError("Auto-save", ex);
                         }
                     });
                 }
             }
             catch (Exception ex)
             {
-                // ZERO-RISK IMPROVEMENT: Enhanced error logging for diagnostics
-                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save timer failed for {Note.Title}: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Timer error details: {ex.StackTrace}");
+                HandleTabError("Auto-save Timer", ex);
             }
         }
         
@@ -491,7 +518,7 @@ namespace NoteNest.UI.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] LoadContent failed for {Note.Title}: {ex.Message}");
+                    HandleTabError("LoadContent", ex);
                 }
             }
         }
@@ -515,6 +542,20 @@ namespace NoteNest.UI.ViewModels
             _saveManager.UpdateContent(_noteId, editorContent);
             
             System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content updated from editor for {Note.Title}: {editorContent?.Length ?? 0} chars");
+        }
+        
+        // PHASE 1A: Centralized error handling
+        private void HandleTabError(string operation, Exception ex)
+        {
+            var message = $"[Tab-{Note.Title}] {operation} failed: {ex.Message}";
+            System.Diagnostics.Debug.WriteLine(message);
+            
+            // For critical operations, consider user notification
+            if (operation == "Save" || operation == "Content Loading")
+            {
+                // Log error with more context
+                System.Diagnostics.Debug.WriteLine($"[Tab-{Note.Title}] {operation} error details: {ex.StackTrace}");
+            }
         }
 
         public void Dispose()

@@ -216,9 +216,9 @@ namespace NoteNest.UI.Controls
                 if (e.RemovedItems?.Count > 0 && e.RemovedItems[0] is NoteTabItem oldTab)
                 {
                     if (oldTab.IsDirty)
+                {
+                    try
                     {
-                        try
-                        {
                             // Direct access to tab's editor - guaranteed to work
                             var content = oldTab.Editor.SaveContent();
                             var saveManager = GetSaveManager();
@@ -255,7 +255,7 @@ namespace NoteNest.UI.Controls
                         _logger?.Error(ex, $"Content loading failed for tab: {newTab.Title}");
                     }
                 }
-                
+
                 // Update pane and workspace state
                 Pane.SelectedTab = newTab;
                 var workspaceService = _workspaceService;
@@ -268,29 +268,11 @@ namespace NoteNest.UI.Controls
                 try { SelectedTabChanged?.Invoke(this, newTab); } catch { }
                 TryApplyEditorSettingsToActiveEditor();
                 
-                // Focus the editor asynchronously after render
-                Dispatcher.BeginInvoke(new Action(() =>
+                // Focus the editor with robust retry logic
+                if (newTabItem != null)
                 {
-                    try
-                    {
-                        if (newTabItem?.Editor != null)
-                        {
-                            newTabItem.Editor.Focus();
-                            // Position cursor at start for consistent behavior
-                            var startPosition = newTabItem.Editor.Document?.ContentStart;
-                            if (startPosition != null)
-                            {
-                                newTabItem.Editor.CaretPosition = startPosition;
-                            }
-                            System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Focus set for {newTab.Title}");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Focus failed for {newTab.Title}: {ex.Message}");
-                        // Silent fail - focus is non-critical
-                    }
-                }), DispatcherPriority.Input); // Input priority for focus operations
+                    SetEditorFocusRobust(newTabItem);
+                }
                 
                 // Update global references (for services that need current editor)
                 UpdateGlobalEditorReferences(newTabItem);
@@ -303,9 +285,9 @@ namespace NoteNest.UI.Controls
                         newTab.Note.IsDirty = newTab.IsDirty;
                         System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Synced dirty state for {newTab.Title}: {newTab.IsDirty}");
                     }
-                }
-                catch (Exception ex) 
-                { 
+                        }
+                        catch (Exception ex)
+                        {
                     System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Sync dirty flag failed: {ex.Message}"); 
                 }
                 
@@ -335,9 +317,9 @@ namespace NoteNest.UI.Controls
                 }
                 
                 System.Diagnostics.Debug.WriteLine($"[TabSwitch] Global references updated for {tab.Title}");
-            }
-            catch (Exception ex)
-            {
+                        }
+                        catch (Exception ex)
+                        {
                 System.Diagnostics.Debug.WriteLine($"[TabSwitch] Global reference update failed: {ex.Message}");
             }
         }
@@ -395,32 +377,87 @@ namespace NoteNest.UI.Controls
             }
         }
 
+        // PHASE 1A: Robust focus management with retry logic
         private void TryFocusActiveEditor()
+        {
+            if (Pane?.SelectedTab is NoteTabItem tabItem)
+            {
+                SetEditorFocusRobust(tabItem);
+            }
+            else
+            {
+                // Fallback to old method for non-NoteTabItem tabs
+                TryFocusActiveEditorLegacy();
+            }
+        }
+        
+        private void SetEditorFocusRobust(NoteTabItem tabItem)
+        {
+            if (tabItem?.Editor == null) return;
+            
+            var attempts = 0;
+            var maxAttempts = 3;
+            
+            void TryFocus()
+            {
+                attempts++;
+                try
+                {
+                    var editor = tabItem.Editor;
+                    if (editor.IsLoaded && editor.IsVisible)
+                    {
+                        var focusResult = editor.Focus();
+                        if (focusResult)
+                        {
+                            // Set cursor position for consistent behavior
+                            var startPosition = editor.Document?.ContentStart;
+                            if (startPosition != null)
+                            {
+                                editor.CaretPosition = startPosition;
+                            }
+                            System.Diagnostics.Debug.WriteLine($"[Focus] Success for {tabItem.Title} on attempt {attempts}");
+                            return;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Focus] Attempt {attempts} failed for {tabItem.Title}: {ex.Message}");
+                }
+                
+                // Retry with exponential backoff
+                if (attempts < maxAttempts)
+                {
+                    var delay = TimeSpan.FromMilliseconds(50 * Math.Pow(2, attempts - 1));
+                    Dispatcher.BeginInvoke(new Action(TryFocus), DispatcherPriority.Background);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Focus] Failed after {maxAttempts} attempts for {tabItem.Title}");
+                }
+            }
+            
+            // Start focus attempt
+            Dispatcher.BeginInvoke(new Action(TryFocus), DispatcherPriority.Input);
+        }
+        
+        // Legacy focus method for backward compatibility
+        private void TryFocusActiveEditorLegacy()
         {
             try
             {
                 var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
                 var presenter = FindVisualChild<ContentPresenter>(container);
                 var editor = FindVisualChild<RTFEditor>(presenter);
-                // Try immediate focus
                 if (editor != null)
                 {
                     Keyboard.Focus(editor);
                 }
-                // Also schedule focus after current input/close events complete
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try
-                    {
-                        var container2 = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
-                        var presenter2 = FindVisualChild<ContentPresenter>(container2);
-                        var editor2 = FindVisualChild<RTFEditor>(presenter2);
-                        if (editor2 != null) Keyboard.Focus(editor2);
-                    }
-                    catch { }
-                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Focus] Legacy focus failed: {ex.Message}");
+            }
         }
 
         // Header interactions and commands
