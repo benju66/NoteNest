@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.Core.Interfaces.Services;
+using NoteNest.UI.Controls.Editor.RTF;
 
 namespace NoteNest.UI.ViewModels
 {
@@ -14,9 +15,12 @@ namespace NoteNest.UI.ViewModels
         private readonly ISaveManager _saveManager;
         private readonly ISupervisedTaskRunner _taskRunner;
         private readonly string _noteId;
+        private readonly RTFEditor _editor;
         private string _content;
         private bool _isSaving;
         private bool _localIsDirty;
+        private bool _contentLoaded = false;
+        private bool _disposed = false;
         
         // PROPER ARCHITECTURE: Each tab manages its own save timing
         private DispatcherTimer _walTimer;
@@ -27,6 +31,12 @@ namespace NoteNest.UI.ViewModels
         public string NoteId => _noteId;
         public NoteModel Note { get; }
         public string Id => _noteId;
+        
+        // ENHANCED: Direct access for code (toolbar, save operations)
+        public RTFEditor Editor => _editor;
+        
+        // ENHANCED: WPF binding property for DataTemplate
+        public UIElement EditorElement => _editor;
         
         public string Title
         {
@@ -106,6 +116,12 @@ namespace NoteNest.UI.ViewModels
             
             System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} initialized: _noteId={_noteId}, contentLength={_content.Length}");
             
+            // ENHANCED: Create editor ONCE - owned by this tab
+            _editor = new RTFEditor();
+            
+            // ENHANCED: Wire up save chain in constructor (bulletproof event chain)
+            _editor.ContentChanged += OnEditorContentChanged;
+            
             // Use weak event pattern to prevent memory leaks
             WeakEventManager<ISaveManager, NoteSavedEventArgs>
                 .AddHandler(_saveManager, nameof(ISaveManager.NoteSaved), OnNoteSaved);
@@ -118,8 +134,12 @@ namespace NoteNest.UI.ViewModels
                 
             // PROPER ARCHITECTURE: Initialize save timers for this tab
             InitializeSaveTimers();
+            
+            // Notify UI that properties are available
+            OnPropertyChanged(nameof(Editor));
+            OnPropertyChanged(nameof(EditorElement));
                 
-            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} constructor completed for noteId={_noteId}");
+            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} constructor completed for noteId={_noteId} with editor");
         }
 
         private void OnNoteSaved(object? sender, NoteSavedEventArgs e)
@@ -144,6 +164,57 @@ namespace NoteNest.UI.ViewModels
             if (e.NoteId == _noteId)
             {
                 IsSaving = false;
+            }
+        }
+        
+        // ENHANCED: Editor content changed handler (bulletproof save chain)
+        private void OnEditorContentChanged(object sender, EventArgs e)
+        {
+            if (_editor == null || _disposed) return;
+            
+            try
+            {
+                // Extract and save content
+                var content = _editor.SaveContent();
+                _content = content; // Update backing field
+                Note.Content = content; // Update model
+                _saveManager.UpdateContent(_noteId, content);
+                
+                // Trigger save timers
+                _localIsDirty = true;
+                NotifyContentChanged();
+                
+                // Notify UI
+                OnPropertyChanged(nameof(IsDirty));
+                OnPropertyChanged(nameof(Title));
+                
+                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Editor content changed for {Note.Title}: {content?.Length ?? 0} chars");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Editor content change failed: {ex.Message}");
+            }
+        }
+        
+        // ENHANCED: Lazy content loading (called when tab becomes visible)
+        public void EnsureContentLoaded()
+        {
+            if (!_contentLoaded && _saveManager != null)
+            {
+                try
+                {
+                    var content = _saveManager.GetContent(_noteId) ?? "";
+                    _editor.LoadContent(content);
+                    _editor.MarkClean();
+                    _contentLoaded = true;
+                    _localIsDirty = false;
+                    
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content loaded for {Note.Title}: {content.Length} chars");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content load failed for {Note.Title}: {ex.Message}");
+                }
             }
         }
 
@@ -221,12 +292,12 @@ namespace NoteNest.UI.ViewModels
             {
                 try
                 {
-                    // Quick markdown extraction for WAL (would need editor reference)
-                    // For now, use current content as approximation
-                    _saveManager.UpdateContent(_noteId, _content);
+                    // ENHANCED: Extract content from editor for WAL protection
+                    var currentContent = _editor?.SaveContent() ?? _content;
+                    _saveManager.UpdateContent(_noteId, currentContent);
                     _walSaved = true;
                     
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] WAL protection triggered for {Note.Title}");
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] WAL protection triggered for {Note.Title}: {currentContent?.Length ?? 0} chars");
                 }
                 catch (Exception ex)
                 {
@@ -312,6 +383,19 @@ namespace NoteNest.UI.ViewModels
 
         public void Dispose()
         {
+            if (_disposed) return;
+            _disposed = true;
+            
+            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Disposing tab for {Note.Title}");
+            
+            // ENHANCED: Clean disconnect from editor
+            if (_editor != null)
+            {
+                _editor.ContentChanged -= OnEditorContentChanged;
+                _editor.Dispose();
+                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Editor disposed for {Note.Title}");
+            }
+            
             // Clean up timers
             _walTimer?.Stop();
             _walTimer = null;
@@ -327,6 +411,8 @@ namespace NoteNest.UI.ViewModels
                 
             WeakEventManager<ISaveManager, SaveProgressEventArgs>
                 .RemoveHandler(_saveManager, nameof(ISaveManager.SaveCompleted), OnSaveCompleted);
+                
+            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Disposal completed for {Note.Title}");
         }
     }
 }

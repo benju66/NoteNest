@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Documents;
+using System.Windows.Threading;
 using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Controls;
@@ -202,65 +203,58 @@ namespace NoteNest.UI.Controls
             UpdateVisualState();
         }
         
-        private async void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        // ENHANCED TAB-OWNED EDITOR PATTERN: Simplified, bulletproof tab switching
+        private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (Pane != null && PaneTabControl.SelectedItem is ITabItem newTab)
             {
-                // PROPER ARCHITECTURE: Tab switching without complex timer coordination
+                System.Diagnostics.Debug.WriteLine($"[TabSwitch] Switching to tab: {newTab.Title}");
                 
-                // Find the previously selected tab from the old selection
-                ITabItem? oldTab = null;
-                if (e.RemovedItems?.Count > 0 && e.RemovedItems[0] is ITabItem removedTab)
+                // Declare newTabItem at method scope to avoid variable scoping issues
+                var newTabItem = newTab as NoteTabItem;
+                
+                // ENHANCED: Save previous tab if dirty (optional immediate save)
+                if (e.RemovedItems?.Count > 0 && e.RemovedItems[0] is NoteTabItem oldTab)
                 {
-                    oldTab = removedTab;
+                    if (oldTab.IsDirty)
+                    {
+                        var saveManager = GetSaveManager();
+                        if (saveManager != null)
+                        {
+                            // Fire-and-forget save on tab switch
+                            _ = Task.Run(async () => 
+                            {
+                                try
+                                {
+                                    await saveManager.SaveNoteAsync(oldTab.NoteId);
+                                    System.Diagnostics.Debug.WriteLine($"[TabSwitch] Saved {oldTab.Title}");
+                                }
+                                catch (Exception ex)
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[TabSwitch] Save failed for {oldTab.Title}: {ex.Message}");
+                                }
+                            });
+                        }
+                    }
                 }
                 
-                // RTF-FOCUSED: Force save old RTF tab before switch (if dirty)
-                if (oldTab != null && oldTab.IsDirty)
+                // ENHANCED: Load content for newly selected tab (lazy loading)
+                if (newTabItem != null)
                 {
                     try
                     {
-                        System.Diagnostics.Debug.WriteLine($"[RTF] Tab switch save: {oldTab.Title} → {newTab.Title}");
+                        // Lazy load content using Tab-Owned Editor Pattern
+                        newTabItem.EnsureContentLoaded();
                         
-                        // Get fresh content from RTF editor and save immediately
-                        var oldRTFEditor = GetRTFEditorForTab(oldTab);
-                        if (oldRTFEditor != null && oldTab is NoteTabItem oldTabItem)
-                        {
-                            var content = oldRTFEditor.SaveContent(); // Direct RTF method call
-                            oldTabItem.UpdateContentFromEditor(content);
-                            oldRTFEditor.MarkClean();
-                            
-                            // BULLETPROOF: Use WriteAheadLog + SupervisedTaskRunner for RTF saves
-                            var saveManager = GetSaveManager();
-                            var taskRunner = GetSupervisedTaskRunner();
-                            
-                            if (saveManager != null)
-                            {
-                                if (taskRunner != null)
-                                {
-                                    _ = taskRunner.RunAsync(
-                                        async () => await saveManager.SaveNoteAsync(oldTab.NoteId),
-                                        $"RTF tab switch save for {oldTab.Title}",
-                                        NoteNest.Core.Services.OperationType.TabSwitchSave
-                                    );
-                                }
-                                else
-                                {
-                                    // Fallback - still bulletproof through SaveManager → WriteAheadLog
-                                    _ = Task.Run(async () => await saveManager.SaveNoteAsync(oldTab.NoteId));
-                                }
-                            }
-                            
-                            System.Diagnostics.Debug.WriteLine($"[RTF] RTF tab switch save completed for {oldTab.Title}");
-                        }
+                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Content loaded for {newTab.Title}");
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[RTF] RTF tab switch save failed: {ex.Message}");
-                        _logger?.Error(ex, $"RTF tab switch save failed: {oldTab.Title}");
+                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Content loading failed for {newTab.Title}: {ex.Message}");
+                        _logger?.Error(ex, $"Content loading failed for tab: {newTab.Title}");
                     }
                 }
-
+                
                 // Update pane and workspace state
                 Pane.SelectedTab = newTab;
                 var workspaceService = _workspaceService;
@@ -268,55 +262,38 @@ namespace NoteNest.UI.Controls
                 {
                     workspaceService.SelectedTab = newTab;
                 }
+                
+                // Notify listeners and apply settings
                 try { SelectedTabChanged?.Invoke(this, newTab); } catch { }
                 TryApplyEditorSettingsToActiveEditor();
-                TryFocusActiveEditor();
                 
-                // RTF-FOCUSED: Load content into new RTF editor (CRITICAL FIX)
-                try
+                // ENHANCED: Focus management with proper timing
+                Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    var newRTFEditor = GetRTFEditorForTab(newTab);
-                    if (newRTFEditor != null && newTab is NoteTabItem newTabItem)
+                    try
                     {
-                        System.Diagnostics.Debug.WriteLine($"[RTF] Loading content for tab: {newTab.Title}");
-                        
-                        // Get fresh content from SaveManager (source of truth)
-                        var saveManager = GetSaveManager();
-                        string contentToLoad = "";
-                        
-                        System.Diagnostics.Debug.WriteLine($"[RTF] Content loading for tab: {newTab.Title}, NoteId: {newTab.NoteId}");
-                        
-                        if (saveManager != null)
+                        if (newTabItem?.Editor != null)
                         {
-                            contentToLoad = saveManager.GetContent(newTab.NoteId) ?? "";
-                            System.Diagnostics.Debug.WriteLine($"[RTF] SaveManager content retrieved: {contentToLoad?.Length ?? 0} chars");
-                        }
-                        else
-                        {
-                            // Fallback to tab content
-                            contentToLoad = newTab.Content ?? "";
-                            System.Diagnostics.Debug.WriteLine($"[RTF] Using fallback tab content: {contentToLoad?.Length ?? 0} chars");
+                            newTabItem.Editor.Focus();
+                            // Position cursor at start for consistent behavior
+                            var startPosition = newTabItem.Editor.Document?.ContentStart;
+                            if (startPosition != null)
+                            {
+                                newTabItem.Editor.CaretPosition = startPosition;
+                            }
                         }
                         
-                        var previewLength = Math.Min(50, contentToLoad?.Length ?? 0);
-                        var preview = contentToLoad?.Substring(0, previewLength) ?? "";
-                        System.Diagnostics.Debug.WriteLine($"[RTF] About to load content: '{preview}...'");
-                        
-                        // Load content into RTF editor
-                        newRTFEditor.LoadContent(contentToLoad);
-                        newRTFEditor.MarkClean(); // Fresh load should be clean
-                        
-                        // CRITICAL: Wire up ContentChanged event for auto-save
-                        WireUpContentChangedEvent(newRTFEditor, newTabItem);
-                        
-                        System.Diagnostics.Debug.WriteLine($"[RTF] Content loaded and events wired for {newTab.Title}: {contentToLoad?.Length ?? 0} chars");
+                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Focus set for {newTab.Title}");
                     }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[RTF] Content loading failed: {ex.Message}");
-                    _logger?.Error(ex, $"RTF content loading failed: {newTab.Title}");
-                }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Focus failed for {newTab.Title}: {ex.Message}");
+                        // Silent fail - focus is non-critical
+                    }
+                }), DispatcherPriority.Loaded);
+                
+                // Update global references (for services that need current editor)
+                UpdateGlobalEditorReferences(newTabItem);
                 
                 // Sync note dirty flag with tab (for tree view indicator)
                 try
@@ -324,21 +301,44 @@ namespace NoteNest.UI.Controls
                     if (newTab.Note != null)
                     {
                         newTab.Note.IsDirty = newTab.IsDirty;
-                        try
-                        {
-                            var presenterNew = FindVisualChild<ContentPresenter>(PaneTabControl.ItemContainerGenerator.ContainerFromItem(newTab) as TabItem);
-                            var editorNew = FindVisualChild<RTFEditor>(presenterNew);
-                            var shownLen = editorNew?.IsDirty == true ? -1 : 0; // Track dirty state instead
-                            // State tracking removed - SaveManager handles content
-                            System.Diagnostics.Debug.WriteLine($"[UI] Switched TO tab id={newTab.Note.Id} shownLen={shownLen}");
-                        }
-                        catch (Exception ex)
-                        {
-                            try { _logger?.Warning($"Failed to inspect editor on tab switch: {ex.Message}"); } catch { }
-                        }
+                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Synced dirty state for {newTab.Title}: {newTab.IsDirty}");
                     }
                 }
-                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[UI][WARN] Sync dirty flag failed: {ex.Message}"); }
+                catch (Exception ex) 
+                { 
+                    System.Diagnostics.Debug.WriteLine($"[TabSwitch] Sync dirty flag failed: {ex.Message}"); 
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[TabSwitch] Tab switch completed: {newTab.Title}");
+            }
+        }
+        
+        // ENHANCED: Update global editor references for services
+        private void UpdateGlobalEditorReferences(NoteTabItem? tab)
+        {
+            if (tab == null) return;
+            
+            try
+            {
+                // Update any services that need current editor
+                if (_metadataManager != null && tab.Editor != null)
+                {
+                    // Set current editor for metadata operations
+                    // _metadataManager.SetCurrentEditor(tab.Editor); // Implement if needed
+                }
+                
+                // Update workspace service
+                if (_workspaceService != null)
+                {
+                    
+                    _workspaceService.SelectedTab = tab;
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[TabSwitch] Global references updated for {tab.Title}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[TabSwitch] Global reference update failed: {ex.Message}");
             }
         }
 
@@ -756,78 +756,21 @@ namespace NoteNest.UI.Controls
         }
 
         /// <summary>
-        /// Get RTF editor for a specific tab - RTF-only focused approach
+        /// Get RTF editor for a specific tab - Enhanced Tab-Owned Editor Pattern
         /// </summary>
-        private RTFEditor GetRTFEditorForTab(ITabItem tab)
+        private RTFEditor? GetRTFEditorForTab(ITabItem tab)
         {
-            if (tab == null) return null;
+            // ENHANCED: Direct access via Tab-Owned Editor Pattern
+            if (tab is NoteTabItem noteTabItem)
+            {
+                return noteTabItem.Editor;
+            }
             
-            var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(tab) as TabItem;
-            if (container == null) return null;
-            
-            var presenter = FindVisualChild<ContentPresenter>(container);
-            return FindVisualChild<RTFEditor>(presenter);
+            return null;
         }
         
-        /// <summary>
-        /// Wire up ContentChanged event for auto-save functionality
-        /// CRITICAL: This enables the auto-save event chain that was missing
-        /// </summary>
-        private void WireUpContentChangedEvent(RTFEditor rtfEditor, NoteTabItem tabItem)
-        {
-            if (rtfEditor == null || tabItem == null) return;
-            
-            try
-            {
-                // Remove any existing handlers to prevent duplicates
-                rtfEditor.ContentChanged -= OnRTFContentChanged;
-                
-                // Create event handler that bridges RTF editor to tab auto-save system
-                EventHandler contentChangedHandler = (s, e) => 
-                {
-                    try
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[RTF] *** ContentChanged event fired for {tabItem.Title} ***");
-                        
-                        // Notify tab that content has changed (triggers auto-save timers)
-                        tabItem.NotifyContentChanged();
-                        System.Diagnostics.Debug.WriteLine($"[RTF] NotifyContentChanged called for {tabItem.Title}");
-                        
-                        // Extract current content and update tab + SaveManager
-                        var currentContent = rtfEditor.SaveContent();
-                        System.Diagnostics.Debug.WriteLine($"[RTF] SaveContent returned: {currentContent?.Length ?? 0} chars");
-                        
-                        tabItem.UpdateContentFromEditor(currentContent);
-                        System.Diagnostics.Debug.WriteLine($"[RTF] UpdateContentFromEditor called for {tabItem.Title}");
-                        
-                        System.Diagnostics.Debug.WriteLine($"[RTF] Auto-save chain completed for {tabItem.Title}: {currentContent?.Length ?? 0} chars");
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[RTF] ContentChanged handler failed: {ex.Message}");
-                        _logger?.Warning($"RTF ContentChanged handler failed: {ex.Message}");
-                    }
-                };
-                
-                // Store reference for cleanup and wire up the event
-                rtfEditor.ContentChanged += contentChangedHandler;
-                
-                System.Diagnostics.Debug.WriteLine($"[RTF] ContentChanged event wired for {tabItem.Title}");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[RTF] Failed to wire ContentChanged event: {ex.Message}");
-                _logger?.Error(ex, $"Failed to wire ContentChanged event for {tabItem.Title}");
-            }
-        }
-        
-        /// <summary>
-        /// Generic ContentChanged handler for cleanup purposes
-        /// </summary>
-        private void OnRTFContentChanged(object sender, EventArgs e)
-        {
-            // This is just for removal - actual handler is created inline
-        }
+        // REMOVED: WireUpContentChangedEvent and OnRTFContentChanged methods
+        // Events are now wired automatically in NoteTabItem constructor (Tab-Owned Editor Pattern)
 
 
         public void SelectTab(ITabItem tab)
