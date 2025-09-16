@@ -4,7 +4,7 @@ using System.Threading;
 using System.Windows.Controls;
 using NoteNest.Core.Models;
 
-namespace NoteNest.UI.Controls.Editor.Core
+namespace NoteNest.UI.Controls.Editor.RTF.Core
 {
     /// <summary>
     /// Centralized memory management for all editor types

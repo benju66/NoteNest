@@ -33,7 +33,6 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IServiceErrorHandler, NoteNest.Core.Services.Implementation.ServiceErrorHandler>();
             services.AddSingleton<IFileSystemProvider, DefaultFileSystemProvider>();
             services.AddSingleton<IEventBus, EventBus>();
-            services.AddSingleton<IMarkdownService, MarkdownService>();
             
             // Save Management Services
             services.AddSingleton<IWriteAheadLog, WriteAheadLog>();
@@ -124,7 +123,6 @@ namespace NoteNest.UI.Services
                     serviceProvider.GetRequiredService<ConfigurationService>(),
                     serviceProvider.GetRequiredService<IAppLogger>(),
                     serviceProvider.GetService<IEventBus>(),
-                    serviceProvider.GetRequiredService<IMarkdownService>(),
                     serviceProvider.GetService<NoteNest.Core.Services.Safety.SafeFileService>(),
                     serviceProvider.GetService<NoteNest.Core.Services.Notes.INoteStorageService>(),
                     serviceProvider.GetService<IUserNotificationService>(),

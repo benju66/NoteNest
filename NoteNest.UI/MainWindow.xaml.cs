@@ -688,54 +688,14 @@ namespace NoteNest.UI
             Close();
         }
 
-        private async void ConvertNotesFormatMenuItem_Click(object sender, RoutedEventArgs e)
+        private void ConvertNotesFormatMenuItem_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
-                var fileSystem = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.IFileSystemProvider)) as NoteNest.Core.Interfaces.IFileSystemProvider;
-                var markdown = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IMarkdownService)) as IMarkdownService;
-                var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
-                if (config == null || fileSystem == null || markdown == null || logger == null)
-                    return;
-
-                // Enhanced dialog window
-                var dialog = new FormatMigrationWindow(config, fileSystem, markdown, logger);
-                dialog.Owner = this;
-                var dlgOk = dialog.ShowDialog();
-                if (dlgOk != true) return;
-
-                var options = dialog.Options; // filled by window
-                var migration = new FormatMigrationService(fileSystem, markdown, logger);
-                var progress = new System.Progress<NoteNest.Core.Services.MigrationProgress>(p =>
-                {
-                    try { System.Diagnostics.Debug.WriteLine($"[FormatMigration] {p.PercentComplete}% {p.CurrentFile}"); } catch { }
-                });
-                var migResult = await migration.MigrateAsync(options, progress);
-                var ok = migResult.Success;
-
-                var doneDialog = new ContentDialog
-                {
-                    Title = ok ? "Conversion Complete" : "Conversion Finished with Errors",
-                    Content = ok 
-                        ? $"Converted {migResult.ConvertedFiles} of {migResult.TotalFiles} files. Skipped {migResult.SkippedFiles}."
-                        : $"Converted {migResult.ConvertedFiles} of {migResult.TotalFiles}. Failed {migResult.FailedFiles}. Check logs for details.",
-                    PrimaryButtonText = "OK",
-                    Owner = this
-                };
-                await doneDialog.ShowAsync();
-            }
-            catch (Exception ex)
-            {
-                var err = new ContentDialog
-                {
-                    Title = "Error",
-                    Content = ex.Message,
-                    PrimaryButtonText = "OK",
-                    Owner = this
-                };
-                await err.ShowAsync();
-            }
+            // RTF-only architecture: Format migration no longer needed
+            System.Windows.MessageBox.Show(
+                "Format migration is no longer needed in the RTF-only architecture.\n\nAll notes are now saved as RTF format automatically.",
+                "RTF-Only Architecture",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Information);
         }
 
         private void FindMenuItem_Click(object sender, RoutedEventArgs e)

@@ -295,32 +295,11 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        public bool UseMarkdownFormat
+        // RTF-only architecture: Format selection no longer needed
+        public bool UseRTFFormat
         {
-            get => Settings.DefaultNoteFormat == NoteFormat.Markdown;
-            set
-            {
-                if (value)
-                {
-                    Settings.DefaultNoteFormat = NoteFormat.Markdown;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(UsePlainTextFormat));
-                }
-            }
-        }
-
-        public bool UsePlainTextFormat
-        {
-            get => Settings.DefaultNoteFormat == NoteFormat.PlainText;
-            set
-            {
-                if (value)
-                {
-                    Settings.DefaultNoteFormat = NoteFormat.PlainText;
-                    OnPropertyChanged();
-                    OnPropertyChanged(nameof(UseMarkdownFormat));
-                }
-            }
+            get => true;  // Always RTF in clean architecture
+            set { /* RTF-only - no other formats */ }
         }
 
         public async Task CommitSettings()

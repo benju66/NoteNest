@@ -22,7 +22,7 @@ namespace NoteNest.Core.Services
 				var currentExt = Path.GetExtension(oldPath);
 				if (string.IsNullOrEmpty(currentExt))
 				{
-					currentExt = note.Format == NoteFormat.Markdown ? ".md" : ".txt";
+					currentExt = ".rtf";  // RTF-only
 				}
 				var newFileName = PathService.SanitizeName(newName) + currentExt;
 				var newPath = Path.Combine(directory ?? string.Empty, newFileName);

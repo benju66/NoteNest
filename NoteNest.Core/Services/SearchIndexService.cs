@@ -20,7 +20,6 @@ namespace NoteNest.Core.Services
         private readonly IFileSystemProvider _fileSystem;
         private readonly IAppLogger _logger;
         private readonly int _contentWordLimit;
-        private readonly IMarkdownService _markdownService;
         private DateTime _lastIndexTime;
         
         private readonly ISupervisedTaskRunner? _taskRunner;
@@ -29,11 +28,10 @@ namespace NoteNest.Core.Services
         /// Constructor that optionally accepts SupervisedTaskRunner
         /// </summary>
         public SearchIndexService(int contentWordLimit = 500, 
-                                  IMarkdownService? markdownService = null,
                                   IFileSystemProvider? fileSystem = null,
                                   IAppLogger? logger = null,
                                   ISupervisedTaskRunner? taskRunner = null)
-            : this(contentWordLimit, markdownService, fileSystem, logger)
+            : this(contentWordLimit, fileSystem, logger)
         {
             _taskRunner = taskRunner;
         }
@@ -74,13 +72,11 @@ namespace NoteNest.Core.Services
 
         public SearchIndexService(
             int contentWordLimit = 500, 
-            IMarkdownService? markdownService = null,
             IFileSystemProvider? fileSystem = null,
             IAppLogger? logger = null)
         {
             _searchIndex = new Dictionary<string, HashSet<SearchResult>>(StringComparer.OrdinalIgnoreCase);
             _contentWordLimit = contentWordLimit > 100 ? contentWordLimit : 500;
-            _markdownService = markdownService ?? new MarkdownService(logger ?? AppLogger.Instance);
             _fileSystem = fileSystem ?? new DefaultFileSystemProvider();
             _logger = logger ?? AppLogger.Instance;
         }
@@ -401,38 +397,11 @@ namespace NoteNest.Core.Services
             }
 
             // Process content based on format FIRST - RTF PRIORITY implementation
-            var contentToIndex = content;
+            // RTF-ONLY: Extract plain text for indexing
+            var contentToIndex = RTFTextExtractor.ExtractPlainText(content);
             float relevanceBoost = 1.0f;
             
-            if (note.Format == NoteFormat.RTF && _markdownService != null)
-            {
-                // RTF PRIORITY: Process RTF files first with enhanced extraction
-                try
-                {
-                    contentToIndex = _markdownService.StripRTFForIndex(contentToIndex);
-                    _logger?.Debug($"[SearchIndex] RTF content processed for {note.Title}: {content.Length} → {contentToIndex.Length} chars");
-                    
-                    // RTF PRIORITY: Give RTF content higher search relevance
-                    relevanceBoost = 1.2f; // 20% boost for RTF content
-                }
-                catch (Exception ex)
-                {
-                    _logger?.Warning($"[SearchIndex] RTF stripping failed for {note.Title}: {ex.Message}");
-                    // Keep original content as fallback
-                    contentToIndex = content;
-                }
-            }
-            else if (note.Format == NoteFormat.Markdown && _markdownService != null)
-            {
-                try
-                {
-                    contentToIndex = _markdownService.StripMarkdownForIndex(contentToIndex);
-                }
-                catch (Exception ex)
-                {
-                    _logger?.Debug($"[SearchIndex] Markdown stripping failed for {note.Title}: {ex.Message}");
-                }
-            }
+            _logger?.Debug($"[SearchIndex] RTF content processed for {note.Title}: {content.Length} → {contentToIndex.Length} chars");
 
             // FIXED: Generate preview from PROCESSED content (clean text, not raw RTF codes)
             var preview = GetPreview(contentToIndex);

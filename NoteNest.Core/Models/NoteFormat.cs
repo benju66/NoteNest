@@ -1,13 +1,13 @@
-using System;
-
 namespace NoteNest.Core.Models
 {
-	public enum NoteFormat
-	{
-		PlainText = 0,
-		Markdown = 1,
-		RTF = 2
-	}
+    /// <summary>
+    /// Note format enumeration - RTF only in clean architecture
+    /// Simplified from multi-format complexity
+    /// </summary>
+    public enum NoteFormat
+    {
+        RTF = 0  // Only format we support - clean and simple
+    }
 }
 
 

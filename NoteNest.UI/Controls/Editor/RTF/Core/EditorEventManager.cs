@@ -6,7 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using NoteNest.Core.Models;
 
-namespace NoteNest.UI.Controls.Editor.Core
+namespace NoteNest.UI.Controls.Editor.RTF.Core
 {
     /// <summary>
     /// Centralized event handler management for consistent cleanup

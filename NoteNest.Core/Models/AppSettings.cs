@@ -29,7 +29,7 @@ namespace NoteNest.Core.Models
         public string CustomNotesPath { get; set; }
         public bool AutoDetectOneDrive { get; set; } = true;
         // Format settings
-        public NoteFormat DefaultNoteFormat { get; set; } = NoteFormat.Markdown;
+        public NoteFormat DefaultNoteFormat { get; set; } = NoteFormat.RTF;
         public bool AutoDetectFormat { get; set; } = true;
         public bool ConvertTxtToMdOnSave { get; set; } = false;
 

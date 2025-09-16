@@ -10,7 +10,7 @@ using System.Windows.Documents;
 using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.UI.Controls;
-using NoteNest.UI.Controls.Editor.Core;
+using NoteNest.UI.Controls.Editor.RTF;
 using NoteNest.Core.Events;
 using NoteNest.Core.Services;
 using System.Windows.Input;
@@ -281,7 +281,7 @@ namespace NoteNest.UI.Controls
                         try
                         {
                             var presenterNew = FindVisualChild<ContentPresenter>(PaneTabControl.ItemContainerGenerator.ContainerFromItem(newTab) as TabItem);
-                            var editorNew = FindVisualChild<FormattedTextEditor>(presenterNew);
+                            var editorNew = FindVisualChild<RTFEditor>(presenterNew);
                             var shownLen = editorNew?.IsDirty == true ? -1 : 0; // Track dirty state instead
                             // State tracking removed - SaveManager handles content
                             System.Diagnostics.Debug.WriteLine($"[UI] Switched TO tab id={newTab.Note.Id} shownLen={shownLen}");
@@ -308,17 +308,10 @@ namespace NoteNest.UI.Controls
                     // Apply editor settings using interface for all editor types
                     if (config?.Settings != null)
                     {
-                        // RTF editor has ApplySettings method, FormattedTextEditor uses manual application
-                        if (editor is RTFTextEditor rtfEditor)
+                        // Apply settings to our clean RTF editor
+                        if (editor is RTFEditor rtfEditor)
                         {
                             try { rtfEditor.ApplySettings(config.Settings.EditorSettings); } catch { }
-                        }
-                        else
-                        {
-                            // Manual settings for FormattedTextEditor (legacy approach)
-                            try { SpellCheck.SetIsEnabled(editor as TextBoxBase, config.Settings.EditorSettings.EnableSpellCheck); } catch { }
-                            try { editor.Document.FontFamily = new System.Windows.Media.FontFamily(config.Settings.EditorSettings.FontFamily); } catch { }
-                            try { editor.Document.FontSize = config.Settings.EditorSettings.FontSize > 0 ? config.Settings.EditorSettings.FontSize : editor.Document.FontSize; } catch { }
                         }
                     }
                     
@@ -327,14 +320,10 @@ namespace NoteNest.UI.Controls
                     {
                         try
                         {
-                            if (editor is FormattedTextEditor formattedEditor)
+                            if (editor is RTFEditor rtfEditor)
                             {
-                                formattedEditor.SetMetadataManager(_metadataManager);
-                                formattedEditor.CurrentNote = Pane.SelectedTab.Note;
-                            }
-                            else if (editor is RTFTextEditor rtfEditor)
-                            {
-                                rtfEditor.SetMetadataManager(_metadataManager);
+                                // Clean RTF architecture - metadata handled by note model directly
+                                // rtfEditor.CurrentNote = Pane.SelectedTab.Note; // Will add if needed
                                 rtfEditor.CurrentNote = Pane.SelectedTab.Note;
                             }
                         }
@@ -366,7 +355,7 @@ namespace NoteNest.UI.Controls
             {
                 var container = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
                 var presenter = FindVisualChild<ContentPresenter>(container);
-                var editor = FindVisualChild<FormattedTextEditor>(presenter);
+                var editor = FindVisualChild<RTFEditor>(presenter);
                 // Try immediate focus
                 if (editor != null)
                 {
@@ -379,7 +368,7 @@ namespace NoteNest.UI.Controls
                     {
                         var container2 = PaneTabControl.ItemContainerGenerator.ContainerFromItem(Pane?.SelectedTab) as TabItem;
                         var presenter2 = FindVisualChild<ContentPresenter>(container2);
-                        var editor2 = FindVisualChild<FormattedTextEditor>(presenter2);
+                        var editor2 = FindVisualChild<RTFEditor>(presenter2);
                         if (editor2 != null) Keyboard.Focus(editor2);
                     }
                     catch { }
@@ -675,7 +664,7 @@ namespace NoteNest.UI.Controls
         /// <summary>
         /// Get the currently active editor for this pane (interface-based)
         /// </summary>
-        private NoteNest.UI.Controls.Editor.Core.INotesEditor GetActiveEditor()
+        private RTFEditor GetActiveEditor()
         {
             var tab = Pane?.SelectedTab;
             if (tab == null) return null;
@@ -684,8 +673,7 @@ namespace NoteNest.UI.Controls
             if (container == null) return null;
             
             var presenter = FindVisualChild<ContentPresenter>(container);
-            var editorContainer = FindVisualChild<NoteEditorContainer>(presenter);
-            return editorContainer?.UnderlyingEditor;
+            return FindVisualChild<RTFEditor>(presenter);
         }
 
 
@@ -710,7 +698,7 @@ namespace NoteNest.UI.Controls
         /// <summary>
         /// Get editor for a specific tab (interface-based for all editor types)
         /// </summary>
-        private NoteNest.UI.Controls.Editor.Core.INotesEditor GetEditorForTab(ITabItem tab)
+        private RTFEditor GetEditorForTab(ITabItem tab)
         {
             if (tab == null) return null;
             
@@ -718,14 +706,13 @@ namespace NoteNest.UI.Controls
             if (container == null) return null;
             
             var presenter = FindVisualChild<ContentPresenter>(container);
-            var editorContainer = FindVisualChild<NoteEditorContainer>(presenter);
-            return editorContainer?.UnderlyingEditor;
+            return FindVisualChild<RTFEditor>(presenter);
         }
 
         /// <summary>
         /// Get RTF editor for a specific tab - RTF-only focused approach
         /// </summary>
-        private RTFTextEditor GetRTFEditorForTab(ITabItem tab)
+        private RTFEditor GetRTFEditorForTab(ITabItem tab)
         {
             if (tab == null) return null;
             
@@ -733,8 +720,7 @@ namespace NoteNest.UI.Controls
             if (container == null) return null;
             
             var presenter = FindVisualChild<ContentPresenter>(container);
-            var editorContainer = FindVisualChild<NoteEditorContainer>(presenter);
-            return editorContainer?.UnderlyingEditor as RTFTextEditor;
+            return FindVisualChild<RTFEditor>(presenter);
         }
 
 

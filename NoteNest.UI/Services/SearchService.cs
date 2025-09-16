@@ -70,7 +70,6 @@ namespace NoteNest.UI.Services
             
             _searchIndex = new SearchIndexService(
                 contentWordLimit,
-                new MarkdownService(_logger),
                 new DefaultFileSystemProvider(),
                 _logger);
             

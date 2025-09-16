@@ -24,15 +24,15 @@ namespace NoteNest.Core.Services
 
                 var notes = new List<NoteModel>();
                 
-                // Use dynamic file discovery - future-proof for any supported format
-                var files = await _formatService.GetAllNoteFilesAsync(_fileSystem, category.Path);
+                // RTF-only: Get all .rtf files in the category
+                var files = await _fileSystem.GetFilesAsync(category.Path, "*.rtf");
 
                 foreach (var file in files)
                 {
                     try
                     {
                         var note = await LoadNoteAsync(file);
-                        note.Format = _formatService.DetectFormatFromPath(file);
+                        note.Format = NoteFormat.RTF;  // RTF-only
                         note.CategoryId = category.Id;
                         notes.Add(note);
                     }

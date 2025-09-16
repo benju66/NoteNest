@@ -16,10 +16,9 @@ namespace NoteNest.Core.Services
 
             try
             {
-                // Get user's preferred format from settings
-                NoteFormat format = _configService.Settings?.DefaultNoteFormat ?? NoteFormat.Markdown;
-
-                var extension = _formatService.GetExtensionForFormat(format);
+                // RTF-only architecture - all notes are RTF
+                NoteFormat format = NoteFormat.RTF;
+                var extension = ".rtf";
                 var fileName = SanitizeFileName(title) + extension;
                 var filePath = Path.Combine(category.Path, fileName);
                 var normalized = PathService.NormalizeAbsolutePath(filePath) ?? filePath;
@@ -35,13 +34,10 @@ namespace NoteNest.Core.Services
                     filePath = Path.Combine(category.Path, fileName);
                 }
 
-                // Create initial content based on format
-                string initialContent = format switch
-                {
-                    NoteFormat.RTF => @"{\rtf1\ansi\deff0 {\fonttbl {\f0 Calibri;}}{\colortbl ;}{\*\generator NoteNest;}\f0\fs24\par}",
-                    NoteFormat.PlainText => content ?? "",
-                    _ => content ?? "" // Markdown starts with provided content or empty
-                };
+                // RTF-only: Create initial RTF content
+                string initialContent = string.IsNullOrEmpty(content) 
+                    ? @"{\rtf1\ansi\deff0 {\fonttbl {\f0 Calibri;}}{\colortbl ;}{\*\generator NoteNest;}\f0\fs24\par}"
+                    : content;
 
                 var note = new NoteModel
                 {

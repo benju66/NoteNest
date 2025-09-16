@@ -21,9 +21,7 @@ namespace NoteNest.Core.Services
         private readonly IFileSystemProvider _fileSystem;
         private readonly ConfigurationService _configService;
         private readonly IAppLogger _logger;
-        private readonly FileFormatService _formatService;
         internal readonly IEventBus? _eventBus;
-        private readonly IMarkdownService _markdownService;
         private readonly JsonSerializerOptions _jsonOptions;
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
         private readonly SafeFileService? _safeFileService;
@@ -36,7 +34,6 @@ namespace NoteNest.Core.Services
             ConfigurationService configService,
             IAppLogger? logger = null,
             IEventBus? eventBus = null,
-            IMarkdownService? markdownService = null,
             SafeFileService? safeFileService = null,
             INoteStorageService? noteStorage = null,
             IUserNotificationService? notifications = null,
@@ -46,8 +43,6 @@ namespace NoteNest.Core.Services
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
             _logger = logger ?? AppLogger.Instance;
             _eventBus = eventBus;
-            _formatService = new FileFormatService(_logger);
-            _markdownService = markdownService ?? new MarkdownService(_logger);
             _safeFileService = safeFileService;
             _noteStorage = noteStorage;
             _notifications = notifications;
@@ -95,16 +90,8 @@ namespace NoteNest.Core.Services
                 // Ensure stable Note Id via metadata sidecar
                 try { if (_metadataManager != null) { await _metadataManager.GetOrCreateNoteIdAsync(note); } }
                 catch { }
-                // Detect and set format
-                try
-                {
-                    note.Format = _formatService.DetectFormatFromPath(filePath);
-                    if ((_configService.Settings?.AutoDetectFormat ?? true) && note.Format == NoteFormat.PlainText && !string.IsNullOrEmpty(content))
-                    {
-                        note.Format = _markdownService.DetectFormatFromContent(content);
-                    }
-                }
-                catch { }
+                // RTF-only: All notes are RTF format
+                note.Format = NoteFormat.RTF;
                 
                 _logger.Debug($"Loaded note: {note.Title}");
                 return note;
@@ -127,23 +114,8 @@ namespace NoteNest.Core.Services
                 var contentLength = note.Content?.Length ?? 0;
                 _logger.Debug($"Saving note '{note.Title}' ({contentLength} characters) to: {note.FilePath}");
 
-                // Optional conversion and sanitization
+                // RTF-only: No format conversion needed
                 var originalPath = note.FilePath;
-                if ((_configService.Settings?.ConvertTxtToMdOnSave ?? false) && note.Format == NoteFormat.PlainText)
-                {
-                    note.Content = _markdownService.ConvertToMarkdown(note.Content ?? string.Empty);
-                    note.Format = NoteFormat.Markdown;
-                    var newPath = _markdownService.UpdateFileExtension(note.FilePath, NoteFormat.Markdown);
-                    if (!string.Equals(newPath, note.FilePath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        note.FilePath = newPath;
-                    }
-                }
-
-                if (note.Format == NoteFormat.Markdown && !string.IsNullOrEmpty(note.Content))
-                {
-                    note.Content = _markdownService.SanitizeMarkdown(note.Content);
-                }
 
                 if (_noteStorage != null)
                 {
