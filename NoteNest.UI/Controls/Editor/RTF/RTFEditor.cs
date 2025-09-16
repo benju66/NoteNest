@@ -123,6 +123,11 @@ namespace NoteNest.UI.Controls.Editor.RTF
             if (!_disposed)
             {
                 _isDirty = true;
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Text changed, setting dirty flag");
+                
+                // The ContentChanged event is handled by the base class RTFEditorCore
+                // We don't need to fire it manually here - it's already fired by:
+                // RTFEditorCore: TextChanged += (s, e) => ContentChanged?.Invoke(this, EventArgs.Empty);
             }
         }
         

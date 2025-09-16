@@ -144,7 +144,7 @@ namespace NoteNest.UI.Controls
                 {
                     Pane.SelectedTab = newTab;
                     PaneTabControl.SelectedItem = newTab;
-                    // Content loading handled by XAML binding - no manual loading needed
+                    // Content loading handled by TabControl_SelectionChanged event
                     return;
                 }
             }
@@ -271,6 +271,52 @@ namespace NoteNest.UI.Controls
                 try { SelectedTabChanged?.Invoke(this, newTab); } catch { }
                 TryApplyEditorSettingsToActiveEditor();
                 TryFocusActiveEditor();
+                
+                // RTF-FOCUSED: Load content into new RTF editor (CRITICAL FIX)
+                try
+                {
+                    var newRTFEditor = GetRTFEditorForTab(newTab);
+                    if (newRTFEditor != null && newTab is NoteTabItem newTabItem)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Loading content for tab: {newTab.Title}");
+                        
+                        // Get fresh content from SaveManager (source of truth)
+                        var saveManager = GetSaveManager();
+                        string contentToLoad = "";
+                        
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Content loading for tab: {newTab.Title}, NoteId: {newTab.NoteId}");
+                        
+                        if (saveManager != null)
+                        {
+                            contentToLoad = saveManager.GetContent(newTab.NoteId) ?? "";
+                            System.Diagnostics.Debug.WriteLine($"[RTF] SaveManager content retrieved: {contentToLoad?.Length ?? 0} chars");
+                        }
+                        else
+                        {
+                            // Fallback to tab content
+                            contentToLoad = newTab.Content ?? "";
+                            System.Diagnostics.Debug.WriteLine($"[RTF] Using fallback tab content: {contentToLoad?.Length ?? 0} chars");
+                        }
+                        
+                        var previewLength = Math.Min(50, contentToLoad?.Length ?? 0);
+                        var preview = contentToLoad?.Substring(0, previewLength) ?? "";
+                        System.Diagnostics.Debug.WriteLine($"[RTF] About to load content: '{preview}...'");
+                        
+                        // Load content into RTF editor
+                        newRTFEditor.LoadContent(contentToLoad);
+                        newRTFEditor.MarkClean(); // Fresh load should be clean
+                        
+                        // CRITICAL: Wire up ContentChanged event for auto-save
+                        WireUpContentChangedEvent(newRTFEditor, newTabItem);
+                        
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Content loaded and events wired for {newTab.Title}: {contentToLoad?.Length ?? 0} chars");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[RTF] Content loading failed: {ex.Message}");
+                    _logger?.Error(ex, $"RTF content loading failed: {newTab.Title}");
+                }
                 
                 // Sync note dirty flag with tab (for tree view indicator)
                 try
@@ -722,6 +768,66 @@ namespace NoteNest.UI.Controls
             var presenter = FindVisualChild<ContentPresenter>(container);
             return FindVisualChild<RTFEditor>(presenter);
         }
+        
+        /// <summary>
+        /// Wire up ContentChanged event for auto-save functionality
+        /// CRITICAL: This enables the auto-save event chain that was missing
+        /// </summary>
+        private void WireUpContentChangedEvent(RTFEditor rtfEditor, NoteTabItem tabItem)
+        {
+            if (rtfEditor == null || tabItem == null) return;
+            
+            try
+            {
+                // Remove any existing handlers to prevent duplicates
+                rtfEditor.ContentChanged -= OnRTFContentChanged;
+                
+                // Create event handler that bridges RTF editor to tab auto-save system
+                EventHandler contentChangedHandler = (s, e) => 
+                {
+                    try
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[RTF] *** ContentChanged event fired for {tabItem.Title} ***");
+                        
+                        // Notify tab that content has changed (triggers auto-save timers)
+                        tabItem.NotifyContentChanged();
+                        System.Diagnostics.Debug.WriteLine($"[RTF] NotifyContentChanged called for {tabItem.Title}");
+                        
+                        // Extract current content and update tab + SaveManager
+                        var currentContent = rtfEditor.SaveContent();
+                        System.Diagnostics.Debug.WriteLine($"[RTF] SaveContent returned: {currentContent?.Length ?? 0} chars");
+                        
+                        tabItem.UpdateContentFromEditor(currentContent);
+                        System.Diagnostics.Debug.WriteLine($"[RTF] UpdateContentFromEditor called for {tabItem.Title}");
+                        
+                        System.Diagnostics.Debug.WriteLine($"[RTF] Auto-save chain completed for {tabItem.Title}: {currentContent?.Length ?? 0} chars");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[RTF] ContentChanged handler failed: {ex.Message}");
+                        _logger?.Warning($"RTF ContentChanged handler failed: {ex.Message}");
+                    }
+                };
+                
+                // Store reference for cleanup and wire up the event
+                rtfEditor.ContentChanged += contentChangedHandler;
+                
+                System.Diagnostics.Debug.WriteLine($"[RTF] ContentChanged event wired for {tabItem.Title}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Failed to wire ContentChanged event: {ex.Message}");
+                _logger?.Error(ex, $"Failed to wire ContentChanged event for {tabItem.Title}");
+            }
+        }
+        
+        /// <summary>
+        /// Generic ContentChanged handler for cleanup purposes
+        /// </summary>
+        private void OnRTFContentChanged(object sender, EventArgs e)
+        {
+            // This is just for removal - actual handler is created inline
+        }
 
 
         public void SelectTab(ITabItem tab)
@@ -729,7 +835,7 @@ namespace NoteNest.UI.Controls
             if (tab == null) return;
             Pane.SelectedTab = tab;
             PaneTabControl.SelectedItem = tab;
-            // Content loading handled by XAML binding - no manual loading needed
+            // Content loading handled by TabControl_SelectionChanged event
         }
 
         private NoteNestPanel? FindNoteNestPanel(DependencyObject? obj)
