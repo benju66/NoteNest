@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.Core.Interfaces.Services;
+using NoteNest.Core.Diagnostics;
 using NoteNest.UI.Controls.Editor.RTF;
 
 namespace NoteNest.UI.ViewModels
@@ -27,6 +28,12 @@ namespace NoteNest.UI.ViewModels
         
         // PHASE 1A: Thread safety
         private readonly object _contentLock = new object();
+        
+        // HIGH-IMPACT MEMORY FIX: Content caching
+        private string _contentCache;
+        private bool _contentCacheValid = false;
+        private readonly object _contentCacheLock = new object();
+        private volatile bool _fullyDisposed = false;
         
         // PROPER ARCHITECTURE: Each tab manages its own save timing
         private DispatcherTimer _walTimer;
@@ -59,36 +66,67 @@ namespace NoteNest.UI.ViewModels
             }
         }
         
-        // PHASE 1A: Interface contract fix - backward compatible Content property
+        // HIGH-IMPACT PERFORMANCE FIX: Cached content property
         public string Content
         {
             get 
             {
-                // Extract current content from editor when requested
-                if (!_disposed && _editor != null)
+                lock (_contentCacheLock)
                 {
-                    try
+                    // Fast path: Return cached content
+                    if (_contentCacheValid && _contentCache != null)
                     {
-                        var currentContent = _editor.SaveContent();
-                        if (!string.IsNullOrEmpty(currentContent))
+                        return _contentCache;
+                    }
+                    
+                    // Slow path: Extract from editor only when needed
+                    if (!_fullyDisposed && _editor != null)
+                    {
+                        try
                         {
-                            return currentContent;
+                            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                            _contentCache = _editor.SaveContent();
+                            stopwatch.Stop();
+                            
+                            _contentCacheValid = true;
+                            
+                            // Log expensive operations
+                            if (stopwatch.ElapsedMilliseconds > 50)
+                            {
+                                DebugLogger.LogPerformance($"Content extraction for {Note.Title}", stopwatch.Elapsed);
+                            }
+                            
+                            return _contentCache ?? "";
+                        }
+                        catch (Exception ex)
+                        {
+                            HandleTabError("Content Extraction", ex);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        HandleTabError("Content Extraction", ex);
-                    }
+                    
+                    return _content ?? "";
                 }
-                return _content ?? "";
             }
             set
             {
                 var newValue = value ?? "";
-                if (SetProperty(ref _content, newValue))
+                if (_content != newValue)
                 {
-                    UpdateContent(newValue);
+                    _content = newValue;
+                    InvalidateContentCache();
+                    OnPropertyChanged();
                 }
+            }
+        }
+        
+        /// <summary>
+        /// Invalidate content cache when editor changes
+        /// </summary>
+        private void InvalidateContentCache()
+        {
+            lock (_contentCacheLock)
+            {
+                _contentCacheValid = false;
             }
         }
 
@@ -197,7 +235,10 @@ namespace NoteNest.UI.ViewModels
             // PROPER ARCHITECTURE: Initialize save timers for this tab
             InitializeSaveTimers();
             
-            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] TAB-OWNED constructor completed for noteId={_noteId} with complete UI");
+            // HIGH-IMPACT MEMORY FIX: Track tab creation
+            SimpleMemoryTracker.TrackTabCreation(Note.Title);
+            
+            DebugLogger.Log($"TAB-OWNED constructor completed for noteId={_noteId} with complete UI");
         }
         
         /// <summary>
@@ -299,25 +340,34 @@ namespace NoteNest.UI.ViewModels
         // ENHANCED: Editor content changed handler (bulletproof save chain)
         private void OnEditorContentChanged(object sender, EventArgs e)
         {
-            if (_editor == null || _disposed) return;
+            if (_fullyDisposed || _editor == null) return;
             
             try
             {
-                // Extract and save content
+                // HIGH-IMPACT PERFORMANCE FIX: Invalidate cache, extract only for save
+                InvalidateContentCache();
+                
+                // Extract content for save operations
                 var content = _editor.SaveContent();
                 _content = content; // Update backing field
                 Note.Content = content; // Update model
                 _saveManager.UpdateContent(_noteId, content);
                 
-                // Trigger save timers
+                // Update cache with fresh content
+                lock (_contentCacheLock)
+                {
+                    _contentCache = content;
+                    _contentCacheValid = true;
+                }
+                
+                // Trigger save timers and UI updates
                 _localIsDirty = true;
                 NotifyContentChanged();
                 
-                // Notify UI
                 OnPropertyChanged(nameof(IsDirty));
                 OnPropertyChanged(nameof(Title));
                 
-                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Editor content changed for {Note.Title}: {content?.Length ?? 0} chars");
+                DebugLogger.Log($"Editor content changed for {Note.Title}: {content?.Length ?? 0} chars");
             }
             catch (ObjectDisposedException)
             {
@@ -342,10 +392,13 @@ namespace NoteNest.UI.ViewModels
                         var content = _saveManager.GetContent(_noteId) ?? "";
                         _editor?.LoadContent(content);
                         _editor?.MarkClean();
-                        _contentLoaded = true;
-                        _localIsDirty = false;
-                        
-                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Content loaded for {Note.Title}: {content.Length} chars");
+                    _contentLoaded = true;
+                    _localIsDirty = false;
+                    
+                    // HIGH-IMPACT MEMORY FIX: Track content size
+                    SimpleMemoryTracker.TrackContentLoad(content.Length, Note.Title);
+                    
+                    DebugLogger.Log($"Content loaded for {Note.Title}: {content.Length} chars");
                     }
                     catch (Exception ex)
                     {
@@ -558,54 +611,169 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        // HIGH-IMPACT MEMORY FIX: Bulletproof disposal
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
             
-            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Disposing tab for {Note.Title}");
+            DebugLogger.Log($"Starting disposal for {Note.Title}");
             
-            // ENHANCED: Clean disconnect from complete UI
-            if (_editor != null)
+            try
             {
-                _editor.ContentChanged -= OnEditorContentChanged;
-                _editor.Dispose();
-                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Editor disposed for {Note.Title}");
+                // PHASE 1: Stop all timers first (prevents callbacks during disposal)
+                SafeDisposeTimer(ref _walTimer, WalTimer_Tick);
+                SafeDisposeTimer(ref _autoSaveTimer, AutoSaveTimer_Tick);
+                
+                // PHASE 2: Unsubscribe all events (prevents memory leaks)
+                SafeUnsubscribeEditorEvents();
+                SafeUnsubscribeSaveManagerEvents();
+                
+                // PHASE 3: Dispose UI components
+                SafeDisposeEditor();
+                SafeDisposeToolbar();
+                SafeDisposeContentGrid();
+                
+                // PHASE 4: Clear all references
+                ClearAllReferences();
+                
+                // Mark as fully disposed
+                _fullyDisposed = true;
+                
+                // HIGH-IMPACT MEMORY FIX: Track disposal
+                SimpleMemoryTracker.TrackTabDisposal(Note.Title);
+                
+                DebugLogger.Log($"Disposal completed for {Note.Title}");
             }
-            
-            // Clean up toolbar
-            if (_toolbar != null)
+            catch (Exception ex)
             {
-                try
+                DebugLogger.Log($"Disposal error for {Note.Title}: {ex.Message}");
+                _fullyDisposed = true; // Mark as disposed even if cleanup failed
+            }
+        }
+        
+        private void SafeDisposeTimer(ref DispatcherTimer timer, EventHandler handler)
+        {
+            try
+            {
+                if (timer != null)
                 {
-                    // Disconnect toolbar from editor
-                    _toolbar.TargetEditor = null;
-                    // Note: UserControl disposal is automatic, but we clear the reference
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Toolbar disposed for {Note.Title}");
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Toolbar disposal warning: {ex.Message}");
+                    timer.Stop();
+                    timer.Tick -= handler;  // ✅ Remove handler reference
+                    timer = null;
                 }
             }
-            
-            // Clean up timers
-            _walTimer?.Stop();
-            _walTimer = null;
-            _autoSaveTimer?.Stop();
-            _autoSaveTimer = null;
-            
-            // Clean up existing event handlers
-            WeakEventManager<ISaveManager, NoteSavedEventArgs>
-                .RemoveHandler(_saveManager, nameof(ISaveManager.NoteSaved), OnNoteSaved);
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"Timer disposal error: {ex.Message}");
+            }
+        }
+        
+        private void SafeUnsubscribeEditorEvents()
+        {
+            try
+            {
+                if (_editor != null)
+                {
+                    _editor.ContentChanged -= OnEditorContentChanged;  // ✅ Critical cleanup
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"Editor event cleanup error: {ex.Message}");
+            }
+        }
+        
+        private void SafeUnsubscribeSaveManagerEvents()
+        {
+            try
+            {
+                if (_saveManager != null)
+                {
+                    WeakEventManager<ISaveManager, NoteSavedEventArgs>
+                        .RemoveHandler(_saveManager, nameof(ISaveManager.NoteSaved), OnNoteSaved);
+                        
+                    WeakEventManager<ISaveManager, SaveProgressEventArgs>
+                        .RemoveHandler(_saveManager, nameof(ISaveManager.SaveStarted), OnSaveStarted);
+                        
+                    WeakEventManager<ISaveManager, SaveProgressEventArgs>
+                        .RemoveHandler(_saveManager, nameof(ISaveManager.SaveCompleted), OnSaveCompleted);
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"SaveManager event cleanup error: {ex.Message}");
+            }
+        }
+        
+        private void SafeDisposeEditor()
+        {
+            try
+            {
+                if (_editor != null)
+                {
+                    _editor.Dispose();
+                    _editor = null;  // ✅ Clear reference for GC
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"Editor disposal error: {ex.Message}");
+            }
+        }
+        
+        private void SafeDisposeToolbar()
+        {
+            try
+            {
+                if (_toolbar != null)
+                {
+                    _toolbar.TargetEditor = null;  // ✅ Break circular reference
+                    _toolbar = null;  // ✅ Clear reference
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"Toolbar disposal error: {ex.Message}");
+            }
+        }
+        
+        private void SafeDisposeContentGrid()
+        {
+            try
+            {
+                if (_contentGrid != null)
+                {
+                    _contentGrid.Children.Clear();  // ✅ Break parent-child references
+                    _contentGrid = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"ContentGrid disposal error: {ex.Message}");
+            }
+        }
+        
+        private void ClearAllReferences()
+        {
+            try
+            {
+                // Clear content cache
+                lock (_contentCacheLock)
+                {
+                    _contentCache = null;
+                    _contentCacheValid = false;
+                }
                 
-            WeakEventManager<ISaveManager, SaveProgressEventArgs>
-                .RemoveHandler(_saveManager, nameof(ISaveManager.SaveStarted), OnSaveStarted);
+                // Clear other references
+                _content = null;
                 
-            WeakEventManager<ISaveManager, SaveProgressEventArgs>
-                .RemoveHandler(_saveManager, nameof(ISaveManager.SaveCompleted), OnSaveCompleted);
-                
-            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Disposal completed for {Note.Title}");
+                DebugLogger.Log("All references cleared");
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"Reference clearing error: {ex.Message}");
+            }
         }
     }
 }
