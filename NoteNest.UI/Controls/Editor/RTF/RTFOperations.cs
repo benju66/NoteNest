@@ -18,7 +18,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
     public static class RTFOperations
     {
         /// <summary>
-        /// Save RichTextBox content to RTF format string
+        /// Save RichTextBox content to RTF format string with single spacing preservation
         /// </summary>
         public static string SaveToRTF(RichTextBox editor)
         {
@@ -30,13 +30,44 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 {
                     var range = new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd);
                     range.Save(stream, System.Windows.DataFormats.Rtf);
-                    return Encoding.UTF8.GetString(stream.ToArray());
+                    var rtfContent = Encoding.UTF8.GetString(stream.ToArray());
+                    
+                    // Enhance RTF with single spacing control codes
+                    return EnhanceRTFForSingleSpacing(rtfContent);
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[RTFOperations] Save failed: {ex.Message}");
                 return string.Empty;
+            }
+        }
+        
+        /// <summary>
+        /// Enhance RTF content with single spacing control codes
+        /// </summary>
+        private static string EnhanceRTFForSingleSpacing(string rtfContent)
+        {
+            if (string.IsNullOrEmpty(rtfContent)) return rtfContent;
+            
+            try
+            {
+                var enhanced = rtfContent;
+                
+                // Insert single line spacing control codes
+                // \sl0\slmult0 = single line spacing
+                enhanced = enhanced.Replace(@"\f0\fs24", @"\f0\fs24\sl0\slmult0");
+                
+                // Remove excessive paragraph spacing that might be added by RTF
+                enhanced = Regex.Replace(enhanced, @"\\sb\d+", "", RegexOptions.IgnoreCase);
+                enhanced = Regex.Replace(enhanced, @"\\sa\d+", "", RegexOptions.IgnoreCase);
+                
+                return enhanced;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFOperations] RTF spacing enhancement failed: {ex.Message}");
+                return rtfContent; // Return original if enhancement fails
             }
         }
         

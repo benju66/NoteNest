@@ -155,6 +155,9 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 _originalContent = rtfContent ?? string.Empty;
                 _isDirty = false;
                 
+                // Reapply document styles after RTF loading (RTF might override them)
+                RefreshDocumentStylesAfterLoad();
+                
                 System.Diagnostics.Debug.WriteLine($"[RTFEditor] Loaded {rtfContent?.Length ?? 0} chars");
             }
             catch (Exception ex)
@@ -231,6 +234,58 @@ namespace NoteNest.UI.Controls.Editor.RTF
         }
         
         /// <summary>
+        /// Refresh document styles after RTF content loading
+        /// RTF loading can override our single spacing styles, so reapply them
+        /// </summary>
+        private void RefreshDocumentStylesAfterLoad()
+        {
+            try
+            {
+                // Reapply document-level single spacing
+                Document.PagePadding = new System.Windows.Thickness(0);
+                Document.LineHeight = double.NaN;
+                
+                // Apply single spacing to all existing paragraphs
+                foreach (var block in Document.Blocks)
+                {
+                    if (block is Paragraph para)
+                    {
+                        para.Margin = new System.Windows.Thickness(0, 0, 0, 0);
+                        para.LineHeight = double.NaN;
+                    }
+                    else if (block is List list)
+                    {
+                        list.Margin = new System.Windows.Thickness(0, 0, 0, 6);
+                        list.Padding = new System.Windows.Thickness(0);
+                        
+                        // Apply to list items
+                        foreach (var listItem in list.ListItems)
+                        {
+                            listItem.Margin = new System.Windows.Thickness(0);
+                            listItem.Padding = new System.Windows.Thickness(0, 0, 0, 2);
+                            
+                            // Apply to paragraphs within list items
+                            foreach (var itemBlock in listItem.Blocks)
+                            {
+                                if (itemBlock is Paragraph itemPara)
+                                {
+                                    itemPara.Margin = new System.Windows.Thickness(0);
+                                    itemPara.LineHeight = double.NaN;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Document styles refreshed after RTF load");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Document style refresh failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
         /// Apply editor settings for integration with settings system
         /// </summary>
         public void ApplySettings(EditorSettings settings)
@@ -245,6 +300,18 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 // Apply document formatting
                 Document.FontFamily = new System.Windows.Media.FontFamily(settings.FontFamily);
                 Document.FontSize = settings.FontSize;
+                
+                // Apply line height settings (override default single spacing if user specifies)
+                if (settings.LineHeight > 0 && Math.Abs(settings.LineHeight - 1.0) > 0.1)
+                {
+                    // User wants custom line height
+                    Document.LineHeight = settings.FontSize * settings.LineHeight;
+                }
+                else
+                {
+                    // Maintain single spacing
+                    Document.LineHeight = double.NaN;
+                }
                 
                 // Apply spell check settings (when implemented in clean architecture)
                 System.Windows.Controls.SpellCheck.SetIsEnabled(this, settings.EnableSpellCheck);
