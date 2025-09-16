@@ -203,54 +203,55 @@ namespace NoteNest.UI.Controls
             UpdateVisualState();
         }
         
-        // ENHANCED TAB-OWNED EDITOR PATTERN: Simplified, bulletproof tab switching
+        // TAB-OWNED EDITOR PATTERN: Clean and simple tab switching
         private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (Pane != null && PaneTabControl.SelectedItem is ITabItem newTab)
             {
-                System.Diagnostics.Debug.WriteLine($"[TabSwitch] Switching to tab: {newTab.Title}");
+                System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Switching to tab: {newTab.Title}");
                 
-                // Declare newTabItem at method scope to avoid variable scoping issues
                 var newTabItem = newTab as NoteTabItem;
                 
-                // ENHANCED: Save previous tab if dirty (optional immediate save)
+                // Save old tab if dirty
                 if (e.RemovedItems?.Count > 0 && e.RemovedItems[0] is NoteTabItem oldTab)
                 {
                     if (oldTab.IsDirty)
                     {
-                        var saveManager = GetSaveManager();
-                        if (saveManager != null)
+                        try
                         {
-                            // Fire-and-forget save on tab switch
-                            _ = Task.Run(async () => 
+                            // Direct access to tab's editor - guaranteed to work
+                            var content = oldTab.Editor.SaveContent();
+                            var saveManager = GetSaveManager();
+                            if (saveManager != null)
                             {
-                                try
-                                {
-                                    await saveManager.SaveNoteAsync(oldTab.NoteId);
-                                    System.Diagnostics.Debug.WriteLine($"[TabSwitch] Saved {oldTab.Title}");
-                                }
-                                catch (Exception ex)
-                                {
-                                    System.Diagnostics.Debug.WriteLine($"[TabSwitch] Save failed for {oldTab.Title}: {ex.Message}");
-                                }
-                            });
+                                saveManager.UpdateContent(oldTab.NoteId, content);
+                                _ = saveManager.SaveNoteAsync(oldTab.NoteId);
+                                System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Saved {oldTab.Title}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Save failed for {oldTab.Title}: {ex.Message}");
                         }
                     }
                 }
                 
-                // ENHANCED: Load content for newly selected tab (lazy loading)
+                // Load new tab content
                 if (newTabItem != null)
                 {
                     try
                     {
-                        // Lazy load content using Tab-Owned Editor Pattern
-                        newTabItem.EnsureContentLoaded();
-                        
-                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Content loaded for {newTab.Title}");
+                        if (!newTabItem.ContentLoaded)
+                        {
+                            var saveManager = GetSaveManager();
+                            var content = saveManager?.GetContent(newTab.NoteId) ?? "";
+                            newTabItem.LoadContent(content); // Use new Tab-Owned method
+                            System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Content loaded for {newTab.Title}: {content.Length} chars");
+                        }
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Content loading failed for {newTab.Title}: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Content loading failed for {newTab.Title}: {ex.Message}");
                         _logger?.Error(ex, $"Content loading failed for tab: {newTab.Title}");
                     }
                 }
@@ -267,7 +268,7 @@ namespace NoteNest.UI.Controls
                 try { SelectedTabChanged?.Invoke(this, newTab); } catch { }
                 TryApplyEditorSettingsToActiveEditor();
                 
-                // ENHANCED: Focus management with proper timing
+                // Focus the editor asynchronously after render
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     try
@@ -281,16 +282,15 @@ namespace NoteNest.UI.Controls
                             {
                                 newTabItem.Editor.CaretPosition = startPosition;
                             }
+                            System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Focus set for {newTab.Title}");
                         }
-                        
-                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Focus set for {newTab.Title}");
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Focus failed for {newTab.Title}: {ex.Message}");
+                        System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Focus failed for {newTab.Title}: {ex.Message}");
                         // Silent fail - focus is non-critical
                     }
-                }), DispatcherPriority.Loaded);
+                }), DispatcherPriority.Input); // Input priority for focus operations
                 
                 // Update global references (for services that need current editor)
                 UpdateGlobalEditorReferences(newTabItem);
@@ -301,15 +301,15 @@ namespace NoteNest.UI.Controls
                     if (newTab.Note != null)
                     {
                         newTab.Note.IsDirty = newTab.IsDirty;
-                        System.Diagnostics.Debug.WriteLine($"[TabSwitch] Synced dirty state for {newTab.Title}: {newTab.IsDirty}");
+                        System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Synced dirty state for {newTab.Title}: {newTab.IsDirty}");
                     }
                 }
                 catch (Exception ex) 
                 { 
-                    System.Diagnostics.Debug.WriteLine($"[TabSwitch] Sync dirty flag failed: {ex.Message}"); 
+                    System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Sync dirty flag failed: {ex.Message}"); 
                 }
                 
-                System.Diagnostics.Debug.WriteLine($"[TabSwitch] Tab switch completed: {newTab.Title}");
+                System.Diagnostics.Debug.WriteLine($"[TAB-OWNED] Tab switch completed: {newTab.Title}");
             }
         }
         

@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
@@ -15,7 +16,9 @@ namespace NoteNest.UI.ViewModels
         private readonly ISaveManager _saveManager;
         private readonly ISupervisedTaskRunner _taskRunner;
         private readonly string _noteId;
-        private readonly RTFEditor _editor;
+        private RTFEditor _editor;
+        private RTFToolbar _toolbar;
+        private Grid _contentGrid;
         private string _content;
         private bool _isSaving;
         private bool _localIsDirty;
@@ -35,8 +38,12 @@ namespace NoteNest.UI.ViewModels
         // ENHANCED: Direct access for code (toolbar, save operations)
         public RTFEditor Editor => _editor;
         
-        // ENHANCED: WPF binding property for DataTemplate
-        public UIElement EditorElement => _editor;
+        // ENHANCED: Complete UI container for tab content (WPF binding)
+        public Grid TabContent => _contentGrid;
+        
+        // ENHANCED: Individual component access
+        public Grid EditorContainer => _contentGrid;
+        public RTFToolbar Toolbar => _toolbar;
         
         public string Title
         {
@@ -106,7 +113,7 @@ namespace NoteNest.UI.ViewModels
         public NoteTabItem(NoteModel note, ISaveManager saveManager, ISupervisedTaskRunner taskRunner = null)
         {
             var instanceId = this.GetHashCode();
-            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] NEW INSTANCE {instanceId}: note.Id={note?.Id}, note.Title={note?.Title}, saveManager={saveManager != null}");
+            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] NEW TAB-OWNED INSTANCE {instanceId}: note.Id={note?.Id}, note.Title={note?.Title}, saveManager={saveManager != null}");
             
             Note = note ?? throw new ArgumentNullException(nameof(note));
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
@@ -116,11 +123,42 @@ namespace NoteNest.UI.ViewModels
             
             System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} initialized: _noteId={_noteId}, contentLength={_content.Length}");
             
-            // ENHANCED: Create editor ONCE - owned by this tab
-            _editor = new RTFEditor();
-            
-            // ENHANCED: Wire up save chain in constructor (bulletproof event chain)
-            _editor.ContentChanged += OnEditorContentChanged;
+            try
+            {
+                // BUILD THE COMPLETE UI IN CODE - WE OWN EVERYTHING
+                _contentGrid = BuildEditorUI();
+                
+                // ENHANCED: Wire up save chain in constructor (bulletproof event chain)
+                _editor.ContentChanged += OnEditorContentChanged;
+                
+                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] UI built successfully for {Note.Title}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] UI creation failed: {ex.Message}");
+                
+                // Fallback to basic editor
+                try
+                {
+                    _editor = new RTFEditor();
+                    _editor.ContentChanged += OnEditorContentChanged;
+                    _contentGrid = new Grid();
+                    _contentGrid.Children.Add(_editor);
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Fallback editor created for {Note.Title}");
+                }
+                catch (Exception fallbackEx)
+                {
+                    // Ultimate fallback
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Complete failure: {fallbackEx.Message}");
+                    _contentGrid = new Grid();
+                    var errorText = new System.Windows.Controls.TextBlock 
+                    { 
+                        Text = "Failed to create editor", 
+                        Foreground = System.Windows.Media.Brushes.Red 
+                    };
+                    _contentGrid.Children.Add(errorText);
+                }
+            }
             
             // Use weak event pattern to prevent memory leaks
             WeakEventManager<ISaveManager, NoteSavedEventArgs>
@@ -135,11 +173,78 @@ namespace NoteNest.UI.ViewModels
             // PROPER ARCHITECTURE: Initialize save timers for this tab
             InitializeSaveTimers();
             
-            // Notify UI that properties are available
-            OnPropertyChanged(nameof(Editor));
-            OnPropertyChanged(nameof(EditorElement));
-                
-            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Instance {instanceId} constructor completed for noteId={_noteId} with editor");
+            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] TAB-OWNED constructor completed for noteId={_noteId} with complete UI");
+        }
+        
+        /// <summary>
+        /// Build the complete editor UI in code - toolbar + editor in grid
+        /// This is the core of the Tab-Owned Editor Pattern
+        /// </summary>
+        private Grid BuildEditorUI()
+        {
+            var grid = new Grid();
+            
+            // Setup grid structure
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });  // Toolbar
+            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Editor
+            
+            // Apply grid style from resources if available
+            try
+            {
+                if (Application.Current.TryFindResource("TabContentGridStyle") is Style gridStyle)
+                {
+                    grid.Style = gridStyle;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BuildUI] Grid styling failed: {ex.Message}");
+            }
+            
+            // Create toolbar
+            _toolbar = new RTFToolbar();
+            Grid.SetRow(_toolbar, 0);
+            
+            // Apply toolbar style if available
+            try
+            {
+                if (Application.Current.TryFindResource("RTFToolbarStyle") is Style toolbarStyle)
+                {
+                    _toolbar.Style = toolbarStyle;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BuildUI] Toolbar styling failed: {ex.Message}");
+            }
+            
+            // Create editor
+            _editor = new RTFEditor();
+            Grid.SetRow(_editor, 1);
+            
+            // Apply editor style if available
+            try
+            {
+                if (Application.Current.TryFindResource("RTFEditorStyle") is Style editorStyle)
+                {
+                    _editor.Style = editorStyle;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BuildUI] Editor styling failed: {ex.Message}");
+            }
+            
+            // Add controls to grid
+            grid.Children.Add(_toolbar);
+            grid.Children.Add(_editor);
+            
+            // CRITICAL: Wire up toolbar to editor (this is the magic connection)
+            _toolbar.TargetEditor = _editor;
+            
+            System.Diagnostics.Debug.WriteLine($"[BuildUI] Complete UI built for {Note.Title}: Grid + Toolbar + Editor");
+            
+            return grid;
         }
 
         private void OnNoteSaved(object? sender, NoteSavedEventArgs e)
@@ -364,6 +469,37 @@ namespace NoteNest.UI.ViewModels
                 System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Timer error details: {ex.StackTrace}");
             }
         }
+        
+        /// <summary>
+        /// Load content into the tab's editor (Tab-Owned pattern)
+        /// </summary>
+        public void LoadContent(string rtfContent)
+        {
+            if (_editor != null)
+            {
+                try
+                {
+                    _editor.LoadContent(rtfContent ?? "");
+                    _editor.MarkClean();
+                    _localIsDirty = false;
+                    _contentLoaded = true;
+                    
+                    OnPropertyChanged(nameof(IsDirty));
+                    OnPropertyChanged(nameof(Title));
+                    
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] LoadContent completed for {Note.Title}: {(rtfContent?.Length ?? 0)} chars");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] LoadContent failed for {Note.Title}: {ex.Message}");
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Check if content has been loaded
+        /// </summary>
+        public bool ContentLoaded => _contentLoaded;
 
         /// <summary>
         /// Update content from editor (called by SplitPaneView)
@@ -388,12 +524,28 @@ namespace NoteNest.UI.ViewModels
             
             System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Disposing tab for {Note.Title}");
             
-            // ENHANCED: Clean disconnect from editor
+            // ENHANCED: Clean disconnect from complete UI
             if (_editor != null)
             {
                 _editor.ContentChanged -= OnEditorContentChanged;
                 _editor.Dispose();
                 System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Editor disposed for {Note.Title}");
+            }
+            
+            // Clean up toolbar
+            if (_toolbar != null)
+            {
+                try
+                {
+                    // Disconnect toolbar from editor
+                    _toolbar.TargetEditor = null;
+                    // Note: UserControl disposal is automatic, but we clear the reference
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Toolbar disposed for {Note.Title}");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Toolbar disposal warning: {ex.Message}");
+                }
             }
             
             // Clean up timers

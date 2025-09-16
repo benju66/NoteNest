@@ -144,19 +144,9 @@
                 </local:DraggableTabControl.ItemTemplate>
                 <local:DraggableTabControl.ContentTemplate>
                     <DataTemplate>
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-
-                            <!-- RTF Formatting Toolbar - positioned just below tabs -->
-                            <rtf:RTFToolbar Grid.Row="0" 
-                                           TargetEditor="{Binding ElementName=RTFEditor}"/>
-                            
-                            <!-- RTF Editor - main editing area -->
-                            <rtf:RTFEditor x:Name="RTFEditor" Grid.Row="1" />
-                        </Grid>
+                        <!-- TAB-OWNED EDITOR PATTERN: Display the tab's complete UI -->
+                        <!-- The tab owns the complete UI: Grid + Toolbar + Editor -->
+                        <ContentPresenter Content="{Binding TabContent}" />
                     </DataTemplate>
                 </local:DraggableTabControl.ContentTemplate>
             </local:DraggableTabControl>

@@ -12,6 +12,38 @@
                 <ui:XamlControlsResources />
                 <ResourceDictionary Source="Themes/Generic.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+            
+            <!-- TAB-OWNED EDITOR PATTERN: Styles for programmatically created UI -->
+            
+            <!-- Grid style for tab content containers -->
+            <Style x:Key="TabContentGridStyle" TargetType="Grid">
+                <Setter Property="Background" Value="{DynamicResource SystemControlPageBackgroundChromeLowBrush}"/>
+                <Setter Property="Margin" Value="0"/>
+            </Style>
+            
+            <!-- RTF Toolbar style -->
+            <Style x:Key="RTFToolbarStyle" TargetType="UserControl">
+                <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundBaseLowBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                <Setter Property="Margin" Value="0"/>
+                <Setter Property="Padding" Value="8,4"/>
+            </Style>
+            
+            <!-- RTF Editor style -->
+            <Style x:Key="RTFEditorStyle" TargetType="RichTextBox">
+                <Setter Property="Background" Value="{DynamicResource SystemControlPageBackgroundChromeLowBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                <Setter Property="FontFamily" Value="Segoe UI"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Padding" Value="12"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="AcceptsReturn" Value="True"/>
+                <Setter Property="AcceptsTab" Value="True"/>
+                <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+                <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+            </Style>
+            
         </ResourceDictionary>
     </Application.Resources>
 </Application>
