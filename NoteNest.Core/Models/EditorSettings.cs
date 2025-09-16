@@ -29,5 +29,12 @@ namespace NoteNest.Core.Models
         public int MaxDocumentSizeMB { get; set; } = 10;
         public bool EnableSpellCheck { get; set; } = true;
         public string SpellCheckLanguage { get; set; } = "en-US";
+        
+        // Memory Management Settings
+        public int UndoStackLimit { get; set; } = 100;
+        public int TextRangeCacheLimit { get; set; } = 50;
+        public int EventHandlerTimeoutMs { get; set; } = 5000;
+        public bool EnableAggressiveMemoryManagement { get; set; } = false;
+        public int MemoryCleanupIntervalMs { get; set; } = 120000; // 2 minutes default
     }
 }

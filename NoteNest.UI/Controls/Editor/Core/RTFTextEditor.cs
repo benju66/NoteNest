@@ -34,6 +34,10 @@ namespace NoteNest.UI.Controls.Editor.Core
         private NoteNest.Core.Services.NoteMetadataManager _metadataManager;
         private NoteModel _currentNote;
         
+        // Memory and event management services
+        private EditorMemoryManager _memoryManager;
+        private EditorEventManager _eventManager;
+        
         public event EventHandler ContentChanged;
         public event EventHandler<ListStateChangedEventArgs> ListStateChanged;
         
@@ -75,13 +79,11 @@ namespace NoteNest.UI.Controls.Editor.Core
             // Initialize professional document styles (copied from FormattedTextEditor)
             InitializeRTFDocumentStyles();
             
-            // Wire up events
-            TextChanged += OnTextChanged;
-            SelectionChanged += OnSelectionChanged;
-            GotFocus += (s, e) => Keyboard.Focus(this);
+            // Initialize memory and event management with default settings
+            InitializeManagementServices(new EditorSettings());
             
-            // Modern spell check context menu
-            ContextMenuOpening += OnContextMenuOpening;
+            // Wire up events using managed subscriptions
+            WireUpManagedEvents();
             
             // Initialize state update timer for toolbar
             _stateUpdateTimer = new DispatcherTimer
@@ -94,7 +96,6 @@ namespace NoteNest.UI.Controls.Editor.Core
             
             // Initialize keyboard shortcuts and behaviors
             RegisterCommandBindings();
-            RegisterKeyboardBehaviors();
             
             // Enable theme-aware spell check configuration
             InitializeSpellCheckWithThemeAwareness();
@@ -486,6 +487,62 @@ namespace NoteNest.UI.Controls.Editor.Core
             {
                 System.Diagnostics.Debug.WriteLine($"[RTF] Spell check initialization failed: {ex.Message}");
             }
+        }
+        
+        /// <summary>
+        /// Initialize memory and event management services
+        /// </summary>
+        private void InitializeManagementServices(EditorSettings settings)
+        {
+            try
+            {
+                // Initialize or update memory management
+                _memoryManager?.Dispose();
+                _memoryManager = new EditorMemoryManager(settings);
+                _memoryManager.ConfigureEditor(this);
+                
+                // Initialize or update event management
+                _eventManager?.Dispose();
+                _eventManager = new EditorEventManager(settings);
+                
+                System.Diagnostics.Debug.WriteLine("[RTF] Management services initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Management services initialization failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Wire up all event handlers using managed subscriptions
+        /// </summary>
+        private void WireUpManagedEvents()
+        {
+            if (_eventManager == null) return;
+            
+            try
+            {
+                // Use strongly-typed managed subscriptions
+                _eventManager.SubscribeToTextChanged(this, OnTextChanged);
+                _eventManager.SubscribeToSelectionChanged(this, OnSelectionChanged);
+                _eventManager.SubscribeToContextMenuOpening(this, OnContextMenuOpening);
+                _eventManager.SubscribeToPreviewKeyDown(this, OnPreviewKeyDown);
+                _eventManager.SubscribeToGotFocus(this, OnGotFocus);
+                
+                System.Diagnostics.Debug.WriteLine("[RTF] Managed event handlers wired up successfully");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTF] Event handler setup failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Focused event handler (replaces lambda for proper cleanup)
+        /// </summary>
+        private void OnGotFocus(object sender, RoutedEventArgs e)
+        {
+            Keyboard.Focus(this);
         }
         
         /// <summary>
@@ -988,13 +1045,6 @@ namespace NoteNest.UI.Controls.Editor.Core
             CommandBindings.Add(new CommandBinding(ApplicationCommands.Paste, OnPreviewPaste));
         }
         
-        /// <summary>
-        /// Register keyboard behaviors for smart list handling
-        /// </summary>
-        private void RegisterKeyboardBehaviors()
-        {
-            PreviewKeyDown += OnPreviewKeyDown;
-        }
         
         /// <summary>
         /// Smart keyboard handling for professional editing experience
@@ -1774,6 +1824,9 @@ namespace NoteNest.UI.Controls.Editor.Core
             
             try
             {
+                // Update memory and event management services with new settings
+                InitializeManagementServices(settings);
+                
                 Document.FontFamily = new System.Windows.Media.FontFamily(settings.FontFamily);
                 Document.FontSize = settings.FontSize;
                 
@@ -1789,7 +1842,7 @@ namespace NoteNest.UI.Controls.Editor.Core
                     System.Diagnostics.Debug.WriteLine($"[RTF] Warning: Document size {currentSize / (1024*1024):F1}MB exceeds limit {settings.MaxDocumentSizeMB}MB");
                 }
                 
-                System.Diagnostics.Debug.WriteLine($"[RTF] Settings applied: Font={settings.FontFamily}, Size={settings.FontSize}, SpellCheck={settings.EnableSpellCheck}");
+                System.Diagnostics.Debug.WriteLine($"[RTF] Settings applied: Font={settings.FontFamily}, Size={settings.FontSize}, SpellCheck={settings.EnableSpellCheck}, UndoLimit={settings.UndoStackLimit}");
             }
             catch (Exception ex)
             {
@@ -2327,22 +2380,24 @@ namespace NoteNest.UI.Controls.Editor.Core
             
             try
             {
+                _disposed = true;
+                
+                // Dispose memory and event management services (handles all event cleanup)
+                _eventManager?.Dispose();
+                _memoryManager?.Dispose();
+                
                 // Stop and dispose timer
                 _stateUpdateTimer?.Stop();
                 _stateUpdateTimer.Tick -= UpdateListState;
-                
-                // Unhook event handlers
-                TextChanged -= OnTextChanged;
-                SelectionChanged -= OnSelectionChanged;
                 
                 // Clear cache and references
                 _cachedContent = null;
                 _metadataManager = null;
                 _currentNote = null;
+                _eventManager = null;
+                _memoryManager = null;
                 
-                _disposed = true;
-                
-                System.Diagnostics.Debug.WriteLine("[RTF] Editor disposed and cleaned up");
+                System.Diagnostics.Debug.WriteLine("[RTF] Editor disposed with robust memory management");
             }
             catch (Exception ex)
             {
