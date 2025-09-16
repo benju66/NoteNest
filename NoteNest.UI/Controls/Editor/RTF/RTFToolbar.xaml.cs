@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -47,11 +48,31 @@ namespace NoteNest.UI.Controls.Editor.RTF
 
         private static void OnTargetEditorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
-            if (d is RTFToolbar toolbar && e.NewValue is RTFEditor editor)
+            if (d is RTFToolbar toolbar)
             {
-                // Update highlight color when editor changes
-                toolbar.UpdateHighlightColor();
+                // Unsubscribe from old editor
+                if (e.OldValue is RTFEditor oldEditor)
+                {
+                    oldEditor.SelectionChanged -= toolbar.OnEditorSelectionChanged;
+                }
+                
+                // Subscribe to new editor
+                if (e.NewValue is RTFEditor newEditor)
+                {
+                    newEditor.SelectionChanged += toolbar.OnEditorSelectionChanged;
+                    toolbar.UpdateHighlightColor();
+                    toolbar.UpdateAllToggleStates();
+                }
             }
+        }
+
+        private void OnEditorSelectionChanged(object sender, RoutedEventArgs e)
+        {
+            // Update toggle states when selection changes
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                UpdateAllToggleStates();
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void UpdateHighlightColor()
@@ -65,11 +86,25 @@ namespace NoteNest.UI.Controls.Editor.RTF
 
         #region Formatting Commands
 
+        private void SplitVerticalButton_Click(object sender, RoutedEventArgs e)
+        {
+            ExecuteFormattingCommand(() =>
+            {
+                // Find the SplitWorkspace and execute split command
+                var splitWorkspace = FindSplitWorkspace();
+                if (splitWorkspace != null)
+                {
+                    NoteNest.UI.Controls.SplitWorkspace.SplitVerticalCommand.Execute(null, splitWorkspace);
+                }
+            });
+        }
+
         private void BoldButton_Click(object sender, RoutedEventArgs e)
         {
             ExecuteFormattingCommand(() =>
             {
                 EditingCommands.ToggleBold.Execute(null, TargetEditor);
+                UpdateToggleButtonState(sender as ToggleButton, IsSelectionBold());
             });
         }
 
@@ -78,6 +113,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
             ExecuteFormattingCommand(() =>
             {
                 EditingCommands.ToggleItalic.Execute(null, TargetEditor);
+                UpdateToggleButtonState(sender as ToggleButton, IsSelectionItalic());
             });
         }
 
@@ -86,6 +122,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
             ExecuteFormattingCommand(() =>
             {
                 EditingCommands.ToggleUnderline.Execute(null, TargetEditor);
+                UpdateToggleButtonState(sender as ToggleButton, IsSelectionUnderlined());
             });
         }
 
@@ -93,19 +130,8 @@ namespace NoteNest.UI.Controls.Editor.RTF
         {
             ExecuteFormattingCommand(() =>
             {
-                // Use keyboard shortcut to trigger highlight cycling
-                var highlightCommand = new KeyGesture(Key.H, ModifierKeys.Control);
-                var keyBinding = new KeyBinding(null, highlightCommand);
-                
-                // Simulate Ctrl+H key press
-                var keyEventArgs = new KeyEventArgs(Keyboard.PrimaryDevice, 
-                    PresentationSource.FromVisual(TargetEditor), 0, Key.H)
-                {
-                    RoutedEvent = UIElement.KeyDownEvent
-                };
-                
-                // Send to target editor
-                TargetEditor?.RaiseEvent(keyEventArgs);
+                // Direct method call - no complex key simulation needed
+                TargetEditor?.CycleHighlight();
                 
                 // Update highlight color display
                 UpdateHighlightColor();
@@ -117,6 +143,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
             ExecuteFormattingCommand(() =>
             {
                 TargetEditor?.InsertBulletList();
+                UpdateToggleButtonState(sender as ToggleButton, IsSelectionInBulletList());
             });
         }
 
@@ -125,6 +152,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
             ExecuteFormattingCommand(() =>
             {
                 TargetEditor?.InsertNumberedList();
+                UpdateToggleButtonState(sender as ToggleButton, IsSelectionInNumberedList());
             });
         }
 
@@ -146,6 +174,156 @@ namespace NoteNest.UI.Controls.Editor.RTF
 
         #endregion
 
+        #region Helper Methods
+
+        /// <summary>
+        /// Find the SplitWorkspace parent for split commands
+        /// </summary>
+        private SplitWorkspace FindSplitWorkspace()
+        {
+            var parent = this.Parent;
+            while (parent != null)
+            {
+                if (parent is SplitWorkspace splitWorkspace)
+                    return splitWorkspace;
+                    
+                if (parent is FrameworkElement fe)
+                    parent = fe.Parent;
+                else if (parent is FrameworkContentElement fce)
+                    parent = fce.Parent;
+                else
+                    break;
+            }
+            
+            // Alternative: Search in MainWindow
+            var mainWindow = Application.Current.MainWindow;
+            if (mainWindow != null)
+            {
+                return FindVisualChild<SplitWorkspace>(mainWindow);
+            }
+            
+            return null;
+        }
+
+        /// <summary>
+        /// Find visual child helper
+        /// </summary>
+        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T result)
+                    return result;
+                    
+                var found = FindVisualChild<T>(child);
+                if (found != null)
+                    return found;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Update toggle button state based on formatting
+        /// </summary>
+        private void UpdateToggleButtonState(ToggleButton toggleButton, bool isActive)
+        {
+            if (toggleButton != null)
+            {
+                toggleButton.IsChecked = isActive;
+            }
+        }
+
+        /// <summary>
+        /// Check if current selection is bold
+        /// </summary>
+        private bool IsSelectionBold()
+        {
+            if (TargetEditor?.Selection == null) return false;
+            try
+            {
+                var value = TargetEditor.Selection.GetPropertyValue(TextElement.FontWeightProperty);
+                return value != DependencyProperty.UnsetValue && 
+                       ((FontWeight)value).ToOpenTypeWeight() >= FontWeights.Bold.ToOpenTypeWeight();
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Check if current selection is italic
+        /// </summary>
+        private bool IsSelectionItalic()
+        {
+            if (TargetEditor?.Selection == null) return false;
+            try
+            {
+                var value = TargetEditor.Selection.GetPropertyValue(TextElement.FontStyleProperty);
+                return value != DependencyProperty.UnsetValue && 
+                       (FontStyle)value == FontStyles.Italic;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Check if current selection is underlined
+        /// </summary>
+        private bool IsSelectionUnderlined()
+        {
+            if (TargetEditor?.Selection == null) return false;
+            try
+            {
+                var value = TargetEditor.Selection.GetPropertyValue(Inline.TextDecorationsProperty);
+                return value != DependencyProperty.UnsetValue && 
+                       value is TextDecorationCollection decorations &&
+                       decorations.Contains(TextDecorations.Underline[0]);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Check if current selection is in a bullet list
+        /// </summary>
+        private bool IsSelectionInBulletList()
+        {
+            if (TargetEditor?.CaretPosition == null) return false;
+            try
+            {
+                var listItem = TargetEditor.CaretPosition.GetAdjacentElement(LogicalDirection.Backward) as ListItem ??
+                               TargetEditor.CaretPosition.GetAdjacentElement(LogicalDirection.Forward) as ListItem;
+                
+                if (listItem?.Parent is List list)
+                {
+                    return list.MarkerStyle == TextMarkerStyle.Disc || 
+                           list.MarkerStyle == TextMarkerStyle.Circle || 
+                           list.MarkerStyle == TextMarkerStyle.Square;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Check if current selection is in a numbered list
+        /// </summary>
+        private bool IsSelectionInNumberedList()
+        {
+            if (TargetEditor?.CaretPosition == null) return false;
+            try
+            {
+                var listItem = TargetEditor.CaretPosition.GetAdjacentElement(LogicalDirection.Backward) as ListItem ??
+                               TargetEditor.CaretPosition.GetAdjacentElement(LogicalDirection.Forward) as ListItem;
+                
+                if (listItem?.Parent is List list)
+                {
+                    return list.MarkerStyle == TextMarkerStyle.Decimal || 
+                           list.MarkerStyle == TextMarkerStyle.LowerLatin || 
+                           list.MarkerStyle == TextMarkerStyle.UpperLatin;
+                }
+            }
+            catch { }
+            return false;
+        }
+
         /// <summary>
         /// Execute a formatting command with error handling and focus management
         /// </summary>
@@ -164,6 +342,9 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 // Execute the formatting command
                 command?.Invoke();
 
+                // Update all toggle button states after command
+                UpdateAllToggleStates();
+
                 // Keep focus on editor for continued editing
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
@@ -175,5 +356,38 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 System.Diagnostics.Debug.WriteLine($"[RTFToolbar] Formatting command failed: {ex.Message}");
             }
         }
+
+        /// <summary>
+        /// Update all toggle button states to reflect current selection
+        /// </summary>
+        private void UpdateAllToggleStates()
+        {
+            try
+            {
+                if (BoldButton is ToggleButton boldToggle)
+                    boldToggle.IsChecked = IsSelectionBold();
+                
+                if (ItalicButton is ToggleButton italicToggle)
+                    italicToggle.IsChecked = IsSelectionItalic();
+                
+                if (UnderlineButton is ToggleButton underlineToggle)
+                    underlineToggle.IsChecked = IsSelectionUnderlined();
+                
+                if (BulletListButton is ToggleButton bulletToggle)
+                    bulletToggle.IsChecked = IsSelectionInBulletList();
+                
+                if (NumberedListButton is ToggleButton numberedToggle)
+                    numberedToggle.IsChecked = IsSelectionInNumberedList();
+                
+                // Update highlight color
+                UpdateHighlightColor();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFToolbar] Toggle state update failed: {ex.Message}");
+            }
+        }
+
+        #endregion
     }
 }

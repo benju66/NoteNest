@@ -223,6 +223,14 @@ namespace NoteNest.UI.Controls.Editor.RTF
         public System.Windows.Media.Color CurrentHighlightColor => _highlight.CurrentColor;
         
         /// <summary>
+        /// Cycle highlight colors - exposed for toolbar integration
+        /// </summary>
+        public void CycleHighlight()
+        {
+            _highlight.CycleHighlight(this);
+        }
+        
+        /// <summary>
         /// Apply editor settings for integration with settings system
         /// </summary>
         public void ApplySettings(EditorSettings settings)

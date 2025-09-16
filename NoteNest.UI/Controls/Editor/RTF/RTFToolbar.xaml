@@ -6,107 +6,270 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d">
     
-    <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+    <UserControl.Resources>
+        <!-- Modern toolbar button style with Segoe MDL2 Assets -->
+        <Style x:Key="ModernToolbarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="1"/>
+            <Setter Property="MinWidth" Value="60"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightBaseMediumLowBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListMediumBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightBaseMediumBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- Modern toggle button style -->
+        <Style x:Key="ModernToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="1"/>
+            <Setter Property="MinWidth" Value="60"/>
+            <Setter Property="MinHeight" Value="32"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightBaseMediumLowBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundListMediumBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightBaseMediumBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource SystemControlHighlightAccentBrush}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightAccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource SystemControlHighlightAltChromeWhiteBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+    
+    <!-- Professional toolbar with clean, flat design -->
+    <Border Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
             BorderThickness="0,0,0,1"
             Padding="8,4">
         
         <StackPanel Orientation="Horizontal">
             
-            <!-- Text Formatting Group -->
-            <StackPanel Orientation="Horizontal">
-                <Button Name="BoldButton" 
-                        ToolTip="Bold (Ctrl+B)"
-                        MinWidth="32" MinHeight="28"
-                        Padding="6,2"
-                        Margin="0,0,2,0"
-                        FontWeight="Bold"
-                        Content="B"
-                        Click="BoldButton_Click"/>
-                
-                <Button Name="ItalicButton" 
-                        ToolTip="Italic (Ctrl+I)"
-                        MinWidth="32" MinHeight="28"
-                        Padding="6,2"
-                        Margin="0,0,2,0"
-                        FontStyle="Italic"
-                        Content="I"
-                        Click="ItalicButton_Click"/>
-                
-                <Button Name="UnderlineButton" 
-                        ToolTip="Underline (Ctrl+U)"
-                        MinWidth="32" MinHeight="28"
-                        Padding="6,2"
-                        Margin="0,0,4,0"
-                        Click="UnderlineButton_Click">
-                    <TextBlock Text="U" TextDecorations="Underline"/>
-                </Button>
-            </StackPanel>
-            
-            <Separator Margin="4,0"/>
-            
-            <!-- Highlight Group -->
-            <Button Name="HighlightButton" 
-                    ToolTip="Cycle Highlight (Ctrl+H)"
-                    MinWidth="32" MinHeight="28"
-                    Padding="6,2"
-                    Margin="0,0,4,0"
-                    Click="HighlightButton_Click">
-                <Border Background="{Binding HighlightColor, RelativeSource={RelativeSource AncestorType=UserControl}}" 
-                        Width="20" Height="20" 
-                        CornerRadius="2"
-                        BorderBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"
-                        BorderThickness="1">
-                    <TextBlock Text="H" 
-                               HorizontalAlignment="Center" 
+            <!-- Split View Group -->
+            <Button Name="SplitVerticalButton"
+                    Style="{StaticResource ModernToolbarButtonStyle}"
+                    ToolTip="Split View Vertically (Ctrl+\)"
+                    Click="SplitVerticalButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" 
+                               Text="&#xE784;" 
+                               FontSize="16"
                                VerticalAlignment="Center"
-                               FontWeight="Bold"
                                Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
-                </Border>
+                    <TextBlock Text="Split" 
+                               Margin="6,0,0,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </StackPanel>
             </Button>
             
-            <Separator Margin="4,0"/>
+            <Separator Margin="6,0" Background="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+            
+            <!-- Text Formatting Group -->
+            <ToggleButton Name="BoldButton"
+                          Style="{StaticResource ModernToggleButtonStyle}"
+                          ToolTip="Bold (Ctrl+B)"
+                          Click="BoldButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" 
+                               Text="&#xE8DD;" 
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    <TextBlock Text="Bold" 
+                               Margin="6,0,0,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </StackPanel>
+            </ToggleButton>
+            
+            <ToggleButton Name="ItalicButton"
+                          Style="{StaticResource ModernToggleButtonStyle}"
+                          ToolTip="Italic (Ctrl+I)"
+                          Click="ItalicButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" 
+                               Text="&#xE8DB;" 
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    <TextBlock Text="Italic" 
+                               Margin="6,0,0,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </StackPanel>
+            </ToggleButton>
+            
+            <ToggleButton Name="UnderlineButton"
+                          Style="{StaticResource ModernToggleButtonStyle}"
+                          ToolTip="Underline (Ctrl+U)"
+                          Click="UnderlineButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" 
+                               Text="&#xE8DC;" 
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    <TextBlock Text="Underline" 
+                               Margin="6,0,0,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </StackPanel>
+            </ToggleButton>
+            
+            <Separator Margin="6,0" Background="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
+            
+            <!-- Highlight Group -->
+            <Button Name="HighlightButton"
+                    Style="{StaticResource ModernToolbarButtonStyle}"
+                    ToolTip="Cycle Highlight (Ctrl+H)"
+                    Click="HighlightButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <Border Background="{Binding HighlightColor, RelativeSource={RelativeSource AncestorType=UserControl}}" 
+                            Width="16" Height="16" 
+                            CornerRadius="2"
+                            BorderBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"
+                            BorderThickness="1"
+                            VerticalAlignment="Center">
+                        <TextBlock FontFamily="Segoe MDL2 Assets" 
+                                   Text="&#xE7E6;" 
+                                   FontSize="10"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    </Border>
+                    <TextBlock Text="Highlight" 
+                               Margin="6,0,0,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </StackPanel>
+            </Button>
+            
+            <Separator Margin="6,0" Background="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
             
             <!-- List Group -->
-            <StackPanel Orientation="Horizontal">
-                <Button Name="BulletListButton" 
-                        ToolTip="Bullet List"
-                        MinWidth="32" MinHeight="28"
-                        Padding="6,2"
-                        Margin="0,0,2,0"
-                        Content="•"
-                        FontSize="16"
-                        Click="BulletListButton_Click"/>
-                
-                <Button Name="NumberedListButton" 
-                        ToolTip="Numbered List"
-                        MinWidth="32" MinHeight="28"
-                        Padding="6,2"
-                        Margin="0,0,4,0"
-                        Content="1."
-                        Click="NumberedListButton_Click"/>
-            </StackPanel>
+            <ToggleButton Name="BulletListButton"
+                          Style="{StaticResource ModernToggleButtonStyle}"
+                          ToolTip="Bullet List"
+                          Click="BulletListButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" 
+                               Text="&#xE8FD;" 
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    <TextBlock Text="Bullets" 
+                               Margin="6,0,0,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </StackPanel>
+            </ToggleButton>
             
-            <Separator Margin="4,0"/>
+            <ToggleButton Name="NumberedListButton"
+                          Style="{StaticResource ModernToggleButtonStyle}"
+                          ToolTip="Numbered List"
+                          Click="NumberedListButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" 
+                               Text="&#xE8BE;" 
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    <TextBlock Text="Numbers" 
+                               Margin="6,0,0,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </StackPanel>
+            </ToggleButton>
+            
+            <Separator Margin="6,0" Background="{DynamicResource SystemControlForegroundBaseLowBrush}"/>
             
             <!-- Indent Group -->
-            <StackPanel Orientation="Horizontal">
-                <Button Name="IndentButton" 
-                        ToolTip="Increase Indent"
-                        MinWidth="32" MinHeight="28"
-                        Padding="6,2"
-                        Margin="0,0,2,0"
-                        Content="→"
-                        Click="IndentButton_Click"/>
-                
-                <Button Name="OutdentButton" 
-                        ToolTip="Decrease Indent"
-                        MinWidth="32" MinHeight="28"
-                        Padding="6,2"
-                        Content="←"
-                        Click="OutdentButton_Click"/>
-            </StackPanel>
+            <Button Name="IndentButton"
+                    Style="{StaticResource ModernToolbarButtonStyle}"
+                    ToolTip="Increase Indent"
+                    Click="IndentButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" 
+                               Text="&#xE291;" 
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    <TextBlock Text="Indent" 
+                               Margin="6,0,0,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </StackPanel>
+            </Button>
+            
+            <Button Name="OutdentButton"
+                    Style="{StaticResource ModernToolbarButtonStyle}"
+                    ToolTip="Decrease Indent"
+                    Click="OutdentButton_Click">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" 
+                               Text="&#xE290;" 
+                               FontSize="16"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                    <TextBlock Text="Outdent" 
+                               Margin="6,0,0,0" 
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemControlForegroundBaseHighBrush}"/>
+                </StackPanel>
+            </Button>
             
         </StackPanel>
     </Border>
+    
 </UserControl>
