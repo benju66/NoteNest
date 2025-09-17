@@ -14,6 +14,7 @@ using System.Runtime.CompilerServices;
 using System.Windows.Automation.Peers;
 using System.Windows.Automation;
 using NoteNest.UI.Config;
+using NoteNest.Core.Diagnostics;
 
 namespace NoteNest.UI.Controls
 {
@@ -223,32 +224,39 @@ namespace NoteNest.UI.Controls
 
         private void StartManualDrag(ITabItem tab)
         {
-            if (_dragState != DragState.Idle)
+            #if DEBUG
+            EnhancedMemoryTracker.TrackServiceOperation("DraggableTabControl", "StartManualDrag", () =>
             {
-                System.Diagnostics.Debug.WriteLine($"Attempted to start drag while in state: {_dragState}");
-                return;
-            }
-
-            _dragState = DragState.Starting;
-
-            try
-            {
-                var window = Window.GetWindow(this);
-                if (_dragManager.BeginManualDrag(tab, this, window, _dragStartPoint))
+            #endif
+                if (_dragState != DragState.Idle)
                 {
-                    _dragState = DragState.Dragging;
-                    PreviewKeyDown += OnDragKeyDown;
+                    System.Diagnostics.Debug.WriteLine($"Attempted to start drag while in state: {_dragState}");
+                    return;
                 }
-                else
+
+                _dragState = DragState.Starting;
+
+                try
                 {
+                    var window = Window.GetWindow(this);
+                    if (_dragManager.BeginManualDrag(tab, this, window, _dragStartPoint))
+                    {
+                        _dragState = DragState.Dragging;
+                        PreviewKeyDown += OnDragKeyDown;
+                    }
+                    else
+                    {
+                        _dragState = DragState.Idle;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to start drag: {ex.Message}");
                     _dragState = DragState.Idle;
                 }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Failed to start drag: {ex.Message}");
-                _dragState = DragState.Idle;
-            }
+            #if DEBUG
+            });
+            #endif
         }
 
         private void CompleteDrop(Point screenPoint)

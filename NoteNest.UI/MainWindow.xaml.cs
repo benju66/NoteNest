@@ -28,6 +28,10 @@ namespace NoteNest.UI
         public static readonly RoutedUICommand ToggleEditorCommand = new RoutedUICommand("ToggleEditor", nameof(ToggleEditorCommand), typeof(MainWindow));
         public static readonly RoutedUICommand ToggleRightPanelCommand = new RoutedUICommand("ToggleRightPanel", nameof(ToggleRightPanelCommand), typeof(MainWindow));
         public static readonly RoutedUICommand FocusSearchCommand = new RoutedUICommand("FocusSearch", nameof(FocusSearchCommand), typeof(MainWindow));
+        
+        #if DEBUG
+        public static readonly RoutedUICommand ShowMemoryDashboardCommand = new RoutedUICommand("ShowMemoryDashboard", nameof(ShowMemoryDashboardCommand), typeof(MainWindow));
+        #endif
 
         private bool _isRightPanelVisible;
         private double _lastRightPanelWidth = 320;
@@ -187,6 +191,18 @@ namespace NoteNest.UI
             {
                 try { await RestoreTreeExpansionOnceAsync(); } catch { }
             };
+            
+            #if DEBUG
+            // Show debug menu items only in debug builds
+            try
+            {
+                if (FindName("DebugSeparator") is System.Windows.Controls.Separator separator)
+                    separator.Visibility = Visibility.Visible;
+                if (FindName("MemoryDashboardMenuItem") is System.Windows.Controls.MenuItem menuItem)
+                    menuItem.Visibility = Visibility.Visible;
+            }
+            catch { }
+            #endif
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -814,6 +830,38 @@ namespace NoteNest.UI
         {
             ToggleEditorCollapsed();
         }
+
+        #if DEBUG
+        private void ShowMemoryDashboardCommand_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            ShowMemoryDashboard();
+        }
+
+        private async void MemoryDashboard_Click(object sender, RoutedEventArgs e)
+        {
+            ShowMemoryDashboard();
+        }
+
+        private void ShowMemoryDashboard()
+        {
+            try
+            {
+                var dashboard = new MemoryDashboardWindow();
+                dashboard.Owner = this;
+                dashboard.Show();
+            }
+            catch (Exception ex)
+            {
+                var dialog = new ModernWpf.Controls.ContentDialog
+                {
+                    Title = "Error",
+                    Content = $"Failed to open memory dashboard: {ex.Message}",
+                    CloseButtonText = "OK"
+                };
+                _ = dialog.ShowAsync();
+            }
+        }
+        #endif
 
         private void UpdateThemeMenuChecks()
         {

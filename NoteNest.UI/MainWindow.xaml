@@ -21,10 +21,13 @@
                         Executed="ToggleEditorCommand_Executed"/>
         <CommandBinding Command="{x:Static local:MainWindow.FocusSearchCommand}"
                         Executed="FocusSearchCommand_Executed"/>
+        <CommandBinding Command="{x:Static local:MainWindow.ShowMemoryDashboardCommand}"
+                        Executed="ShowMemoryDashboardCommand_Executed"/>
     </Window.CommandBindings>
     <Window.InputBindings>
         <KeyBinding Command="{x:Static local:MainWindow.ToggleEditorCommand}" Gesture="Ctrl+Alt+E"/>
         <KeyBinding Key="F" Modifiers="Control" Command="{x:Static local:MainWindow.FocusSearchCommand}"/>
+        <KeyBinding Key="M" Modifiers="Ctrl+Alt" Command="{x:Static local:MainWindow.ShowMemoryDashboardCommand}"/>
     </Window.InputBindings>
 
     <Grid SnapsToDevicePixels="True">
@@ -178,6 +181,17 @@
                 <MenuItem Header="_About" Click="AboutMenuItem_Click">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="Help"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                
+                <!-- DEBUG: Memory Dashboard Menu -->
+                <Separator x:Name="DebugSeparator" Visibility="Collapsed"/>
+                <MenuItem x:Name="MemoryDashboardMenuItem" Header="_Memory Dashboard" 
+                          Click="MemoryDashboard_Click" 
+                          InputGestureText="Ctrl+Alt+M"
+                          Visibility="Collapsed">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="Setting"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>

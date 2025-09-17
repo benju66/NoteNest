@@ -42,6 +42,9 @@ namespace NoteNest.UI.Services
                 if (weakRef.Target is NoteTabItem existingTab)
                 {
                     DebugLogger.Log($"Reusing cached tab for {note.Title}");
+                    #if DEBUG
+                    EnhancedMemoryTracker.TrackServiceOperation<UITabFactory>("CreateTab-CacheHit", () => { });
+                    #endif
                     return existingTab;
                 }
             }
@@ -49,66 +52,89 @@ namespace NoteNest.UI.Services
             // Periodic cleanup to prevent memory growth
             PerformCleanupIfNeeded();
             
-            // Create new tab
-            var tabItem = new NoteTabItem(note, _saveManager, _taskRunner);
-            
-            // Cache with weak reference
-            _tabCache[noteId] = new WeakReference(tabItem);
+            // Create new tab with memory tracking
+            #if DEBUG
+            ITabItem result = null;
+            EnhancedMemoryTracker.TrackServiceOperation<UITabFactory>("CreateTab", () =>
+            {
+                var tabItem = new NoteTabItem(note, _saveManager, _taskRunner);
+                _tabCache[noteId] = new WeakReference(tabItem);
+                result = tabItem;
+            });
             
             DebugLogger.Log($"Created new tab for {note.Title}. Cache size: {_tabCache.Count}");
-            
+            return result;
+            #else
+            var tabItem = new NoteTabItem(note, _saveManager, _taskRunner);
+            _tabCache[noteId] = new WeakReference(tabItem);
+            DebugLogger.Log($"Created new tab for {note.Title}. Cache size: {_tabCache.Count}");
             return tabItem;
+            #endif
         }
         
         // HIGH-IMPACT MEMORY FIX: Simple cleanup without warnings
         private void PerformCleanupIfNeeded()
         {
-            var now = DateTime.Now;
-            if (now - _lastCleanup < _cleanupInterval)
-                return;
-            
-            _lastCleanup = now;
-            
-            var deadKeys = new List<string>();
-            
-            // Find dead references
-            foreach (var kvp in _tabCache)
+            #if DEBUG
+            EnhancedMemoryTracker.TrackServiceOperation<UITabFactory>("CacheCleanup", () =>
             {
-                if (!kvp.Value.IsAlive)
+            #endif
+                var now = DateTime.Now;
+                if (now - _lastCleanup < _cleanupInterval)
+                    return;
+                
+                _lastCleanup = now;
+                
+                var deadKeys = new List<string>();
+                
+                // Find dead references
+                foreach (var kvp in _tabCache)
                 {
-                    deadKeys.Add(kvp.Key);
+                    if (!kvp.Value.IsAlive)
+                    {
+                        deadKeys.Add(kvp.Key);
+                    }
                 }
-            }
-            
-            // Clean up dead references
-            foreach (var key in deadKeys)
-            {
-                _tabCache.TryRemove(key, out _);
-            }
-            
-            if (deadKeys.Count > 0)
-            {
-                DebugLogger.Log($"Cleaned up {deadKeys.Count} dead tab references. Active: {_tabCache.Count}");
-                DebugLogger.LogMemory("After tab cleanup");
-            }
-            
-            // If we're still over the reasonable limit, log for diagnostics
-            if (_tabCache.Count > _maxTabs * 0.8)
-            {
-                DebugLogger.Log($"High tab count: {_tabCache.Count} tabs cached (limit: {_maxTabs})");
-            }
+                
+                // Clean up dead references
+                foreach (var key in deadKeys)
+                {
+                    _tabCache.TryRemove(key, out _);
+                }
+                
+                if (deadKeys.Count > 0)
+                {
+                    DebugLogger.Log($"Cleaned up {deadKeys.Count} dead tab references. Active: {_tabCache.Count}");
+                    DebugLogger.LogMemory("After tab cleanup");
+                }
+                
+                // If we're still over the reasonable limit, log for diagnostics
+                if (_tabCache.Count > _maxTabs * 0.8)
+                {
+                    DebugLogger.Log($"High tab count: {_tabCache.Count} tabs cached (limit: {_maxTabs})");
+                }
+            #if DEBUG
+            });
+            #endif
         }
         
         public void RemoveTab(string noteId)
         {
-            if (_tabCache.TryRemove(noteId, out var weakRef))
+            #if DEBUG
+            EnhancedMemoryTracker.TrackServiceOperation<UITabFactory>("RemoveTab", () =>
             {
-                if (weakRef.IsAlive && weakRef.Target is NoteTabItem tab)
+            #endif
+                if (_tabCache.TryRemove(noteId, out var weakRef))
                 {
-                    tab.Dispose();
-                    DebugLogger.Log($"Removed and disposed tab: {tab.Note.Title}");
+                    if (weakRef.IsAlive && weakRef.Target is NoteTabItem tab)
+                    {
+                        tab.Dispose();
+                        DebugLogger.Log($"Removed and disposed tab: {tab.Note.Title}");
+                    }
                 }
-            }
+            #if DEBUG
+            });
+            #endif
         }
         
         public void Dispose()

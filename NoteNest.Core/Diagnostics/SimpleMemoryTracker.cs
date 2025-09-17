@@ -165,4 +165,372 @@ namespace NoteNest.Core.Diagnostics
             }
         }
     }
+
+#if DEBUG
+    /// <summary>
+    /// Enhanced memory tracking for service-level diagnostics
+    /// Extends SimpleMemoryTracker for detailed analysis
+    /// </summary>
+    public static class EnhancedMemoryTracker
+    {
+        private static readonly Dictionary<string, ServiceMemoryInfo> _serviceStats = new();
+        private static readonly List<MemorySnapshot> _snapshots = new();
+        private static readonly object _enhancedLock = new object();
+        private static DateTime _lastSnapshotTime = DateTime.MinValue;
+        private static readonly TimeSpan _snapshotInterval = TimeSpan.FromSeconds(5);
+
+        /// <summary>
+        /// Track memory usage for a specific service operation
+        /// </summary>
+        public static void TrackServiceOperation<T>(string operation, Action action)
+        {
+            TrackServiceOperation(typeof(T).Name, operation, action);
+        }
+
+        /// <summary>
+        /// Track memory usage for a named service operation
+        /// </summary>
+        public static void TrackServiceOperation(string serviceName, string operation, Action action)
+        {
+            var before = GC.GetTotalMemory(false);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                action();
+            }
+            finally
+            {
+                stopwatch.Stop();
+                var after = GC.GetTotalMemory(false);
+                var delta = after - before;
+
+                RecordServiceOperation(serviceName, operation, delta, stopwatch.Elapsed);
+            }
+        }
+
+        /// <summary>
+        /// Track memory usage for a specific service operation (async)
+        /// </summary>
+        public static async Task TrackServiceOperationAsync<T>(string operation, Func<Task> action)
+        {
+            await TrackServiceOperationAsync(typeof(T).Name, operation, action);
+        }
+
+        /// <summary>
+        /// Track memory usage for a named service operation (async)
+        /// </summary>
+        public static async Task TrackServiceOperationAsync(string serviceName, string operation, Func<Task> action)
+        {
+            var before = GC.GetTotalMemory(false);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                await action();
+            }
+            finally
+            {
+                stopwatch.Stop();
+                var after = GC.GetTotalMemory(false);
+                var delta = after - before;
+
+                RecordServiceOperation(serviceName, operation, delta, stopwatch.Elapsed);
+            }
+        }
+
+        /// <summary>
+        /// Record a service operation's memory impact
+        /// </summary>
+        private static void RecordServiceOperation(string serviceName, string operation, long memoryDeltaBytes, TimeSpan duration)
+        {
+            lock (_enhancedLock)
+            {
+                if (!_serviceStats.ContainsKey(serviceName))
+                {
+                    _serviceStats[serviceName] = new ServiceMemoryInfo
+                    {
+                        ServiceName = serviceName,
+                        Operations = new List<OperationMemoryInfo>()
+                    };
+                }
+
+                var serviceInfo = _serviceStats[serviceName];
+                serviceInfo.TotalMemoryDeltaBytes += memoryDeltaBytes;
+                serviceInfo.OperationCount++;
+                serviceInfo.LastOperationTime = DateTime.Now;
+
+                // Track individual operations for analysis
+                serviceInfo.Operations.Add(new OperationMemoryInfo
+                {
+                    OperationName = operation,
+                    MemoryDeltaBytes = memoryDeltaBytes,
+                    Duration = duration,
+                    Timestamp = DateTime.Now
+                });
+
+                // Keep only recent operations (last 100 per service)
+                if (serviceInfo.Operations.Count > 100)
+                {
+                    serviceInfo.Operations.RemoveRange(0, serviceInfo.Operations.Count - 100);
+                }
+
+                // Log significant memory changes
+                if (Math.Abs(memoryDeltaBytes) > 4096) // > 4KB
+                {
+                    DebugLogger.Log($"[ENHANCED-MEMORY] {serviceName}.{operation}: {memoryDeltaBytes / 1024.0:+0.0;-0.0;0.0}KB ({duration.TotalMilliseconds:F1}ms)");
+                }
+
+                // Create snapshots periodically
+                TakeSnapshotIfNeeded();
+            }
+        }
+
+        /// <summary>
+        /// Take a memory snapshot if enough time has passed
+        /// </summary>
+        private static void TakeSnapshotIfNeeded()
+        {
+            var now = DateTime.Now;
+            if (now - _lastSnapshotTime >= _snapshotInterval)
+            {
+                _lastSnapshotTime = now;
+
+                var snapshot = new MemorySnapshot
+                {
+                    Timestamp = now,
+                    TotalMemoryBytes = GC.GetTotalMemory(false),
+                    ServiceStats = _serviceStats.Values.Select(s => new ServiceMemoryInfo
+                    {
+                        ServiceName = s.ServiceName,
+                        TotalMemoryDeltaBytes = s.TotalMemoryDeltaBytes,
+                        OperationCount = s.OperationCount,
+                        LastOperationTime = s.LastOperationTime,
+                        Operations = new List<OperationMemoryInfo>() // Don't duplicate operations in snapshots
+                    }).ToList()
+                };
+
+                _snapshots.Add(snapshot);
+
+                // Keep only recent snapshots (last 100)
+                if (_snapshots.Count > 100)
+                {
+                    _snapshots.RemoveRange(0, _snapshots.Count - 100);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Get comprehensive memory statistics for dashboard
+        /// </summary>
+        public static MemoryDashboardStats GetDashboardStats()
+        {
+            lock (_enhancedLock)
+            {
+                var baseStats = SimpleMemoryTracker.GetStats();
+                var currentMemory = GC.GetTotalMemory(false);
+
+                return new MemoryDashboardStats
+                {
+                    // Base statistics
+                    TotalMemoryMB = baseStats.totalMB,
+                    DeltaFromBaselineMB = baseStats.deltaMB,
+                    MemoryPerTabKB = baseStats.perTabKB,
+                    ActiveTabCount = baseStats.tabCount,
+
+                    // Service-level statistics
+                    ServiceBreakdown = _serviceStats.Values
+                        .OrderByDescending(s => Math.Abs(s.TotalMemoryDeltaBytes))
+                        .Take(10)
+                        .ToList(),
+
+                    // Leak detection
+                    PotentialLeaks = DetectPotentialLeaks(),
+
+                    // Recent activity
+                    RecentOperations = GetRecentOperations(20),
+
+                    // Memory trends
+                    MemoryTrend = CalculateMemoryTrend(),
+
+                    // General info
+                    SnapshotCount = _snapshots.Count,
+                    TrackingDuration = DateTime.Now - (_snapshots.FirstOrDefault()?.Timestamp ?? DateTime.Now)
+                };
+            }
+        }
+
+        /// <summary>
+        /// Detect services that might be leaking memory
+        /// </summary>
+        private static List<LeakSuspectInfo> DetectPotentialLeaks()
+        {
+            var suspects = new List<LeakSuspectInfo>();
+
+            foreach (var service in _serviceStats.Values)
+            {
+                // Look for services with consistently growing memory usage
+                if (service.TotalMemoryDeltaBytes > 1024 * 1024 && // > 1MB total delta
+                    service.OperationCount > 10) // With reasonable operation count
+                {
+                    var avgMemoryPerOp = service.TotalMemoryDeltaBytes / (double)service.OperationCount;
+                    if (avgMemoryPerOp > 10240) // > 10KB average per operation
+                    {
+                        suspects.Add(new LeakSuspectInfo
+                        {
+                            ServiceName = service.ServiceName,
+                            TotalLeakEstimateKB = service.TotalMemoryDeltaBytes / 1024.0,
+                            AverageLeakPerOperationKB = avgMemoryPerOp / 1024.0,
+                            OperationCount = service.OperationCount,
+                            Description = $"Averaging {avgMemoryPerOp / 1024.0:F1}KB per operation"
+                        });
+                    }
+                }
+            }
+
+            return suspects.OrderByDescending(s => s.TotalLeakEstimateKB).ToList();
+        }
+
+        /// <summary>
+        /// Get recent operations across all services
+        /// </summary>
+        private static List<OperationMemoryInfo> GetRecentOperations(int count)
+        {
+            return _serviceStats.Values
+                .SelectMany(s => s.Operations)
+                .OrderByDescending(o => o.Timestamp)
+                .Take(count)
+                .ToList();
+        }
+
+        /// <summary>
+        /// Calculate memory usage trend
+        /// </summary>
+        private static MemoryTrendInfo CalculateMemoryTrend()
+        {
+            if (_snapshots.Count < 2)
+            {
+                return new MemoryTrendInfo { Trend = "Insufficient data" };
+            }
+
+            var recent = _snapshots.TakeLast(10).ToList();
+            var first = recent.First();
+            var last = recent.Last();
+
+            var memoryChange = last.TotalMemoryBytes - first.TotalMemoryBytes;
+            var timeSpan = last.Timestamp - first.Timestamp;
+            var changeRateMBPerMin = (memoryChange / 1024.0 / 1024.0) / timeSpan.TotalMinutes;
+
+            return new MemoryTrendInfo
+            {
+                Trend = changeRateMBPerMin > 1 ? "Growing" :
+                        changeRateMBPerMin < -1 ? "Shrinking" : "Stable",
+                ChangeRateMBPerMinute = changeRateMBPerMin,
+                DataPoints = recent.Count
+            };
+        }
+
+        /// <summary>
+        /// Clear all enhanced tracking data
+        /// </summary>
+        public static void ClearTrackingData()
+        {
+            lock (_enhancedLock)
+            {
+                _serviceStats.Clear();
+                _snapshots.Clear();
+                _lastSnapshotTime = DateTime.MinValue;
+            }
+        }
+
+        /// <summary>
+        /// Get detailed statistics for a specific service
+        /// </summary>
+        public static ServiceMemoryInfo GetServiceDetails(string serviceName)
+        {
+            lock (_enhancedLock)
+            {
+                return _serviceStats.TryGetValue(serviceName, out var info) ? info : null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Comprehensive memory dashboard statistics
+    /// </summary>
+    public class MemoryDashboardStats
+    {
+        public long TotalMemoryMB { get; set; }
+        public long DeltaFromBaselineMB { get; set; }
+        public long MemoryPerTabKB { get; set; }
+        public int ActiveTabCount { get; set; }
+        public List<ServiceMemoryInfo> ServiceBreakdown { get; set; } = new();
+        public List<LeakSuspectInfo> PotentialLeaks { get; set; } = new();
+        public List<OperationMemoryInfo> RecentOperations { get; set; } = new();
+        public MemoryTrendInfo MemoryTrend { get; set; } = new();
+        public int SnapshotCount { get; set; }
+        public TimeSpan TrackingDuration { get; set; }
+    }
+
+    /// <summary>
+    /// Information about a service's memory usage
+    /// </summary>
+    public class ServiceMemoryInfo
+    {
+        public string ServiceName { get; set; }
+        public long TotalMemoryDeltaBytes { get; set; }
+        public int OperationCount { get; set; }
+        public DateTime LastOperationTime { get; set; }
+        public List<OperationMemoryInfo> Operations { get; set; } = new();
+
+        public double TotalMemoryDeltaKB => TotalMemoryDeltaBytes / 1024.0;
+        public double TotalMemoryDeltaMB => TotalMemoryDeltaBytes / 1024.0 / 1024.0;
+        public double AverageMemoryPerOperationKB => OperationCount > 0 ? TotalMemoryDeltaKB / OperationCount : 0;
+    }
+
+    /// <summary>
+    /// Information about a specific operation's memory usage
+    /// </summary>
+    public class OperationMemoryInfo
+    {
+        public string OperationName { get; set; }
+        public long MemoryDeltaBytes { get; set; }
+        public TimeSpan Duration { get; set; }
+        public DateTime Timestamp { get; set; }
+
+        public double MemoryDeltaKB => MemoryDeltaBytes / 1024.0;
+    }
+
+    /// <summary>
+    /// Information about potential memory leaks
+    /// </summary>
+    public class LeakSuspectInfo
+    {
+        public string ServiceName { get; set; }
+        public double TotalLeakEstimateKB { get; set; }
+        public double AverageLeakPerOperationKB { get; set; }
+        public int OperationCount { get; set; }
+        public string Description { get; set; }
+    }
+
+    /// <summary>
+    /// Memory trend information
+    /// </summary>
+    public class MemoryTrendInfo
+    {
+        public string Trend { get; set; }
+        public double ChangeRateMBPerMinute { get; set; }
+        public int DataPoints { get; set; }
+    }
+
+    /// <summary>
+    /// Memory snapshot at a point in time
+    /// </summary>
+    public class MemorySnapshot
+    {
+        public DateTime Timestamp { get; set; }
+        public long TotalMemoryBytes { get; set; }
+        public List<ServiceMemoryInfo> ServiceStats { get; set; } = new();
+    }
+#endif
 }
