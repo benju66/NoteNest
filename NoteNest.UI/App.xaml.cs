@@ -52,6 +52,7 @@ namespace NoteNest.UI
                     {
                         services.AddNoteNestServices(); // Only fast services
                         services.AddSilentSaveFailureFix(); // ADDED: Eliminates all silent save failures
+                        services.AddHybridSaveCoordination(); // HYBRID: Enhanced save coordination with status bar
                     })
                     .Build();
 
@@ -90,6 +91,18 @@ namespace NoteNest.UI
                 
                 MainWindow = mainWindow;
                 mainWindow.Show();
+                
+                // HYBRID: Initialize save coordination system (start centralized timers)
+                try
+                {
+                    ServiceProvider.InitializeHybridSaveCoordination();
+                    _logger.Info("Hybrid Save Coordination System started successfully");
+                }
+                catch (Exception hybridEx)
+                {
+                    _logger.Error(hybridEx, "Failed to initialize Hybrid Save Coordination - falling back to legacy timers");
+                    // Continue startup - system will fall back to existing save mechanisms
+                }
                 
                 // HIGH-IMPACT MEMORY FIX: Set memory baseline after startup
                 SimpleMemoryTracker.SetBaseline();
@@ -219,26 +232,65 @@ namespace NoteNest.UI
         {
             try
             {
+                // HYBRID: Try enhanced save coordination first, fall back to legacy
+                var saveOperationsHelper = ServiceProvider?.GetService<NoteNest.UI.Services.SaveOperationsHelper>();
                 var saveManager = ServiceProvider?.GetService<ISaveManager>();
-                if (saveManager != null)
+                
+                bool saveSucceeded = false;
+                
+                if (saveOperationsHelper != null)
                 {
+                    _logger?.Info("Using hybrid save coordination for shutdown");
+                    try
+                    {
+                        // Use enhanced emergency save with coordination
+                        var saveTask = saveOperationsHelper.EmergencySaveAllAsync();
+                        var timeoutTask = Task.Delay(15000); // 15 second timeout for enhanced system
+                        
+                        var completedTask = await Task.WhenAny(saveTask, timeoutTask);
+                        
+                        if (completedTask == saveTask)
+                        {
+                            var hybridResult = await saveTask;
+                            _logger?.Info($"Hybrid emergency save completed: {hybridResult.SuccessCount} succeeded, {hybridResult.FailureCount} failed");
+                            saveSucceeded = hybridResult.SuccessCount > 0 || hybridResult.FailureCount == 0;
+                        }
+                        else
+                        {
+                            _logger?.Warning("Hybrid save timeout during shutdown - falling back to legacy");
+                        }
+                    }
+                    catch (Exception hybridEx)
+                    {
+                        _logger?.Error(hybridEx, "Hybrid save system failed during shutdown - falling back to legacy");
+                    }
+                }
+                
+                // Legacy fallback if hybrid failed or unavailable
+                if (!saveSucceeded && saveManager != null)
+                {
+                    _logger?.Info("Using legacy save system for shutdown");
                     // Save all dirty notes with timeout
                     var saveTask = saveManager.SaveAllDirtyAsync();
                     var timeoutTask = Task.Delay(10000); // 10 second timeout
                     
                     var completedTask = await Task.WhenAny(saveTask, timeoutTask);
                     
-                    BatchSaveResult result = null;
                     if (completedTask == saveTask)
                     {
-                        result = await saveTask;
+                        var legacyResult = await saveTask;
+                        _logger?.Info($"Legacy save completed: {legacyResult.SuccessCount} succeeded, {legacyResult.FailureCount} failed");
+                        saveSucceeded = legacyResult.SuccessCount > 0 || legacyResult.FailureCount == 0;
                     }
                     else
                     {
-                        _logger?.Warning("Save timeout during shutdown");
+                        _logger?.Warning("Legacy save timeout during shutdown");
                     }
-                    
-                    // If any failed or timed out, write emergency files
+                }
+                
+                // If any saves failed or timed out, write emergency files
+                if (saveManager != null)
+                {
                     var dirtyNotes = saveManager.GetDirtyNoteIds();
                     if (dirtyNotes.Count > 0)
                     {

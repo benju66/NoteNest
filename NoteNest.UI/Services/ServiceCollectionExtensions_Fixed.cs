@@ -406,4 +406,89 @@ namespace NoteNest.UI.Services
             }
         }
     }
+
+    /// <summary>
+    /// HYBRID SAVE COORDINATION SYSTEM: Extension for enhanced save system
+    /// Adds SaveCoordinator, CentralSaveManager, and status bar integration
+    /// </summary>
+    public static class HybridSaveCoordinationExtensions
+    {
+        /// <summary>
+        /// Add the hybrid save coordination system to services
+        /// Call this AFTER AddSilentSaveFailureFix() for complete enhancement
+        /// </summary>
+        public static IServiceCollection AddHybridSaveCoordination(this IServiceCollection services)
+        {
+            // Step 1: Register SaveStatusManager for status bar integration
+            services.AddSingleton<NoteNest.Core.Services.SaveCoordination.SaveStatusManager>(serviceProvider =>
+            {
+                var statusBar = serviceProvider.GetRequiredService<NoteNest.Core.Services.IStatusBarService>();
+                var logger = serviceProvider.GetRequiredService<IAppLogger>();
+                return new NoteNest.Core.Services.SaveCoordination.SaveStatusManager(statusBar, logger);
+            });
+
+            // Step 2: Register SaveCoordinator with all dependencies
+            services.AddSingleton<NoteNest.Core.Services.SaveCoordination.SaveCoordinator>(serviceProvider =>
+            {
+                var fileWatcher = serviceProvider.GetRequiredService<FileWatcherService>();
+                var notifications = serviceProvider.GetRequiredService<IUserNotificationService>();
+                var logger = serviceProvider.GetRequiredService<IAppLogger>();
+                var statusManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.SaveStatusManager>();
+                
+                return new NoteNest.Core.Services.SaveCoordination.SaveCoordinator(
+                    fileWatcher, notifications, logger, statusManager);
+            });
+
+            // Step 3: Register CentralSaveManager for timer consolidation
+            services.AddSingleton<NoteNest.Core.Services.SaveCoordination.CentralSaveManager>(serviceProvider =>
+            {
+                var saveCoordinator = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.SaveCoordinator>();
+                var workspace = serviceProvider.GetRequiredService<IWorkspaceService>();
+                var walManager = serviceProvider.GetRequiredService<IWriteAheadLog>();
+                var logger = serviceProvider.GetRequiredService<IAppLogger>();
+                var statusManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.SaveStatusManager>();
+                
+                return new NoteNest.Core.Services.SaveCoordination.CentralSaveManager(
+                    saveCoordinator, workspace, walManager, logger, statusManager);
+            });
+
+            // Step 4: Register SaveOperationsHelper for easy integration
+            services.AddSingleton<NoteNest.UI.Services.SaveOperationsHelper>(serviceProvider =>
+            {
+                var saveCoordinator = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.SaveCoordinator>();
+                var centralSaveManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.CentralSaveManager>();
+                var logger = serviceProvider.GetRequiredService<IAppLogger>();
+                
+                return new NoteNest.UI.Services.SaveOperationsHelper(saveCoordinator, centralSaveManager, logger);
+            });
+
+            return services;
+        }
+
+        /// <summary>
+        /// Initialize the hybrid save coordination system
+        /// Call this after DI container is built to start timers
+        /// </summary>
+        public static void InitializeHybridSaveCoordination(this IServiceProvider serviceProvider)
+        {
+            try
+            {
+                var logger = serviceProvider.GetRequiredService<IAppLogger>();
+                logger.Info("Initializing Hybrid Save Coordination System");
+
+                // Start the centralized timers
+                var centralSaveManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.CentralSaveManager>();
+                centralSaveManager.StartTimers();
+
+                logger.Info("Hybrid Save Coordination System initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                var logger = serviceProvider.GetService<IAppLogger>();
+                logger?.Error(ex, "Failed to initialize Hybrid Save Coordination System");
+                throw;
+            }
+        }
+    }
+
 }

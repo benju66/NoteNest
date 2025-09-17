@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using NoteNest.Core.Services.Logging;
@@ -13,6 +14,10 @@ namespace NoteNest.Core.Services
         private readonly Dictionary<string, DateTime> _lastEventTimes = new();
         private readonly TimeSpan _debounceInterval;
         private readonly ConfigurationService? _config;
+        
+        // HYBRID ENHANCEMENT: File path suspension for save coordination
+        private readonly ConcurrentDictionary<string, DateTime> _suspendedUntil = new();
+        private readonly TimeSpan _suspendDuration = TimeSpan.FromSeconds(2);
 
         public event EventHandler<FileChangedEventArgs>? FileChanged;
         public event EventHandler<FileChangedEventArgs>? FileCreated;
@@ -134,6 +139,13 @@ namespace NoteNest.Core.Services
         {
             try
             {
+                // HYBRID ENHANCEMENT: Check if file path is suspended (during saves)
+                if (IsSuspended(e.FullPath))
+                {
+                    _logger.Debug($"Skipping file change event for suspended path: {e.FullPath}");
+                    return;
+                }
+
                 // Debounce rapid successive events for the same path
                 lock (_lastEventTimes)
                 {
@@ -251,6 +263,57 @@ namespace NoteNest.Core.Services
                     }
                 });
             }
+        }
+
+        /// <summary>
+        /// HYBRID ENHANCEMENT: Suspend file watching for a specific path
+        /// Used during save operations to prevent false external change detection
+        /// </summary>
+        public void SuspendPath(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath) || _disposed)
+                return;
+
+            var normalizedPath = filePath.ToLowerInvariant();
+            _suspendedUntil[normalizedPath] = DateTime.UtcNow.Add(_suspendDuration);
+            _logger.Debug($"Suspended file watching: {filePath} for {_suspendDuration.TotalSeconds}s");
+        }
+
+        /// <summary>
+        /// HYBRID ENHANCEMENT: Resume file watching for a specific path
+        /// </summary>
+        public void ResumePath(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath) || _disposed)
+                return;
+
+            var normalizedPath = filePath.ToLowerInvariant();
+            _suspendedUntil.TryRemove(normalizedPath, out _);
+            _logger.Debug($"Resumed file watching: {filePath}");
+        }
+
+        /// <summary>
+        /// HYBRID ENHANCEMENT: Check if a file path is currently suspended
+        /// </summary>
+        private bool IsSuspended(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+                return false;
+
+            var normalizedPath = filePath.ToLowerInvariant();
+            if (_suspendedUntil.TryGetValue(normalizedPath, out var suspendUntil))
+            {
+                if (DateTime.UtcNow < suspendUntil)
+                {
+                    return true; // Still suspended
+                }
+                else
+                {
+                    // Expired suspension - clean up
+                    _suspendedUntil.TryRemove(normalizedPath, out _);
+                }
+            }
+            return false;
         }
 
         public void Dispose()

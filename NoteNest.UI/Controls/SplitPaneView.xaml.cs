@@ -642,44 +642,93 @@ namespace NoteNest.UI.Controls
         /// <summary>
         /// RTF-FOCUSED: Save RTF tab with content flush
         /// </summary>
+        /// <summary>
+        /// HYBRID ENHANCED: RTF save with coordinated retry and status feedback
+        /// DEMONSTRATION of hybrid save integration
+        /// </summary>
         private async void SaveTab_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem mi && mi.Tag is ITabItem tab)
             {
-                System.Diagnostics.Debug.WriteLine($"[RTF] SaveTab START: {tab.Title}");
+                System.Diagnostics.Debug.WriteLine($"[HYBRID] SaveTab START: {tab.Title}");
                 
                 try
                 {
-                    // RTF-SPECIFIC: Flush content from RTF editor first
-                    var rtfEditor = GetRTFEditorForTab(tab);
-                    if (rtfEditor != null && tab is NoteTabItem nti)
+                    // Get hybrid save coordination services
+                    var app = Application.Current as App;
+                    var saveOperationsHelper = app?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.SaveOperationsHelper)) as NoteNest.UI.Services.SaveOperationsHelper;
+                    var saveManager = app?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
+
+                    if (saveOperationsHelper != null && saveManager != null)
                     {
-                        var content = rtfEditor.SaveContent();
-                        nti.UpdateContentFromEditor(content);
-                        rtfEditor.MarkClean();
-                        System.Diagnostics.Debug.WriteLine($"[RTF] Content flushed for RTF save: {tab.Title}");
-                    }
-                    
-                    var saveManager = (Application.Current as App)?.ServiceProvider
-                        ?.GetService(typeof(ISaveManager)) as ISaveManager;
-                    
-                    if (saveManager != null)
-                    {
-                        var success = await saveManager.SaveNoteAsync(tab.NoteId);
+                        // HYBRID APPROACH: Enhanced save with coordination
+                        System.Diagnostics.Debug.WriteLine($"[HYBRID] Using enhanced save coordination for: {tab.Title}");
+                        
+                        var success = await saveOperationsHelper.SafeSaveAsync(
+                            async () =>
+                            {
+                                // RTF-SPECIFIC: Flush content from RTF editor first
+                                var rtfEditor = GetRTFEditorForTab(tab);
+                                if (rtfEditor != null && tab is NoteTabItem nti)
+                                {
+                                    var content = rtfEditor.SaveContent();
+                                    nti.UpdateContentFromEditor(content);
+                                    rtfEditor.MarkClean();
+                                    System.Diagnostics.Debug.WriteLine($"[HYBRID] RTF content flushed: {tab.Title}");
+                                }
+                                
+                                // Delegate to existing save infrastructure
+                                await saveManager.SaveNoteAsync(tab.NoteId);
+                            },
+                            tab.Note?.FilePath ?? "",
+                            tab.Title ?? "Unknown"
+                        );
+
                         if (success)
                         {
-                            System.Diagnostics.Debug.WriteLine($"[RTF] RTF tab saved successfully: {tab.Title}");
+                            System.Diagnostics.Debug.WriteLine($"[HYBRID] Enhanced save succeeded: {tab.Title}");
+                            // Status bar automatically shows: "✅ Saved 'tab.Title'"
                         }
                         else
                         {
-                            _logger?.Warning($"RTF tab save returned false: {tab.Title}");
+                            System.Diagnostics.Debug.WriteLine($"[HYBRID] Enhanced save failed: {tab.Title}");
+                            // Status bar shows: "❌ Save failed: 'tab.Title' - error"
+                            // User dialog already displayed by SaveCoordinator
+                        }
+                    }
+                    else
+                    {
+                        // FALLBACK: Legacy save system (if hybrid not available)
+                        System.Diagnostics.Debug.WriteLine($"[HYBRID] Falling back to legacy save: {tab.Title}");
+                        
+                        // RTF-SPECIFIC: Flush content from RTF editor first
+                        var rtfEditor = GetRTFEditorForTab(tab);
+                        if (rtfEditor != null && tab is NoteTabItem nti)
+                        {
+                            var content = rtfEditor.SaveContent();
+                            nti.UpdateContentFromEditor(content);
+                            rtfEditor.MarkClean();
+                            System.Diagnostics.Debug.WriteLine($"[HYBRID] Legacy RTF content flushed: {tab.Title}");
+                        }
+                        
+                        if (saveManager != null)
+                        {
+                            var success = await saveManager.SaveNoteAsync(tab.NoteId);
+                            if (success)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[HYBRID] Legacy save succeeded: {tab.Title}");
+                            }
+                            else
+                            {
+                                _logger?.Warning($"Legacy save returned false: {tab.Title}");
+                            }
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger?.Error(ex, $"RTF tab save failed: {tab.Title}");
-                    System.Diagnostics.Debug.WriteLine($"[RTF] SaveTab FAILED: {ex.Message}");
+                    _logger?.Error(ex, $"Save failed for tab: {tab.Title}");
+                    System.Diagnostics.Debug.WriteLine($"[HYBRID] SaveTab EXCEPTION: {ex.Message}");
                 }
             }
         }
