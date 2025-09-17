@@ -11,6 +11,7 @@ using Microsoft.Extensions.Hosting;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Interfaces.Services;
+using NoteNest.Core.Diagnostics;
 using NoteNest.UI.Services;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.Controls;
@@ -89,6 +90,9 @@ namespace NoteNest.UI
                 
                 MainWindow = mainWindow;
                 mainWindow.Show();
+                
+                // HIGH-IMPACT MEMORY FIX: Set memory baseline after startup
+                SimpleMemoryTracker.SetBaseline();
                 
                 _startupTimer.Stop();
                 _logger.Info($"App started in {_startupTimer.ElapsedMilliseconds}ms");
@@ -286,6 +290,9 @@ namespace NoteNest.UI
                     saveManager.Dispose();
                 }
                 
+                // HIGH-IMPACT MEMORY FIX: Log final memory status
+                DebugLogger.LogMemory("Before app shutdown");
+                
                 // Dispose other services
                 if (MainWindow?.DataContext is IDisposable vm)
                 {
@@ -293,6 +300,9 @@ namespace NoteNest.UI
                 }
                 
                 _host?.Dispose();
+                
+                // Final memory report
+                DebugLogger.LogMemory("After app shutdown");
             }
             catch (Exception ex)
             {
