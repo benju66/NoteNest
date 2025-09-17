@@ -97,7 +97,10 @@ namespace NoteNest.Core.Services
 			return idx >= 0 ? notePath.Substring(0, idx) + ".meta" : notePath + ".meta";
 		}
 
-		private async Task<NoteMetadata?> ReadMetadataAsync(string metaPath)
+		/// <summary>
+		/// Read metadata from file - made public for AtomicMetadataSaver integration
+		/// </summary>
+		public async Task<NoteMetadata?> ReadMetadataAsync(string metaPath)
 		{
 			try
 			{
@@ -129,7 +132,10 @@ namespace NoteNest.Core.Services
 			await _fileSystem.WriteTextAsync(metaPath, json);
 		}
 
-		private async Task WriteMetadataAsync(string metaPath, NoteMetadata meta)
+		/// <summary>
+		/// Write metadata to file - made public for AtomicMetadataSaver integration
+		/// </summary>
+		public async Task WriteMetadataAsync(string metaPath, NoteMetadata meta)
 		{
 			try
 			{

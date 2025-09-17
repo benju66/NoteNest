@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Services.SaveCoordination;
+using NoteNest.Core.Models;
 
 namespace NoteNest.UI.Services
 {
@@ -34,6 +35,20 @@ namespace NoteNest.UI.Services
         }
 
         /// <summary>
+        /// Enhanced atomic save with metadata coordination
+        /// Provides bulletproof content + metadata consistency
+        /// Use this for high-value saves (manual saves, tab closes)
+        /// </summary>
+        public async Task<bool> SafeSaveWithMetadata(
+            NoteModel note,
+            string content,
+            Func<Task> legacyContentSaveAction,
+            string noteTitle)
+        {
+            return await _saveCoordinator.SafeSaveWithMetadata(note, content, legacyContentSaveAction, noteTitle);
+        }
+
+        /// <summary>
         /// Emergency save all dirty tabs (for shutdown, crashes, etc.)
         /// </summary>
         public async Task<BatchSaveResult> EmergencySaveAllAsync()
@@ -47,6 +62,15 @@ namespace NoteNest.UI.Services
         public SaveCoordinatorStats GetStats()
         {
             return _saveCoordinator.GetStats();
+        }
+
+        /// <summary>
+        /// Get atomic save metrics for monitoring data integrity improvements
+        /// </summary>
+        public AtomicSaveMetrics GetAtomicSaveMetrics()
+        {
+            // Access atomic saver metrics through coordinator
+            return _saveCoordinator.GetAtomicSaveMetrics();
         }
     }
 }

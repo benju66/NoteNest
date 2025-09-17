@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Interfaces;
+using NoteNest.Core.Models;
 
 namespace NoteNest.Core.Services.SaveCoordination
 {
@@ -19,18 +20,21 @@ namespace NoteNest.Core.Services.SaveCoordination
         private readonly IUserNotificationService _notifications;
         private readonly IAppLogger _logger;
         private readonly SaveStatusManager _statusManager;
+        private readonly AtomicMetadataSaver _atomicSaver;
         private bool _disposed = false;
 
         public SaveCoordinator(
             FileWatcherService fileWatcher,
             IUserNotificationService notifications,
             IAppLogger logger,
-            SaveStatusManager statusManager)
+            SaveStatusManager statusManager,
+            AtomicMetadataSaver atomicSaver)
         {
             _fileWatcher = fileWatcher ?? throw new ArgumentNullException(nameof(fileWatcher));
             _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _statusManager = statusManager ?? throw new ArgumentNullException(nameof(statusManager));
+            _atomicSaver = atomicSaver ?? throw new ArgumentNullException(nameof(atomicSaver));
         }
 
         /// <summary>
@@ -135,6 +139,120 @@ namespace NoteNest.Core.Services.SaveCoordination
         }
 
         /// <summary>
+        /// Enhanced save with atomic metadata coordination
+        /// Provides bulletproof content + metadata consistency
+        /// </summary>
+        public async Task<bool> SafeSaveWithMetadata(
+            NoteModel note,
+            string content,
+            Func<Task> legacyContentSaveAction,
+            string noteTitle)
+        {
+            if (note == null || string.IsNullOrEmpty(note.FilePath) || string.IsNullOrEmpty(noteTitle))
+            {
+                _logger.Warning("SafeSaveWithMetadata called with invalid parameters");
+                return false;
+            }
+
+            var normalizedPath = note.FilePath.ToLowerInvariant();
+            
+            // Prevent concurrent saves to same file
+            if (!_savingFiles.Add(normalizedPath))
+            {
+                _logger.Debug($"Atomic save already in progress for: {noteTitle}");
+                return true; // Already saving - coalesce the request
+            }
+
+            try
+            {
+                // Show save starting in status bar
+                _statusManager.ShowSaveInProgress(noteTitle);
+
+                // Suspend file watcher to prevent false external change detection
+                _fileWatcher?.SuspendPath(note.FilePath);
+
+                // Exponential backoff retry logic for atomic saves
+                var delays = new[] { 100, 500, 1500 }; // ms
+                AtomicSaveResult lastResult = null;
+
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    try
+                    {
+                        // Try atomic save (content + metadata together)
+                        lastResult = await _atomicSaver.SaveContentAndMetadataAtomically(
+                            note, content, legacyContentSaveAction);
+
+                        if (lastResult.Success)
+                        {
+                            // Success - show appropriate status
+                            var statusSuffix = lastResult.WasFullyAtomic ? " (atomic)" : " (fallback)";
+                            _statusManager.ShowSaveSuccess(noteTitle + statusSuffix);
+                            _logger.Debug($"Atomic save succeeded on attempt {attempt + 1}: {noteTitle} (fully atomic: {lastResult.WasFullyAtomic})");
+                            return true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning($"Atomic save attempt {attempt + 1} failed for {noteTitle}: {ex.Message}");
+                        lastResult = new AtomicSaveResult 
+                        { 
+                            Success = false, 
+                            ErrorMessage = ex.Message 
+                        };
+
+                        if (attempt < 2) // Not the last attempt
+                        {
+                            // Show retry status in status bar
+                            _statusManager.ShowSaveFailure(noteTitle, ex.Message, isRetrying: true);
+                            await Task.Delay(delays[attempt]);
+                        }
+                    }
+                }
+
+                // All atomic save attempts failed
+                var errorMsg = lastResult?.ErrorMessage ?? "Unknown error";
+                _statusManager.ShowSaveFailure(noteTitle, errorMsg);
+                
+                // Show user dialog for critical failures (non-blocking)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _notifications.ShowErrorAsync(
+                            $"Failed to save '{noteTitle}' atomically after 3 attempts. Content may have been saved but metadata could be inconsistent.", 
+                            new Exception(errorMsg));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, "Failed to show atomic save error notification");
+                    }
+                });
+
+                _logger.Error($"All atomic save attempts failed for: {note.FilePath}");
+                return false;
+            }
+            finally
+            {
+                // Always clean up
+                _savingFiles.Remove(normalizedPath);
+
+                // Resume file watcher with delay to avoid catching our own write
+                _ = Task.Delay(750).ContinueWith(_ =>
+                {
+                    try
+                    {
+                        _fileWatcher?.ResumePath(note.FilePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning($"Failed to resume file watcher for {note.FilePath}: {ex.Message}");
+                    }
+                }, TaskScheduler.Default);
+            }
+        }
+
+        /// <summary>
         /// Batch save with coordinated progress reporting
         /// </summary>
         public async Task<BatchSaveResult> SafeBatchSave(
@@ -218,6 +336,14 @@ namespace NoteNest.Core.Services.SaveCoordination
                 CurrentlySaving = _savingFiles.Count,
                 SavingFiles = _savingFiles.ToArray()
             };
+        }
+
+        /// <summary>
+        /// Get atomic save metrics for monitoring data integrity improvements
+        /// </summary>
+        public AtomicSaveMetrics GetAtomicSaveMetrics()
+        {
+            return _atomicSaver.GetMetrics();
         }
 
         public void Dispose()

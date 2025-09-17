@@ -643,14 +643,14 @@ namespace NoteNest.UI.Controls
         /// RTF-FOCUSED: Save RTF tab with content flush
         /// </summary>
         /// <summary>
-        /// HYBRID ENHANCED: RTF save with coordinated retry and status feedback
-        /// DEMONSTRATION of hybrid save integration
+        /// ATOMIC ENHANCED: RTF save with atomic metadata coordination
+        /// DEMONSTRATION of bulletproof content + metadata consistency
         /// </summary>
         private async void SaveTab_Click(object sender, RoutedEventArgs e)
         {
             if (sender is MenuItem mi && mi.Tag is ITabItem tab)
             {
-                System.Diagnostics.Debug.WriteLine($"[HYBRID] SaveTab START: {tab.Title}");
+                System.Diagnostics.Debug.WriteLine($"[ATOMIC] SaveTab START: {tab.Title}");
                 
                 try
                 {
@@ -661,45 +661,59 @@ namespace NoteNest.UI.Controls
 
                     if (saveOperationsHelper != null && saveManager != null)
                     {
-                        // HYBRID APPROACH: Enhanced save with coordination
-                        System.Diagnostics.Debug.WriteLine($"[HYBRID] Using enhanced save coordination for: {tab.Title}");
+                        // ATOMIC ENHANCED: Use atomic metadata coordination for bulletproof saves
+                        System.Diagnostics.Debug.WriteLine($"[ATOMIC] Using atomic metadata coordination for: {tab.Title}");
                         
-                        var success = await saveOperationsHelper.SafeSaveAsync(
+                        // RTF-SPECIFIC: Flush content from RTF editor first
+                        var rtfEditor = GetRTFEditorForTab(tab);
+                        string flushedContent = "";
+                        
+                        if (rtfEditor != null && tab is NoteTabItem nti)
+                        {
+                            flushedContent = rtfEditor.SaveContent();
+                            nti.UpdateContentFromEditor(flushedContent);
+                            rtfEditor.MarkClean();
+                            System.Diagnostics.Debug.WriteLine($"[ATOMIC] RTF content flushed: {tab.Title} ({flushedContent?.Length ?? 0} chars)");
+                        }
+                        
+                        var success = await saveOperationsHelper.SafeSaveWithMetadata(
+                            tab.Note,
+                            flushedContent,
                             async () =>
                             {
-                                // RTF-SPECIFIC: Flush content from RTF editor first
-                                var rtfEditor = GetRTFEditorForTab(tab);
-                                if (rtfEditor != null && tab is NoteTabItem nti)
-                                {
-                                    var content = rtfEditor.SaveContent();
-                                    nti.UpdateContentFromEditor(content);
-                                    rtfEditor.MarkClean();
-                                    System.Diagnostics.Debug.WriteLine($"[HYBRID] RTF content flushed: {tab.Title}");
-                                }
-                                
-                                // Delegate to existing save infrastructure
+                                // Legacy content save action (fallback if atomic fails)
                                 await saveManager.SaveNoteAsync(tab.NoteId);
                             },
-                            tab.Note?.FilePath ?? "",
                             tab.Title ?? "Unknown"
                         );
 
                         if (success)
                         {
-                            System.Diagnostics.Debug.WriteLine($"[HYBRID] Enhanced save succeeded: {tab.Title}");
-                            // Status bar automatically shows: "✅ Saved 'tab.Title'"
+                            System.Diagnostics.Debug.WriteLine($"[ATOMIC] Atomic metadata save succeeded: {tab.Title}");
+                            // Status bar automatically shows: "✅ Saved 'tab.Title' (atomic)" or "(fallback)"
+                            
+                            // Log atomic save metrics for monitoring
+                            try
+                            {
+                                var metrics = saveOperationsHelper.GetAtomicSaveMetrics();
+                                System.Diagnostics.Debug.WriteLine($"[ATOMIC] Metrics: {metrics}");
+                            }
+                            catch (Exception metricsEx)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[ATOMIC] Metrics error: {metricsEx.Message}");
+                            }
                         }
                         else
                         {
-                            System.Diagnostics.Debug.WriteLine($"[HYBRID] Enhanced save failed: {tab.Title}");
+                            System.Diagnostics.Debug.WriteLine($"[ATOMIC] Atomic save failed: {tab.Title}");
                             // Status bar shows: "❌ Save failed: 'tab.Title' - error"
                             // User dialog already displayed by SaveCoordinator
                         }
                     }
                     else
                     {
-                        // FALLBACK: Legacy save system (if hybrid not available)
-                        System.Diagnostics.Debug.WriteLine($"[HYBRID] Falling back to legacy save: {tab.Title}");
+                        // FALLBACK: Legacy save system (if atomic coordination not available)
+                        System.Diagnostics.Debug.WriteLine($"[ATOMIC] Falling back to legacy save: {tab.Title}");
                         
                         // RTF-SPECIFIC: Flush content from RTF editor first
                         var rtfEditor = GetRTFEditorForTab(tab);
@@ -708,7 +722,7 @@ namespace NoteNest.UI.Controls
                             var content = rtfEditor.SaveContent();
                             nti.UpdateContentFromEditor(content);
                             rtfEditor.MarkClean();
-                            System.Diagnostics.Debug.WriteLine($"[HYBRID] Legacy RTF content flushed: {tab.Title}");
+                            System.Diagnostics.Debug.WriteLine($"[ATOMIC] Legacy RTF content flushed: {tab.Title}");
                         }
                         
                         if (saveManager != null)
@@ -716,7 +730,7 @@ namespace NoteNest.UI.Controls
                             var success = await saveManager.SaveNoteAsync(tab.NoteId);
                             if (success)
                             {
-                                System.Diagnostics.Debug.WriteLine($"[HYBRID] Legacy save succeeded: {tab.Title}");
+                                System.Diagnostics.Debug.WriteLine($"[ATOMIC] Legacy save succeeded: {tab.Title}");
                             }
                             else
                             {
@@ -728,7 +742,7 @@ namespace NoteNest.UI.Controls
                 catch (Exception ex)
                 {
                     _logger?.Error(ex, $"Save failed for tab: {tab.Title}");
-                    System.Diagnostics.Debug.WriteLine($"[HYBRID] SaveTab EXCEPTION: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[ATOMIC] SaveTab EXCEPTION: {ex.Message}");
                 }
             }
         }

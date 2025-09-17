@@ -427,16 +427,26 @@ namespace NoteNest.UI.Services
                 return new NoteNest.Core.Services.SaveCoordination.SaveStatusManager(statusBar, logger);
             });
 
-            // Step 2: Register SaveCoordinator with all dependencies
+            // Step 1B: Register AtomicMetadataSaver for data integrity
+            services.AddSingleton<NoteNest.Core.Services.SaveCoordination.AtomicMetadataSaver>(serviceProvider =>
+            {
+                var metadataManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.NoteMetadataManager>();
+                var fileSystem = serviceProvider.GetRequiredService<IFileSystemProvider>();
+                var logger = serviceProvider.GetRequiredService<IAppLogger>();
+                return new NoteNest.Core.Services.SaveCoordination.AtomicMetadataSaver(metadataManager, fileSystem, logger);
+            });
+
+            // Step 2: Register SaveCoordinator with all dependencies (including AtomicMetadataSaver)
             services.AddSingleton<NoteNest.Core.Services.SaveCoordination.SaveCoordinator>(serviceProvider =>
             {
                 var fileWatcher = serviceProvider.GetRequiredService<FileWatcherService>();
                 var notifications = serviceProvider.GetRequiredService<IUserNotificationService>();
                 var logger = serviceProvider.GetRequiredService<IAppLogger>();
                 var statusManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.SaveStatusManager>();
+                var atomicSaver = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.AtomicMetadataSaver>();
                 
                 return new NoteNest.Core.Services.SaveCoordination.SaveCoordinator(
-                    fileWatcher, notifications, logger, statusManager);
+                    fileWatcher, notifications, logger, statusManager, atomicSaver);
             });
 
             // Step 3: Register CentralSaveManager for timer consolidation
