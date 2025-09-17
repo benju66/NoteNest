@@ -689,13 +689,6 @@ namespace NoteNest.UI.Controls.Editor.RTF
                     Document.LineHeight = double.NaN;
                 }
                 
-                // Apply spell check settings (when implemented in clean architecture)
-                System.Windows.Controls.SpellCheck.SetIsEnabled(this, settings.EnableSpellCheck);
-                if (!string.IsNullOrEmpty(settings.SpellCheckLanguage))
-                {
-                    Language = System.Windows.Markup.XmlLanguage.GetLanguage(settings.SpellCheckLanguage);
-                }
-                
                 System.Diagnostics.Debug.WriteLine($"[RTFEditor] Settings applied: Font={settings.FontFamily}, Size={settings.FontSize}, UndoLimit={settings.UndoStackLimit}");
             }
             catch (Exception ex)

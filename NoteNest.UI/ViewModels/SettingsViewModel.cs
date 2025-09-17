@@ -392,9 +392,7 @@ namespace NoteNest.UI.ViewModels
                     TabSize = source.EditorSettings.TabSize,
                     InsertSpaces = source.EditorSettings.InsertSpaces,
                     ShowFormattingToolbar = source.EditorSettings.ShowFormattingToolbar,
-                    EnhancedListHandling = source.EditorSettings.EnhancedListHandling,
-                    EnableSpellCheck = source.EditorSettings.EnableSpellCheck,
-                    SpellCheckLanguage = source.EditorSettings.SpellCheckLanguage
+                    EnhancedListHandling = source.EditorSettings.EnhancedListHandling
                 },
                 CreateBackup = source.CreateBackup,
                 MaxBackups = source.MaxBackups,
@@ -457,8 +455,6 @@ namespace NoteNest.UI.ViewModels
             target.EditorSettings.InsertSpaces = source.EditorSettings.InsertSpaces;
             target.EditorSettings.ShowFormattingToolbar = source.EditorSettings.ShowFormattingToolbar;
             target.EditorSettings.EnhancedListHandling = source.EditorSettings.EnhancedListHandling;
-            target.EditorSettings.EnableSpellCheck = source.EditorSettings.EnableSpellCheck;
-            target.EditorSettings.SpellCheckLanguage = source.EditorSettings.SpellCheckLanguage;
             target.CreateBackup = source.CreateBackup;
             target.MaxBackups = source.MaxBackups;
             target.ShowWelcomeScreen = source.ShowWelcomeScreen;

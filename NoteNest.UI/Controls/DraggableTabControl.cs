@@ -819,11 +819,12 @@ namespace NoteNest.UI.Controls
                                  "Ctrl+D: Detach to new window\n" +
                                  "Esc: Cancel drag operation";
 
-                ToolTip = new ToolTip
-                {
-                    Content = tooltipText,
-                    Placement = PlacementMode.Bottom
-                };
+                // ToolTip disabled - keyboard shortcuts still work, just no visual tooltip
+                // ToolTip = new ToolTip
+                // {
+                //     Content = tooltipText,
+                //     Placement = PlacementMode.Bottom
+                // };
 
                 AutomationProperties.SetHelpText(this, tooltipText);
                 AutomationProperties.SetName(this, "Tab Control with Keyboard Navigation");

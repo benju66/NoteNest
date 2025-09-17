@@ -95,6 +95,10 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 {
                     var range = new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd);
                     range.Load(stream, System.Windows.DataFormats.Rtf);
+                    
+                    // Re-enable spell check after RTF load (RTF loading can reset it)
+                    System.Windows.Controls.SpellCheck.SetIsEnabled(editor, true);
+                    System.Diagnostics.Debug.WriteLine("[RTFOperations] Spell check re-enabled after RTF load");
                 }
             }
             catch (Exception ex)

@@ -356,10 +356,6 @@
                             </StackPanel>
                         </Border>
 
-                        <ui:ToggleSwitch Header="Enable spell check (English)" 
-                                         IsOn="{Binding Settings.EditorSettings.EnableSpellCheck}"
-                                         Margin="0,4"/>
-                        
                         <ui:ToggleSwitch Header="Enable Task Management" 
                                          IsOn="{Binding Settings.EnableTaskPanel}"
                                          Margin="0,8"/>

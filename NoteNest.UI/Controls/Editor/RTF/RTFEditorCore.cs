@@ -34,14 +34,18 @@ namespace NoteNest.UI.Controls.Editor.RTF
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             
-            // Initialize with empty document
-            Document = new FlowDocument();
-            
-            // Apply single spacing document styles
-            InitializeDocumentStyles();
-            
-            // Basic visual setup
-            FocusVisualStyle = null;
+        // Initialize with empty document
+        Document = new FlowDocument();
+        
+        // Apply single spacing document styles
+        InitializeDocumentStyles();
+        
+        // Always enable spell check at core level - infrastructure not configuration
+        System.Windows.Controls.SpellCheck.SetIsEnabled(this, true);
+        Language = System.Windows.Markup.XmlLanguage.GetLanguage("en-US");
+        
+        // Basic visual setup
+        FocusVisualStyle = null;
         }
         
         private void RegisterBasicKeyboardShortcuts()

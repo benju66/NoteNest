@@ -27,8 +27,6 @@ namespace NoteNest.Core.Models
         
         // Performance Settings
         public int MaxDocumentSizeMB { get; set; } = 10;
-        public bool EnableSpellCheck { get; set; } = true;
-        public string SpellCheckLanguage { get; set; } = "en-US";
         
         // Memory Management Settings
         public int UndoStackLimit { get; set; } = 100;
