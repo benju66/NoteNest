@@ -9,6 +9,7 @@ using NoteNest.Core.Interfaces;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Services.Search;
+using NoteNest.Core.Diagnostics;
 
 namespace NoteNest.Core.Services
 {
@@ -86,23 +87,33 @@ namespace NoteNest.Core.Services
         /// </summary>
         public async Task<bool> BuildIndexAsync(List<CategoryModel> categories, List<NoteModel> allNotes)
         {
-            try
+            #if DEBUG
+            bool result = false;
+            await EnhancedMemoryTracker.TrackServiceOperationAsync<SearchIndexService>("BuildIndexAsync", async () =>
             {
-                _logger?.Debug($"[SearchIndex] Starting async index build with {allNotes?.Count ?? 0} notes and {categories?.Count ?? 0} categories");
-                
-                if (allNotes == null || categories == null)
+            #endif
+                try
                 {
-                    _logger?.Warning("[SearchIndex] Null notes or categories provided to BuildIndexAsync");
-                    return false;
-                }
+                    _logger?.Debug($"[SearchIndex] Starting async index build with {allNotes?.Count ?? 0} notes and {categories?.Count ?? 0} categories");
+                    
+                    if (allNotes == null || categories == null)
+                    {
+                        _logger?.Warning("[SearchIndex] Null notes or categories provided to BuildIndexAsync");
+                        #if DEBUG
+                        result = false;
+                        return;
+                        #else
+                        return false;
+                        #endif
+                    }
 
-                // Clear existing index
-                lock (_indexLock)
-                {
-                    _searchIndex.Clear();
-                    _contentCache.Clear();
-                    _contentLoadingComplete = false;
-                }
+                    // Clear existing index
+                    lock (_indexLock)
+                    {
+                        _searchIndex.Clear();
+                        _contentCache.Clear();
+                        _contentLoadingComplete = false;
+                    }
 
                 // Phase 1: Index metadata immediately (no I/O, very fast)
                 int metadataIndexed = 0;
@@ -177,13 +188,25 @@ namespace NoteNest.Core.Services
                 }
 
                 _logger?.Info($"[SearchIndex] Initial index built with {_searchIndex.Count} unique terms");
+                #if DEBUG
+                result = true;
+                #else
                 return true;
-            }
-            catch (Exception ex)
-            {
-                _logger?.Error(ex, "[SearchIndex] Failed to build index");
-                return false;
-            }
+                #endif
+                }
+                catch (Exception ex)
+                {
+                    _logger?.Error(ex, "[SearchIndex] Failed to build index");
+                    #if DEBUG
+                    result = false;
+                    #else
+                    return false;
+                    #endif
+                }
+            #if DEBUG
+            });
+            return result;
+            #endif
         }
 
         /// <summary>
@@ -508,33 +531,52 @@ namespace NoteNest.Core.Services
         /// </summary>
         public List<SearchResult> Search(string query, int maxResults = 50)
         {
-            if (string.IsNullOrWhiteSpace(query)) 
-                return new List<SearchResult>();
-
-            _logger?.Debug($"[SearchIndex] Searching for: '{query}'");
-
-            var queryWords = TokenizeText(query);
-            if (!queryWords.Any())
-                return new List<SearchResult>();
-
-            var resultScores = new Dictionary<string, (SearchResult result, float score)>();
-
-            lock (_indexLock)
+            #if DEBUG
+            List<SearchResult> result = null;
+            EnhancedMemoryTracker.TrackServiceOperation<SearchIndexService>("Search", () =>
             {
-                foreach (var word in queryWords)
+            #endif
+                if (string.IsNullOrWhiteSpace(query)) 
                 {
-                    var lowerWord = word.ToLowerInvariant();
+                    #if DEBUG
+                    result = new List<SearchResult>();
+                    return;
+                    #else
+                    return new List<SearchResult>();
+                    #endif
+                }
 
-                    // Exact match
-                    if (_searchIndex.TryGetValue(lowerWord, out var exactMatches))
+                _logger?.Debug($"[SearchIndex] Searching for: '{query}'");
+
+                var queryWords = TokenizeText(query);
+                if (!queryWords.Any())
+                {
+                    #if DEBUG
+                    result = new List<SearchResult>();
+                    return;
+                    #else
+                    return new List<SearchResult>();
+                    #endif
+                }
+
+                var resultScores = new Dictionary<string, (SearchResult result, float score)>();
+
+                lock (_indexLock)
+                {
+                    foreach (var word in queryWords)
                     {
-                        foreach (var result in exactMatches)
-                        {
-                            UpdateResultScore(resultScores, result, 1.0f);
-                        }
-                    }
+                        var lowerWord = word.ToLowerInvariant();
 
-                    // Prefix match (for autocomplete)
+                        // Exact match
+                        if (_searchIndex.TryGetValue(lowerWord, out var exactMatches))
+                        {
+                            foreach (var searchResult in exactMatches)
+                            {
+                                UpdateResultScore(resultScores, searchResult, 1.0f);
+                            }
+                        }
+
+                        // Prefix match (for autocomplete)
                     var prefixMatches = _searchIndex
                         .Where(kvp => kvp.Key.StartsWith(lowerWord, StringComparison.OrdinalIgnoreCase))
                         .SelectMany(kvp => kvp.Value);
@@ -568,8 +610,14 @@ namespace NoteNest.Core.Services
                 .Select(kvp => kvp.Value.result)
                 .ToList();
 
-            _logger?.Debug($"[SearchIndex] Returning {finalResults.Count} results");
-            return finalResults;
+                _logger?.Debug($"[SearchIndex] Returning {finalResults.Count} results");
+                #if DEBUG
+                result = finalResults;
+            });
+            return result;
+            #else
+                return finalResults;
+            #endif
         }
 
         /// <summary>

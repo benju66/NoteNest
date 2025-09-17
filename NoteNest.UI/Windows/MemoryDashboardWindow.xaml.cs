@@ -21,6 +21,10 @@ namespace NoteNest.UI.Windows
         private readonly DispatcherTimer _refreshTimer;
         private MemoryDashboardStats _currentStats;
         private bool _disposed = false;
+        
+        // Filtering state
+        private string _serviceFilter = "All Services";
+        private double _memoryThresholdKB = 0;
 
         public MemoryDashboardWindow()
         {
@@ -118,10 +122,16 @@ namespace NoteNest.UI.Windows
                 ? System.Windows.Media.Brushes.Red
                 : System.Windows.Media.Brushes.Green;
 
-            // Update service breakdown
-            ServiceBreakdownGrid.ItemsSource = _currentStats.ServiceBreakdown?
-                .Where(s => Math.Abs(s.TotalMemoryDeltaKB) > 1) // Only show services with > 1KB delta
-                .ToList();
+            // Update service breakdown with filtering
+            var filteredServices = _currentStats.ServiceBreakdown?
+                .Where(s => Math.Abs(s.TotalMemoryDeltaKB) >= _memoryThresholdKB);
+                
+            if (_serviceFilter != "All Services")
+            {
+                filteredServices = filteredServices?.Where(s => s.ServiceName.Contains(_serviceFilter));
+            }
+                
+            ServiceBreakdownGrid.ItemsSource = filteredServices?.ToList();
 
             // Update leak suspects
             if (_currentStats.PotentialLeaks?.Any() == true)
@@ -242,6 +252,41 @@ namespace NoteNest.UI.Windows
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             Close();
+        }
+
+        private void ServiceFilter_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (ServiceFilterCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+            {
+                _serviceFilter = item.Content?.ToString() ?? "All Services";
+                UpdateUI(); // Refresh with new filter
+            }
+        }
+
+        private void MemoryThreshold_Changed(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (MemoryThresholdCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+            {
+                var thresholdText = item.Content?.ToString() ?? "0 KB";
+                _memoryThresholdKB = thresholdText switch
+                {
+                    "1 KB" => 1.0,
+                    "10 KB" => 10.0,
+                    "100 KB" => 100.0,
+                    "1 MB" => 1024.0,
+                    _ => 0.0
+                };
+                UpdateUI(); // Refresh with new threshold
+            }
+        }
+
+        private void ResetFilters_Click(object sender, RoutedEventArgs e)
+        {
+            ServiceFilterCombo.SelectedIndex = 0; // "All Services"
+            MemoryThresholdCombo.SelectedIndex = 0; // "0 KB"
+            _serviceFilter = "All Services";
+            _memoryThresholdKB = 0;
+            UpdateUI();
         }
 
         #endregion

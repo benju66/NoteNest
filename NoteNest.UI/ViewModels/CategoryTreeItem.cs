@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
+using NoteNest.Core.Diagnostics;
 
 namespace NoteNest.UI.ViewModels
 {
@@ -115,45 +116,52 @@ namespace NoteNest.UI.ViewModels
 
         public async Task LoadChildrenAsync()
         {
-            if (_isLoaded || _isLoading || _noteService == null) return;
-
-            await _loadLock.WaitAsync();
-            try
+            #if DEBUG
+            await EnhancedMemoryTracker.TrackServiceOperationAsync<CategoryTreeItem>("LoadChildren", async () =>
             {
+            #endif
                 if (_isLoaded || _isLoading || _noteService == null) return;
-                IsLoading = true;
 
-                // Load notes for this category
-                var notes = await _noteService.GetNotesInCategoryAsync(_model);
-                // Note pinning removed - will be reimplemented with better architecture later
-
-                // Defensive: ensure we don't add duplicates
-                var existingById = new HashSet<string>(Notes.Select(n => n.Model.Id), StringComparer.OrdinalIgnoreCase);
-                var existingByPath = new HashSet<string>(Notes.Select(n => n.Model.FilePath ?? string.Empty), StringComparer.OrdinalIgnoreCase);
-
-                foreach (var note in notes)
+                await _loadLock.WaitAsync();
+                try
                 {
-                    if (IsNoteDuplicate(note, existingById, existingByPath))
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Prevented duplicate: id={note?.Id} path={note?.FilePath}");
-                        continue;
-                    }
-                    Notes.Add(new NoteTreeItem(note));
-                }
+                    if (_isLoaded || _isLoading || _noteService == null) return;
+                    IsLoading = true;
 
-                _isLoaded = true;
-                OnPropertyChanged(nameof(IsLoaded));
-            }
-            catch (Exception ex)
-            {
-                // Log error
-                System.Diagnostics.Debug.WriteLine($"Error loading children for {Name}: {ex.Message}");
-            }
-            finally
-            {
-                IsLoading = false;
-                _loadLock.Release();
-            }
+                    // Load notes for this category
+                    var notes = await _noteService.GetNotesInCategoryAsync(_model);
+                    // Note pinning removed - will be reimplemented with better architecture later
+
+                    // Defensive: ensure we don't add duplicates
+                    var existingById = new HashSet<string>(Notes.Select(n => n.Model.Id), StringComparer.OrdinalIgnoreCase);
+                    var existingByPath = new HashSet<string>(Notes.Select(n => n.Model.FilePath ?? string.Empty), StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var note in notes)
+                    {
+                        if (IsNoteDuplicate(note, existingById, existingByPath))
+                        {
+                            System.Diagnostics.Debug.WriteLine($"Prevented duplicate: id={note?.Id} path={note?.FilePath}");
+                            continue;
+                        }
+                        Notes.Add(new NoteTreeItem(note));
+                    }
+
+                    _isLoaded = true;
+                    OnPropertyChanged(nameof(IsLoaded));
+                }
+                catch (Exception ex)
+                {
+                    // Log error
+                    System.Diagnostics.Debug.WriteLine($"Error loading children for {Name}: {ex.Message}");
+                }
+                finally
+                {
+                    IsLoading = false;
+                    _loadLock.Release();
+                }
+            #if DEBUG
+            });
+            #endif
         }
 
         public async Task ReloadNotesAsync()

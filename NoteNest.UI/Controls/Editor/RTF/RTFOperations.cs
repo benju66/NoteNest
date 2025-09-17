@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows;
 using System.Collections.Generic;
 using System.Linq;
+using NoteNest.Core.Diagnostics;
 
 namespace NoteNest.UI.Controls.Editor.RTF
 {
@@ -22,25 +23,50 @@ namespace NoteNest.UI.Controls.Editor.RTF
         /// </summary>
         public static string SaveToRTF(RichTextBox editor)
         {
-            if (editor?.Document == null) return string.Empty;
-            
-            try
+            #if DEBUG
+            string result = string.Empty;
+            EnhancedMemoryTracker.TrackServiceOperation("RTFOperations", "SaveToRTF", () =>
             {
-                using (var stream = new MemoryStream())
+            #endif
+                if (editor?.Document == null) 
                 {
-                    var range = new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd);
-                    range.Save(stream, System.Windows.DataFormats.Rtf);
-                    var rtfContent = Encoding.UTF8.GetString(stream.ToArray());
-                    
-                    // Enhance RTF with single spacing control codes
-                    return EnhanceRTFForSingleSpacing(rtfContent);
+                    #if DEBUG
+                    result = string.Empty;
+                    return;
+                    #else
+                    return string.Empty;
+                    #endif
                 }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[RTFOperations] Save failed: {ex.Message}");
-                return string.Empty;
-            }
+                
+                try
+                {
+                    using (var stream = new MemoryStream())
+                    {
+                        var range = new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd);
+                        range.Save(stream, System.Windows.DataFormats.Rtf);
+                        var rtfContent = Encoding.UTF8.GetString(stream.ToArray());
+                        
+                        // Enhance RTF with single spacing control codes
+                        #if DEBUG
+                        result = EnhanceRTFForSingleSpacing(rtfContent);
+                        #else
+                        return EnhanceRTFForSingleSpacing(rtfContent);
+                        #endif
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[RTFOperations] Save failed: {ex.Message}");
+                    #if DEBUG
+                    result = string.Empty;
+                    #else
+                    return string.Empty;
+                    #endif
+                }
+            #if DEBUG
+            });
+            return result;
+            #endif
         }
         
         /// <summary>
@@ -77,36 +103,43 @@ namespace NoteNest.UI.Controls.Editor.RTF
         /// </summary>
         public static void LoadFromRTF(RichTextBox editor, string rtfContent)
         {
-            if (editor?.Document == null || string.IsNullOrEmpty(rtfContent)) return;
-            
-            try
+            #if DEBUG
+            EnhancedMemoryTracker.TrackServiceOperation("RTFOperations", "LoadFromRTF", () =>
             {
-                // Security validation
-                if (!IsValidRTF(rtfContent))
-                {
-                    LoadAsPlainText(editor, rtfContent);
-                    return;
-                }
+            #endif
+                if (editor?.Document == null || string.IsNullOrEmpty(rtfContent)) return;
                 
-                // Sanitize content
-                var sanitizedContent = SanitizeRTFContent(rtfContent);
-                
-                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(sanitizedContent)))
+                try
                 {
-                    var range = new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd);
-                    range.Load(stream, System.Windows.DataFormats.Rtf);
+                    // Security validation
+                    if (!IsValidRTF(rtfContent))
+                    {
+                        LoadAsPlainText(editor, rtfContent);
+                        return;
+                    }
                     
-                    // Re-enable spell check after RTF load (RTF loading can reset it)
-                    System.Windows.Controls.SpellCheck.SetIsEnabled(editor, true);
-                    System.Diagnostics.Debug.WriteLine("[RTFOperations] Spell check re-enabled after RTF load");
+                    // Sanitize content
+                    var sanitizedContent = SanitizeRTFContent(rtfContent);
+                    
+                    using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(sanitizedContent)))
+                    {
+                        var range = new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd);
+                        range.Load(stream, System.Windows.DataFormats.Rtf);
+                        
+                        // Re-enable spell check after RTF load (RTF loading can reset it)
+                        System.Windows.Controls.SpellCheck.SetIsEnabled(editor, true);
+                        System.Diagnostics.Debug.WriteLine("[RTFOperations] Spell check re-enabled after RTF load");
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[RTFOperations] Load failed: {ex.Message}");
-                // Fallback to plain text
-                LoadAsPlainText(editor, rtfContent);
-            }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[RTFOperations] Load failed: {ex.Message}");
+                    // Fallback to plain text
+                    LoadAsPlainText(editor, rtfContent);
+                }
+            #if DEBUG
+            });
+            #endif
         }
         
         /// <summary>

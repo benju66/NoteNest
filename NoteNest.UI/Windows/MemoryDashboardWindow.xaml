@@ -101,6 +101,45 @@
                 <ScrollViewer>
                     <StackPanel>
                         <TextBlock Text="Top Memory Consumers" Style="{StaticResource SectionHeaderStyle}"/>
+                        
+                        <!-- Filter Controls -->
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="200"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            
+                            <TextBlock Grid.Column="0" Text="Filter:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox Grid.Column="1" x:Name="ServiceFilterCombo" 
+                                      SelectedValuePath="Content" 
+                                      SelectionChanged="ServiceFilter_Changed">
+                                <ComboBoxItem Content="All Services"/>
+                                <ComboBoxItem Content="UITabFactory"/>
+                                <ComboBoxItem Content="SearchIndexService"/>
+                                <ComboBoxItem Content="CategoryTreeItem"/>
+                                <ComboBoxItem Content="RTFOperations"/>
+                                <ComboBoxItem Content="DraggableTabControl"/>
+                            </ComboBox>
+                            
+                            <TextBlock Grid.Column="2" Text="Min Memory:" VerticalAlignment="Center" Margin="12,0,8,0"/>
+                            <ComboBox Grid.Column="3" x:Name="MemoryThresholdCombo"
+                                      SelectedValuePath="Content"
+                                      SelectionChanged="MemoryThreshold_Changed">
+                                <ComboBoxItem Content="0 KB" IsSelected="True"/>
+                                <ComboBoxItem Content="1 KB"/>
+                                <ComboBoxItem Content="10 KB"/>
+                                <ComboBoxItem Content="100 KB"/>
+                                <ComboBoxItem Content="1 MB"/>
+                            </ComboBox>
+                            
+                            <Button Grid.Column="5" Content="Reset Filters" Click="ResetFilters_Click"
+                                    HorizontalAlignment="Right" Padding="8,4"/>
+                        </Grid>
+                        
                         <DataGrid x:Name="ServiceBreakdownGrid" AutoGenerateColumns="False" 
                                   IsReadOnly="True" GridLinesVisibility="None"
                                   HeadersVisibility="Column" CanUserSortColumns="True">
