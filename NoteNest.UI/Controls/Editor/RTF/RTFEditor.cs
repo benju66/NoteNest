@@ -1,6 +1,7 @@
 using System;
 using System.Windows.Input;
 using System.Windows.Documents;
+using System.Linq;
 using NoteNest.UI.Controls.Editor.RTF.Features;
 using NoteNest.UI.Controls.Editor.RTF.Core;
 using NoteNest.Core.Models;
@@ -107,14 +108,16 @@ namespace NoteNest.UI.Controls.Editor.RTF
             {
                 // Use managed event subscriptions for bulletproof cleanup
                 _eventManager?.SubscribeToTextChanged(this, OnTextChanged);
+                _eventManager?.SubscribeToPreviewKeyDown(this, OnPreviewKeyDown);
                 
-                System.Diagnostics.Debug.WriteLine("[RTFEditor] Managed events wired up");
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Managed events wired up (including smart list behavior)");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[RTFEditor] Event wiring failed: {ex.Message}");
                 // Fallback to direct subscription
                 TextChanged += OnTextChanged;
+                PreviewKeyDown += OnPreviewKeyDown;
             }
         }
         
@@ -130,6 +133,315 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 // RTFEditorCore: TextChanged += (s, e) => ContentChanged?.Invoke(this, EventArgs.Empty);
             }
         }
+        
+        /// <summary>
+        /// Smart keyboard event handler for enhanced list behavior
+        /// </summary>
+        private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (_disposed) return;
+            
+            try
+            {
+                switch (e.Key)
+                {
+                    case Key.Enter:
+                        if (HandleEnterInList(e))
+                            e.Handled = true;
+                        break;
+                        
+                    case Key.Tab:
+                        if (e.KeyboardDevice.Modifiers == ModifierKeys.Shift)
+                        {
+                            if (HandleShiftTabInList(e))
+                                e.Handled = true;
+                        }
+                        else if (HandleTabInList(e))
+                        {
+                            e.Handled = true;
+                        }
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] PreviewKeyDown failed: {ex.Message}");
+            }
+        }
+        
+        #region Smart List Behavior Methods
+        
+        /// <summary>
+        /// Handle Enter key in list context
+        /// </summary>
+        private bool HandleEnterInList(KeyEventArgs e)
+        {
+            var context = GetCurrentListContext();
+            if (context == null) return false;
+            
+            if (IsCaretInEmptyListItem())
+            {
+                // Check for list exit (double enter or shift+enter for exit)
+                if (ShouldExitList(context))
+                {
+                    ExitListMode();
+                    return true;
+                }
+            }
+            
+            // Create new list item at current nesting level
+            CreateNewListItem();
+            return true;
+        }
+        
+        /// <summary>
+        /// Handle Tab key in list context (increase indentation/nesting)
+        /// </summary>
+        private bool HandleTabInList(KeyEventArgs e)
+        {
+            var context = GetCurrentListContext();
+            if (context == null) return false;
+            
+            try
+            {
+                // Use WPF's built-in indentation, which handles list nesting
+                EditingCommands.IncreaseIndentation.Execute(null, this);
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Increased list indentation");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Tab handling failed: {ex.Message}");
+                return false;
+            }
+        }
+        
+        /// <summary>
+        /// Handle Shift+Tab in list context (decrease indentation/nesting)
+        /// </summary>
+        private bool HandleShiftTabInList(KeyEventArgs e)
+        {
+            var context = GetCurrentListContext();
+            if (context == null) return false;
+            
+            try
+            {
+                // Use WPF's built-in outdentation, which handles list nesting
+                EditingCommands.DecreaseIndentation.Execute(null, this);
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Decreased list indentation");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Shift+Tab handling failed: {ex.Message}");
+                return false;
+            }
+        }
+        
+        /// <summary>
+        /// Get current list context information
+        /// </summary>
+        private ListItemContext GetCurrentListContext()
+        {
+            if (CaretPosition == null) return null;
+            
+            try
+            {
+                // Find the current ListItem by checking adjacent elements
+                var listItem = CaretPosition.GetAdjacentElement(LogicalDirection.Backward) as ListItem ??
+                              CaretPosition.GetAdjacentElement(LogicalDirection.Forward) as ListItem;
+                
+                if (listItem == null)
+                {
+                    // Check if we're inside a paragraph that's within a list item
+                    var paragraph = CaretPosition.Paragraph;
+                    listItem = paragraph?.Parent as ListItem;
+                }
+                
+                if (listItem?.Parent is List list)
+                {
+                    return new ListItemContext
+                    {
+                        ListItem = listItem,
+                        List = list,
+                        NestingLevel = GetListNestingLevel(listItem)
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] GetCurrentListContext failed: {ex.Message}");
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Check if caret is in an empty list item
+        /// </summary>
+        private bool IsCaretInEmptyListItem()
+        {
+            var context = GetCurrentListContext();
+            if (context?.ListItem == null) return false;
+            
+            try
+            {
+                // Get text content of the list item
+                var textRange = new TextRange(context.ListItem.ContentStart, context.ListItem.ContentEnd);
+                var text = textRange.Text?.Trim();
+                return string.IsNullOrEmpty(text);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+        /// <summary>
+        /// Determine if we should exit list mode
+        /// </summary>
+        private bool ShouldExitList(ListItemContext context)
+        {
+            if (context?.ListItem == null) return false;
+            
+            // Exit if this is an empty item and we're at the base level
+            return IsCaretInEmptyListItem() && context.NestingLevel <= 1;
+        }
+        
+        /// <summary>
+        /// Exit list mode and return to normal paragraph
+        /// </summary>
+        private void ExitListMode()
+        {
+            try
+            {
+                var context = GetCurrentListContext();
+                if (context?.ListItem == null) return;
+                
+                // Position caret after the list
+                var insertionPoint = context.List.ContentEnd.GetNextContextPosition(LogicalDirection.Forward);
+                if (insertionPoint != null && context.List.Parent is FlowDocument flowDoc)
+                {
+                    // Create a new paragraph after the list
+                    var newParagraph = new Paragraph();
+                    flowDoc.Blocks.InsertAfter(context.List, newParagraph);
+                    CaretPosition = newParagraph.ContentStart;
+                }
+                else if (context.List.Parent is ListItem parentListItem)
+                {
+                    // Handle nested list case
+                    var newParagraph = new Paragraph();
+                    parentListItem.Blocks.InsertAfter(context.List, newParagraph);
+                    CaretPosition = newParagraph.ContentStart;
+                }
+                
+                // Remove the empty list item
+                if (IsCaretInEmptyListItem())
+                {
+                    context.List.ListItems.Remove(context.ListItem);
+                    
+                    // If list is now empty, remove it entirely
+                    if (context.List.ListItems.Count == 0)
+                    {
+                        if (context.List.Parent is FlowDocument parentFlowDoc)
+                        {
+                            parentFlowDoc.Blocks.Remove(context.List);
+                        }
+                        else if (context.List.Parent is ListItem parentListItem)
+                        {
+                            parentListItem.Blocks.Remove(context.List);
+                        }
+                    }
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Exited list mode");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] ExitListMode failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Create a new list item at specified nesting level
+        /// </summary>
+        private void CreateNewListItem()
+        {
+            try
+            {
+                var context = GetCurrentListContext();
+                if (context?.List == null) return;
+                
+                // Create new list item
+                var newListItem = new ListItem(new Paragraph());
+                
+                // Insert after current item using LINQ to find index
+                var listItems = context.List.ListItems.ToArray();
+                var currentIndex = Array.IndexOf(listItems, context.ListItem);
+                
+                if (currentIndex >= 0 && currentIndex < listItems.Length - 1)
+                {
+                    // Insert after the current item by removing all items after current, adding new, then re-adding others
+                    var itemsToReAdd = listItems.Skip(currentIndex + 1).ToList();
+                    
+                    // Remove items after current
+                    foreach (var item in itemsToReAdd)
+                    {
+                        context.List.ListItems.Remove(item);
+                    }
+                    
+                    // Add new item
+                    context.List.ListItems.Add(newListItem);
+                    
+                    // Re-add the removed items
+                    foreach (var item in itemsToReAdd)
+                    {
+                        context.List.ListItems.Add(item);
+                    }
+                }
+                else
+                {
+                    context.List.ListItems.Add(newListItem);
+                }
+                
+                // Position caret in new item
+                CaretPosition = newListItem.ContentStart;
+                
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Created new list item");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] CreateNewListItem failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Get the nesting level of a list item
+        /// </summary>
+        private int GetListNestingLevel(ListItem listItem)
+        {
+            int level = 1;
+            var parent = listItem?.Parent;
+            
+            while (parent != null)
+            {
+                if (parent is List)
+                {
+                    level++;
+                }
+                
+                if (parent is Block block)
+                    parent = block.Parent;
+                else if (parent is Inline inline)
+                    parent = inline.Parent;
+                else
+                    break;
+            }
+            
+            return level;
+        }
+        
+        #endregion
         
         /// <summary>
         /// Save RTF content using static operations
@@ -180,21 +492,19 @@ namespace NoteNest.UI.Controls.Editor.RTF
         }
         
         /// <summary>
-        /// Insert bulleted list at current position
+        /// Insert bulleted list at current position - WPF Native approach
         /// </summary>
         public void InsertBulletList()
         {
             try
             {
-                if (Selection.IsEmpty)
-                {
-                    Selection.Text = "• ";
-                }
-                else
-                {
-                    // Apply bullet formatting to selection
-                    EditingCommands.ToggleBullets.Execute(null, this);
-                }
+                // Always use WPF native command for consistent list structure
+                EditingCommands.ToggleBullets.Execute(null, this);
+                
+                // Ensure editor maintains focus for continued editing
+                Focus();
+                
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Created WPF native bullet list");
             }
             catch (Exception ex)
             {
@@ -203,21 +513,19 @@ namespace NoteNest.UI.Controls.Editor.RTF
         }
         
         /// <summary>
-        /// Insert numbered list at current position
+        /// Insert numbered list at current position - WPF Native approach
         /// </summary>
         public void InsertNumberedList()
         {
             try
             {
-                if (Selection.IsEmpty)
-                {
-                    Selection.Text = "1. ";
-                }
-                else
-                {
-                    // Apply numbered formatting to selection
-                    EditingCommands.ToggleNumbering.Execute(null, this);
-                }
+                // Always use WPF native command for consistent list structure
+                EditingCommands.ToggleNumbering.Execute(null, this);
+                
+                // Ensure editor maintains focus for continued editing
+                Focus();
+                
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Created WPF native numbered list");
             }
             catch (Exception ex)
             {
@@ -241,6 +549,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
         /// <summary>
         /// Refresh document styles after RTF content loading
         /// RTF loading can override our single spacing styles, so reapply them
+        /// Now processes ALL lists recursively including nested ones
         /// </summary>
         private void RefreshDocumentStylesAfterLoad()
         {
@@ -250,43 +559,76 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 Document.PagePadding = new System.Windows.Thickness(0);
                 Document.LineHeight = double.NaN;
                 
-                // Apply single spacing to all existing paragraphs
-                foreach (var block in Document.Blocks)
+                // Recursively process all blocks including nested lists
+                ProcessBlocksRecursively(Document.Blocks);
+                
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Document styles refreshed recursively after RTF load");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Document style refresh failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Recursively process all blocks to apply single spacing styles
+        /// Handles nested lists properly by traversing the entire document tree
+        /// </summary>
+        private void ProcessBlocksRecursively(BlockCollection blocks)
+        {
+            if (blocks == null) return;
+            
+            try
+            {
+                foreach (var block in blocks)
                 {
                     if (block is Paragraph para)
                     {
+                        // Apply single spacing to paragraphs
                         para.Margin = new System.Windows.Thickness(0, 0, 0, 0);
                         para.LineHeight = double.NaN;
                     }
                     else if (block is List list)
                     {
-                        list.Margin = new System.Windows.Thickness(0, 0, 0, 6);
-                        list.Padding = new System.Windows.Thickness(0);
+                        // Apply single spacing styles to this list
+                        ApplySingleSpacingToList(list);
                         
-                        // Apply to list items
+                        // Recursively process nested lists within list items
                         foreach (var listItem in list.ListItems)
                         {
-                            listItem.Margin = new System.Windows.Thickness(0);
+                            // Apply styles to the list item itself
+                            listItem.Margin = new System.Windows.Thickness(0, 0, 0, 0);
                             listItem.Padding = new System.Windows.Thickness(0, 0, 0, 2);
                             
-                            // Apply to paragraphs within list items
-                            foreach (var itemBlock in listItem.Blocks)
-                            {
-                                if (itemBlock is Paragraph itemPara)
-                                {
-                                    itemPara.Margin = new System.Windows.Thickness(0);
-                                    itemPara.LineHeight = double.NaN;
-                                }
-                            }
+                            // Recursively process any nested content (including nested lists)
+                            ProcessBlocksRecursively(listItem.Blocks);
                         }
                     }
                 }
-                
-                System.Diagnostics.Debug.WriteLine("[RTFEditor] Document styles refreshed after RTF load");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Document style refresh failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] ProcessBlocksRecursively failed: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Apply single spacing styles to a specific list
+        /// </summary>
+        private void ApplySingleSpacingToList(List list)
+        {
+            if (list == null) return;
+            
+            try
+            {
+                list.Margin = new System.Windows.Thickness(0, 0, 0, 6);
+                list.Padding = new System.Windows.Thickness(20, 0, 0, 0); // Left padding for bullets
+                
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Applied single spacing to list with {list.ListItems.Count} items");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] ApplySingleSpacingToList failed: {ex.Message}");
             }
         }
         
@@ -355,5 +697,15 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 System.Diagnostics.Debug.WriteLine($"[RTFEditor] Disposal failed: {ex.Message}");
             }
         }
+    }
+    
+    /// <summary>
+    /// Context information for list item operations
+    /// </summary>
+    internal class ListItemContext
+    {
+        public ListItem ListItem { get; set; }
+        public List List { get; set; }
+        public int NestingLevel { get; set; }
     }
 }

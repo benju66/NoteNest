@@ -200,7 +200,7 @@
             <!-- List Group -->
             <ToggleButton Name="BulletListButton"
                           Style="{StaticResource ModernToggleButtonStyle}"
-                          ToolTip="Bullet List"
+                          ToolTip="Bullet List (Ctrl+.)"
                           Click="BulletListButton_Click">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock FontFamily="Segoe MDL2 Assets" 

@@ -44,7 +44,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
         }
         
         /// <summary>
-        /// Enhance RTF content with single spacing control codes
+        /// Enhance RTF content with single spacing control codes while preserving list hierarchy
         /// </summary>
         private static string EnhanceRTFForSingleSpacing(string rtfContent)
         {
@@ -58,10 +58,11 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 // \sl0\slmult0 = single line spacing
                 enhanced = enhanced.Replace(@"\f0\fs24", @"\f0\fs24\sl0\slmult0");
                 
-                // Remove excessive paragraph spacing that might be added by RTF
-                enhanced = Regex.Replace(enhanced, @"\\sb\d+", "", RegexOptions.IgnoreCase);
-                enhanced = Regex.Replace(enhanced, @"\\sa\d+", "", RegexOptions.IgnoreCase);
+                // PRESERVE list hierarchy codes (\sb, \sa) - they're needed for nested list structure
+                // Visual single spacing will be handled by post-load style application
+                // No longer removing \sb and \sa codes to maintain RTF structural integrity
                 
+                System.Diagnostics.Debug.WriteLine("[RTFOperations] RTF enhanced with line spacing while preserving list hierarchy");
                 return enhanced;
             }
             catch (Exception ex)
