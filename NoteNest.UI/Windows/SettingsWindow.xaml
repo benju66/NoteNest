@@ -331,49 +331,30 @@
                         <TextBlock Text="Features" Style="{StaticResource TitleTextBlockStyle}" 
                                    Margin="0,0,0,16"/>
                         
-                        <TextBlock Text="Default Format for New Notes" 
+                        <TextBlock Text="Note Format" 
                                    Style="{StaticResource SubtitleTextBlockStyle}" 
                                    Margin="0,16,0,8"/>
 
-                        <ComboBox SelectedValue="{Binding Settings.DefaultNoteFormat}"
-                                  Width="400"
-                                  HorizontalAlignment="Left"
-                                  Margin="0,8">
-                            <ComboBox.ItemsSource>
-                                <x:Array Type="{x:Type models:NoteFormat}">
-                                    <models:NoteFormat>Markdown</models:NoteFormat>
-                                    <models:NoteFormat>RTF</models:NoteFormat>
-                                    <models:NoteFormat>PlainText</models:NoteFormat>
-                                </x:Array>
-                            </ComboBox.ItemsSource>
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock>
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding}" Value="Markdown">
-                                                        <Setter Property="Text" Value="Markdown (.md) - Lightweight with conversion"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding}" Value="RTF">
-                                                        <Setter Property="Text" Value="Rich Text Format (.rtf) - Full formatting, no conversion"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding}" Value="PlainText">
-                                                        <Setter Property="Text" Value="Plain Text (.txt) - No formatting"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
-
-                        <TextBlock Text="Note: This only affects new notes. Existing notes keep their current format." 
-                                   Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                                   FontStyle="Italic"
-                                   TextWrapping="Wrap"
-                                   Margin="0,4,0,0"/>
+                        <!-- PHASE 3A: Convert format selection to informational display -->
+                        <Border Background="{DynamicResource SystemControlBackgroundBaseLowBrush}" 
+                                CornerRadius="4" 
+                                Padding="12,8" 
+                                Margin="0,8"
+                                Width="400"
+                                HorizontalAlignment="Left">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="✅" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Rich Text Format (.rtf)" 
+                                               FontWeight="SemiBold" 
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock Text="NoteNest uses RTF format for all notes to provide consistent rich text editing, reliable formatting preservation, and seamless compatibility across devices." 
+                                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </Border>
 
                         <ui:ToggleSwitch Header="Enable spell check (English)" 
                                          IsOn="{Binding Settings.EditorSettings.EnableSpellCheck}"

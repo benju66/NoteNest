@@ -67,6 +67,9 @@ namespace NoteNest.Core.Services
                     
                     if (loadedSettings != null)
                     {
+                        // PHASE 2A: Migrate settings from old format to RTF-only architecture
+                        await MigrateNoteFormatSettings(loadedSettings);
+                        
                         _settings = loadedSettings;
 
                         // Only resolve paths if they're empty; do NOT overwrite if directory is missing
@@ -350,6 +353,99 @@ namespace NoteNest.Core.Services
             }
 
             _settings.RecentFiles = recent.ToList();
+        }
+        /// <summary>
+        /// PHASE 2A: Migrate settings from old multi-format architecture to RTF-only
+        /// Handles existing settings files that might contain old enum values
+        /// </summary>
+        private async Task MigrateNoteFormatSettings(AppSettings settings)
+        {
+            if (settings == null) return;
+
+            bool settingsChanged = false;
+
+            try
+            {
+                // PHASE 2B: Create backup before migration (safety first)
+                await BackupSettingsBeforeMigration();
+
+                // Ensure DefaultNoteFormat is RTF (handle any old string values)
+                if (settings.DefaultNoteFormat != NoteFormat.RTF)
+                {
+                    var oldValue = settings.DefaultNoteFormat;
+                    settings.DefaultNoteFormat = NoteFormat.RTF;
+                    settingsChanged = true;
+                    System.Diagnostics.Debug.WriteLine($"[Settings Migration] DefaultNoteFormat: {oldValue} → RTF");
+                }
+
+                // Clean up obsolete format-related properties that shouldn't exist in RTF-only
+                // These will be removed in Phase 4, but for now ensure they have safe values
+                try
+                {
+                    var settingsType = typeof(AppSettings);
+                    
+                    // If AutoDetectFormat property exists, ensure it's false (meaningless in RTF-only)
+                    var autoDetectProp = settingsType.GetProperty("AutoDetectFormat");
+                    if (autoDetectProp != null && autoDetectProp.GetValue(settings) is bool autoDetect && autoDetect)
+                    {
+                        autoDetectProp.SetValue(settings, false);
+                        settingsChanged = true;
+                        System.Diagnostics.Debug.WriteLine("[Settings Migration] AutoDetectFormat disabled (RTF-only)");
+                    }
+
+                    // If ConvertTxtToMdOnSave property exists, ensure it's false (meaningless in RTF-only)
+                    var convertProp = settingsType.GetProperty("ConvertTxtToMdOnSave");
+                    if (convertProp != null && convertProp.GetValue(settings) is bool convert && convert)
+                    {
+                        convertProp.SetValue(settings, false);
+                        settingsChanged = true;
+                        System.Diagnostics.Debug.WriteLine("[Settings Migration] ConvertTxtToMdOnSave disabled (RTF-only)");
+                    }
+                }
+                catch (Exception reflectionEx)
+                {
+                    // Reflection-based cleanup failed - not critical
+                    System.Diagnostics.Debug.WriteLine($"[Settings Migration] Property cleanup failed: {reflectionEx.Message}");
+                }
+
+                // If we made changes, save the migrated settings
+                if (settingsChanged)
+                {
+                    System.Diagnostics.Debug.WriteLine("[Settings Migration] Saving migrated settings");
+                    await SaveSettingsAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Settings Migration] Error during migration: {ex.Message}");
+                // Ensure RTF is set even if migration fails
+                settings.DefaultNoteFormat = NoteFormat.RTF;
+            }
+        }
+
+        /// <summary>
+        /// PHASE 2B: Create backup of existing settings before migration
+        /// </summary>
+        private async Task BackupSettingsBeforeMigration()
+        {
+            try
+            {
+                if (await _fileSystem.ExistsAsync(_settingsPath))
+                {
+                    var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+                    var backupPath = _settingsPath.Replace(".json", $".backup_{timestamp}.json");
+                    
+                    var existingContent = await _fileSystem.ReadTextAsync(_settingsPath);
+                    await _fileSystem.WriteTextAsync(backupPath, existingContent);
+                    
+                    System.Diagnostics.Debug.WriteLine($"[Settings Migration] Backup created: {backupPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Backup failure is not critical - log but continue
+                System.Diagnostics.Debug.WriteLine($"[Settings Migration] Backup failed: {ex.Message}");
+            }
         }
     }
 }

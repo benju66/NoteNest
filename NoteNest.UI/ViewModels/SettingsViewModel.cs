@@ -295,12 +295,8 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        // RTF-only architecture: Format selection no longer needed
-        public bool UseRTFFormat
-        {
-            get => true;  // Always RTF in clean architecture
-            set { /* RTF-only - no other formats */ }
-        }
+        // RTF-only architecture: Format properties removed
+        // All notes use RTF format automatically
 
         public async Task CommitSettings()
         {
@@ -407,7 +403,7 @@ namespace NoteNest.UI.ViewModels
                 StorageMode = source.StorageMode,
                 CustomNotesPath = source.CustomNotesPath,
                 AutoDetectOneDrive = source.AutoDetectOneDrive,
-                DefaultNoteFormat = source.DefaultNoteFormat,
+                DefaultNoteFormat = source.DefaultNoteFormat, // RTF-only architecture
                 EnableTaskPanel = source.EnableTaskPanel,
                 ParseMarkdownCheckboxes = source.ParseMarkdownCheckboxes,
                 QuickNoteHotkey = source.QuickNoteHotkey,
@@ -470,7 +466,7 @@ namespace NoteNest.UI.ViewModels
             target.StorageMode = source.StorageMode;
             target.CustomNotesPath = source.CustomNotesPath;
             target.AutoDetectOneDrive = source.AutoDetectOneDrive;
-            target.DefaultNoteFormat = source.DefaultNoteFormat;
+            target.DefaultNoteFormat = source.DefaultNoteFormat; // RTF-only architecture
             target.EnableTaskPanel = source.EnableTaskPanel;
             target.ParseMarkdownCheckboxes = source.ParseMarkdownCheckboxes;
             target.QuickNoteHotkey = source.QuickNoteHotkey;
