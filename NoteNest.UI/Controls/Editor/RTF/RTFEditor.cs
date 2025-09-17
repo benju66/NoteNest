@@ -29,6 +29,9 @@ namespace NoteNest.UI.Controls.Editor.RTF
         private string _originalContent = string.Empty;
         private bool _disposed = false;
         private NoteModel _currentNote;
+        
+        // Smart list behavior state
+        private DateTime _lastEnterTime = DateTime.MinValue;
 
         public bool IsDirty => _isDirty;
         public string OriginalContent => _originalContent;
@@ -172,25 +175,39 @@ namespace NoteNest.UI.Controls.Editor.RTF
         #region Smart List Behavior Methods
         
         /// <summary>
-        /// Handle Enter key in list context
+        /// Handle Enter key in list context with smart exit behavior
         /// </summary>
         private bool HandleEnterInList(KeyEventArgs e)
         {
             var context = GetCurrentListContext();
             if (context == null) return false;
             
+            var currentTime = DateTime.Now;
+            var timeSinceLastEnter = currentTime - _lastEnterTime;
+            var isDoubleEnter = timeSinceLastEnter.TotalMilliseconds < 1000; // Within 1 second
+            
+            // Check for list exit conditions
             if (IsCaretInEmptyListItem())
             {
-                // Check for list exit (double enter or shift+enter for exit)
-                if (ShouldExitList(context))
-                {
-                    ExitListMode();
-                    return true;
-                }
+                // Exit list on empty item + Enter (any nesting level)
+                ExitListMode();
+                _lastEnterTime = DateTime.MinValue; // Reset tracking
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Exited list from empty item");
+                return true;
+            }
+            else if (isDoubleEnter)
+            {
+                // Exit list on double-enter (rapid consecutive Enter presses)
+                ExitListMode();
+                _lastEnterTime = DateTime.MinValue; // Reset tracking  
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Exited list from double-enter");
+                return true;
             }
             
-            // Create new list item at current nesting level
+            // Create new list item and track this Enter press
             CreateNewListItem();
+            _lastEnterTime = currentTime;
+            System.Diagnostics.Debug.WriteLine("[RTFEditor] Created new list item, tracking Enter time");
             return true;
         }
         
@@ -286,26 +303,24 @@ namespace NoteNest.UI.Controls.Editor.RTF
             
             try
             {
-                // Get text content of the list item
+                // Get text content of the list item, excluding the bullet marker
                 var textRange = new TextRange(context.ListItem.ContentStart, context.ListItem.ContentEnd);
                 var text = textRange.Text?.Trim();
-                return string.IsNullOrEmpty(text);
+                
+                // Consider empty if no text or only whitespace/bullet characters
+                var isEmpty = string.IsNullOrWhiteSpace(text) || 
+                             text == "•" || 
+                             text == "\u2022" || 
+                             text.All(c => char.IsWhiteSpace(c) || c == '•' || c == '\u2022');
+                             
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] IsCaretInEmptyListItem: '{text}' -> {isEmpty}");
+                return isEmpty;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] IsCaretInEmptyListItem failed: {ex.Message}");
                 return false;
             }
-        }
-        
-        /// <summary>
-        /// Determine if we should exit list mode
-        /// </summary>
-        private bool ShouldExitList(ListItemContext context)
-        {
-            if (context?.ListItem == null) return false;
-            
-            // Exit if this is an empty item and we're at the base level
-            return IsCaretInEmptyListItem() && context.NestingLevel <= 1;
         }
         
         /// <summary>
@@ -318,47 +333,61 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 var context = GetCurrentListContext();
                 if (context?.ListItem == null) return;
                 
-                // Position caret after the list
-                var insertionPoint = context.List.ContentEnd.GetNextContextPosition(LogicalDirection.Forward);
-                if (insertionPoint != null && context.List.Parent is FlowDocument flowDoc)
-                {
-                    // Create a new paragraph after the list
-                    var newParagraph = new Paragraph();
-                    flowDoc.Blocks.InsertAfter(context.List, newParagraph);
-                    CaretPosition = newParagraph.ContentStart;
-                }
-                else if (context.List.Parent is ListItem parentListItem)
-                {
-                    // Handle nested list case
-                    var newParagraph = new Paragraph();
-                    parentListItem.Blocks.InsertAfter(context.List, newParagraph);
-                    CaretPosition = newParagraph.ContentStart;
-                }
+                // Remove the empty list item first
+                var listToCheck = context.List;
+                listToCheck.ListItems.Remove(context.ListItem);
                 
-                // Remove the empty list item
-                if (IsCaretInEmptyListItem())
+                // Create new paragraph after the list
+                var newParagraph = new Paragraph();
+                
+                // Handle different parent types
+                if (listToCheck.Parent is FlowDocument flowDoc)
                 {
-                    context.List.ListItems.Remove(context.ListItem);
+                    flowDoc.Blocks.InsertAfter(listToCheck, newParagraph);
                     
                     // If list is now empty, remove it entirely
-                    if (context.List.ListItems.Count == 0)
+                    if (listToCheck.ListItems.Count == 0)
                     {
-                        if (context.List.Parent is FlowDocument parentFlowDoc)
-                        {
-                            parentFlowDoc.Blocks.Remove(context.List);
-                        }
-                        else if (context.List.Parent is ListItem parentListItem)
-                        {
-                            parentListItem.Blocks.Remove(context.List);
-                        }
+                        flowDoc.Blocks.Remove(listToCheck);
                     }
                 }
+                else if (listToCheck.Parent is ListItem parentListItem)
+                {
+                    parentListItem.Blocks.InsertAfter(listToCheck, newParagraph);
+                    
+                    // If list is now empty, remove it entirely
+                    if (listToCheck.ListItems.Count == 0)
+                    {
+                        parentListItem.Blocks.Remove(listToCheck);
+                    }
+                }
+                else
+                {
+                    // Fallback: insert at document level
+                    var rootParagraph = new Paragraph();
+                    Document.Blocks.Add(rootParagraph);
+                    newParagraph = rootParagraph;
+                }
                 
-                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Exited list mode");
+                // Position caret in the new paragraph
+                CaretPosition = newParagraph.ContentStart;
+                Focus(); // Ensure editor maintains focus
+                
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Successfully exited list mode");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[RTFEditor] ExitListMode failed: {ex.Message}");
+                
+                // Fallback: try to position caret at document end
+                try
+                {
+                    CaretPosition = Document.ContentEnd;
+                }
+                catch
+                {
+                    // Final fallback: do nothing rather than crash
+                }
             }
         }
         
