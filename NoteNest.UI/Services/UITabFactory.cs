@@ -13,7 +13,6 @@ namespace NoteNest.UI.Services
     public class UITabFactory : ITabFactory, IDisposable
     {
         private readonly ISaveManager _saveManager;
-        private readonly NoteNest.Core.Services.ISupervisedTaskRunner _taskRunner;
         
         // HIGH-IMPACT MEMORY FIX: Simple tab caching with cleanup
         private readonly ConcurrentDictionary<string, WeakReference> _tabCache = new();
@@ -21,10 +20,9 @@ namespace NoteNest.UI.Services
         private DateTime _lastCleanup = DateTime.Now;
         private readonly TimeSpan _cleanupInterval = TimeSpan.FromMinutes(2);
         
-        public UITabFactory(ISaveManager saveManager, NoteNest.Core.Services.ISupervisedTaskRunner taskRunner = null)
+        public UITabFactory(ISaveManager saveManager)
         {
             _saveManager = saveManager;
-            _taskRunner = taskRunner; // Allow null for backward compatibility
             
             DebugLogger.Log("UITabFactory initialized with memory management");
         }
@@ -57,7 +55,7 @@ namespace NoteNest.UI.Services
             ITabItem result = null;
             EnhancedMemoryTracker.TrackServiceOperation<UITabFactory>("CreateTab", () =>
             {
-                var tabItem = new NoteTabItem(note, _saveManager, _taskRunner);
+                var tabItem = new NoteTabItem(note, _saveManager);
                 _tabCache[noteId] = new WeakReference(tabItem);
                 result = tabItem;
             });

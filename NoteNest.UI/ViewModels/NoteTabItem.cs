@@ -16,7 +16,6 @@ namespace NoteNest.UI.ViewModels
     public class NoteTabItem : ViewModelBase, ITabItem, IDisposable
     {
         private readonly ISaveManager _saveManager;
-        private readonly ISupervisedTaskRunner _taskRunner;
         private readonly string _noteId;
         private RTFEditor _editor;
         private RTFToolbar _toolbar;
@@ -173,14 +172,13 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        public NoteTabItem(NoteModel note, ISaveManager saveManager, ISupervisedTaskRunner taskRunner = null)
+        public NoteTabItem(NoteModel note, ISaveManager saveManager)
         {
             var instanceId = this.GetHashCode();
             System.Diagnostics.Debug.WriteLine($"[NoteTabItem] NEW TAB-OWNED INSTANCE {instanceId}: note.Id={note?.Id}, note.Title={note?.Title}, saveManager={saveManager != null}");
             
             Note = note ?? throw new ArgumentNullException(nameof(note));
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
-            _taskRunner = taskRunner; // Allow null for backward compatibility 
             _noteId = note.Id;
             _content = note.Content ?? "";
             
@@ -507,64 +505,55 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
-                // Check if RTF-integrated save system is enabled
+                // Use RTF-integrated save system for tab auto-save (now the only system)
                 var app = System.Windows.Application.Current as App;
-                var configService = app?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
-                var useNewEngine = configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
                 
-                if (useNewEngine)
+                if (rtfSaveWrapper != null && _editor != null)
                 {
-                    // NEW: Use RTF-integrated save system for tab auto-save
-                    var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
-                    
-                    if (rtfSaveWrapper != null && _editor != null)
+                    _ = Task.Run(async () =>
                     {
-                        _ = Task.Run(async () =>
+                        try
                         {
-                            try
+                            var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                                _noteId,
+                                _editor,
+                                Note.Title ?? "Untitled",
+                                NoteNest.Core.Services.SaveType.AutoSave
+                            );
+                            
+                            if (result.Success)
                             {
-                                var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
-                                    _noteId,
-                                    _editor,
-                                    Note.Title ?? "Untitled",
-                                    NoteNest.Core.Services.SaveType.AutoSave
-                                );
+                                // Update UI state on success
+                                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                                {
+                                    IsDirty = false;
+                                    IsSaving = false;
+                                });
                                 
-                                if (result.Success)
-                                {
-                                    // Update UI state on success
-                                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                                    {
-                                        IsDirty = false;
-                                        IsSaving = false;
-                                    });
-                                    
-                                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save completed for {Note.Title}");
-                                }
-                                else
-                                {
-                                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save failed for {Note.Title}: {result.Error}");
-                                }
+                                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save completed for {Note.Title}");
                             }
-                            catch (Exception ex)
+                            else
                             {
-                                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save error for {Note.Title}: {ex.Message}");
+                                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save failed for {Note.Title}: {result.Error}");
                             }
-                        });
-                        
-                        return; // Exit early, don't use old system
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF save wrapper not available, falling back to legacy for {Note.Title}");
-                    }
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save error for {Note.Title}: {ex.Message}");
+                        }
+                    });
+                    
+                    return; // Success path
                 }
-                
-                // OLD SYSTEM: Use legacy auto-save when feature flag disabled or new system unavailable
-                if (_taskRunner != null)
+                else
                 {
-                    _ = _taskRunner.RunAsync(
-                        async () =>
+                    // Fallback to ISaveManager interface (still uses RTFIntegratedSaveEngine)
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF save wrapper not available, using ISaveManager interface for {Note.Title}");
+                    
+                    _ = Task.Run(async () =>
+                    {
+                        try
                         {
                             await _saveManager.SaveNoteAsync(_noteId);
                             
@@ -575,21 +564,7 @@ namespace NoteNest.UI.ViewModels
                                 IsSaving = false;
                             });
                             
-                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Legacy auto-save completed for {Note.Title}");
-                        },
-                        $"Auto-save for {Note.Title}",
-                        NoteNest.Core.Services.OperationType.AutoSave
-                    );
-                }
-                else
-                {
-                    // Fallback for backward compatibility
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _saveManager.SaveNoteAsync(_noteId);
-                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Legacy auto-save completed for {Note.Title}");
+                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] ISaveManager auto-save completed for {Note.Title}");
                         }
                         catch (Exception ex)
                         {

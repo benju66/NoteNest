@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,8 +14,9 @@ namespace NoteNest.Core.Services
     /// <summary>
     /// RTF-aware save engine that properly integrates with existing RTF pipeline
     /// Simplifies coordination while preserving all RTF functionality and adding critical safety features
+    /// Now implements ISaveManager for full compatibility with existing code
     /// </summary>
-    public class RTFIntegratedSaveEngine : IDisposable
+    public class RTFIntegratedSaveEngine : ISaveManager
     {
         private readonly string _dataPath;
         private readonly string _tempPath;
@@ -25,11 +28,25 @@ namespace NoteNest.Core.Services
         // Write-Ahead Log for crash protection
         private readonly WriteAheadLog _wal;
         
+        // ISaveManager state tracking
+        private readonly ConcurrentDictionary<string, string> _noteContents = new();
+        private readonly ConcurrentDictionary<string, string> _lastSavedContents = new();
+        private readonly ConcurrentDictionary<string, string> _noteFilePaths = new();
+        private readonly ConcurrentDictionary<string, string> _pathToNoteId = new();
+        private readonly ConcurrentDictionary<string, bool> _dirtyNotes = new();
+        private readonly ConcurrentDictionary<string, bool> _savingNotes = new();
+        
         // Metrics
         private int _totalSaves = 0;
         private int _failedSaves = 0;
         private int _retriedSaves = 0;
         private bool _disposed = false;
+        
+        // ISaveManager Events
+        public event EventHandler<NoteSavedEventArgs>? NoteSaved;
+        public event EventHandler<SaveProgressEventArgs>? SaveStarted;
+        public event EventHandler<SaveProgressEventArgs>? SaveCompleted;
+        public event EventHandler<ExternalChangeEventArgs>? ExternalChangeDetected;
 
         public RTFIntegratedSaveEngine(string dataPath, IStatusNotifier statusNotifier)
         {
@@ -350,6 +367,26 @@ namespace NoteNest.Core.Services
             SaveType saveType,
             WALEntry walEntry)
         {
+            var filePath = _noteFilePaths.TryGetValue(noteId, out var path) ? path : "";
+            
+            // Fire SaveStarted event
+            SaveStarted?.Invoke(this, new SaveProgressEventArgs
+            {
+                NoteId = noteId,
+                FilePath = filePath,
+                Priority = saveType switch
+                {
+                    SaveType.Manual => SavePriority.UserSave,
+                    SaveType.AppShutdown => SavePriority.ShutdownSave,
+                    _ => SavePriority.AutoSave
+                },
+                Timestamp = DateTime.UtcNow,
+                Success = false // Will be updated on completion
+            });
+            
+            // Mark as saving
+            _savingNotes[noteId] = true;
+            
             int retryCount = 0;
             const int maxRetries = 3;
             Exception lastException = null;
@@ -371,6 +408,24 @@ namespace NoteNest.Core.Services
                             ? $"Auto-saved {title ?? noteId}"
                             : $"Saved {title ?? noteId}";
                         _statusNotifier.ShowStatus(message, StatusType.Success, duration: 2000);
+
+                        // Clear saving state
+                        _savingNotes[noteId] = false;
+                        
+                        // Fire SaveCompleted event  
+                        SaveCompleted?.Invoke(this, new SaveProgressEventArgs
+                        {
+                            NoteId = noteId,
+                            FilePath = filePath,
+                            Priority = saveType switch
+                            {
+                                SaveType.Manual => SavePriority.UserSave,
+                                SaveType.AppShutdown => SavePriority.ShutdownSave,
+                                _ => SavePriority.AutoSave
+                            },
+                            Timestamp = DateTime.UtcNow,
+                            Success = true
+                        });
 
                         return new SaveResult
                         {
@@ -408,6 +463,24 @@ namespace NoteNest.Core.Services
             _statusNotifier.ShowStatus(
                 $"Failed to save {title ?? noteId}: {lastException?.Message}", 
                 StatusType.Error, duration: 5000);
+
+            // Clear saving state
+            _savingNotes[noteId] = false;
+            
+            // Fire SaveCompleted event with failure
+            SaveCompleted?.Invoke(this, new SaveProgressEventArgs
+            {
+                NoteId = noteId,
+                FilePath = filePath,
+                Priority = saveType switch
+                {
+                    SaveType.Manual => SavePriority.UserSave,
+                    SaveType.AppShutdown => SavePriority.ShutdownSave,
+                    _ => SavePriority.AutoSave
+                },
+                Timestamp = DateTime.UtcNow,
+                Success = false
+            });
 
             return new SaveResult
             {
@@ -461,6 +534,318 @@ namespace NoteNest.Core.Services
         public async Task<Dictionary<string, string>> RecoverFromWAL()
         {
             return await _wal.RecoverAllAsync();
+        }
+
+        // ====================================================================
+        // ISaveManager Interface Implementation
+        // ====================================================================
+
+        /// <summary>
+        /// Open a note file and return its unique ID
+        /// </summary>
+        public async Task<string> OpenNoteAsync(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath))
+                throw new ArgumentNullException(nameof(filePath));
+
+            // Check if we already have this file open
+            if (_pathToNoteId.TryGetValue(filePath, out var existingNoteId))
+                return existingNoteId;
+
+            // Generate deterministic note ID based on file path
+            var noteId = GenerateNoteId(filePath);
+            
+            // Load content if file exists
+            string content = "";
+            if (File.Exists(filePath))
+            {
+                try
+                {
+                    content = await File.ReadAllTextAsync(filePath);
+                }
+                catch (Exception ex)
+                {
+                    _statusNotifier.ShowStatus($"Failed to open {Path.GetFileName(filePath)}: {ex.Message}", StatusType.Error);
+                    throw;
+                }
+            }
+
+            // Register the note
+            _noteFilePaths[noteId] = filePath;
+            _pathToNoteId[filePath] = noteId;
+            _noteContents[noteId] = content;
+            _lastSavedContents[noteId] = content;
+            _dirtyNotes[noteId] = false;
+
+            return noteId;
+        }
+
+        /// <summary>
+        /// Update the content of a note in memory
+        /// </summary>
+        public void UpdateContent(string noteId, string content)
+        {
+            if (string.IsNullOrEmpty(noteId))
+                return;
+
+            content = content ?? "";
+            
+            var oldContent = _noteContents.TryGetValue(noteId, out var existingContent) ? existingContent : "";
+            _noteContents[noteId] = content;
+            
+            // Mark as dirty if content changed
+            var lastSavedContent = _lastSavedContents.TryGetValue(noteId, out var lastSaved) ? lastSaved : "";
+            _dirtyNotes[noteId] = content != lastSavedContent;
+        }
+
+        /// <summary>
+        /// Save a single note by ID
+        /// </summary>
+        public async Task<bool> SaveNoteAsync(string noteId)
+        {
+            if (string.IsNullOrEmpty(noteId))
+                return false;
+
+            var content = _noteContents.TryGetValue(noteId, out var noteContent) ? noteContent : "";
+            var filePath = _noteFilePaths.TryGetValue(noteId, out var notePath) ? notePath : "";
+            
+            if (string.IsNullOrEmpty(filePath))
+                return false;
+
+            try
+            {
+                var result = await SaveRTFContentAsync(noteId, content, Path.GetFileNameWithoutExtension(filePath), SaveType.Manual);
+                
+                if (result.Success)
+                {
+                    _lastSavedContents[noteId] = content;
+                    _dirtyNotes[noteId] = false;
+                    
+                    // Fire events
+                    NoteSaved?.Invoke(this, new NoteSavedEventArgs
+                    {
+                        NoteId = noteId,
+                        FilePath = filePath,
+                        SavedAt = DateTime.UtcNow,
+                        WasAutoSave = false
+                    });
+                    
+                    SaveCompleted?.Invoke(this, new SaveProgressEventArgs
+                    {
+                        NoteId = noteId,
+                        FilePath = filePath,
+                        Success = true,
+                        Timestamp = DateTime.UtcNow,
+                        Priority = SavePriority.UserSave
+                    });
+                }
+                
+                return result.Success;
+            }
+            catch (Exception ex)
+            {
+                _statusNotifier.ShowStatus($"Save failed: {ex.Message}", StatusType.Error);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Save all dirty notes
+        /// </summary>
+        public async Task<BatchSaveResult> SaveAllDirtyAsync()
+        {
+            var result = new BatchSaveResult();
+            var dirtyNoteIds = GetDirtyNoteIds().ToList();
+            
+            if (!dirtyNoteIds.Any())
+                return result;
+
+            _statusNotifier.ShowStatus($"Saving {dirtyNoteIds.Count} dirty notes...", StatusType.InProgress);
+
+            foreach (var noteId in dirtyNoteIds)
+            {
+                var success = await SaveNoteAsync(noteId);
+                if (success)
+                {
+                    result.SuccessCount++;
+                }
+                else
+                {
+                    result.FailureCount++;
+                    result.FailedNoteIds.Add(noteId);
+                    result.FailureReasons[noteId] = "Save operation failed";
+                }
+            }
+
+            var message = result.FailureCount == 0 
+                ? $"Saved {result.SuccessCount} notes successfully"
+                : $"Saved {result.SuccessCount}/{dirtyNoteIds.Count} notes ({result.FailureCount} failed)";
+                
+            _statusNotifier.ShowStatus(message, result.FailureCount == 0 ? StatusType.Success : StatusType.Warning);
+
+            return result;
+        }
+
+        /// <summary>
+        /// Close a note and clean up its state
+        /// </summary>
+        public async Task<bool> CloseNoteAsync(string noteId)
+        {
+            if (string.IsNullOrEmpty(noteId))
+                return false;
+
+            // Save if dirty before closing
+            if (_dirtyNotes.TryGetValue(noteId, out var isDirty) && isDirty)
+            {
+                var saved = await SaveNoteAsync(noteId);
+                if (!saved)
+                {
+                    _statusNotifier.ShowStatus("Note has unsaved changes", StatusType.Warning);
+                    return false;
+                }
+            }
+
+            // Clean up state
+            _noteContents.TryRemove(noteId, out _);
+            _lastSavedContents.TryRemove(noteId, out _);
+            _dirtyNotes.TryRemove(noteId, out _);
+            _savingNotes.TryRemove(noteId, out _);
+            
+            if (_noteFilePaths.TryRemove(noteId, out var filePath))
+            {
+                _pathToNoteId.TryRemove(filePath, out _);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Check if a note has unsaved changes
+        /// </summary>
+        public bool IsNoteDirty(string noteId)
+        {
+            return _dirtyNotes.TryGetValue(noteId, out var isDirty) && isDirty;
+        }
+
+        /// <summary>
+        /// Check if a note is currently being saved
+        /// </summary>
+        public bool IsSaving(string noteId)
+        {
+            return _savingNotes.TryGetValue(noteId, out var isSaving) && isSaving;
+        }
+
+        /// <summary>
+        /// Get the current content of a note
+        /// </summary>
+        public string GetContent(string noteId)
+        {
+            return _noteContents.TryGetValue(noteId, out var content) ? content : "";
+        }
+
+        /// <summary>
+        /// Get the last saved content of a note
+        /// </summary>
+        public string? GetLastSavedContent(string noteId)
+        {
+            return _lastSavedContents.TryGetValue(noteId, out var content) ? content : null;
+        }
+
+        /// <summary>
+        /// Get the file path for a note
+        /// </summary>
+        public string? GetFilePath(string noteId)
+        {
+            return _noteFilePaths.TryGetValue(noteId, out var path) ? path : null;
+        }
+
+        /// <summary>
+        /// Get the note ID for a file path
+        /// </summary>
+        public string? GetNoteIdForPath(string filePath)
+        {
+            return _pathToNoteId.TryGetValue(filePath, out var noteId) ? noteId : null;
+        }
+
+        /// <summary>
+        /// Get all dirty note IDs
+        /// </summary>
+        public IReadOnlyList<string> GetDirtyNoteIds()
+        {
+            return _dirtyNotes.Where(kvp => kvp.Value).Select(kvp => kvp.Key).ToList().AsReadOnly();
+        }
+
+        /// <summary>
+        /// Resolve external file changes
+        /// </summary>
+        public async Task<bool> ResolveExternalChangeAsync(string noteId, ConflictResolution resolution)
+        {
+            var filePath = GetFilePath(noteId);
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                return false;
+
+            try
+            {
+                var externalContent = await File.ReadAllTextAsync(filePath);
+                var currentContent = GetContent(noteId);
+
+                switch (resolution)
+                {
+                    case ConflictResolution.KeepLocal:
+                        // Save current content, overriding external changes
+                        return await SaveNoteAsync(noteId);
+                        
+                    case ConflictResolution.KeepExternal:
+                        // Update to external content
+                        UpdateContent(noteId, externalContent);
+                        _lastSavedContents[noteId] = externalContent;
+                        _dirtyNotes[noteId] = false;
+                        return true;
+                        
+                    case ConflictResolution.Merge:
+                        // Simple merge - append external content
+                        var mergedContent = currentContent + "\n\n--- EXTERNAL CHANGES ---\n" + externalContent;
+                        UpdateContent(noteId, mergedContent);
+                        return true;
+                        
+                    default:
+                        return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                _statusNotifier.ShowStatus($"Failed to resolve conflict: {ex.Message}", StatusType.Error);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Update the file path for a note
+        /// </summary>
+        public void UpdateFilePath(string noteId, string newFilePath)
+        {
+            if (string.IsNullOrEmpty(noteId) || string.IsNullOrEmpty(newFilePath))
+                return;
+
+            // Remove old path mapping
+            if (_noteFilePaths.TryGetValue(noteId, out var oldPath))
+            {
+                _pathToNoteId.TryRemove(oldPath, out _);
+            }
+
+            // Add new path mapping
+            _noteFilePaths[noteId] = newFilePath;
+            _pathToNoteId[newFilePath] = noteId;
+        }
+
+        /// <summary>
+        /// Generate a deterministic note ID from file path
+        /// </summary>
+        private string GenerateNoteId(string filePath)
+        {
+            // Use a hash of the absolute path for deterministic IDs
+            var normalizedPath = Path.GetFullPath(filePath).ToLowerInvariant();
+            return $"note_{normalizedPath.GetHashCode():X8}";
         }
 
         public void Dispose()

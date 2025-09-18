@@ -152,7 +152,6 @@ namespace NoteNest.UI.Services.Tab
     public class DefaultTabSaveCoordinator : ITabSaveCoordinator, IDisposable
     {
         private ISaveManager _saveManager;
-        private ISupervisedTaskRunner _taskRunner;
         private string _noteId;
         private bool _disposed = false;
         
@@ -181,7 +180,7 @@ namespace NoteNest.UI.Services.Tab
         public void Initialize(object saveManager, object taskRunner, string noteId)
         {
             _saveManager = saveManager as ISaveManager ?? throw new ArgumentNullException(nameof(saveManager));
-            _taskRunner = taskRunner as ISupervisedTaskRunner; // Allow null for backward compatibility
+            // taskRunner parameter ignored - simplified coordination now
             _noteId = noteId ?? throw new ArgumentNullException(nameof(noteId));
             
             InitializeSaveTimers();
@@ -304,34 +303,19 @@ namespace NoteNest.UI.Services.Tab
             
             try
             {
-                if (_taskRunner != null)
+                // Simplified auto-save - uses ISaveManager interface (RTFIntegratedSaveEngine)
+                _ = Task.Run(async () =>
                 {
-                    _ = _taskRunner.RunAsync(
-                        async () =>
-                        {
-                            await _saveManager.SaveNoteAsync(_noteId);
-                            System.Diagnostics.Debug.WriteLine($"[DefaultTabSaveCoordinator] Auto-save completed for {_noteId}");
-                        },
-                        $"Auto-save for {_noteId}",
-                        OperationType.AutoSave
-                    );
-                }
-                else
-                {
-                    // Fallback for backward compatibility
-                    _ = Task.Run(async () =>
+                    try
                     {
-                        try
-                        {
-                            await _saveManager.SaveNoteAsync(_noteId);
-                            System.Diagnostics.Debug.WriteLine($"[DefaultTabSaveCoordinator] Auto-save completed for {_noteId}");
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[DefaultTabSaveCoordinator] Auto-save failed for {_noteId}: {ex.Message}");
-                        }
-                    });
-                }
+                        await _saveManager.SaveNoteAsync(_noteId);
+                        System.Diagnostics.Debug.WriteLine($"[DefaultTabSaveCoordinator] Auto-save completed for {_noteId}");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DefaultTabSaveCoordinator] Auto-save failed for {_noteId}: {ex.Message}");
+                    }
+                });
             }
             catch (Exception ex)
             {

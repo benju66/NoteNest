@@ -1072,44 +1072,35 @@ namespace NoteNest.UI.ViewModels
             {
                 try
                 {
-                    // Check if RTF-integrated save system is enabled
-                    var useNewEngine = _configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                    // Use RTF-integrated save system (now the only system)
+                    var rtfSaveWrapper = (Application.Current as App)?.ServiceProvider?
+                        .GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
                     
-                    if (useNewEngine)
+                    if (rtfSaveWrapper != null && current is NoteTabItem noteTabItem && noteTabItem.Editor != null)
                     {
-                        // NEW: Use RTF-integrated save system
-                        var rtfSaveWrapper = (Application.Current as App)?.ServiceProvider?
-                            .GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
+                        var saveResult = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                            current.NoteId,
+                            noteTabItem.Editor, // Direct access to RTF editor
+                            current.Note?.Title ?? "Untitled",
+                            NoteNest.Core.Services.SaveType.Manual
+                        );
                         
-                        if (rtfSaveWrapper != null && current is NoteTabItem noteTabItem && noteTabItem.Editor != null)
+                        if (saveResult.Success)
                         {
-                            var saveResult = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
-                                current.NoteId,
-                                noteTabItem.Editor, // Direct access to RTF editor
-                                current.Note?.Title ?? "Untitled",
-                                NoteNest.Core.Services.SaveType.Manual
-                            );
-                            
-                            if (saveResult.Success)
-                            {
-                                // Success message handled by WPFStatusNotifier
-                                noteTabItem.IsDirty = false;
-                                noteTabItem.Note.IsDirty = false;
-                            }
-                            // Error messages also handled by WPFStatusNotifier
-                            return;
+                            // Success message handled by WPFStatusNotifier
+                            noteTabItem.IsDirty = false;
+                            noteTabItem.Note.IsDirty = false;
                         }
-                        else
-                        {
-                            // Fallback to old system if new engine not available
-                            StatusMessage = "RTF save engine not available, using legacy save...";
-                        }
+                        // Error messages also handled by WPFStatusNotifier
+                        return;
                     }
-                    
-                    // OLD SYSTEM: Fallback or when feature flag disabled
-                    StatusMessage = "Saving...";
-                    var result = await _saveManager.SaveNoteAsync(current.NoteId);
-                    StatusMessage = result ? "Saved" : "Save failed";
+                    else
+                    {
+                        // Fallback to ISaveManager interface (still uses RTFIntegratedSaveEngine)
+                        StatusMessage = "Saving...";
+                        var result = await _saveManager.SaveNoteAsync(current.NoteId);
+                        StatusMessage = result ? "Saved" : "Save failed";
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1350,129 +1341,100 @@ namespace NoteNest.UI.ViewModels
 
         private void AutoSaveTimer_Tick(object sender, EventArgs e)
         {
-            // FIXED: No more silent global auto-save failures - Execute auto-save on background thread to avoid blocking UI
-            var taskRunner = (Application.Current as App)?.ServiceProvider
-                ?.GetService(typeof(ISupervisedTaskRunner)) as ISupervisedTaskRunner;
-                
-            if (taskRunner != null)
+            // Execute auto-save on background thread to avoid blocking UI
+            _ = Task.Run(async () =>
             {
-                _ = taskRunner.RunAsync(
-                    async () =>
-                    {
-                        if (!_cancellationTokenSource.Token.IsCancellationRequested)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[VM] AutoSaveTimer tick at={DateTime.Now:HH:mm:ss.fff}");
-                            await AutoSaveAsync();
-                        }
-                    },
-                    "Global auto-save timer",
-                    NoteNest.Core.Services.OperationType.AutoSave
-                );
-            }
-            else
-            {
-                // Fallback for backward compatibility
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
+                    if (!_cancellationTokenSource.Token.IsCancellationRequested)
                     {
-                        if (!_cancellationTokenSource.Token.IsCancellationRequested)
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[VM] AutoSaveTimer tick at={DateTime.Now:HH:mm:ss.fff}");
-                            await AutoSaveAsync();
-                        }
+                        System.Diagnostics.Debug.WriteLine($"[VM] AutoSaveTimer tick at={DateTime.Now:HH:mm:ss.fff}");
+                        await AutoSaveAsync();
                     }
-                    catch (OperationCanceledException)
-                    {
-                        // Expected during shutdown
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Error(ex, "Auto-save timer error");
-                    }
-                });
-            }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected during shutdown
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Auto-save timer error");
+                }
+            });
         }
 
         private async Task AutoSaveAsync()
         {
             try
             {
-                // Check if RTF-integrated save system is enabled
-                var useNewEngine = _configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                // Use RTF-integrated save system (now the only system)
+                var rtfSaveWrapper = (Application.Current as App)?.ServiceProvider?
+                    .GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
+                var workspaceService = GetWorkspaceService();
                 
-                if (useNewEngine)
+                if (rtfSaveWrapper != null && workspaceService != null)
                 {
-                    // NEW: Use RTF-integrated save system for auto-save
-                    var rtfSaveWrapper = (Application.Current as App)?.ServiceProvider?
-                        .GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
-                    var workspaceService = GetWorkspaceService();
+                    var dirtyTabs = workspaceService.OpenTabs.Where(t => t.IsDirty).ToList();
                     
-                    if (rtfSaveWrapper != null && workspaceService != null)
+                    if (dirtyTabs.Any())
                     {
-                        var dirtyTabs = workspaceService.OpenTabs.Where(t => t.IsDirty).ToList();
+                        int successCount = 0;
+                        int failureCount = 0;
                         
-                        if (dirtyTabs.Any())
+                        foreach (var tab in dirtyTabs)
                         {
-                            int successCount = 0;
-                            int failureCount = 0;
-                            
-                            foreach (var tab in dirtyTabs)
+                            try
                             {
-                                try
+                                if (tab is NoteTabItem noteTabItem && noteTabItem.Editor != null)
                                 {
-                                    if (tab is NoteTabItem noteTabItem && noteTabItem.Editor != null)
+                                    var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                                        tab.NoteId,
+                                        noteTabItem.Editor,
+                                        tab.Title ?? "Untitled",
+                                        NoteNest.Core.Services.SaveType.AutoSave
+                                    );
+                                    
+                                    if (result.Success)
                                     {
-                                        var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
-                                            tab.NoteId,
-                                            noteTabItem.Editor,
-                                            tab.Title ?? "Untitled",
-                                            NoteNest.Core.Services.SaveType.AutoSave
-                                        );
-                                        
-                                        if (result.Success)
+                                        successCount++;
+                                        if (tab is NoteTabItem nti)
                                         {
-                                            successCount++;
-                                            if (tab is NoteTabItem nti)
-                                            {
-                                                nti.IsDirty = false;
-                                                nti.Note.IsDirty = false;
-                                            }
-                                        }
-                                        else
-                                        {
-                                            failureCount++;
+                                            nti.IsDirty = false;
+                                            nti.Note.IsDirty = false;
                                         }
                                     }
-                                }
-                                catch (Exception ex)
-                                {
-                                    failureCount++;
-                                    _logger.Warning($"RTF auto-save failed for {tab.Title}: {ex.Message}");
+                                    else
+                                    {
+                                        failureCount++;
+                                    }
                                 }
                             }
-                            
-                            if (successCount > 0)
+                            catch (Exception ex)
                             {
-                                // Status message will be shown by WPFStatusNotifier for each save
-                                _logger.Debug($"RTF-integrated auto-save completed: {successCount} succeeded, {failureCount} failed");
+                                failureCount++;
+                                _logger.Warning($"RTF auto-save failed for {tab.Title}: {ex.Message}");
                             }
                         }
                         
-                        return; // Exit early, don't use old system
+                        if (successCount > 0)
+                        {
+                            // Status message will be shown by WPFStatusNotifier for each save
+                            _logger.Debug($"RTF-integrated auto-save completed: {successCount} succeeded, {failureCount} failed");
+                        }
                     }
-                    else
-                    {
-                        _logger.Warning("RTF save wrapper not available for auto-save, falling back to legacy");
-                    }
+                    
+                    return; // Success path
                 }
-                
-                // OLD SYSTEM: Fallback when feature flag disabled or new system unavailable
-                var legacyResult = await _saveManager.SaveAllDirtyAsync();
-                if (legacyResult.SuccessCount > 0)
+                else
                 {
-                    StatusMessage = $"Auto-saved {legacyResult.SuccessCount} note(s)";
-                    _logger.Debug($"Auto-saved {legacyResult.SuccessCount} notes");
+                    // Fallback to ISaveManager interface (still uses RTFIntegratedSaveEngine)
+                    _logger.Warning("RTF save wrapper not available, using ISaveManager interface");
+                    var legacyResult = await _saveManager.SaveAllDirtyAsync();
+                    if (legacyResult.SuccessCount > 0)
+                    {
+                        StatusMessage = $"Auto-saved {legacyResult.SuccessCount} note(s)";
+                        _logger.Debug($"Auto-saved {legacyResult.SuccessCount} notes");
+                    }
                 }
             }
             catch (Exception ex)

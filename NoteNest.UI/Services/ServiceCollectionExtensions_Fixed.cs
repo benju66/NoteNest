@@ -54,7 +54,8 @@ namespace NoteNest.UI.Services
                 return new WriteAheadLog(walPath);
             });
             services.AddSingleton<SaveConfiguration>();
-            services.AddSingleton<ISaveManager, UnifiedSaveManager>();
+            // OLD: services.AddSingleton<ISaveManager, UnifiedSaveManager>();
+            // RTFIntegratedSaveEngine now implements ISaveManager - registered below
             
             // Note Operation Services - PREVIOUSLY MISSING
             services.AddSingleton<INoteOperationsService>(serviceProvider =>
@@ -164,8 +165,7 @@ namespace NoteNest.UI.Services
             services.AddSingleton<ITabFactory>(serviceProvider =>
             {
                 return new UITabFactory(
-                    serviceProvider.GetRequiredService<ISaveManager>(),
-                    serviceProvider.GetService<NoteNest.Core.Services.ISupervisedTaskRunner>()
+                    serviceProvider.GetRequiredService<ISaveManager>()
                 );
             });
             services.AddSingleton<ITabPersistenceService, TabPersistenceService>();
@@ -184,339 +184,10 @@ namespace NoteNest.UI.Services
     /// </summary>
     public static class SilentSaveFailureFixExtensions
     {
-        /// <summary>
-        /// Add Silent Save Failure Fix to your service collection
-        /// Call this AFTER your existing AddNoteNestServices() call
-        /// </summary>
-        public static IServiceCollection AddSilentSaveFailureFix(this IServiceCollection services)
-        {
-            // Step 1: Add SupervisedTaskRunner
-            services.AddSingleton<NoteNest.Core.Services.ISupervisedTaskRunner>(serviceProvider =>
-            {
-                var logger = serviceProvider.GetRequiredService<IAppLogger>();
-                var notifications = serviceProvider.GetRequiredService<IUserNotificationService>();
-                return new NoteNest.Core.Services.SupervisedTaskRunner(logger, notifications);
-            });
-
-            // Step 2: Add service bridges with full namespace qualifiers
-            services.AddSingleton<NoteNest.Core.Services.IStatusBarService>(serviceProvider =>
-            {
-                var stateManager = serviceProvider.GetRequiredService<IStateManager>();
-                return new NoteNest.Core.Services.StatusBarServiceBridge(stateManager);
-            });
-
-            services.AddSingleton<NoteNest.Core.Services.IEnhancedDialogService>(serviceProvider =>
-            {
-                var dialogBridge = new DialogServiceBridge(serviceProvider.GetRequiredService<IDialogService>());
-                return new NoteNest.Core.Services.EnhancedDialogServiceBridge(dialogBridge);
-            });
-
-            // Step 3: Add SaveHealthMonitor
-            services.AddSingleton<SaveHealthMonitor>(serviceProvider =>
-            {
-                var taskRunner = serviceProvider.GetRequiredService<NoteNest.Core.Services.ISupervisedTaskRunner>();
-                var statusBar = serviceProvider.GetRequiredService<NoteNest.Core.Services.IStatusBarService>();
-                return new SaveHealthMonitor(taskRunner, statusBar);
-            });
-
-            // Step 4: Update existing services
-            UpdateSaveManagerWithSupervisedRunner(services);
-            UpdateTabFactoryWithSupervisedRunner(services);
-
-            return services;
-        }
-
-        private static void UpdateSaveManagerWithSupervisedRunner(IServiceCollection services)
-        {
-            // Remove existing ISaveManager registration
-            for (int i = services.Count - 1; i >= 0; i--)
-            {
-                if (services[i].ServiceType == typeof(ISaveManager))
-                {
-                    services.RemoveAt(i);
-                }
-            }
-
-            // Re-register with SupervisedTaskRunner
-            services.AddSingleton<ISaveManager>(serviceProvider => 
-            {
-                var logger = serviceProvider.GetRequiredService<IAppLogger>();
-                var wal = serviceProvider.GetRequiredService<IWriteAheadLog>();
-                var config = serviceProvider.GetService<SaveConfiguration>();
-                var taskRunner = serviceProvider.GetRequiredService<NoteNest.Core.Services.ISupervisedTaskRunner>();
-                
-                return new UnifiedSaveManager(logger, wal, config, taskRunner);
-            });
-        }
-
-        private static void UpdateTabFactoryWithSupervisedRunner(IServiceCollection services)
-        {
-            // Remove existing ITabFactory registration
-            for (int i = services.Count - 1; i >= 0; i--)
-            {
-                if (services[i].ServiceType == typeof(ITabFactory))
-                {
-                    services.RemoveAt(i);
-                }
-            }
-
-            // Re-register UITabFactory with SupervisedTaskRunner instead of using separate EnhancedTabFactory
-            services.AddSingleton<ITabFactory>(serviceProvider =>
-            {
-                return new UITabFactory(
-                    serviceProvider.GetRequiredService<ISaveManager>(),
-                    serviceProvider.GetService<NoteNest.Core.Services.ISupervisedTaskRunner>()
-                );
-            });
-        }
+        // Old service registration methods removed - RTF-integrated save system is now the unified solution
     }
 
-    /// <summary>
-    /// Enhanced tab factory that creates NoteTabItems with SupervisedTaskRunner support
-    /// </summary>
-    internal class EnhancedTabFactory : ITabFactory
-    {
-        private readonly ISaveManager _saveManager;
-        private readonly NoteNest.Core.Services.ISupervisedTaskRunner _taskRunner;
-
-        public EnhancedTabFactory(ISaveManager saveManager, NoteNest.Core.Services.ISupervisedTaskRunner taskRunner = null)
-        {
-            _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
-            _taskRunner = taskRunner; // Allow null for backward compatibility
-        }
-
-        public ITabItem CreateTab(NoteModel note, string noteId)
-        {
-            // Ensure note has the correct ID (same pattern as UITabFactory)
-            note.Id = noteId;
-            return new NoteNest.UI.ViewModels.NoteTabItem(note, _saveManager, _taskRunner);
-        }
-    }
-
-    /// <summary>
-    /// Bridge to existing UI IDialogService 
-    /// </summary>
-    internal class DialogServiceBridge : NoteNest.Core.Services.IUIDialogService
-    {
-        private readonly IDialogService _dialogService;
-
-        public DialogServiceBridge(IDialogService dialogService)
-        {
-            _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
-        }
-
-        public async Task<bool> ShowConfirmationDialogAsync(string message, string title)
-            => await _dialogService.ShowConfirmationDialogAsync(message, title);
-
-        public void ShowError(string message, string title = "Error")
-            => _dialogService.ShowError(message, title);
-
-        public void ShowInfo(string message, string title = "Information")
-            => _dialogService.ShowInfo(message, title);
-    }
-
-    /// <summary>
-    /// Save health monitor that displays save status in the status bar
-    /// </summary>
-    public class SaveHealthMonitor : IDisposable
-    {
-        private readonly NoteNest.Core.Services.ISupervisedTaskRunner _taskRunner;
-        private readonly NoteNest.Core.Services.IStatusBarService _statusBar;
-        private readonly System.Windows.Threading.DispatcherTimer _updateTimer;
-        private bool _disposed;
-        
-        public SaveHealthMonitor(NoteNest.Core.Services.ISupervisedTaskRunner taskRunner, 
-                                NoteNest.Core.Services.IStatusBarService statusBar)
-        {
-            _taskRunner = taskRunner ?? throw new ArgumentNullException(nameof(taskRunner));
-            _statusBar = statusBar ?? throw new ArgumentNullException(nameof(statusBar));
-            
-            // Update status bar every 2 seconds
-            _updateTimer = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(2)
-            };
-            _updateTimer.Tick += UpdateHealthIndicator;
-            _updateTimer.Start();
-            
-            // React immediately to failures
-            _taskRunner.SaveFailed += OnSaveFailure;
-        }
-        
-        private void UpdateHealthIndicator(object? sender, EventArgs e)
-        {
-            if (_disposed) return;
-            
-            try
-            {
-                var health = _taskRunner.GetSaveHealth();
-                
-                string indicator = "";
-                string tooltip = "";
-                
-                if (!health.WALHealthy)
-                {
-                    indicator = "⚠️ No crash protection";
-                    tooltip = $"Crash protection failed: {health.LastFailureReason}";
-                    _statusBar.SetMessage(indicator, NoteNest.Core.Interfaces.StatusType.Warning);
-                }
-                else if (!health.AutoSaveHealthy)
-                {
-                    indicator = "❌ Auto-save failing";
-                    tooltip = $"Last save failed: {health.LastFailureReason}";
-                    _statusBar.SetMessage(indicator, NoteNest.Core.Interfaces.StatusType.Error);
-                }
-                else if (health.FailedSaves > 0)
-                {
-                    indicator = $"⚠️ {health.FailedSaves} save issues";
-                    tooltip = "Some background saves failed. Your work is safe but check logs.";
-                    _statusBar.SetMessage(indicator, NoteNest.Core.Interfaces.StatusType.Warning);
-                }
-                else if (health.SuccessfulSaves > 0)
-                {
-                    // Only show positive status occasionally to avoid clutter
-                    if (health.SuccessfulSaves % 10 == 0)
-                    {
-                        indicator = "✅ All saves working";
-                        tooltip = $"{health.SuccessfulSaves} successful saves";
-                        _statusBar.SetMessage(indicator, NoteNest.Core.Interfaces.StatusType.Info);
-                    }
-                }
-                
-                _statusBar.SetSaveHealth(indicator, tooltip);
-            }
-            catch (Exception ex)
-            {
-                // Don't let health monitoring itself cause problems
-                System.Diagnostics.Debug.WriteLine($"SaveHealthMonitor error: {ex.Message}");
-            }
-        }
-        
-        private void OnSaveFailure(object? sender, NoteNest.Core.Services.SaveFailureEventArgs e)
-        {
-            if (_disposed) return;
-            
-            try
-            {
-                // Immediate status bar update for critical failures
-                if (e.Type == NoteNest.Core.Services.OperationType.AutoSave || 
-                    e.Type == NoteNest.Core.Services.OperationType.WALWrite)
-                {
-                    _statusBar.SetMessage($"❌ {e.OperationName} failed", NoteNest.Core.Interfaces.StatusType.Error);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"SaveHealthMonitor.OnSaveFailure error: {ex.Message}");
-            }
-        }
-        
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            
-            _updateTimer?.Stop();
-            if (_taskRunner != null)
-            {
-                _taskRunner.SaveFailed -= OnSaveFailure;
-            }
-        }
-    }
-
-    /// <summary>
-    /// HYBRID SAVE COORDINATION SYSTEM: Extension for enhanced save system
-    /// Adds SaveCoordinator, CentralSaveManager, and status bar integration
-    /// </summary>
-    public static class HybridSaveCoordinationExtensions
-    {
-        /// <summary>
-        /// Add the hybrid save coordination system to services
-        /// Call this AFTER AddSilentSaveFailureFix() for complete enhancement
-        /// </summary>
-        public static IServiceCollection AddHybridSaveCoordination(this IServiceCollection services)
-        {
-            // Step 1: Register SaveStatusManager for status bar integration
-            services.AddSingleton<NoteNest.Core.Services.SaveCoordination.SaveStatusManager>(serviceProvider =>
-            {
-                var statusBar = serviceProvider.GetRequiredService<NoteNest.Core.Services.IStatusBarService>();
-                var logger = serviceProvider.GetRequiredService<IAppLogger>();
-                return new NoteNest.Core.Services.SaveCoordination.SaveStatusManager(statusBar, logger);
-            });
-
-            // Step 1B: Register AtomicMetadataSaver for data integrity
-            services.AddSingleton<NoteNest.Core.Services.SaveCoordination.AtomicMetadataSaver>(serviceProvider =>
-            {
-                var metadataManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.NoteMetadataManager>();
-                var fileSystem = serviceProvider.GetRequiredService<IFileSystemProvider>();
-                var logger = serviceProvider.GetRequiredService<IAppLogger>();
-                return new NoteNest.Core.Services.SaveCoordination.AtomicMetadataSaver(metadataManager, fileSystem, logger);
-            });
-
-            // Step 2: Register SaveCoordinator with all dependencies (including AtomicMetadataSaver)
-            services.AddSingleton<NoteNest.Core.Services.SaveCoordination.SaveCoordinator>(serviceProvider =>
-            {
-                var fileWatcher = serviceProvider.GetRequiredService<FileWatcherService>();
-                var notifications = serviceProvider.GetRequiredService<IUserNotificationService>();
-                var logger = serviceProvider.GetRequiredService<IAppLogger>();
-                var statusManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.SaveStatusManager>();
-                var atomicSaver = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.AtomicMetadataSaver>();
-                
-                return new NoteNest.Core.Services.SaveCoordination.SaveCoordinator(
-                    fileWatcher, notifications, logger, statusManager, atomicSaver);
-            });
-
-            // Step 3: Register CentralSaveManager for timer consolidation
-            services.AddSingleton<NoteNest.Core.Services.SaveCoordination.CentralSaveManager>(serviceProvider =>
-            {
-                var saveCoordinator = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.SaveCoordinator>();
-                var workspace = serviceProvider.GetRequiredService<IWorkspaceService>();
-                var walManager = serviceProvider.GetRequiredService<IWriteAheadLog>();
-                var logger = serviceProvider.GetRequiredService<IAppLogger>();
-                var statusManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.SaveStatusManager>();
-                
-                return new NoteNest.Core.Services.SaveCoordination.CentralSaveManager(
-                    saveCoordinator, workspace, walManager, logger, statusManager);
-            });
-
-            // Step 4: Register SaveOperationsHelper for easy integration
-            services.AddSingleton<NoteNest.UI.Services.SaveOperationsHelper>(serviceProvider =>
-            {
-                var saveCoordinator = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.SaveCoordinator>();
-                var centralSaveManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.CentralSaveManager>();
-                var logger = serviceProvider.GetRequiredService<IAppLogger>();
-                
-                return new NoteNest.UI.Services.SaveOperationsHelper(saveCoordinator, centralSaveManager, logger);
-            });
-
-            return services;
-        }
-
-        /// <summary>
-        /// Initialize the hybrid save coordination system
-        /// Call this after DI container is built to start timers
-        /// </summary>
-        public static void InitializeHybridSaveCoordination(this IServiceProvider serviceProvider)
-        {
-            try
-            {
-                var logger = serviceProvider.GetRequiredService<IAppLogger>();
-                logger.Info("Initializing Hybrid Save Coordination System");
-
-                // Start the centralized timers
-                var centralSaveManager = serviceProvider.GetRequiredService<NoteNest.Core.Services.SaveCoordination.CentralSaveManager>();
-                centralSaveManager.StartTimers();
-
-                logger.Info("Hybrid Save Coordination System initialized successfully");
-            }
-            catch (Exception ex)
-            {
-                var logger = serviceProvider.GetService<IAppLogger>();
-                logger?.Error(ex, "Failed to initialize Hybrid Save Coordination System");
-                throw;
-            }
-        }
-    }
+    // Old coordination classes removed - RTF-integrated save system is now the unified solution
 
     /// <summary>
     /// RTF-Integrated Save System: Clean, unified save system that replaces coordination complexity
@@ -529,7 +200,7 @@ namespace NoteNest.UI.Services
         /// </summary>
         public static IServiceCollection AddRTFIntegratedSaveSystem(this IServiceCollection services)
         {
-            // Register the core save engine
+            // Register the unified save engine as both RTFIntegratedSaveEngine and ISaveManager
             services.AddSingleton<RTFIntegratedSaveEngine>(serviceProvider =>
             {
                 // Get configuration for data path with safe fallback
@@ -549,6 +220,12 @@ namespace NoteNest.UI.Services
                 var statusNotifier = new WPFStatusNotifier(stateManager);
                 
                 return new RTFIntegratedSaveEngine(dataPath, statusNotifier);
+            });
+            
+            // Register RTFIntegratedSaveEngine as ISaveManager (same instance)
+            services.AddSingleton<ISaveManager>(serviceProvider =>
+            {
+                return serviceProvider.GetRequiredService<RTFIntegratedSaveEngine>();
             });
 
             // Register the UI wrapper that handles RTF extraction

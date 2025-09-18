@@ -657,117 +657,50 @@ namespace NoteNest.UI.Controls
                 {
                     var app = Application.Current as App;
                     
-                    // Check feature flag for new save engine
-                    var configService = app?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
-                    var useNewEngine = configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                    // Use RTF-integrated save system (now the only system)
+                    System.Diagnostics.Debug.WriteLine($"[SAVE] Using RTF-integrated save engine for: {tab.Title}");
                     
-                    if (useNewEngine)
-                    {
-                        // NEW: Use RTF-integrated save engine
-                        System.Diagnostics.Debug.WriteLine($"[SAVE] Using RTF-integrated save engine for: {tab.Title}");
-                        
-                        var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
-                        var rtfEditor = GetRTFEditorForTab(tab);
-                        
-                        if (rtfSaveWrapper != null && rtfEditor != null)
-                        {
-                            var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
-                                tab.NoteId,
-                                rtfEditor, // Pass the RTFEditor (which extends RichTextBox)
-                                tab.Title,
-                                SaveType.Manual
-                            );
-                            
-                            if (result.Success)
-                            {
-                                if (tab is NoteTabItem nti)
-                                {
-                                    nti.IsDirty = false;
-                                    nti.Note.IsDirty = false;
-                                }
-                                System.Diagnostics.Debug.WriteLine($"[SAVE] RTF-integrated save succeeded: {tab.Title}");
-                            }
-                            else
-                            {
-                                System.Diagnostics.Debug.WriteLine($"[SAVE] RTF-integrated save failed: {tab.Title} - {result.Error}");
-                            }
-                            
-                            return; // Exit early, don't use old system
-                        }
-                        else
-                        {
-                            System.Diagnostics.Debug.WriteLine($"[SAVE] RTF-integrated save engine not available, falling back to old system");
-                        }
-                    }
+                    var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
+                    var rtfEditor = GetRTFEditorForTab(tab);
                     
-                    // OLD SYSTEM: Use existing atomic coordination
-                    var saveOperationsHelper = app?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.SaveOperationsHelper)) as NoteNest.UI.Services.SaveOperationsHelper;
-                    var saveManager = app?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
-
-                    if (saveOperationsHelper != null && saveManager != null)
+                    if (rtfSaveWrapper != null && rtfEditor != null)
                     {
-                        // ATOMIC ENHANCED: Use atomic metadata coordination for bulletproof saves
-                        System.Diagnostics.Debug.WriteLine($"[ATOMIC] Using atomic metadata coordination for: {tab.Title}");
-                        
-                        // RTF-SPECIFIC: Flush content from RTF editor first
-                        var rtfEditor = GetRTFEditorForTab(tab);
-                        string flushedContent = "";
-                        
-                        if (rtfEditor != null && tab is NoteTabItem nti)
-                        {
-                            flushedContent = rtfEditor.SaveContent();
-                            nti.UpdateContentFromEditor(flushedContent);
-                            rtfEditor.MarkClean();
-                            System.Diagnostics.Debug.WriteLine($"[ATOMIC] RTF content flushed: {tab.Title} ({flushedContent?.Length ?? 0} chars)");
-                        }
-                        
-                        var success = await saveOperationsHelper.SafeSaveWithMetadata(
-                            tab.Note,
-                            flushedContent,
-                            async () =>
-                            {
-                                // Legacy content save action (fallback if atomic fails)
-                                await saveManager.SaveNoteAsync(tab.NoteId);
-                            },
-                            tab.Title ?? "Unknown"
+                        var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                            tab.NoteId,
+                            rtfEditor, // Pass the RTFEditor (which extends RichTextBox)
+                            tab.Title,
+                            SaveType.Manual
                         );
-
-                        if (success)
+                        
+                        if (result.Success)
                         {
-                            System.Diagnostics.Debug.WriteLine($"[ATOMIC] Atomic metadata save succeeded: {tab.Title}");
-                            // Status bar automatically shows: "✅ Saved 'tab.Title' (atomic)" or "(fallback)"
-                            
-                            // Log atomic save metrics for monitoring
-                            try
+                            if (tab is NoteTabItem nti)
                             {
-                                var metrics = saveOperationsHelper.GetAtomicSaveMetrics();
-                                System.Diagnostics.Debug.WriteLine($"[ATOMIC] Metrics: {metrics}");
+                                nti.IsDirty = false;
+                                nti.Note.IsDirty = false;
                             }
-                            catch (Exception metricsEx)
-                            {
-                                System.Diagnostics.Debug.WriteLine($"[ATOMIC] Metrics error: {metricsEx.Message}");
-                            }
+                            System.Diagnostics.Debug.WriteLine($"[SAVE] RTF-integrated save succeeded: {tab.Title}");
                         }
                         else
                         {
-                            System.Diagnostics.Debug.WriteLine($"[ATOMIC] Atomic save failed: {tab.Title}");
-                            // Status bar shows: "❌ Save failed: 'tab.Title' - error"
-                            // User dialog already displayed by SaveCoordinator
+                            System.Diagnostics.Debug.WriteLine($"[SAVE] RTF-integrated save failed: {tab.Title} - {result.Error}");
                         }
+                        
+                        return; // Success path
                     }
                     else
                     {
-                        // FALLBACK: Legacy save system (if atomic coordination not available)
-                        System.Diagnostics.Debug.WriteLine($"[ATOMIC] Falling back to legacy save: {tab.Title}");
+                        // Fallback to ISaveManager interface (still uses RTFIntegratedSaveEngine)
+                        System.Diagnostics.Debug.WriteLine($"[SAVE] RTF wrapper not available, using ISaveManager interface");
+                        var saveManager = app?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
                         
                         // RTF-SPECIFIC: Flush content from RTF editor first
-                        var rtfEditor = GetRTFEditorForTab(tab);
                         if (rtfEditor != null && tab is NoteTabItem nti)
                         {
                             var content = rtfEditor.SaveContent();
                             nti.UpdateContentFromEditor(content);
                             rtfEditor.MarkClean();
-                            System.Diagnostics.Debug.WriteLine($"[ATOMIC] Legacy RTF content flushed: {tab.Title}");
+                            System.Diagnostics.Debug.WriteLine($"[SAVE] RTF content flushed for ISaveManager: {tab.Title}");
                         }
                         
                         if (saveManager != null)
@@ -775,11 +708,11 @@ namespace NoteNest.UI.Controls
                             var success = await saveManager.SaveNoteAsync(tab.NoteId);
                             if (success)
                             {
-                                System.Diagnostics.Debug.WriteLine($"[ATOMIC] Legacy save succeeded: {tab.Title}");
+                                System.Diagnostics.Debug.WriteLine($"[SAVE] ISaveManager save succeeded: {tab.Title}");
                             }
                             else
                             {
-                                _logger?.Warning($"Legacy save returned false: {tab.Title}");
+                                _logger?.Warning($"ISaveManager save returned false: {tab.Title}");
                             }
                         }
                     }
@@ -877,14 +810,7 @@ namespace NoteNest.UI.Controls
                 ?.GetService(typeof(ISaveManager)) as ISaveManager;
         }
         
-        /// <summary>
-        /// Get SupervisedTaskRunner service for preventing silent save failures
-        /// </summary>
-        private ISupervisedTaskRunner GetSupervisedTaskRunner()
-        {
-            return (Application.Current as App)?.ServiceProvider
-                ?.GetService(typeof(ISupervisedTaskRunner)) as ISupervisedTaskRunner;
-        }
+        // SupervisedTaskRunner removed - save operations now use RTF-integrated save system
 
         /// <summary>
         /// Get editor for a specific tab (interface-based for all editor types)
@@ -1012,72 +938,49 @@ namespace NoteNest.UI.Controls
                         Pane?.Tabs.Remove(tab);
                         System.Diagnostics.Debug.WriteLine($"[RTF] Tab removed from UI: {tab?.Title}");
                         
-                        // ENHANCED: RTF-integrated save (eliminates ForceSaveAsync bypass)
+                        // RTF-integrated save (eliminates ForceSaveAsync bypass)
                         try
                         {
                             var app = Application.Current as App;
                             
-                            // Check if RTF-integrated save system is enabled
-                            var configService = app?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
-                            var useNewEngine = configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                            // Use RTF-integrated save for tab close (now the only system)
+                            var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
                             
-                            if (useNewEngine)
+                            if (rtfSaveWrapper != null && tab.IsDirty)
                             {
-                                // NEW: Use RTF-integrated save for tab close
-                                var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
-                                
-                                if (rtfSaveWrapper != null && tab.IsDirty)
+                                var rtfEditor = GetRTFEditorForTab(tab);
+                                if (rtfEditor != null)
                                 {
-                                    var rtfEditor = GetRTFEditorForTab(tab);
-                                    if (rtfEditor != null)
+                                    var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                                        tab.NoteId,
+                                        rtfEditor,
+                                        tab.Title ?? "Untitled",
+                                        NoteNest.Core.Services.SaveType.TabClose
+                                    );
+                                    
+                                    if (result.Success)
                                     {
-                                        var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
-                                            tab.NoteId,
-                                            rtfEditor,
-                                            tab.Title ?? "Untitled",
-                                            NoteNest.Core.Services.SaveType.TabClose
-                                        );
-                                        
-                                        if (result.Success)
-                                        {
-                                            System.Diagnostics.Debug.WriteLine($"[RTF] RTF-integrated tab close save succeeded: {tab.Title}");
-                                        }
-                                        else
-                                        {
-                                            System.Diagnostics.Debug.WriteLine($"[RTF] RTF-integrated tab close save failed: {tab.Title} - {result.Error}");
-                                        }
+                                        System.Diagnostics.Debug.WriteLine($"[RTF] RTF-integrated tab close save succeeded: {tab.Title}");
+                                    }
+                                    else
+                                    {
+                                        System.Diagnostics.Debug.WriteLine($"[RTF] RTF-integrated tab close save failed: {tab.Title} - {result.Error}");
                                     }
                                 }
-                                
-                                // Save tab persistence state using normal method (no more force bypass)
-                                var persistence = app?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
-                                var workspaceService = _workspaceService;
-                                
-                                if (persistence != null && workspaceService != null)
-                                {
-                                    var remainingTabs = workspaceService.OpenTabs;
-                                    var activeTabId = workspaceService.SelectedTab?.Note?.Id;
-                                    var activeContent = workspaceService.SelectedTab?.Content;
-                                    
-                                    await persistence.SaveAsync(remainingTabs, activeTabId, activeContent);
-                                    System.Diagnostics.Debug.WriteLine($"[RTF] Tab persistence save completed for RTF tab close");
-                                }
                             }
-                            else
+                            
+                            // Save tab persistence state using normal method (no more force bypass)
+                            var persistence = app?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
+                            var workspaceService = _workspaceService;
+                            
+                            if (persistence != null && workspaceService != null)
                             {
-                                // OLD SYSTEM: Use ForceSaveAsync bypass when feature flag disabled
-                                var persistence = app?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
-                                var workspaceService = _workspaceService;
+                                var remainingTabs = workspaceService.OpenTabs;
+                                var activeTabId = workspaceService.SelectedTab?.Note?.Id;
+                                var activeContent = workspaceService.SelectedTab?.Content;
                                 
-                                if (persistence != null && workspaceService != null)
-                                {
-                                    var remainingTabs = workspaceService.OpenTabs;
-                                    var activeTabId = workspaceService.SelectedTab?.Note?.Id;
-                                    var activeContent = workspaceService.SelectedTab?.Content;
-                                    
-                                    await persistence.ForceSaveAsync(remainingTabs, activeTabId, activeContent);
-                                    System.Diagnostics.Debug.WriteLine($"[RTF] Force persistence save completed for RTF tab close");
-                                }
+                                await persistence.SaveAsync(remainingTabs, activeTabId, activeContent);
+                                System.Diagnostics.Debug.WriteLine($"[RTF] Tab persistence save completed for RTF tab close");
                             }
                         }
                         catch (Exception ex)

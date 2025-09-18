@@ -42,14 +42,7 @@ namespace NoteNest.UI.Services
         // Enhanced cache with LRU and size limits
         private readonly LRUCache<string, List<SearchResultViewModel>> _searchCache;
         
-        /// <summary>
-        /// Get SupervisedTaskRunner service for preventing silent failures
-        /// </summary>
-        private ISupervisedTaskRunner GetSupervisedTaskRunner()
-        {
-            return (System.Windows.Application.Current as App)?.ServiceProvider
-                ?.GetService(typeof(ISupervisedTaskRunner)) as ISupervisedTaskRunner;
-        }
+        // SupervisedTaskRunner removed - search operations now use simplified task management
         private const int MaxCacheEntries = 50;
         private const int CacheExpirySeconds = 30;
 
@@ -170,24 +163,11 @@ namespace NoteNest.UI.Services
                         await _searchIndex.LoadFromPersistedAsync(persistedIndex);
                         _isIndexBuilt = true;
                         
-                        // FIXED: No more silent indexing failures - If previews are empty, trigger background content load
+                        // If previews are empty, trigger background content load
                         if (persistedIndex.Entries.Any(e => string.IsNullOrEmpty(e.ContentPreview)))
                         {
                             _logger?.Info("Some previews missing, loading content in background");
-                            var taskRunner = GetSupervisedTaskRunner();
-                            if (taskRunner != null)
-                            {
-                                _ = taskRunner.RunAsync(
-                                    async () => await UpdateIndexForModifiedFiles(persistedIndex),
-                                    "Background search index content loading",
-                                    NoteNest.Core.Services.OperationType.SearchIndex
-                                );
-                            }
-                            else
-                            {
-                                // Fallback for backward compatibility
-                                _ = Task.Run(async () => await UpdateIndexForModifiedFiles(persistedIndex));
-                            }
+                            _ = Task.Run(async () => await UpdateIndexForModifiedFiles(persistedIndex));
                         }
                         
                         return true;

@@ -88,8 +88,7 @@ namespace NoteNest.Core.Models
         // Feature flags
         public EditorSettings EditorSettings { get; set; } = new EditorSettings();
         
-        // Save system feature flags
-        public bool UseRTFIntegratedSaveEngine { get; set; } = true; // TEMPORARILY ENABLED FOR TESTING
+        // RTF-integrated save system is now the only system (feature flag removed)
 
         public AppSettings()
         {

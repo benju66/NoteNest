@@ -51,11 +51,8 @@ namespace NoteNest.UI
                 _host = Host.CreateDefaultBuilder()
                     .ConfigureServices((context, services) =>
                     {
-                        services.AddNoteNestServices(); // Only fast services
-                        // TEMPORARILY DISABLED: Complex coordination systems while testing new save engine
-                        // services.AddSilentSaveFailureFix(); // ADDED: Eliminates all silent save failures
-                        // services.AddHybridSaveCoordination(); // HYBRID: Enhanced save coordination with status bar
-                        services.AddRTFIntegratedSaveSystem(); // NEW: Unified save engine with RTF integration
+                        services.AddNoteNestServices(); // Core services
+                        services.AddRTFIntegratedSaveSystem(); // Unified save engine with RTF integration
                     })
                     .Build();
 
@@ -95,20 +92,7 @@ namespace NoteNest.UI
                 MainWindow = mainWindow;
                 mainWindow.Show();
                 
-                // TEMPORARILY DISABLED: Hybrid coordination initialization
-                // The new RTF-integrated save system doesn't need timer coordination
-                /*
-                try
-                {
-                    ServiceProvider.InitializeHybridSaveCoordination();
-                    _logger.Info("Hybrid Save Coordination System started successfully");
-                }
-                catch (Exception hybridEx)
-                {
-                    _logger.Error(hybridEx, "Failed to initialize Hybrid Save Coordination - falling back to legacy timers");
-                    // Continue startup - system will fall back to existing save mechanisms
-                }
-                */
+                // RTF-integrated save system is now active and doesn't need timer coordination
                 
                 // HIGH-IMPACT MEMORY FIX: Set memory baseline after startup
                 SimpleMemoryTracker.SetBaseline();
@@ -238,58 +222,25 @@ namespace NoteNest.UI
         {
             try
             {
-                // RTF-INTEGRATED: Try new unified save system first, then fall back to legacy
-                var configService = ServiceProvider?.GetService<ConfigurationService>();
-                var useNewEngine = configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
-                var saveOperationsHelper = ServiceProvider?.GetService<NoteNest.UI.Services.SaveOperationsHelper>();
+                // RTF-INTEGRATED: Use unified save system (now the only system)
                 var saveManager = ServiceProvider?.GetService<ISaveManager>();
                 
                 bool saveSucceeded = false;
                 
-                if (useNewEngine)
+                // Primary: Use RTF-integrated save system
+                _logger?.Info("Using RTF-integrated save system for shutdown");
+                try
                 {
-                    _logger?.Info("Using RTF-integrated save system for shutdown");
-                    try
-                    {
-                        var rtfSaveResult = await RTFIntegratedShutdownSaveAsync();
-                        saveSucceeded = rtfSaveResult.SuccessCount > 0 || rtfSaveResult.FailureCount == 0;
-                        _logger?.Info($"RTF-integrated shutdown save completed: {rtfSaveResult.SuccessCount} succeeded, {rtfSaveResult.FailureCount} failed");
-                    }
-                    catch (Exception rtfEx)
-                    {
-                        _logger?.Error(rtfEx, "RTF-integrated save system failed during shutdown - falling back to hybrid");
-                    }
+                    var rtfSaveResult = await RTFIntegratedShutdownSaveAsync();
+                    saveSucceeded = rtfSaveResult.SuccessCount > 0 || rtfSaveResult.FailureCount == 0;
+                    _logger?.Info($"RTF-integrated shutdown save completed: {rtfSaveResult.SuccessCount} succeeded, {rtfSaveResult.FailureCount} failed");
+                }
+                catch (Exception rtfEx)
+                {
+                    _logger?.Error(rtfEx, "RTF-integrated save system failed during shutdown - falling back to ISaveManager");
                 }
                 
-                if (!saveSucceeded && saveOperationsHelper != null)
-                {
-                    _logger?.Info("Using hybrid save coordination for shutdown");
-                    try
-                    {
-                        // Use enhanced emergency save with coordination
-                        var saveTask = saveOperationsHelper.EmergencySaveAllAsync();
-                        var timeoutTask = Task.Delay(15000); // 15 second timeout for enhanced system
-                        
-                        var completedTask = await Task.WhenAny(saveTask, timeoutTask);
-                        
-                        if (completedTask == saveTask)
-                        {
-                            var hybridResult = await saveTask;
-                            _logger?.Info($"Hybrid emergency save completed: {hybridResult.SuccessCount} succeeded, {hybridResult.FailureCount} failed");
-                            saveSucceeded = hybridResult.SuccessCount > 0 || hybridResult.FailureCount == 0;
-                        }
-                        else
-                        {
-                            _logger?.Warning("Hybrid save timeout during shutdown - falling back to legacy");
-                        }
-                    }
-                    catch (Exception hybridEx)
-                    {
-                        _logger?.Error(hybridEx, "Hybrid save system failed during shutdown - falling back to legacy");
-                    }
-                }
-                
-                // Legacy fallback if hybrid failed or unavailable
+                // Fallback: Use ISaveManager interface if RTF-integrated save had issues
                 if (!saveSucceeded && saveManager != null)
                 {
                     _logger?.Info("Using legacy save system for shutdown");
