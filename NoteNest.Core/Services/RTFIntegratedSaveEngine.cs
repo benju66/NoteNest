@@ -117,13 +117,23 @@ namespace NoteNest.Core.Services
                             
                             var duration = (DateTime.UtcNow - startTime).TotalMilliseconds;
 
-                            // 6. Silent auto-save: Only show status for manual saves
+                            // 6. CRITICAL FIX: Fire NoteSaved event for ALL save types (including auto-save)
+                            var filePath = _noteFilePaths.TryGetValue(noteId, out var path) ? path : "";
+                            NoteSaved?.Invoke(this, new NoteSavedEventArgs
+                            {
+                                NoteId = noteId,
+                                FilePath = filePath,
+                                SavedAt = DateTime.UtcNow,
+                                WasAutoSave = (saveType == SaveType.AutoSave)
+                            });
+
+                            // 7. Silent auto-save: Only show status for manual saves
                             if (saveType != SaveType.AutoSave)
                             {
                                 var message = $"Saved {title ?? noteId}";
                                 _statusNotifier.ShowStatus(message, StatusType.Success, duration: 2000);
                             }
-                            // Auto-save success is silent - modern UX pattern
+                            // Auto-save success is silent but still fires events for state management
 
                             // 7. Memory management for large content
                             if (!string.IsNullOrEmpty(rtfContent) && rtfContent.Length > 1_000_000) // >1MB RTF
@@ -418,13 +428,22 @@ namespace NoteNest.Core.Services
                         
                         var duration = (DateTime.UtcNow - startTime).TotalMilliseconds;
 
+                        // CRITICAL FIX: Fire NoteSaved event for ALL save types (including auto-save)
+                        NoteSaved?.Invoke(this, new NoteSavedEventArgs
+                        {
+                            NoteId = noteId,
+                            FilePath = filePath,
+                            SavedAt = DateTime.UtcNow,
+                            WasAutoSave = (saveType == SaveType.AutoSave)
+                        });
+
                         // Silent auto-save: Only show status for manual saves
                         if (saveType != SaveType.AutoSave)
                         {
                             var message = $"Saved {title ?? noteId}";
                             _statusNotifier.ShowStatus(message, StatusType.Success, duration: 2000);
                         }
-                        // Auto-save success is silent - modern UX pattern
+                        // Auto-save success is silent but still fires events for state management
 
                         // Clear saving state
                         _savingNotes[noteId] = false;

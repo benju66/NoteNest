@@ -40,6 +40,10 @@ namespace NoteNest.UI.ViewModels
         private DispatcherTimer _autoSaveTimer;
         private DateTime _lastModification;
         private bool _walSaved;
+        
+        // PHASE 4: Enhanced auto-save intelligence
+        private string _lastAutoSavedContent = "";
+        private DateTime _lastContentChangeTime;
 
         public string NoteId => _noteId;
         public NoteModel Note { get; }
@@ -456,6 +460,7 @@ namespace NoteNest.UI.ViewModels
         public void NotifyContentChanged()
         {
             _lastModification = DateTime.Now;
+            _lastContentChangeTime = DateTime.Now;  // PHASE 4: Track change time for smart auto-save
             _walSaved = false;
             
             // Restart both timers for proper debouncing
@@ -505,6 +510,22 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
+                // PHASE 4: Enhanced auto-save intelligence - skip if content unchanged since last auto-save
+                var currentContent = _editor?.SaveContent() ?? _content;
+                if (currentContent == _lastAutoSavedContent)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save skipped - content unchanged for {Note.Title}");
+                    return;
+                }
+                
+                // PHASE 4: Enhanced auto-save intelligence - skip if user is actively typing (changed within last second)
+                if ((DateTime.Now - _lastContentChangeTime).TotalSeconds < 1.0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save deferred - user still typing {Note.Title}");
+                    _autoSaveTimer.Start();  // Restart timer to try again later
+                    return;
+                }
+                
                 // Use RTF-integrated save system for tab auto-save (now the only system)
                 var app = System.Windows.Application.Current as App;
                 var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
@@ -524,11 +545,15 @@ namespace NoteNest.UI.ViewModels
                             
                             if (result.Success)
                             {
-                                // Update UI state on success
+                                // PHASE 4: Update last saved content for future comparison
+                                _lastAutoSavedContent = currentContent;
+                                
+                                // PHASE 1 FIX: NoteSaved event will handle clearing dirty flag
+                                // Removed manual clearing to ensure consistency across all save types
                                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                                 {
-                                    IsDirty = false;
                                     IsSaving = false;
+                                    // IsDirty = false; ← Removed: Let NoteSaved event handle this
                                 });
                                 
                                 System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save completed for {Note.Title}");
