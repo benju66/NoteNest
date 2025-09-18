@@ -51,8 +51,10 @@ namespace NoteNest.UI
                     .ConfigureServices((context, services) =>
                     {
                         services.AddNoteNestServices(); // Only fast services
-                        services.AddSilentSaveFailureFix(); // ADDED: Eliminates all silent save failures
-                        services.AddHybridSaveCoordination(); // HYBRID: Enhanced save coordination with status bar
+                        // TEMPORARILY DISABLED: Complex coordination systems while testing new save engine
+                        // services.AddSilentSaveFailureFix(); // ADDED: Eliminates all silent save failures
+                        // services.AddHybridSaveCoordination(); // HYBRID: Enhanced save coordination with status bar
+                        services.AddRTFIntegratedSaveSystem(); // NEW: Unified save engine with RTF integration
                     })
                     .Build();
 
@@ -92,7 +94,9 @@ namespace NoteNest.UI
                 MainWindow = mainWindow;
                 mainWindow.Show();
                 
-                // HYBRID: Initialize save coordination system (start centralized timers)
+                // TEMPORARILY DISABLED: Hybrid coordination initialization
+                // The new RTF-integrated save system doesn't need timer coordination
+                /*
                 try
                 {
                     ServiceProvider.InitializeHybridSaveCoordination();
@@ -103,6 +107,7 @@ namespace NoteNest.UI
                     _logger.Error(hybridEx, "Failed to initialize Hybrid Save Coordination - falling back to legacy timers");
                     // Continue startup - system will fall back to existing save mechanisms
                 }
+                */
                 
                 // HIGH-IMPACT MEMORY FIX: Set memory baseline after startup
                 SimpleMemoryTracker.SetBaseline();

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using NoteNest.Core.Services;
@@ -35,7 +36,23 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IEventBus, EventBus>();
             
             // Save Management Services
-            services.AddSingleton<IWriteAheadLog, WriteAheadLog>();
+            services.AddSingleton<IWriteAheadLog>(serviceProvider =>
+            {
+                // Get configuration for WAL path with safe fallback
+                var configService = serviceProvider.GetRequiredService<ConfigurationService>();
+                var basePath = configService.Settings.DefaultNotePath;
+                
+                // Fallback if DefaultNotePath is null (during startup)
+                if (string.IsNullOrEmpty(basePath))
+                {
+                    basePath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                        "NoteNest");
+                }
+                
+                var walPath = Path.Combine(basePath, ".wal");
+                return new WriteAheadLog(walPath);
+            });
             services.AddSingleton<SaveConfiguration>();
             services.AddSingleton<ISaveManager, UnifiedSaveManager>();
             
@@ -341,19 +358,19 @@ namespace NoteNest.UI.Services
                 {
                     indicator = "⚠️ No crash protection";
                     tooltip = $"Crash protection failed: {health.LastFailureReason}";
-                    _statusBar.SetMessage(indicator, NoteNest.Core.Services.StatusType.Warning);
+                    _statusBar.SetMessage(indicator, NoteNest.Core.Interfaces.StatusType.Warning);
                 }
                 else if (!health.AutoSaveHealthy)
                 {
                     indicator = "❌ Auto-save failing";
                     tooltip = $"Last save failed: {health.LastFailureReason}";
-                    _statusBar.SetMessage(indicator, NoteNest.Core.Services.StatusType.Error);
+                    _statusBar.SetMessage(indicator, NoteNest.Core.Interfaces.StatusType.Error);
                 }
                 else if (health.FailedSaves > 0)
                 {
                     indicator = $"⚠️ {health.FailedSaves} save issues";
                     tooltip = "Some background saves failed. Your work is safe but check logs.";
-                    _statusBar.SetMessage(indicator, NoteNest.Core.Services.StatusType.Warning);
+                    _statusBar.SetMessage(indicator, NoteNest.Core.Interfaces.StatusType.Warning);
                 }
                 else if (health.SuccessfulSaves > 0)
                 {
@@ -362,7 +379,7 @@ namespace NoteNest.UI.Services
                     {
                         indicator = "✅ All saves working";
                         tooltip = $"{health.SuccessfulSaves} successful saves";
-                        _statusBar.SetMessage(indicator, NoteNest.Core.Services.StatusType.Info);
+                        _statusBar.SetMessage(indicator, NoteNest.Core.Interfaces.StatusType.Info);
                     }
                 }
                 
@@ -385,7 +402,7 @@ namespace NoteNest.UI.Services
                 if (e.Type == NoteNest.Core.Services.OperationType.AutoSave || 
                     e.Type == NoteNest.Core.Services.OperationType.WALWrite)
                 {
-                    _statusBar.SetMessage($"❌ {e.OperationName} failed", NoteNest.Core.Services.StatusType.Error);
+                    _statusBar.SetMessage($"❌ {e.OperationName} failed", NoteNest.Core.Interfaces.StatusType.Error);
                 }
             }
             catch (Exception ex)
@@ -498,6 +515,50 @@ namespace NoteNest.UI.Services
                 logger?.Error(ex, "Failed to initialize Hybrid Save Coordination System");
                 throw;
             }
+        }
+    }
+
+    /// <summary>
+    /// RTF-Integrated Save System: Clean, unified save system that replaces coordination complexity
+    /// </summary>
+    public static class RTFIntegratedSaveSystemExtensions
+    {
+        /// <summary>
+        /// Add the RTF-integrated save system to services
+        /// This is the new unified save system that simplifies coordination while preserving all RTF functionality
+        /// </summary>
+        public static IServiceCollection AddRTFIntegratedSaveSystem(this IServiceCollection services)
+        {
+            // Register the core save engine
+            services.AddSingleton<RTFIntegratedSaveEngine>(serviceProvider =>
+            {
+                // Get configuration for data path with safe fallback
+                var configService = serviceProvider.GetRequiredService<ConfigurationService>();
+                var dataPath = configService.Settings.DefaultNotePath;
+                
+                // Fallback if DefaultNotePath is null (during startup)
+                if (string.IsNullOrEmpty(dataPath))
+                {
+                    dataPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                        "NoteNest");
+                }
+                
+                // Create status notifier using existing state manager
+                var stateManager = serviceProvider.GetRequiredService<IStateManager>();
+                var statusNotifier = new WPFStatusNotifier(stateManager);
+                
+                return new RTFIntegratedSaveEngine(dataPath, statusNotifier);
+            });
+
+            // Register the UI wrapper that handles RTF extraction
+            services.AddSingleton<RTFSaveEngineWrapper>(serviceProvider =>
+            {
+                var coreEngine = serviceProvider.GetRequiredService<RTFIntegratedSaveEngine>();
+                return new RTFSaveEngineWrapper(coreEngine);
+            });
+
+            return services;
         }
     }
 

@@ -10,10 +10,11 @@ using System.Windows.Documents;
 using System.Windows.Threading;
 using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces.Services;
+using NoteNest.Core.Services;
 using NoteNest.UI.Controls;
 using NoteNest.UI.Controls.Editor.RTF;
+using NoteNest.UI.Services;
 using NoteNest.Core.Events;
-using NoteNest.Core.Services;
 using System.Windows.Input;
 using NoteNest.UI.ViewModels;
 
@@ -650,12 +651,56 @@ namespace NoteNest.UI.Controls
         {
             if (sender is MenuItem mi && mi.Tag is ITabItem tab)
             {
-                System.Diagnostics.Debug.WriteLine($"[ATOMIC] SaveTab START: {tab.Title}");
+                System.Diagnostics.Debug.WriteLine($"[SAVE] SaveTab START: {tab.Title}");
                 
                 try
                 {
-                    // Get hybrid save coordination services
                     var app = Application.Current as App;
+                    
+                    // Check feature flag for new save engine
+                    var configService = app?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    var useNewEngine = configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                    
+                    if (useNewEngine)
+                    {
+                        // NEW: Use RTF-integrated save engine
+                        System.Diagnostics.Debug.WriteLine($"[SAVE] Using RTF-integrated save engine for: {tab.Title}");
+                        
+                        var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
+                        var rtfEditor = GetRTFEditorForTab(tab);
+                        
+                        if (rtfSaveWrapper != null && rtfEditor != null)
+                        {
+                            var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                                tab.NoteId,
+                                rtfEditor, // Pass the RTFEditor (which extends RichTextBox)
+                                tab.Title,
+                                SaveType.Manual
+                            );
+                            
+                            if (result.Success)
+                            {
+                                if (tab is NoteTabItem nti)
+                                {
+                                    nti.IsDirty = false;
+                                    nti.Note.IsDirty = false;
+                                }
+                                System.Diagnostics.Debug.WriteLine($"[SAVE] RTF-integrated save succeeded: {tab.Title}");
+                            }
+                            else
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[SAVE] RTF-integrated save failed: {tab.Title} - {result.Error}");
+                            }
+                            
+                            return; // Exit early, don't use old system
+                        }
+                        else
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[SAVE] RTF-integrated save engine not available, falling back to old system");
+                        }
+                    }
+                    
+                    // OLD SYSTEM: Use existing atomic coordination
                     var saveOperationsHelper = app?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.SaveOperationsHelper)) as NoteNest.UI.Services.SaveOperationsHelper;
                     var saveManager = app?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
 

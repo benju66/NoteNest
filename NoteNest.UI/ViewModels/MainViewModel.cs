@@ -1070,9 +1070,52 @@ namespace NoteNest.UI.ViewModels
             var current = GetWorkspaceService().SelectedTab;
             if (current != null)
             {
-                StatusMessage = "Saving...";
-                var result = await _saveManager.SaveNoteAsync(current.NoteId);
-                StatusMessage = result ? "Saved" : "Save failed";
+                try
+                {
+                    // Check if RTF-integrated save system is enabled
+                    var useNewEngine = _configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                    
+                    if (useNewEngine)
+                    {
+                        // NEW: Use RTF-integrated save system
+                        var rtfSaveWrapper = (Application.Current as App)?.ServiceProvider?
+                            .GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
+                        
+                        if (rtfSaveWrapper != null && current is NoteTabItem noteTabItem && noteTabItem.Editor != null)
+                        {
+                            var saveResult = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                                current.NoteId,
+                                noteTabItem.Editor, // Direct access to RTF editor
+                                current.Note?.Title ?? "Untitled",
+                                NoteNest.Core.Services.SaveType.Manual
+                            );
+                            
+                            if (saveResult.Success)
+                            {
+                                // Success message handled by WPFStatusNotifier
+                                noteTabItem.IsDirty = false;
+                                noteTabItem.Note.IsDirty = false;
+                            }
+                            // Error messages also handled by WPFStatusNotifier
+                            return;
+                        }
+                        else
+                        {
+                            // Fallback to old system if new engine not available
+                            StatusMessage = "RTF save engine not available, using legacy save...";
+                        }
+                    }
+                    
+                    // OLD SYSTEM: Fallback or when feature flag disabled
+                    StatusMessage = "Saving...";
+                    var result = await _saveManager.SaveNoteAsync(current.NoteId);
+                    StatusMessage = result ? "Saved" : "Save failed";
+                }
+                catch (Exception ex)
+                {
+                    StatusMessage = $"Save error: {ex.Message}";
+                    _logger?.Error(ex, "Error in SaveCurrentNoteAsync");
+                }
             }
         }
 

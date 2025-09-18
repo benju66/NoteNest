@@ -416,5 +416,24 @@ namespace NoteNest.UI.Controls.Editor.RTF
         {
             LoadAsPlainTextOptimized(editor, content);
         }
+        
+        // ====================================================================
+        // PUBLIC INTEGRATION METHODS for RTFIntegratedSaveEngine
+        // ====================================================================
+        
+        /// <summary>
+        /// Public wrapper for RTF validation - used by RTFIntegratedSaveEngine
+        /// </summary>
+        public static bool IsValidRTFPublic(string content) => IsValidRTF(content);
+        
+        /// <summary>
+        /// Public wrapper for RTF sanitization - used by RTFIntegratedSaveEngine
+        /// </summary>
+        public static string SanitizeRTFContentPublic(string rtfContent) => SanitizeRTFContent(rtfContent);
+        
+        /// <summary>
+        /// Public wrapper for document size estimation - used by RTFIntegratedSaveEngine
+        /// </summary>
+        public static long EstimateDocumentSizePublic(FlowDocument document) => EstimateDocumentSize(document);
     }
 }

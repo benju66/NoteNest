@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using NoteNest.Core.Interfaces;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.Core.Services.SaveCoordination
@@ -34,7 +35,7 @@ namespace NoteNest.Core.Services.SaveCoordination
             var truncatedTitle = TruncateTitle(noteTitle);
             var message = $"💾 Saving '{truncatedTitle}'...";
             
-            UpdateStatusSafely(message, NoteNest.Core.Services.StatusType.Info);
+            UpdateStatusSafely(message, NoteNest.Core.Interfaces.StatusType.Info);
             _logger.Debug($"Status: {message}");
         }
 
@@ -48,7 +49,7 @@ namespace NoteNest.Core.Services.SaveCoordination
             var truncatedTitle = TruncateTitle(noteTitle);
             var message = $"✅ Saved '{truncatedTitle}'";
             
-            UpdateStatusSafely(message, NoteNest.Core.Services.StatusType.Info);
+            UpdateStatusSafely(message, NoteNest.Core.Interfaces.StatusType.Info);
             _logger.Debug($"Status: {message}");
             
             // Auto-clear success message after 2 seconds
@@ -72,13 +73,13 @@ namespace NoteNest.Core.Services.SaveCoordination
             if (isRetrying)
             {
                 message = $"🔄 Retrying save for '{truncatedTitle}'...";
-                statusType = NoteNest.Core.Services.StatusType.Warning;
+                statusType = NoteNest.Core.Interfaces.StatusType.Warning;
                 clearDelayMs = 1000; // Clear retry messages quickly
             }
             else
             {
                 message = $"❌ Save failed: '{truncatedTitle}' - {truncatedError}";
-                statusType = NoteNest.Core.Services.StatusType.Error;
+                statusType = NoteNest.Core.Interfaces.StatusType.Error;
                 clearDelayMs = 10000; // Keep error messages visible longer
             }
 
@@ -100,14 +101,14 @@ namespace NoteNest.Core.Services.SaveCoordination
             if (completed == total)
             {
                 message = $"✅ Auto-saved {total} files";
-                UpdateStatusSafely(message, NoteNest.Core.Services.StatusType.Info);
+                UpdateStatusSafely(message, NoteNest.Core.Interfaces.StatusType.Info);
                 // Clear after 3 seconds
                 _statusClearTimer.Change(3000, Timeout.Infinite);
             }
             else
             {
                 message = $"💾 Saving... {completed}/{total} files";
-                UpdateStatusSafely(message, NoteNest.Core.Services.StatusType.Info);
+                UpdateStatusSafely(message, NoteNest.Core.Interfaces.StatusType.Info);
                 // Don't auto-clear progress messages
             }
             
@@ -117,7 +118,7 @@ namespace NoteNest.Core.Services.SaveCoordination
         /// <summary>
         /// Show general status message
         /// </summary>
-        public void ShowStatus(string message, NoteNest.Core.Services.StatusType type = NoteNest.Core.Services.StatusType.Info, int clearAfterMs = 5000)
+        public void ShowStatus(string message, NoteNest.Core.Interfaces.StatusType type = NoteNest.Core.Interfaces.StatusType.Info, int clearAfterMs = 5000)
         {
             if (_disposed) return;
 
@@ -137,13 +138,13 @@ namespace NoteNest.Core.Services.SaveCoordination
         {
             if (_disposed) return;
 
-            UpdateStatusSafely("Ready", NoteNest.Core.Services.StatusType.Info);
+            UpdateStatusSafely("Ready", NoteNest.Core.Interfaces.StatusType.Info);
         }
 
         /// <summary>
         /// Update status bar - threading handled by IStatusBarService implementation
         /// </summary>
-        private void UpdateStatusSafely(string message, NoteNest.Core.Services.StatusType type)
+        private void UpdateStatusSafely(string message, NoteNest.Core.Interfaces.StatusType type)
         {
             try
             {

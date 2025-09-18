@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using NoteNest.Core.Services;
+using NoteNest.Core.Interfaces;
 using NUnit.Framework;
 using NoteNest.Core.Services.Logging;
 
@@ -281,9 +282,23 @@ namespace NoteNest.Tests.Services
 
     public class TestWriteAheadLog : IWriteAheadLog
     {
+        // Legacy API methods
         public Task AppendAsync(string noteId, string content) => Task.CompletedTask;
-        public Task<string?> RecoverAsync(string noteId) => Task.FromResult<string?>(null);
         public Task CommitAsync(string noteId) => Task.CompletedTask;
+        
+        // New API methods
+        public Task<WALEntry> WriteAsync(string noteId, string content) => Task.FromResult(new WALEntry 
+        { 
+            Id = Guid.NewGuid().ToString(), 
+            NoteId = noteId, 
+            Content = content, 
+            Timestamp = DateTime.UtcNow 
+        });
+        public Task RemoveAsync(string walId) => Task.CompletedTask;
+        public Task CleanupOldEntriesAsync(TimeSpan maxAge) => Task.CompletedTask;
+        
+        // Common methods
+        public Task<string?> RecoverAsync(string noteId) => Task.FromResult<string?>(null);
         public Task<Dictionary<string, string>> RecoverAllAsync() => Task.FromResult(new Dictionary<string, string>());
         public void Dispose() { }
     }

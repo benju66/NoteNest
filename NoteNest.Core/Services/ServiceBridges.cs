@@ -38,12 +38,7 @@ namespace NoteNest.Core.Services
         void ShowInfo(string message, string title = "Information");
     }
 
-    public enum StatusType
-    {
-        Info,
-        Warning, 
-        Error
-    }
+    // StatusType enum moved to NoteNest.Core.Interfaces.StatusType for consistency
 
     /// <summary>
     /// Bridge that connects IStatusBarService to existing IStateManager
@@ -57,13 +52,13 @@ namespace NoteNest.Core.Services
             _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
         }
         
-        public void SetMessage(string message, StatusType type)
+        public void SetMessage(string message, NoteNest.Core.Interfaces.StatusType type)
         {
             var icon = type switch
             {
-                StatusType.Error => "❌",
-                StatusType.Warning => "⚠️", 
-                StatusType.Info => "ℹ️",
+                NoteNest.Core.Interfaces.StatusType.Error => "❌",
+                NoteNest.Core.Interfaces.StatusType.Warning => "⚠️", 
+                NoteNest.Core.Interfaces.StatusType.Info => "ℹ️",
                 _ => ""
             };
             
