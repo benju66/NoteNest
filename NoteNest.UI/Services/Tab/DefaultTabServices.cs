@@ -265,10 +265,10 @@ namespace NoteNest.UI.Services.Tab
             };
             _walTimer.Tick += WalTimer_Tick;
             
-            // Auto-save timer (2 seconds after last change)
+            // Auto-save timer (5 seconds after last change - balanced responsiveness)
             _autoSaveTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(2),
+                Interval = TimeSpan.FromSeconds(5),
                 IsEnabled = false  
             };
             _autoSaveTimer.Tick += AutoSaveTimer_Tick;

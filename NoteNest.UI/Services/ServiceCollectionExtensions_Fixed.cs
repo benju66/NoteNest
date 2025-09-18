@@ -194,10 +194,10 @@ namespace NoteNest.UI.Services
     /// </summary>
     public static class RTFIntegratedSaveSystemExtensions
     {
-        /// <summary>
+    /// <summary>
         /// Add the RTF-integrated save system to services
         /// This is the new unified save system that simplifies coordination while preserving all RTF functionality
-        /// </summary>
+    /// </summary>
         public static IServiceCollection AddRTFIntegratedSaveSystem(this IServiceCollection services)
         {
             // Register the unified save engine as both RTFIntegratedSaveEngine and ISaveManager

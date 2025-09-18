@@ -107,15 +107,23 @@ namespace NoteNest.Core.Services
                             // 4. Clear WAL entry on success
                             await _wal.RemoveAsync(walEntry.Id);
                             
-                            // 5. Update tracking
+                            // 5. Update tracking and internal state 
                             _lastSaveTime[noteId] = DateTime.UtcNow;
+                            
+                            // CRITICAL FIX: Update internal state to reflect successful save
+                            _noteContents[noteId] = rtfContent;
+                            _lastSavedContents[noteId] = rtfContent;
+                            _dirtyNotes[noteId] = false;
+                            
                             var duration = (DateTime.UtcNow - startTime).TotalMilliseconds;
 
-                            // 6. Show success with appropriate message
-                            var message = saveType == SaveType.AutoSave 
-                                ? $"Auto-saved {title ?? noteId}"
-                                : $"Saved {title ?? noteId}";
-                            _statusNotifier.ShowStatus(message, StatusType.Success, duration: 2000);
+                            // 6. Silent auto-save: Only show status for manual saves
+                            if (saveType != SaveType.AutoSave)
+                            {
+                                var message = $"Saved {title ?? noteId}";
+                                _statusNotifier.ShowStatus(message, StatusType.Success, duration: 2000);
+                            }
+                            // Auto-save success is silent - modern UX pattern
 
                             // 7. Memory management for large content
                             if (!string.IsNullOrEmpty(rtfContent) && rtfContent.Length > 1_000_000) // >1MB RTF
@@ -402,12 +410,21 @@ namespace NoteNest.Core.Services
                     {
                         await _wal.RemoveAsync(walEntry.Id);
                         _lastSaveTime[noteId] = DateTime.UtcNow;
+                        
+                        // CRITICAL FIX: Update internal state to reflect successful save
+                        _noteContents[noteId] = content;
+                        _lastSavedContents[noteId] = content;
+                        _dirtyNotes[noteId] = false;
+                        
                         var duration = (DateTime.UtcNow - startTime).TotalMilliseconds;
 
-                        var message = saveType == SaveType.AutoSave 
-                            ? $"Auto-saved {title ?? noteId}"
-                            : $"Saved {title ?? noteId}";
-                        _statusNotifier.ShowStatus(message, StatusType.Success, duration: 2000);
+                        // Silent auto-save: Only show status for manual saves
+                        if (saveType != SaveType.AutoSave)
+                        {
+                            var message = $"Saved {title ?? noteId}";
+                            _statusNotifier.ShowStatus(message, StatusType.Success, duration: 2000);
+                        }
+                        // Auto-save success is silent - modern UX pattern
 
                         // Clear saving state
                         _savingNotes[noteId] = false;
@@ -581,7 +598,7 @@ namespace NoteNest.Core.Services
         }
 
         /// <summary>
-        /// Update the content of a note in memory
+        /// Update the content of a note in memory with immediate WAL protection
         /// </summary>
         public void UpdateContent(string noteId, string content)
         {
@@ -595,7 +612,37 @@ namespace NoteNest.Core.Services
             
             // Mark as dirty if content changed
             var lastSavedContent = _lastSavedContents.TryGetValue(noteId, out var lastSaved) ? lastSaved : "";
-            _dirtyNotes[noteId] = content != lastSavedContent;
+            var isDirty = content != lastSavedContent;
+            _dirtyNotes[noteId] = isDirty;
+            
+            // CRITICAL FIX: Immediate WAL protection for crash safety
+            // This restores the behavior from the old UnifiedSaveManager
+            if (isDirty && content != oldContent)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _wal.WriteAsync(noteId, content);
+                        System.Diagnostics.Debug.WriteLine($"[RTFIntegratedSaveEngine] WAL protection triggered for content update: {noteId} ({content.Length} chars)");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Non-blocking error - log and notify but don't stop typing
+                        System.Diagnostics.Debug.WriteLine($"[RTFIntegratedSaveEngine] WAL protection failed for {noteId}: {ex.Message}");
+                        
+                        // Show warning to user but don't block
+                        _ = Task.Run(() =>
+                        {
+                            try
+                            {
+                                _statusNotifier.ShowStatus($"⚠️ Crash protection failed for {noteId}", StatusType.Warning, duration: 3000);
+                            }
+                            catch { /* Don't let status notification errors cascade */ }
+                        });
+                    }
+                });
+            }
         }
 
         /// <summary>

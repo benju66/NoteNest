@@ -50,7 +50,7 @@ namespace NoteNest.UI.ViewModels
         private TreeControllerAdapter _treeControllerAdapter;
         private readonly IWorkspaceService _workspaceService;
         private WorkspaceViewModel _workspaceViewModel;
-        private DispatcherTimer _autoSaveTimer;
+        // Auto-save timer removed - per-tab timers handle all auto-save operations
         // NotePinService removed - will be reimplemented with better architecture later
         private bool _disposed;
         private readonly CancellationTokenSource _cancellationTokenSource;
@@ -1321,127 +1321,13 @@ namespace NoteNest.UI.ViewModels
 
         private void InitializeAutoSave()
         {
-            // Ensure settings are loaded before initializing auto-save
-            if (_configService?.Settings == null)
-            {
-                _logger.Warning("Settings not available for auto-save initialization");
-                return;
-            }
-
-            _autoSaveTimer = new DispatcherTimer();
-            _autoSaveTimer.Interval = TimeSpan.FromSeconds(_configService.Settings.AutoSaveInterval);
-            // Fix: Use synchronous event handler to avoid async void
-            _autoSaveTimer.Tick += AutoSaveTimer_Tick;
-            
-            if (_configService.Settings.AutoSave)
-            {
-                _autoSaveTimer.Start();
-            }
+            // AUTO-SAVE ARCHITECTURE SIMPLIFIED: 
+            // Removed global auto-save timer to eliminate conflicts with per-tab auto-save
+            // Per-tab timers now handle all auto-save operations for better user experience
+            _logger.Info("Auto-save handled by per-tab timers (5-second silent auto-save)");
         }
 
-        private void AutoSaveTimer_Tick(object sender, EventArgs e)
-        {
-            // Execute auto-save on background thread to avoid blocking UI
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    if (!_cancellationTokenSource.Token.IsCancellationRequested)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[VM] AutoSaveTimer tick at={DateTime.Now:HH:mm:ss.fff}");
-                        await AutoSaveAsync();
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    // Expected during shutdown
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "Auto-save timer error");
-                }
-            });
-        }
-
-        private async Task AutoSaveAsync()
-        {
-            try
-            {
-                // Use RTF-integrated save system (now the only system)
-                var rtfSaveWrapper = (Application.Current as App)?.ServiceProvider?
-                    .GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
-                var workspaceService = GetWorkspaceService();
-                
-                if (rtfSaveWrapper != null && workspaceService != null)
-                {
-                    var dirtyTabs = workspaceService.OpenTabs.Where(t => t.IsDirty).ToList();
-                    
-                    if (dirtyTabs.Any())
-                    {
-                        int successCount = 0;
-                        int failureCount = 0;
-                        
-                        foreach (var tab in dirtyTabs)
-                        {
-                            try
-                            {
-                                if (tab is NoteTabItem noteTabItem && noteTabItem.Editor != null)
-                                {
-                                    var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
-                                        tab.NoteId,
-                                        noteTabItem.Editor,
-                                        tab.Title ?? "Untitled",
-                                        NoteNest.Core.Services.SaveType.AutoSave
-                                    );
-                                    
-                                    if (result.Success)
-                                    {
-                                        successCount++;
-                                        if (tab is NoteTabItem nti)
-                                        {
-                                            nti.IsDirty = false;
-                                            nti.Note.IsDirty = false;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        failureCount++;
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                failureCount++;
-                                _logger.Warning($"RTF auto-save failed for {tab.Title}: {ex.Message}");
-                            }
-                        }
-                        
-                        if (successCount > 0)
-                        {
-                            // Status message will be shown by WPFStatusNotifier for each save
-                            _logger.Debug($"RTF-integrated auto-save completed: {successCount} succeeded, {failureCount} failed");
-                        }
-                    }
-                    
-                    return; // Success path
-                }
-                else
-                {
-                    // Fallback to ISaveManager interface (still uses RTFIntegratedSaveEngine)
-                    _logger.Warning("RTF save wrapper not available, using ISaveManager interface");
-                    var legacyResult = await _saveManager.SaveAllDirtyAsync();
-                    if (legacyResult.SuccessCount > 0)
-                    {
-                        StatusMessage = $"Auto-saved {legacyResult.SuccessCount} note(s)";
-                        _logger.Debug($"Auto-saved {legacyResult.SuccessCount} notes");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Auto-save failed");
-            }
-        }
+        // Global auto-save timer removed - per-tab timers handle all auto-save operations
 
         private async Task SafeExecuteAsync(Func<Task> operation, string operationName)
         {
@@ -1694,7 +1580,7 @@ namespace NoteNest.UI.ViewModels
                     (_workspaceService as IDisposable)?.Dispose();
 
                     _cancellationTokenSource?.Dispose();
-                    _autoSaveTimer?.Stop();
+                    // Auto-save timer removed - per-tab timers handle disposal
                 }
                 catch (Exception ex)
                 {

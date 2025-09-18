@@ -379,6 +379,7 @@ namespace NoteNest.UI
                     await semaphore.WaitAsync();
                     try
                     {
+                        // Try RTF-specific save first (preferred path)
                         if (tab is NoteTabItem noteTabItem && noteTabItem.Editor != null)
                         {
                             var saveResult = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
@@ -404,9 +405,44 @@ namespace NoteNest.UI
                         }
                         else
                         {
-                            // Tab doesn't have RTF editor - skip with warning
-                            _logger?.Warning($"Tab {tab.Title} doesn't have RTF editor, skipping RTF save");
-                            return true; // Don't count as failure
+                            // ENHANCED: Fallback to ISaveManager for any non-RTF tabs (should be rare in RTF-only architecture)
+                            _logger?.Info($"Tab {tab.Title} using ISaveManager fallback for shutdown save");
+                            
+                            var saveManager = ServiceProvider?.GetService<ISaveManager>();
+                            if (saveManager != null)
+                            {
+                                try
+                                {
+                                    var success = await saveManager.SaveNoteAsync(tab.NoteId);
+                                    if (success)
+                                    {
+                                        Interlocked.Increment(ref successCount);
+                                        _logger?.Debug($"ISaveManager shutdown save succeeded: {tab.Title}");
+                                        return true;
+                                    }
+                                    else
+                                    {
+                                        Interlocked.Increment(ref failureCount);
+                                        lock (result.FailedNoteIds) { result.FailedNoteIds.Add(tab.NoteId); }
+                                        _logger?.Warning($"ISaveManager shutdown save failed: {tab.Title}");
+                                        return false;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Interlocked.Increment(ref failureCount);
+                                    lock (result.FailedNoteIds) { result.FailedNoteIds.Add(tab.NoteId); }
+                                    _logger?.Error(ex, $"ISaveManager shutdown save error: {tab.Title}");
+                                    return false;
+                                }
+                            }
+                            else
+                            {
+                                _logger?.Error($"No save method available for tab: {tab.Title}");
+                                Interlocked.Increment(ref failureCount);
+                                lock (result.FailedNoteIds) { result.FailedNoteIds.Add(tab.NoteId); }
+                                return false;
+                            }
                         }
                     }
                     catch (Exception ex)
