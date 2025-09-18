@@ -9,6 +9,7 @@ using NoteNest.Core.Services;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Diagnostics;
 using NoteNest.UI.Controls.Editor.RTF;
+using NoteNest.UI.Services;
 
 namespace NoteNest.UI.ViewModels
 {
@@ -506,7 +507,60 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
-                // FIXED: No more silent auto-save failures 
+                // Check if RTF-integrated save system is enabled
+                var app = System.Windows.Application.Current as App;
+                var configService = app?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                var useNewEngine = configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                
+                if (useNewEngine)
+                {
+                    // NEW: Use RTF-integrated save system for tab auto-save
+                    var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
+                    
+                    if (rtfSaveWrapper != null && _editor != null)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                                    _noteId,
+                                    _editor,
+                                    Note.Title ?? "Untitled",
+                                    NoteNest.Core.Services.SaveType.AutoSave
+                                );
+                                
+                                if (result.Success)
+                                {
+                                    // Update UI state on success
+                                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                                    {
+                                        IsDirty = false;
+                                        IsSaving = false;
+                                    });
+                                    
+                                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save completed for {Note.Title}");
+                                }
+                                else
+                                {
+                                    System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save failed for {Note.Title}: {result.Error}");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF-integrated auto-save error for {Note.Title}: {ex.Message}");
+                            }
+                        });
+                        
+                        return; // Exit early, don't use old system
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[NoteTabItem] RTF save wrapper not available, falling back to legacy for {Note.Title}");
+                    }
+                }
+                
+                // OLD SYSTEM: Use legacy auto-save when feature flag disabled or new system unavailable
                 if (_taskRunner != null)
                 {
                     _ = _taskRunner.RunAsync(
@@ -521,7 +575,7 @@ namespace NoteNest.UI.ViewModels
                                 IsSaving = false;
                             });
                             
-                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save completed for {Note.Title}");
+                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Legacy auto-save completed for {Note.Title}");
                         },
                         $"Auto-save for {Note.Title}",
                         NoteNest.Core.Services.OperationType.AutoSave
@@ -535,7 +589,7 @@ namespace NoteNest.UI.ViewModels
                         try
                         {
                             await _saveManager.SaveNoteAsync(_noteId);
-                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Auto-save completed for {Note.Title}");
+                            System.Diagnostics.Debug.WriteLine($"[NoteTabItem] Legacy auto-save completed for {Note.Title}");
                         }
                         catch (Exception ex)
                         {

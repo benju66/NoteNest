@@ -1398,11 +1398,81 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                var result = await _saveManager.SaveAllDirtyAsync();
-                if (result.SuccessCount > 0)
+                // Check if RTF-integrated save system is enabled
+                var useNewEngine = _configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                
+                if (useNewEngine)
                 {
-                    StatusMessage = $"Auto-saved {result.SuccessCount} note(s)";
-                    _logger.Debug($"Auto-saved {result.SuccessCount} notes");
+                    // NEW: Use RTF-integrated save system for auto-save
+                    var rtfSaveWrapper = (Application.Current as App)?.ServiceProvider?
+                        .GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
+                    var workspaceService = GetWorkspaceService();
+                    
+                    if (rtfSaveWrapper != null && workspaceService != null)
+                    {
+                        var dirtyTabs = workspaceService.OpenTabs.Where(t => t.IsDirty).ToList();
+                        
+                        if (dirtyTabs.Any())
+                        {
+                            int successCount = 0;
+                            int failureCount = 0;
+                            
+                            foreach (var tab in dirtyTabs)
+                            {
+                                try
+                                {
+                                    if (tab is NoteTabItem noteTabItem && noteTabItem.Editor != null)
+                                    {
+                                        var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                                            tab.NoteId,
+                                            noteTabItem.Editor,
+                                            tab.Title ?? "Untitled",
+                                            NoteNest.Core.Services.SaveType.AutoSave
+                                        );
+                                        
+                                        if (result.Success)
+                                        {
+                                            successCount++;
+                                            if (tab is NoteTabItem nti)
+                                            {
+                                                nti.IsDirty = false;
+                                                nti.Note.IsDirty = false;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            failureCount++;
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    failureCount++;
+                                    _logger.Warning($"RTF auto-save failed for {tab.Title}: {ex.Message}");
+                                }
+                            }
+                            
+                            if (successCount > 0)
+                            {
+                                // Status message will be shown by WPFStatusNotifier for each save
+                                _logger.Debug($"RTF-integrated auto-save completed: {successCount} succeeded, {failureCount} failed");
+                            }
+                        }
+                        
+                        return; // Exit early, don't use old system
+                    }
+                    else
+                    {
+                        _logger.Warning("RTF save wrapper not available for auto-save, falling back to legacy");
+                    }
+                }
+                
+                // OLD SYSTEM: Fallback when feature flag disabled or new system unavailable
+                var legacyResult = await _saveManager.SaveAllDirtyAsync();
+                if (legacyResult.SuccessCount > 0)
+                {
+                    StatusMessage = $"Auto-saved {legacyResult.SuccessCount} note(s)";
+                    _logger.Debug($"Auto-saved {legacyResult.SuccessCount} notes");
                 }
             }
             catch (Exception ex)

@@ -1012,21 +1012,72 @@ namespace NoteNest.UI.Controls
                         Pane?.Tabs.Remove(tab);
                         System.Diagnostics.Debug.WriteLine($"[RTF] Tab removed from UI: {tab?.Title}");
                         
-                        // BULLETPROOF: Force immediate persistence save (no debouncing)
+                        // ENHANCED: RTF-integrated save (eliminates ForceSaveAsync bypass)
                         try
                         {
-                            var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
-                            var workspaceService = _workspaceService;
+                            var app = Application.Current as App;
                             
-                            if (persistence != null && workspaceService != null)
+                            // Check if RTF-integrated save system is enabled
+                            var configService = app?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                            var useNewEngine = configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
+                            
+                            if (useNewEngine)
                             {
-                                // Force save bypassing debouncing for RTF tab close
-                                var remainingTabs = workspaceService.OpenTabs;
-                                var activeTabId = workspaceService.SelectedTab?.Note?.Id;
-                                var activeContent = workspaceService.SelectedTab?.Content;
+                                // NEW: Use RTF-integrated save for tab close
+                                var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
                                 
-                                await persistence.ForceSaveAsync(remainingTabs, activeTabId, activeContent);
-                                System.Diagnostics.Debug.WriteLine($"[RTF] Force persistence save completed for RTF tab close");
+                                if (rtfSaveWrapper != null && tab.IsDirty)
+                                {
+                                    var rtfEditor = GetRTFEditorForTab(tab);
+                                    if (rtfEditor != null)
+                                    {
+                                        var result = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                                            tab.NoteId,
+                                            rtfEditor,
+                                            tab.Title ?? "Untitled",
+                                            NoteNest.Core.Services.SaveType.TabClose
+                                        );
+                                        
+                                        if (result.Success)
+                                        {
+                                            System.Diagnostics.Debug.WriteLine($"[RTF] RTF-integrated tab close save succeeded: {tab.Title}");
+                                        }
+                                        else
+                                        {
+                                            System.Diagnostics.Debug.WriteLine($"[RTF] RTF-integrated tab close save failed: {tab.Title} - {result.Error}");
+                                        }
+                                    }
+                                }
+                                
+                                // Save tab persistence state using normal method (no more force bypass)
+                                var persistence = app?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
+                                var workspaceService = _workspaceService;
+                                
+                                if (persistence != null && workspaceService != null)
+                                {
+                                    var remainingTabs = workspaceService.OpenTabs;
+                                    var activeTabId = workspaceService.SelectedTab?.Note?.Id;
+                                    var activeContent = workspaceService.SelectedTab?.Content;
+                                    
+                                    await persistence.SaveAsync(remainingTabs, activeTabId, activeContent);
+                                    System.Diagnostics.Debug.WriteLine($"[RTF] Tab persistence save completed for RTF tab close");
+                                }
+                            }
+                            else
+                            {
+                                // OLD SYSTEM: Use ForceSaveAsync bypass when feature flag disabled
+                                var persistence = app?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
+                                var workspaceService = _workspaceService;
+                                
+                                if (persistence != null && workspaceService != null)
+                                {
+                                    var remainingTabs = workspaceService.OpenTabs;
+                                    var activeTabId = workspaceService.SelectedTab?.Note?.Id;
+                                    var activeContent = workspaceService.SelectedTab?.Content;
+                                    
+                                    await persistence.ForceSaveAsync(remainingTabs, activeTabId, activeContent);
+                                    System.Diagnostics.Debug.WriteLine($"[RTF] Force persistence save completed for RTF tab close");
+                                }
                             }
                         }
                         catch (Exception ex)

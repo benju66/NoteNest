@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
@@ -237,13 +238,30 @@ namespace NoteNest.UI
         {
             try
             {
-                // HYBRID: Try enhanced save coordination first, fall back to legacy
+                // RTF-INTEGRATED: Try new unified save system first, then fall back to legacy
+                var configService = ServiceProvider?.GetService<ConfigurationService>();
+                var useNewEngine = configService?.Settings?.UseRTFIntegratedSaveEngine ?? false;
                 var saveOperationsHelper = ServiceProvider?.GetService<NoteNest.UI.Services.SaveOperationsHelper>();
                 var saveManager = ServiceProvider?.GetService<ISaveManager>();
                 
                 bool saveSucceeded = false;
                 
-                if (saveOperationsHelper != null)
+                if (useNewEngine)
+                {
+                    _logger?.Info("Using RTF-integrated save system for shutdown");
+                    try
+                    {
+                        var rtfSaveResult = await RTFIntegratedShutdownSaveAsync();
+                        saveSucceeded = rtfSaveResult.SuccessCount > 0 || rtfSaveResult.FailureCount == 0;
+                        _logger?.Info($"RTF-integrated shutdown save completed: {rtfSaveResult.SuccessCount} succeeded, {rtfSaveResult.FailureCount} failed");
+                    }
+                    catch (Exception rtfEx)
+                    {
+                        _logger?.Error(rtfEx, "RTF-integrated save system failed during shutdown - falling back to hybrid");
+                    }
+                }
+                
+                if (!saveSucceeded && saveOperationsHelper != null)
                 {
                     _logger?.Info("Using hybrid save coordination for shutdown");
                     try
@@ -367,6 +385,120 @@ namespace NoteNest.UI
             }
 
             base.OnExit(e);
+        }
+
+        /// <summary>
+        /// RTF-integrated shutdown save implementation
+        /// Uses the new unified save system for all dirty tabs
+        /// </summary>
+        private async Task<BatchSaveResult> RTFIntegratedShutdownSaveAsync()
+        {
+            var result = new BatchSaveResult();
+            int successCount = 0;
+            int failureCount = 0;
+            
+            try
+            {
+                // Get RTF save wrapper service
+                var rtfSaveWrapper = ServiceProvider?.GetService<RTFSaveEngineWrapper>();
+                var workspaceService = ServiceProvider?.GetService<IWorkspaceService>();
+                
+                if (rtfSaveWrapper == null || workspaceService == null)
+                {
+                    _logger?.Warning("RTF-integrated save services not available during shutdown");
+                    return result; // Return empty result, will trigger fallback
+                }
+
+                // Get all dirty tabs using workspace service
+                var dirtyTabs = workspaceService.OpenTabs.Where(t => t.IsDirty).ToList();
+                
+                if (!dirtyTabs.Any())
+                {
+                    _logger?.Info("No dirty tabs to save during shutdown");
+                    return result;
+                }
+
+                _logger?.Info($"RTF-integrated shutdown save starting for {dirtyTabs.Count} dirty tabs");
+
+                // Use semaphore to limit concurrent saves (prevent overwhelming system during shutdown)
+                using var semaphore = new SemaphoreSlim(3, 3); // Max 3 concurrent saves
+                
+                var saveTasks = dirtyTabs.Select(async tab =>
+                {
+                    await semaphore.WaitAsync();
+                    try
+                    {
+                        if (tab is NoteTabItem noteTabItem && noteTabItem.Editor != null)
+                        {
+                            var saveResult = await rtfSaveWrapper.SaveFromRichTextBoxAsync(
+                                tab.NoteId,
+                                noteTabItem.Editor,
+                                tab.Title ?? "Untitled",
+                                NoteNest.Core.Services.SaveType.AppShutdown
+                            );
+                            
+                            if (saveResult.Success)
+                            {
+                                Interlocked.Increment(ref successCount);
+                                _logger?.Debug($"RTF shutdown save succeeded: {tab.Title}");
+                                return true;
+                            }
+                            else
+                            {
+                                Interlocked.Increment(ref failureCount);
+                                lock (result.FailedNoteIds) { result.FailedNoteIds.Add(tab.NoteId); }
+                                _logger?.Warning($"RTF shutdown save failed: {tab.Title} - {saveResult.Error}");
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            // Tab doesn't have RTF editor - skip with warning
+                            _logger?.Warning($"Tab {tab.Title} doesn't have RTF editor, skipping RTF save");
+                            return true; // Don't count as failure
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Interlocked.Increment(ref failureCount);
+                        lock (result.FailedNoteIds) { result.FailedNoteIds.Add(tab.NoteId); }
+                        _logger?.Error(ex, $"RTF shutdown save error for tab: {tab.Title}");
+                        return false;
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                });
+
+                // Wait for all saves to complete with timeout
+                var saveTask = Task.WhenAll(saveTasks);
+                var timeoutTask = Task.Delay(12000); // 12 second timeout for RTF saves
+                
+                var completedTask = await Task.WhenAny(saveTask, timeoutTask);
+                
+                if (completedTask == saveTask)
+                {
+                    await saveTask; // Ensure all tasks completed
+                    result.SuccessCount = successCount;
+                    result.FailureCount = failureCount;
+                    _logger?.Info($"RTF-integrated shutdown save completed: {successCount} succeeded, {failureCount} failed");
+                }
+                else
+                {
+                    _logger?.Warning("RTF-integrated shutdown save timeout - some saves may not have completed");
+                    result.SuccessCount = successCount;
+                    result.FailureCount = dirtyTabs.Count - successCount; // Mark remaining as failed due to timeout
+                }
+                
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Error in RTF-integrated shutdown save");
+                result.FailureCount = 1;
+                return result;
+            }
         }
     }
 }
