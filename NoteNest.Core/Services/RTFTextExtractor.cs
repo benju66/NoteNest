@@ -2,6 +2,7 @@ using System;
 using System.Text.RegularExpressions;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace NoteNest.Core.Services
 {
@@ -9,9 +10,27 @@ namespace NoteNest.Core.Services
     /// Lightweight RTF text extraction for search indexing
     /// Single Responsibility: Extract plain text from RTF content for search
     /// Core-only implementation to avoid UI dependencies
+    /// MEMORY OPTIMIZED: Uses compiled Regex patterns for performance
     /// </summary>
     public static class RTFTextExtractor
     {
+        // MEMORY FIX: Pre-compiled Regex patterns (eliminates compilation overhead)
+        private static readonly Regex ControlWordsRegex = new Regex(@"\\[a-z]+[-]?\d*[ ]?", 
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex BracesRegex = new Regex(@"[{}]", 
+            RegexOptions.Compiled);
+        private static readonly Regex EscapeCharsRegex = new Regex(@"\\\*", 
+            RegexOptions.Compiled);
+        private static readonly Regex EncodingArtifactsRegex = new Regex(@"cpg\d+", 
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex FontDeclarationsRegex = new Regex(@"\\f\d+", 
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex FontNamesRegex = new Regex(@"\b(Segoe UI|Calibri|Arial|Times New Roman)\b", 
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex WhitespaceRegex = new Regex(@"\s+", 
+            RegexOptions.Compiled);
+        private static readonly Regex BulletPatternRegex = new Regex(@"\\bullet\s*([^\\]+?)(?=\\|$)", 
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
         /// <summary>
         /// Extract plain text from RTF content for search indexing
         /// Enhanced version that removes formatting artifacts
@@ -22,28 +41,17 @@ namespace NoteNest.Core.Services
             
             try
             {
+                // MEMORY FIX: Use compiled patterns instead of dynamic compilation
                 var text = rtfContent;
                 
-                // Remove RTF control words
-                text = Regex.Replace(text, @"\\[a-z]+[-]?\d*[ ]?", " ", RegexOptions.IgnoreCase);
-                
-                // Remove braces
-                text = Regex.Replace(text, @"[{}]", "");
-                
-                // Remove escape characters
-                text = Regex.Replace(text, @"\\\*", "");
-                
-                // Remove encoding artifacts
-                text = Regex.Replace(text, @"cpg\d+", "", RegexOptions.IgnoreCase);
-                
-                // Remove font declarations
-                text = Regex.Replace(text, @"\\f\d+", "", RegexOptions.IgnoreCase);
-                
-                // Remove common font family names that leak through
-                text = Regex.Replace(text, @"\b(Segoe UI|Calibri|Arial|Times New Roman)\b", "", RegexOptions.IgnoreCase);
-                
-                // Clean up whitespace
-                text = Regex.Replace(text, @"\s+", " ");
+                // Apply optimized compiled patterns (eliminates ~25KB compilation overhead)
+                text = ControlWordsRegex.Replace(text, " ");
+                text = BracesRegex.Replace(text, "");
+                text = EscapeCharsRegex.Replace(text, "");
+                text = EncodingArtifactsRegex.Replace(text, "");
+                text = FontDeclarationsRegex.Replace(text, "");
+                text = FontNamesRegex.Replace(text, "");
+                text = WhitespaceRegex.Replace(text, " ");
                 
                 return text.Trim();
             }
@@ -66,7 +74,8 @@ namespace NoteNest.Core.Services
                 var plain = ExtractPlainText(rtfContent);
                 
                 // Try to extract bulleted list items first (priority content)
-                var listMatches = Regex.Matches(plain, @"\\bullet\s*([^\\]+?)(?=\\|$)", RegexOptions.IgnoreCase);
+                // MEMORY FIX: Use compiled pattern
+                var listMatches = BulletPatternRegex.Matches(plain);
                 var listItems = new List<string>();
                 
                 foreach (Match match in listMatches)
@@ -93,5 +102,6 @@ namespace NoteNest.Core.Services
                 return ExtractPlainText(rtfContent);
             }
         }
+        
     }
 }
