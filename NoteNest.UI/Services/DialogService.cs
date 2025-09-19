@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using NoteNest.UI.Dialogs;
 using System.Windows.Threading;
+using Microsoft.Win32;
 #nullable enable
 
 namespace NoteNest.UI.Services
@@ -53,6 +54,39 @@ namespace NoteNest.UI.Services
 			{
 				return dialog.ResponseText;
 			}
+			return null;
+		}
+
+		public async Task<string?> ShowFolderDialogAsync(string title, string? initialDirectory = null)
+		{
+			if (_dispatcher.CheckAccess())
+			{
+				return ShowFolderDialogCore(title, initialDirectory);
+			}
+
+			return await _dispatcher.InvokeAsync(() => ShowFolderDialogCore(title, initialDirectory));
+		}
+
+		private string? ShowFolderDialogCore(string title, string? initialDirectory)
+		{
+			var owner = GetSafeOwner();
+			if (owner == null) return null;
+
+			var dialog = new OpenFolderDialog
+			{
+				Title = title
+			};
+
+			if (!string.IsNullOrEmpty(initialDirectory) && System.IO.Directory.Exists(initialDirectory))
+			{
+				dialog.InitialDirectory = initialDirectory;
+			}
+
+			if (dialog.ShowDialog(owner) == true)
+			{
+				return dialog.FolderName;
+			}
+
 			return null;
 		}
 		

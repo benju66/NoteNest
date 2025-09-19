@@ -237,6 +237,38 @@ namespace NoteNest.UI.Services
 
             return services;
         }
+
+        /// <summary>
+        /// Add the storage transaction system to services
+        /// This enables safe storage location changes with full rollback support
+        /// </summary>
+        public static IServiceCollection AddStorageTransactionSystem(this IServiceCollection services)
+        {
+            // Core transaction components
+            services.AddSingleton<ISaveManagerFactory, SaveManagerFactory>();
+            services.AddSingleton<IStorageTransactionManager, StorageTransactionManager>();
+            services.AddSingleton<ITransactionalSettingsService, TransactionalSettingsService>();
+            
+            // Validation service
+            services.AddSingleton<IValidationService, ValidationService>();
+            
+            return services;
+        }
+
+        /// <summary>
+        /// Add storage transaction system to UI services
+        /// This should be called after AddNoteNestServices() to enhance existing services
+        /// </summary>
+        public static IServiceCollection AddStorageTransactionUI(this IServiceCollection services)
+        {
+            // Add the core transaction system
+            services.AddStorageTransactionSystem();
+            
+            // UI-specific transaction components could be added here
+            // For example: progress dialog services, transaction status UI, etc.
+            
+            return services;
+        }
     }
 
 }

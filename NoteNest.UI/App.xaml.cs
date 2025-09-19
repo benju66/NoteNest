@@ -53,6 +53,7 @@ namespace NoteNest.UI
                     {
                         services.AddNoteNestServices(); // Core services
                         services.AddRTFIntegratedSaveSystem(); // Unified save engine with RTF integration
+                        services.AddStorageTransactionUI(); // Storage location transaction system
                     })
                     .Build();
 

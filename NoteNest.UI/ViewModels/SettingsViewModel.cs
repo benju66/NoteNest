@@ -300,6 +300,88 @@ namespace NoteNest.UI.ViewModels
 
         public async Task CommitSettings()
         {
+            try
+            {
+                // Get the TransactionalSettingsService if available
+                var transactionalService = (System.Windows.Application.Current as App)?.ServiceProvider?
+                    .GetService(typeof(NoteNest.Core.Services.ITransactionalSettingsService)) 
+                    as NoteNest.Core.Services.ITransactionalSettingsService;
+
+                if (transactionalService != null)
+                {
+                    // Use transaction-based settings change
+                    var result = await transactionalService.ApplySettingsAsync(_settings, _originalSettings);
+                    
+                    if (result.Success)
+                    {
+                        // Update the original settings reference to match committed settings
+                        CopySettings(_originalSettings, _settings);
+                        CopySettings(_configService.Settings, _settings);
+                        
+                        OnPropertyChanged(nameof(CurrentStoragePath));
+                        
+                        // Show success notification if storage location changed
+                        if (!result.SettingsOnly)
+                        {
+                            var statusNotifier = (System.Windows.Application.Current as App)?.ServiceProvider?
+                                .GetService(typeof(NoteNest.Core.Interfaces.IStatusNotifier)) 
+                                as NoteNest.Core.Interfaces.IStatusNotifier;
+                            
+                            statusNotifier?.ShowStatus(
+                                $"Storage location changed successfully to: {result.NewStoragePath}", 
+                                NoteNest.Core.Interfaces.StatusType.Success, 
+                                5000);
+                        }
+                    }
+                    else
+                    {
+                        // Show error notification
+                        var statusNotifier = (System.Windows.Application.Current as App)?.ServiceProvider?
+                            .GetService(typeof(NoteNest.Core.Interfaces.IStatusNotifier)) 
+                            as NoteNest.Core.Interfaces.IStatusNotifier;
+                            
+                        statusNotifier?.ShowStatus(
+                            $"Settings change failed: {result.ErrorMessage}", 
+                            NoteNest.Core.Interfaces.StatusType.Error, 
+                            7000);
+                            
+                        // Optionally throw exception to let caller handle it
+                        throw new InvalidOperationException($"Settings change failed: {result.ErrorMessage}", result.Exception);
+                    }
+                }
+                else
+                {
+                    // Fallback to original implementation if TransactionalSettingsService not available
+                    await CommitSettingsFallback();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log error and show user notification
+                var logger = (System.Windows.Application.Current as App)?.ServiceProvider?
+                    .GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) 
+                    as NoteNest.Core.Services.Logging.IAppLogger;
+                    
+                logger?.Error(ex, "Failed to commit settings changes");
+                
+                var statusNotifier = (System.Windows.Application.Current as App)?.ServiceProvider?
+                    .GetService(typeof(NoteNest.Core.Interfaces.IStatusNotifier)) 
+                    as NoteNest.Core.Interfaces.IStatusNotifier;
+                    
+                statusNotifier?.ShowStatus(
+                    $"Settings save failed: {ex.Message}", 
+                    NoteNest.Core.Interfaces.StatusType.Error, 
+                    7000);
+                    
+                throw; // Re-throw to let caller handle
+            }
+        }
+
+        /// <summary>
+        /// Fallback method for committing settings without transaction support
+        /// </summary>
+        private async Task CommitSettingsFallback()
+        {
             // Save to disk and update the service's internal reference
             await _configService.UpdateSettingsAsync(_settings);
 
