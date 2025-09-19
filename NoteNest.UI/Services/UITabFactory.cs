@@ -63,7 +63,7 @@ namespace NoteNest.UI.Services
             DebugLogger.Log($"Created new tab for {note.Title}. Cache size: {_tabCache.Count}");
             return result;
             #else
-            var tabItem = new NoteTabItem(note, _saveManager, _taskRunner);
+            var tabItem = new NoteTabItem(note, _saveManager);
             _tabCache[noteId] = new WeakReference(tabItem);
             DebugLogger.Log($"Created new tab for {note.Title}. Cache size: {_tabCache.Count}");
             return tabItem;
