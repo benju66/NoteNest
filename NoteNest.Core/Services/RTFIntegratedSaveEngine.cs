@@ -252,9 +252,16 @@ namespace NoteNest.Core.Services
 
             try
             {
-                // Check for RTF file
-                var rtfFile = Path.Combine(_dataPath, $"{noteId}.rtf");
-                var metaFile = Path.Combine(_dataPath, $"{noteId}.meta");
+                // FIXED: Use the correct file path from the mapping instead of constructing a wrong one
+                var correctContentFile = GetFilePath(noteId);
+                
+                if (string.IsNullOrEmpty(correctContentFile))
+                {
+                    return new LoadResult { Success = false, Error = "No file path mapped for this note" };
+                }
+                
+                var rtfFile = correctContentFile; // NOW USING CORRECT PATH!
+                var metaFile = Path.ChangeExtension(correctContentFile, ".meta");
                 
                 if (!File.Exists(rtfFile))
                 {
@@ -320,8 +327,18 @@ namespace NoteNest.Core.Services
             string title, 
             SaveType saveType)
         {
-            var contentFile = Path.Combine(_dataPath, $"{noteId}.rtf");
-            var metaFile = Path.Combine(_dataPath, $"{noteId}.meta");
+            // FIXED: Use the correct file path from the mapping instead of constructing a wrong one
+            var correctContentFile = GetFilePath(noteId);
+            
+            if (string.IsNullOrEmpty(correctContentFile))
+            {
+                // Fallback: If no file path is mapped, this is an error condition
+                System.Diagnostics.Debug.WriteLine($"[ERROR] No file path mapped for noteId: {noteId}");
+                return false;
+            }
+            
+            var contentFile = correctContentFile; // NOW USING CORRECT PATH!
+            var metaFile = Path.ChangeExtension(contentFile, ".meta");
             
             // Use GUID for truly unique temp files
             var tempId = Guid.NewGuid().ToString("N");

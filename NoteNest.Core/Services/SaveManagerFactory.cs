@@ -36,7 +36,17 @@ namespace NoteNest.Core.Services
             _currentSaveManager = (ISaveManager)_serviceProvider.GetService(typeof(ISaveManager)) ?? 
                 throw new InvalidOperationException("ISaveManager service not registered");
             
-            _logger.Info("SaveManagerFactory initialized with existing SaveManager");
+            // DIAGNOSTIC: Log the initial SaveManager's data path
+            if (_currentSaveManager is RTFIntegratedSaveEngine rtfEngine)
+            {
+                var dataPathField = typeof(RTFIntegratedSaveEngine).GetField("_dataPath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var currentDataPath = dataPathField?.GetValue(rtfEngine) as string ?? "UNKNOWN";
+                _logger.Info($"SaveManagerFactory initialized with RTFIntegratedSaveEngine at path: {currentDataPath}");
+            }
+            else
+            {
+                _logger.Info($"SaveManagerFactory initialized with SaveManager type: {_currentSaveManager.GetType().Name}");
+            }
         }
 
         /// <summary>
