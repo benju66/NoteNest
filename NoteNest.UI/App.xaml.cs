@@ -51,6 +51,7 @@ namespace NoteNest.UI
                 // CRITICAL FIX: Run first-time setup BEFORE DI container initialization
                 // This ensures storage paths are configured before any path-dependent services are created
                 FirstTimeSetupService.UserSelectionCallback = ShowFolderSelectionDialog;
+                FirstTimeSetupService.EmptyFolderChoiceCallback = ShowEmptyFolderChoiceDialog;
                 
                 bool setupSucceeded = await FirstTimeSetupService.EnsureStorageConfigurationAsync();
                 if (!setupSucceeded)
@@ -258,6 +259,39 @@ namespace NoteNest.UI
                 return Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     "NoteNest");
+            }
+        }
+        
+        /// <summary>
+        /// Show dialog when user has selected an empty folder
+        /// </summary>
+        private async Task<string> ShowEmptyFolderChoiceDialog(string currentPath)
+        {
+            await Task.CompletedTask; // Satisfy async method requirement
+            
+            try
+            {
+                var result = MessageBox.Show(
+                    $"The folder you've selected appears to be empty:\\n{currentPath}\\n\\n" +
+                    "What would you like to do?\\n\\n" +
+                    "• Yes: Use this folder (NoteNest will set it up for you)\\n" +
+                    "• No: Select a different folder\\n" +
+                    "• Cancel: Exit setup",
+                    "Empty Folder Detected",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+
+                return result switch
+                {
+                    MessageBoxResult.Yes => "use",
+                    MessageBoxResult.No => "select", 
+                    _ => null // Cancel or closed
+                };
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Error in empty folder dialog: {ex.Message}");
+                return null;
             }
         }
 

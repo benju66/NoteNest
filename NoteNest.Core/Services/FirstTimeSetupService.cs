@@ -89,8 +89,67 @@ namespace NoteNest.Core.Services
                     }
                 }
 
-                // Ensure required directory structure exists
-                await CreateRequiredDirectoriesAsync(notesPath);
+                // Check if folder has existing NoteNest structure or handle empty folder scenario
+                if (!HasExistingNoteNestStructure(notesPath))
+                {
+                    if (IsFolderEmpty(notesPath) || Directory.GetFileSystemEntries(notesPath).Length <= 2) // Allow for some minimal files
+                    {
+                        // Folder is empty or nearly empty - ask user what they want to do
+                        if (EmptyFolderChoiceCallback != null)
+                        {
+                            var choice = await EmptyFolderChoiceCallback(notesPath);
+                            
+                            if (choice == "select")
+                            {
+                                // User wants to select a different folder
+                                var newPath = await PromptUserForNotesPathAsync(notesPath);
+                                if (string.IsNullOrEmpty(newPath))
+                                {
+                                    _logger.Warning("FirstTimeSetupService: User cancelled folder selection after empty folder dialog");
+                                    return false;
+                                }
+                                
+                                // Update notesPath and re-validate
+                                notesPath = newPath;
+                                var revalidation = await ValidateNotesPathAsync(notesPath);
+                                if (!revalidation.IsValid)
+                                {
+                                    _logger.Error($"FirstTimeSetupService: Re-selected path is invalid: {revalidation.ErrorMessage}");
+                                    return false;
+                                }
+                                
+                                // Check the new path for existing structure
+                                if (!HasExistingNoteNestStructure(notesPath))
+                                {
+                                    await CreateRequiredDirectoriesAsync(notesPath);
+                                }
+                            }
+                            else if (choice == "use")
+                            {
+                                // User wants to use current folder - create structure
+                                await CreateRequiredDirectoriesAsync(notesPath);
+                            }
+                            else
+                            {
+                                // User cancelled
+                                _logger.Warning("FirstTimeSetupService: User cancelled empty folder dialog");
+                                return false;
+                            }
+                        }
+                        else
+                        {
+                            // No callback - fallback to creating directories (shouldn't happen in normal operation)
+                            _logger.Warning("FirstTimeSetupService: No EmptyFolderChoiceCallback available, creating directories");
+                            await CreateRequiredDirectoriesAsync(notesPath);
+                        }
+                    }
+                    else
+                    {
+                        // Folder has some content but no NoteNest structure - create structure anyway
+                        await CreateRequiredDirectoriesAsync(notesPath);
+                    }
+                }
+                // If folder already has NoteNest structure, no need to create anything
 
                 // Set the configured path for DI container to use
                 _configuredNotesPath = notesPath;
@@ -99,6 +158,7 @@ namespace NoteNest.Core.Services
                 var settings = existingSettings ?? new AppSettings();
                 settings.DefaultNotePath = notesPath;
                 settings.MetadataPath = Path.Combine(notesPath, ".metadata");
+                settings.StorageMode = DetermineStorageModeFromPath(notesPath);
                 await SaveSettingsAsync(settings, settingsPath);
 
                 // Update PathService static property
@@ -213,6 +273,105 @@ namespace NoteNest.Core.Services
         }
 
         /// <summary>
+        /// Check if a folder has existing NoteNest structure
+        /// </summary>
+        private static bool HasExistingNoteNestStructure(string path)
+        {
+            try
+            {
+                var categoriesFile = Path.Combine(path, ".metadata", "categories.json");
+                var hasCategories = File.Exists(categoriesFile);
+                var notesFolder = Path.Combine(path, "Notes");
+                var hasNotesFolder = Directory.Exists(notesFolder);
+                
+                return hasCategories && hasNotesFolder;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+        /// <summary>
+        /// Check if a folder is effectively empty (no important files/folders)
+        /// </summary>
+        private static bool IsFolderEmpty(string path)
+        {
+            try
+            {
+                if (!Directory.Exists(path))
+                    return true;
+                    
+                var entries = Directory.GetFileSystemEntries(path);
+                return entries.Length == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Determine the correct StorageMode based on the selected path
+        /// </summary>
+        private static StorageMode DetermineStorageModeFromPath(string notesPath)
+        {
+            try
+            {
+                var storageService = new StorageLocationService();
+                
+                // Check if it's the default local path
+                var defaultLocal = storageService.ResolveNotesPath(StorageMode.Local);
+                if (PathService.NormalizeAbsolutePath(notesPath).Equals(
+                    PathService.NormalizeAbsolutePath(defaultLocal), 
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return StorageMode.Local;
+                }
+                
+                // Check if it's OneDrive path
+                var oneDrivePath = storageService.ResolveNotesPath(StorageMode.OneDrive);
+                if (!string.IsNullOrEmpty(oneDrivePath) && 
+                    PathService.NormalizeAbsolutePath(notesPath).Equals(
+                    PathService.NormalizeAbsolutePath(oneDrivePath), 
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return StorageMode.OneDrive;
+                }
+                
+                // Check if path is under OneDrive directory structure
+                var oneDriveRoot = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                var possibleOneDrivePaths = new[]
+                {
+                    Path.Combine(oneDriveRoot, "OneDrive"),
+                    Path.Combine(oneDriveRoot, "OneDrive - Personal"),
+                    Path.Combine(oneDriveRoot, "OneDrive - Business")
+                };
+                
+                var normalizedPath = PathService.NormalizeAbsolutePath(notesPath);
+                foreach (var oneDriveBase in possibleOneDrivePaths)
+                {
+                    if (Directory.Exists(oneDriveBase))
+                    {
+                        var normalizedOneDriveBase = PathService.NormalizeAbsolutePath(oneDriveBase);
+                        if (normalizedPath.StartsWith(normalizedOneDriveBase, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return StorageMode.OneDrive;
+                        }
+                    }
+                }
+                
+                // Default to Custom for any other path
+                return StorageMode.Custom;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to determine storage mode for path '{notesPath}': {ex.Message}");
+                return StorageMode.Custom; // Safe fallback
+            }
+        }
+
+        /// <summary>
         /// Prompt user to select their notes folder using a dialog
         /// Uses the UserSelectionCallback provided by the UI layer
         /// </summary>
@@ -241,6 +400,12 @@ namespace NoteNest.Core.Services
         /// Set the user selection callback for the UI layer
         /// </summary>
         public static Func<string, Task<string>> UserSelectionCallback { get; set; }
+        
+        /// <summary>
+        /// Callback function for handling empty folder scenarios with three choices
+        /// Returns: "use" to use current folder, "select" to pick different folder, null for cancel
+        /// </summary>
+        public static Func<string, Task<string>> EmptyFolderChoiceCallback { get; set; }
 
         /// <summary>
         /// Load settings from file
