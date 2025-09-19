@@ -204,22 +204,13 @@ namespace NoteNest.UI.Services
             // FIXED: Use deferred initialization to avoid singleton path binding during DI container build
             services.AddSingleton<RTFIntegratedSaveEngine>(serviceProvider =>
             {
-                // CRITICAL FIX: Use FirstTimeSetupService configured path to avoid timing issues
+                // Use FirstTimeSetupService configured path - this should always be available
+                // since FirstTimeSetupService runs before DI container initialization
                 var dataPath = FirstTimeSetupService.ConfiguredNotesPath;
                 
-                // If FirstTimeSetupService didn't run (shouldn't happen), fall back to ConfigurationService
                 if (string.IsNullOrEmpty(dataPath))
                 {
-                    var configService = serviceProvider.GetRequiredService<ConfigurationService>();
-                    dataPath = configService.Settings.DefaultNotePath;
-                    
-                    // Final fallback if settings also empty
-                    if (string.IsNullOrEmpty(dataPath))
-                    {
-                        dataPath = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                            "NoteNest");
-                    }
+                    throw new InvalidOperationException("FirstTimeSetupService.ConfiguredNotesPath is null - this indicates FirstTimeSetupService was not run before DI container initialization");
                 }
                 
                 // Create status notifier using existing state manager

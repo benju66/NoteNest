@@ -111,41 +111,6 @@ namespace NoteNest.Core.Services
         /// </summary>
         public static string CategoriesPath => Path.Combine(MetadataPath, "categories.json");
 
-        /// <summary>
-        /// Ensures all required directories exist
-        /// </summary>
-        public static void EnsureDirectoriesExist()
-        {
-            var errors = new System.Collections.Generic.List<string>();
-
-            // Try to create each directory and collect errors
-            TryCreateDirectory(RootPath, "Root", errors);
-            TryCreateDirectory(MetadataPath, "Metadata", errors);
-            TryCreateDirectory(ProjectsPath, "Notes", errors);
-            TryCreateDirectory(TemplatesPath, "Templates", errors);
-            TryCreateDirectory(AppDataPath, "AppData", errors);
-
-            if (errors.Count > 0)
-            {
-                var errorMessage = "Failed to create the following directories:\n" + string.Join("\n", errors);
-                throw new InvalidOperationException(errorMessage);
-            }
-        }
-
-        private static void TryCreateDirectory(string path, string name, System.Collections.Generic.List<string> errors)
-        {
-            try
-            {
-                if (!Directory.Exists(path))
-                {
-                    Directory.CreateDirectory(path);
-                }
-            }
-            catch (Exception ex)
-            {
-                errors.Add($"- {name} ({path}): {ex.Message}");
-            }
-        }
 
         /// <summary>
         /// Converts an absolute path to a relative path (for storage)
