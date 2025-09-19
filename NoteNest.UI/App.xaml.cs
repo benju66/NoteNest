@@ -44,10 +44,24 @@ namespace NoteNest.UI
                     System.Diagnostics.Debug.WriteLine($"[App] Debug listener configured at {logFile} {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
                 }
                 catch { }
+                
                 // Ultra-fast startup sequence
                 ShutdownMode = ShutdownMode.OnMainWindowClose;
 
+                // CRITICAL FIX: Run first-time setup BEFORE DI container initialization
+                // This ensures storage paths are configured before any path-dependent services are created
+                FirstTimeSetupService.UserSelectionCallback = ShowFolderSelectionDialog;
+                
+                bool setupSucceeded = await FirstTimeSetupService.EnsureStorageConfigurationAsync();
+                if (!setupSucceeded)
+                {
+                    // User cancelled or setup failed - exit gracefully
+                    Shutdown(0);
+                    return;
+                }
+
                 // Minimal DI container (only essential services)
+                // Now all services can safely use the configured storage path
                 _host = Host.CreateDefaultBuilder()
                     .ConfigureServices((context, services) =>
                     {
@@ -184,6 +198,67 @@ namespace NoteNest.UI
                 catch { }
                 e.Handled = true; // Keep app running
             };
+        }
+
+        /// <summary>
+        /// Show folder selection dialog for first-time setup
+        /// </summary>
+        private async Task<string> ShowFolderSelectionDialog(string currentPath)
+        {
+            await Task.CompletedTask; // Satisfy async method requirement
+            
+            try
+            {
+                // Show message box explaining the situation
+                var result = MessageBox.Show(
+                    "NoteNest needs to configure your notes folder.\n\n" +
+                    "Would you like to:\n" +
+                    "• Select your existing notes folder (if you have one)\n" +
+                    "• Use the default location (Documents/NoteNest)\n\n" +
+                    "Click Yes to choose a folder, No to use default, or Cancel to exit.",
+                    "Configure Notes Folder",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Cancel)
+                {
+                    return null; // User cancelled
+                }
+
+                if (result == MessageBoxResult.No)
+                {
+                    // Use default location
+                    var defaultPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                        "NoteNest");
+                    return defaultPath;
+                }
+
+                // Show folder browser dialog
+                var dialog = new Microsoft.Win32.OpenFolderDialog
+                {
+                    Title = "Select Your Notes Folder",
+                    InitialDirectory = !string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath) 
+                        ? currentPath 
+                        : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                };
+
+                if (dialog.ShowDialog() == true)
+                {
+                    return dialog.FolderName;
+                }
+
+                return null; // User cancelled dialog
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[App] Error showing folder selection dialog: {ex.Message}");
+                
+                // Fallback to default if dialog fails
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "NoteNest");
+            }
         }
 
         private static DateTime _lastToastAt = DateTime.MinValue;

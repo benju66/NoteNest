@@ -602,189 +602,58 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
+                // SIMPLIFIED: FirstTimeSetupService should have already configured the storage path
+                // This method now just performs basic validation and logging
                 var root = _configService?.Settings?.DefaultNotePath;
                 var meta = _configService?.Settings?.MetadataPath;
                 var categoriesPath = NoteNest.Core.Services.PathService.CategoriesPath;
                 var validRoot = !string.IsNullOrWhiteSpace(root) && Directory.Exists(root);
                 var hasCategories = File.Exists(categoriesPath);
 
-                if (!validRoot || !hasCategories)
+                if (!validRoot)
                 {
-                    _logger.Warning($"Notes root validation failed. RootExists={validRoot} HasCategories={hasCategories}");
-                    var pick = await _dialogService.ShowYesNoCancelAsync(
-                        "Your notes folder isn't configured or looks empty. Do you want to select your existing notes folder now?",
-                        "Configure Notes Folder");
-                    if (pick == true)
-                    {
-                        var currentPath = _configService?.Settings?.DefaultNotePath;
-                        var initialDirectory = !string.IsNullOrEmpty(currentPath) && Directory.Exists(currentPath) 
-                            ? currentPath 
-                            : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                            
-                        var selected = await _dialogService.ShowFolderDialogAsync(
-                            "Select Your Notes Folder", 
-                            initialDirectory);
+                    _logger.Error($"Notes root validation failed after FirstTimeSetupService - this should not happen. Root: {root}, Exists: {Directory.Exists(root ?? "")}");
+                    throw new InvalidOperationException($"Notes root is not configured properly: {root}");
+                }
 
-                        if (!string.IsNullOrWhiteSpace(selected) && Directory.Exists(selected))
+                if (!hasCategories)
+                {
+                    _logger.Info("Categories file not found - this is normal for new installations");
+                    // Create empty categories file if it doesn't exist
+                    try
+                    {
+                        var categoriesDir = Path.GetDirectoryName(categoriesPath);
+                        if (!Directory.Exists(categoriesDir))
                         {
-                            // Use the storage transaction system for proper first-run setup
-                            // This ensures ALL required folders (.temp, .wal, .metadata, Notes) are created
-                            // and all services are properly updated to the new location
-                            _logger.Info($"First-run setup: Attempting to get TransactionalSettingsService for path: {selected}");
-                            
-                            var serviceProvider = (System.Windows.Application.Current as App)?.ServiceProvider;
-                            if (serviceProvider == null)
-                            {
-                                _logger.Error("ServiceProvider is null during first-run setup");
-                                await ApplyBasicFirstRunSetup(selected);
-                                return;
-                            }
-                            
-                            ITransactionalSettingsService transactionalService = null;
-                            try
-                            {
-                                transactionalService = serviceProvider
-                                    .GetService(typeof(NoteNest.Core.Services.ITransactionalSettingsService)) 
-                                    as NoteNest.Core.Services.ITransactionalSettingsService;
-                                    
-                                _logger.Info($"TransactionalSettingsService retrieved: {transactionalService != null}");
-                            }
-                            catch (Exception serviceEx)
-                            {
-                                _logger.Error(serviceEx, "Exception getting TransactionalSettingsService");
-                            }
-
-                            if (transactionalService != null)
-                            {
-                                // Create new settings with the selected path
-                                var newSettings = new AppSettings
-                                {
-                                    DefaultNotePath = selected,
-                                    MetadataPath = System.IO.Path.Combine(selected, ".metadata"),
-                                    StorageMode = _configService.Settings.StorageMode,
-                                    // Copy other settings
-                                    AutoSaveInterval = _configService.Settings.AutoSaveInterval,
-                                    WindowSettings = _configService.Settings.WindowSettings,
-                                    RecentFiles = _configService.Settings.RecentFiles,
-                                    CustomNotesPath = _configService.Settings.CustomNotesPath
-                                };
-
-                                try
-                                {
-                                    var result = await transactionalService.ApplySettingsAsync(newSettings, _configService.Settings);
-                                    
-                                    if (result.Success)
-                                    {
-                                        _logger.Info($"First-run storage location successfully set to: {selected}");
-                                    }
-                                    else
-                                    {
-                                        _logger.Error($"Failed to set first-run storage location: {result.ErrorMessage}");
-                                        // Fallback to basic setup
-                                        await ApplyBasicFirstRunSetup(selected);
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.Error(ex, "Error during transactional first-run setup");
-                                    // Fallback to basic setup
-                                    await ApplyBasicFirstRunSetup(selected);
-                                }
-                            }
-                            else
-                            {
-                                // Fallback if transaction service not available
-                                await ApplyBasicFirstRunSetup(selected);
-                            }
+                            Directory.CreateDirectory(categoriesDir);
                         }
+                        
+                        var initialCategories = new { Categories = new object[0] };
+                        var json = System.Text.Json.JsonSerializer.Serialize(initialCategories, 
+                            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                        await File.WriteAllTextAsync(categoriesPath, json);
+                        
+                        _logger.Info($"Created initial categories file: {categoriesPath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning($"Failed to create initial categories file: {ex.Message}");
+                        // Continue - categories will be created when first category is added
                     }
                 }
+
+                _logger.Info($"Notes root validation completed. Root: {root}, HasCategories: {hasCategories}");
             }
             catch (Exception ex)
             {
-                _logger.Warning($"ValidateNotesRoot failed: {ex.Message}");
+                _logger.Error(ex, "Exception during notes root validation");
+                throw; // Re-throw since this indicates a serious configuration problem
             }
         }
 
-        /// <summary>
-        /// Fallback method for basic first-run setup when transaction system is unavailable
-        /// </summary>
-        private async Task ApplyBasicFirstRunSetup(string selected)
-        {
-            _configService.Settings.DefaultNotePath = selected;
-            _configService.Settings.MetadataPath = System.IO.Path.Combine(selected, ".metadata");
-            NoteNest.Core.Services.PathService.RootPath = selected;
-            await _configService.SaveSettingsAsync();
-            await _configService.EnsureDefaultDirectoriesAsync();
-            
-            // CRITICAL: Create .temp folder manually since RTFIntegratedSaveEngine singleton 
-            // was already instantiated with the old path
-            try
-            {
-                var tempPath = System.IO.Path.Combine(selected, ".temp");
-                var walPath = System.IO.Path.Combine(selected, ".wal");
-                System.IO.Directory.CreateDirectory(tempPath);
-                System.IO.Directory.CreateDirectory(walPath);
-                _logger.Info($"Created .temp folder at: {tempPath}");
-                _logger.Info($"Created .wal folder at: {walPath}");
-                
-                // Also ensure Notes folder exists
-                var notesPath = System.IO.Path.Combine(selected, "Notes");
-                System.IO.Directory.CreateDirectory(notesPath);
-                _logger.Info($"Created Notes folder at: {notesPath}");
-                
-                // CRITICAL: Force the existing RTFIntegratedSaveEngine singleton to be aware of the new location
-                // This is needed because the singleton was created with the default path during startup
-                await ForceUpdateSaveEngineLocationAsync(selected);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to create required folders during basic first-run setup");
-            }
-            
-            _logger.Info($"Basic first-run setup completed for: {selected}");
-        }
-
-        /// <summary>
-        /// Forces the existing RTFIntegratedSaveEngine singleton to be aware of the new storage location
-        /// This is a workaround for the fact that the singleton was created with the default path during startup
-        /// </summary>
-        private async Task ForceUpdateSaveEngineLocationAsync(string newPath)
-        {
-            try
-            {
-                _logger.Info($"Forcing SaveEngine location update to: {newPath}");
-                
-                // Get the existing RTFIntegratedSaveEngine singleton
-                var serviceProvider = (System.Windows.Application.Current as App)?.ServiceProvider;
-                if (serviceProvider != null)
-                {
-                    // Since RTFIntegratedSaveEngine is a singleton that can't easily change its path,
-                    // we'll use the SaveManagerFactory's ability to create a new instance and replace it
-                    var saveManagerFactory = serviceProvider.GetService(typeof(ISaveManagerFactory)) as ISaveManagerFactory;
-                    if (saveManagerFactory != null)
-                    {
-                        _logger.Info("Using SaveManagerFactory to create new SaveManager for updated path");
-                        
-                        // Create a new SaveManager for the selected path
-                        var newSaveManager = await saveManagerFactory.CreateSaveManagerAsync(newPath);
-                        
-                        // Replace the current SaveManager
-                        await saveManagerFactory.ReplaceSaveManagerAsync(newSaveManager);
-                        
-                        _logger.Info("Successfully updated SaveEngine to new location");
-                    }
-                    else
-                    {
-                        _logger.Warning("SaveManagerFactory not available - SaveEngine still points to original location");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Failed to force update SaveEngine location to {newPath}");
-            }
-        }
+        // REMOVED: ApplyBasicFirstRunSetup and ForceUpdateSaveEngineLocationAsync methods
+        // These fallback mechanisms are no longer needed since FirstTimeSetupService
+        // handles path configuration before DI container initialization
 
         private async Task CheckForRecovery()
         {

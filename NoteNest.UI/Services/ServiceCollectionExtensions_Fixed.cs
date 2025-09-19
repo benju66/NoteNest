@@ -201,18 +201,25 @@ namespace NoteNest.UI.Services
         public static IServiceCollection AddRTFIntegratedSaveSystem(this IServiceCollection services)
         {
             // Register the unified save engine as both RTFIntegratedSaveEngine and ISaveManager
+            // FIXED: Use deferred initialization to avoid singleton path binding during DI container build
             services.AddSingleton<RTFIntegratedSaveEngine>(serviceProvider =>
             {
-                // Get configuration for data path with safe fallback
-                var configService = serviceProvider.GetRequiredService<ConfigurationService>();
-                var dataPath = configService.Settings.DefaultNotePath;
+                // CRITICAL FIX: Use FirstTimeSetupService configured path to avoid timing issues
+                var dataPath = FirstTimeSetupService.ConfiguredNotesPath;
                 
-                // Fallback if DefaultNotePath is null (during startup)
+                // If FirstTimeSetupService didn't run (shouldn't happen), fall back to ConfigurationService
                 if (string.IsNullOrEmpty(dataPath))
                 {
-                    dataPath = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                        "NoteNest");
+                    var configService = serviceProvider.GetRequiredService<ConfigurationService>();
+                    dataPath = configService.Settings.DefaultNotePath;
+                    
+                    // Final fallback if settings also empty
+                    if (string.IsNullOrEmpty(dataPath))
+                    {
+                        dataPath = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                            "NoteNest");
+                    }
                 }
                 
                 // Create status notifier using existing state manager
