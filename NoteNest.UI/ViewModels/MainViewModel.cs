@@ -233,6 +233,9 @@ namespace NoteNest.UI.ViewModels
                 {
                     await _metadataManager.MoveMetadataAsync(e.OldPath, e.NewPath);
                 }
+
+                // Update FTS5 search index for file rename
+                await UpdateSearchIndexForFileRename(e.OldPath, e.NewPath);
             }
             catch (Exception ex)
             {
@@ -261,10 +264,113 @@ namespace NoteNest.UI.ViewModels
                         catch { }
                     }
                 }
+
+                // Update FTS5 search index
+                await UpdateSearchIndexForFileDelete(e.FilePath);
             }
             catch (Exception ex)
             {
                 _logger.Warning($"Error handling file deletion: {ex.Message}");
+            }
+        }
+
+        private async void OnFileCreated(object sender, FileChangedEventArgs e)
+        {
+            try
+            {
+                // Only index RTF files
+                if (System.IO.Path.GetExtension(e.FilePath).Equals(".rtf", StringComparison.OrdinalIgnoreCase))
+                {
+                    await UpdateSearchIndexForFileCreate(e.FilePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Error handling file creation: {ex.Message}");
+            }
+        }
+
+        private async void OnFileModified(object sender, FileChangedEventArgs e)
+        {
+            try
+            {
+                // Only index RTF files
+                if (System.IO.Path.GetExtension(e.FilePath).Equals(".rtf", StringComparison.OrdinalIgnoreCase))
+                {
+                    await UpdateSearchIndexForFileModify(e.FilePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Error handling file modification: {ex.Message}");
+            }
+        }
+
+        private async Task UpdateSearchIndexForFileCreate(string filePath)
+        {
+            try
+            {
+                var searchService = _serviceProvider.GetService<NoteNest.UI.Services.ISearchService>();
+                if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
+                {
+                    await fts5Service.HandleNoteCreatedAsync(filePath);
+                    _logger.Debug($"Updated search index for created file: {filePath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to update search index for created file {filePath}: {ex.Message}");
+            }
+        }
+
+        private async Task UpdateSearchIndexForFileModify(string filePath)
+        {
+            try
+            {
+                var searchService = _serviceProvider.GetService<NoteNest.UI.Services.ISearchService>();
+                if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
+                {
+                    await fts5Service.HandleNoteUpdatedAsync(filePath);
+                    _logger.Debug($"Updated search index for modified file: {filePath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to update search index for modified file {filePath}: {ex.Message}");
+            }
+        }
+
+        private async Task UpdateSearchIndexForFileDelete(string filePath)
+        {
+            try
+            {
+                var searchService = _serviceProvider.GetService<NoteNest.UI.Services.ISearchService>();
+                if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
+                {
+                    await fts5Service.HandleNoteDeletedAsync(filePath);
+                    _logger.Debug($"Updated search index for deleted file: {filePath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to update search index for deleted file {filePath}: {ex.Message}");
+            }
+        }
+
+        private async Task UpdateSearchIndexForFileRename(string oldPath, string newPath)
+        {
+            try
+            {
+                var searchService = _serviceProvider.GetService<NoteNest.UI.Services.ISearchService>();
+                if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
+                {
+                    await fts5Service.HandleNoteRenamedAsync(oldPath, newPath);
+                    _logger.Debug($"Updated search index for renamed file: {oldPath} -> {newPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to update search index for renamed file {oldPath} -> {newPath}: {ex.Message}");
             }
         }
 
@@ -923,6 +1029,8 @@ namespace NoteNest.UI.ViewModels
                 var fileWatcher = GetFileWatcher();
                 fileWatcher.FileRenamed += OnFileRenamed;
                 fileWatcher.FileDeleted += OnFileDeleted;
+                fileWatcher.FileCreated += OnFileCreated;  // FTS5 integration
+                fileWatcher.FileChanged += OnFileModified; // FTS5 integration
                 _metadataManager ??= new NoteNest.Core.Services.NoteMetadataManager(_fileSystem, _logger);
                 fileWatcher.StartWatching(PathService.ProjectsPath, "*.*", includeSubdirectories: true);
 

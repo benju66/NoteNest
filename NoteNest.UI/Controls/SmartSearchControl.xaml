@@ -159,7 +159,7 @@
                             MouseDoubleClick="ResultsList_MouseDoubleClick">
                         
                         <ListBox.ItemTemplate>
-            <DataTemplate DataType="{x:Type services:SearchResultViewModel}">
+            <DataTemplate DataType="{x:Type vm:SearchResultViewModel}">
                                 <Border Padding="10,8" 
                                        Background="Transparent"
                                        BorderThickness="0,0,0,1"

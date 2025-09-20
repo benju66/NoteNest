@@ -266,7 +266,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
             if (!string.IsNullOrEmpty(rtfContent))
             {
                 System.Diagnostics.Debug.WriteLine("[RTFOperations] Using Core RTFTextExtractor fallback");
-                return NoteNest.Core.Services.RTFTextExtractor.ExtractPlainText(rtfContent);
+                return NoteNest.Core.Utils.RTFTextExtractor.ExtractPlainText(rtfContent);
             }
             
             return string.Empty;
@@ -279,7 +279,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
         public static string ExtractPlainText(string rtfContent)
         {
             // MEMORY FIX: Delegate to optimized Core implementation (compiled Regex patterns)
-            return NoteNest.Core.Services.RTFTextExtractor.ExtractPlainText(rtfContent);
+            return NoteNest.Core.Utils.RTFTextExtractor.ExtractPlainText(rtfContent);
         }
         
         /// <summary>
@@ -289,7 +289,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
         public static string ExtractSearchPreview(string rtfContent, int maxLength = 200)
         {
             // MEMORY FIX: Delegate to optimized Core implementation
-            return NoteNest.Core.Services.RTFTextExtractor.ExtractSearchPreview(rtfContent, maxLength);
+            return NoteNest.Core.Utils.RTFTextExtractor.ExtractSearchPreview(rtfContent, maxLength);
         }
         
         /// <summary>

@@ -7,6 +7,8 @@ using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Models;
+using NoteNest.Core.Interfaces.Search;
+using NoteNest.Core.Services.Search;
 
 namespace NoteNest.UI.Services
 {
@@ -171,6 +173,9 @@ namespace NoteNest.UI.Services
             services.AddSingleton<ITabPersistenceService, TabPersistenceService>();
             services.AddSingleton<IWorkspaceService, NoteNest.Core.Services.Implementation.WorkspaceService>();
             
+            // FTS5 Search Services
+            services.AddFTS5SearchServices();
+            
             // Window and ViewModels
             services.AddSingleton<MainWindow>();
             services.AddSingleton<NoteNest.UI.ViewModels.MainViewModel>();
@@ -265,6 +270,43 @@ namespace NoteNest.UI.Services
             // UI-specific transaction components could be added here
             // For example: progress dialog services, transaction status UI, etc.
             
+            return services;
+        }
+
+        /// <summary>
+        /// Add FTS5 search services to replace legacy search system
+        /// </summary>
+        public static IServiceCollection AddFTS5SearchServices(this IServiceCollection services)
+        {
+            // Core FTS5 services
+            services.AddSingleton<IFts5Repository>(serviceProvider =>
+            {
+                return new Fts5Repository(serviceProvider.GetService<IAppLogger>());
+            });
+
+            services.AddSingleton<ISearchResultMapper, SearchResultMapper>();
+
+            services.AddSingleton<ISearchIndexManager>(serviceProvider =>
+            {
+                return new Fts5IndexManager(
+                    serviceProvider.GetRequiredService<IFts5Repository>(),
+                    serviceProvider.GetRequiredService<ISearchResultMapper>(),
+                    serviceProvider.GetService<IAppLogger>()
+                );
+            });
+
+            // Replace ISearchService with FTS5 implementation
+            services.AddSingleton<ISearchService>(serviceProvider =>
+            {
+                return new FTS5SearchService(
+                    serviceProvider.GetRequiredService<IFts5Repository>(),
+                    serviceProvider.GetRequiredService<ISearchResultMapper>(),
+                    serviceProvider.GetRequiredService<ISearchIndexManager>(),
+                    serviceProvider.GetRequiredService<AppSettings>(),
+                    serviceProvider.GetService<IAppLogger>()
+                );
+            });
+
             return services;
         }
     }
