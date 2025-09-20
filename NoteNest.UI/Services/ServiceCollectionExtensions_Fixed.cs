@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using NoteNest.Core.Services;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services.Logging;
@@ -9,6 +10,7 @@ using NoteNest.Core.Interfaces;
 using NoteNest.Core.Models;
 using NoteNest.Core.Interfaces.Search;
 using NoteNest.Core.Services.Search;
+using NoteNest.Core.Configuration;
 
 namespace NoteNest.UI.Services
 {
@@ -24,36 +26,47 @@ namespace NoteNest.UI.Services
         {
             // Core Infrastructure Services
             services.AddSingleton<IAppLogger>(AppLogger.Instance);
+            services.AddSingleton<IStateManager, NoteNest.Core.Services.Implementation.StateManager>();
+            services.AddSingleton<IServiceErrorHandler, NoteNest.Core.Services.Implementation.ServiceErrorHandler>();
+            services.AddSingleton<IFileSystemProvider, DefaultFileSystemProvider>();
+            services.AddSingleton<IEventBus, EventBus>();
+
+            // Modern Configuration System (replaces ConfigurationService anti-pattern)
+            services.AddSingleton<IStorageOptions>(serviceProvider =>
+            {
+                var notesPath = FirstTimeSetupService.ConfiguredNotesPath;
+                if (string.IsNullOrEmpty(notesPath))
+                {
+                    notesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
+                }
+                
+                var storageOptions = StorageOptions.FromNotesPath(notesPath);
+                storageOptions.ValidatePaths(); // Ensure paths are accessible
+                return storageOptions;
+            });
+
+            services.AddSingleton<ISearchOptions>(serviceProvider =>
+            {
+                var storageOptions = serviceProvider.GetRequiredService<IStorageOptions>();
+                var searchOptions = SearchConfigurationOptions.FromStoragePath(storageOptions.MetadataPath);
+                searchOptions.ValidateConfiguration(); // Ensure configuration is valid
+                return searchOptions;
+            });
+
+            // Legacy ConfigurationService (kept for backward compatibility during transition)
             services.AddSingleton<ConfigurationService>(serviceProvider =>
             {
-                // CRITICAL FIX: Provide proper dependencies to ConfigurationService
                 return new ConfigurationService(
                     serviceProvider.GetRequiredService<IFileSystemProvider>(),
                     serviceProvider.GetRequiredService<IEventBus>()
                 );
             });
-            services.AddSingleton<IStateManager, NoteNest.Core.Services.Implementation.StateManager>();
-            services.AddSingleton<IServiceErrorHandler, NoteNest.Core.Services.Implementation.ServiceErrorHandler>();
-            services.AddSingleton<IFileSystemProvider, DefaultFileSystemProvider>();
-            services.AddSingleton<IEventBus, EventBus>();
             
-            // Save Management Services
+            // Save Management Services (using modern configuration)
             services.AddSingleton<IWriteAheadLog>(serviceProvider =>
             {
-                // Get configuration for WAL path with safe fallback
-                var configService = serviceProvider.GetRequiredService<ConfigurationService>();
-                var basePath = configService.Settings.DefaultNotePath;
-                
-                // Fallback if DefaultNotePath is null (during startup)
-                if (string.IsNullOrEmpty(basePath))
-                {
-                    basePath = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                        "NoteNest");
-                }
-                
-                var walPath = Path.Combine(basePath, ".wal");
-                return new WriteAheadLog(walPath);
+                var storageOptions = serviceProvider.GetRequiredService<IStorageOptions>();
+                return new WriteAheadLog(storageOptions.WalPath);
             });
             services.AddSingleton<SaveConfiguration>();
             // OLD: services.AddSingleton<ISaveManager, UnifiedSaveManager>();
@@ -274,11 +287,12 @@ namespace NoteNest.UI.Services
         }
 
         /// <summary>
-        /// Add FTS5 search services to replace legacy search system
+        /// Add modern FTS5 search services using clean IOptions<T> configuration
+        /// Completely replaces legacy ConfigurationService.Settings anti-pattern
         /// </summary>
         public static IServiceCollection AddFTS5SearchServices(this IServiceCollection services)
         {
-            // Core FTS5 services
+            // Core FTS5 services with clean dependencies
             services.AddSingleton<IFts5Repository>(serviceProvider =>
             {
                 return new Fts5Repository(serviceProvider.GetService<IAppLogger>());
@@ -295,17 +309,11 @@ namespace NoteNest.UI.Services
                 );
             });
 
-            // Replace ISearchService with FTS5 implementation
-            services.AddSingleton<ISearchService>(serviceProvider =>
-            {
-                return new FTS5SearchService(
-                    serviceProvider.GetRequiredService<IFts5Repository>(),
-                    serviceProvider.GetRequiredService<ISearchResultMapper>(),
-                    serviceProvider.GetRequiredService<ISearchIndexManager>(),
-                    serviceProvider.GetRequiredService<AppSettings>(),
-                    serviceProvider.GetService<IAppLogger>()
-                );
-            });
+            // Modern FTS5SearchService with clean IOptions<T> dependencies
+            services.AddSingleton<NoteNest.UI.Interfaces.ISearchService, FTS5SearchService>();
+            
+            // Clean SearchViewModel registration (no complex factory logic)
+            services.AddSingleton<NoteNest.UI.ViewModels.SearchViewModel>();
 
             return services;
         }

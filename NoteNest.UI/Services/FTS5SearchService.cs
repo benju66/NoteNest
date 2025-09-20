@@ -4,12 +4,13 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
+using NoteNest.Core.Configuration;
 using NoteNest.Core.Interfaces.Search;
-using NoteNest.Core.Models;
 using NoteNest.Core.Models.Search;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Services.Search;
+using NoteNest.UI.Interfaces;
 using NoteNest.UI.ViewModels;
 
 namespace NoteNest.UI.Services
@@ -18,16 +19,16 @@ namespace NoteNest.UI.Services
     /// FTS5-based search service replacing the legacy SearchService
     /// Single Responsibility: UI layer search operations and coordination
     /// </summary>
-    public class FTS5SearchService : ISearchService
+    public class FTS5SearchService : NoteNest.UI.Interfaces.ISearchService
     {
         private readonly IFts5Repository _repository;
         private readonly ISearchResultMapper _mapper;
         private readonly ISearchIndexManager _indexManager;
         private readonly IAppLogger? _logger;
-        private readonly AppSettings _settings;
+        private readonly ISearchOptions _searchOptions;
+        private readonly IStorageOptions _storageOptions;
 
         private bool _isInitialized = false;
-        private string? _databasePath;
 
         /// <summary>
         /// Indicates whether the search index is ready for queries
@@ -38,13 +39,15 @@ namespace NoteNest.UI.Services
             IFts5Repository repository,
             ISearchResultMapper mapper, 
             ISearchIndexManager indexManager,
-            AppSettings settings,
+            ISearchOptions searchOptions,
+            IStorageOptions storageOptions,
             IAppLogger? logger = null)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
             _indexManager = indexManager ?? throw new ArgumentNullException(nameof(indexManager));
-            _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _searchOptions = searchOptions ?? throw new ArgumentNullException(nameof(searchOptions));
+            _storageOptions = storageOptions ?? throw new ArgumentNullException(nameof(storageOptions));
             _logger = logger;
         }
 
@@ -57,11 +60,11 @@ namespace NoteNest.UI.Services
 
             try
             {
-                // Build database path from settings
-                _databasePath = GetDatabasePath();
+                // Use clean configuration - no complex path resolution needed
+                var databasePath = _searchOptions.DatabasePath;
                 
                 // Initialize repository
-                await _repository.InitializeAsync(_databasePath);
+                await _repository.InitializeAsync(databasePath);
                 
                 // Initialize index manager
                 var indexManagerSettings = CreateIndexManagerSettings();
@@ -76,7 +79,7 @@ namespace NoteNest.UI.Services
                 }
 
                 _isInitialized = true;
-                _logger?.Info($"FTS5 Search Service initialized with database: {_databasePath}");
+                _logger?.Info($"FTS5 Search Service initialized with database: {_searchOptions.DatabasePath}");
             }
             catch (Exception ex)
             {
@@ -429,39 +432,17 @@ namespace NoteNest.UI.Services
 
         #region Private Helper Methods
 
-        private string GetDatabasePath()
-        {
-            // Use the same .notenest metadata folder as the legacy system
-            var storageService = new StorageLocationService();
-            var baseDirectory = _settings.StorageMode switch
-            {
-                StorageMode.Local => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest"),
-                StorageMode.OneDrive => storageService.GetOneDrivePath() != null ? 
-                    Path.Combine(storageService.GetOneDrivePath(), "NoteNest") : 
-                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest"),
-                StorageMode.Custom => _settings.CustomNotesPath,
-                _ => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest")
-            };
-
-            if (string.IsNullOrEmpty(baseDirectory))
-            {
-                // Fallback to default location
-                baseDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
-            }
-
-            var metadataPath = Path.Combine(baseDirectory, ".notenest");
-            return Path.Combine(metadataPath, DatabaseConfig.DatabaseFileName);
-        }
+        // GetDatabasePath method removed - using clean _searchOptions.DatabasePath instead
 
         private IndexManagerSettings CreateIndexManagerSettings()
         {
             return new IndexManagerSettings
             {
                 IndexedExtensions = new HashSet<string> { ".rtf" },
-                MaxFileSizeBytes = 50 * 1024 * 1024, // 50MB
+                MaxFileSizeBytes = _searchOptions.MaxFileSizeBytes,
                 BatchSize = 100,
                 FileProcessingTimeoutMs = 30000,
-                AutoOptimizeAfterBatch = true,
+                AutoOptimizeAfterBatch = _searchOptions.AutoOptimizeIndex,
                 ExcludedDirectories = new HashSet<string> 
                 { 
                     ".git", ".temp", ".wal", ".backup", ".notenest", ".metadata"

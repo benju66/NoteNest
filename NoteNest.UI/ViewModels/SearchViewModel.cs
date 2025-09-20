@@ -10,12 +10,13 @@ using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Commands;
 using NoteNest.UI.Services;
+using NoteNest.UI.Interfaces;
 
 namespace NoteNest.UI.ViewModels
 {
     public class SearchViewModel : ViewModelBase, IDisposable
     {
-        private readonly ISearchService _searchService;
+        private readonly NoteNest.UI.Interfaces.ISearchService _searchService;
         private readonly IWorkspaceService _workspaceService;
         private readonly NoteService _noteService;
         private readonly IAppLogger _logger;
@@ -111,7 +112,7 @@ namespace NoteNest.UI.ViewModels
         public ICommand OpenSelectedCommand { get; private set; }
 
         public SearchViewModel(
-            ISearchService searchService,
+            NoteNest.UI.Interfaces.ISearchService searchService,
             IWorkspaceService workspaceService,
             NoteService noteService,
             IAppLogger logger)

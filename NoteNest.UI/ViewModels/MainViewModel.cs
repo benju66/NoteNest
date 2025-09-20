@@ -310,7 +310,7 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                var searchService = _serviceProvider.GetService<NoteNest.UI.Services.ISearchService>();
+                var searchService = _serviceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
                 if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
                 {
                     await fts5Service.HandleNoteCreatedAsync(filePath);
@@ -327,7 +327,7 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                var searchService = _serviceProvider.GetService<NoteNest.UI.Services.ISearchService>();
+                var searchService = _serviceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
                 if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
                 {
                     await fts5Service.HandleNoteUpdatedAsync(filePath);
@@ -344,7 +344,7 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                var searchService = _serviceProvider.GetService<NoteNest.UI.Services.ISearchService>();
+                var searchService = _serviceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
                 if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
                 {
                     await fts5Service.HandleNoteDeletedAsync(filePath);
@@ -361,7 +361,7 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
-                var searchService = _serviceProvider.GetService<NoteNest.UI.Services.ISearchService>();
+                var searchService = _serviceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
                 if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
                 {
                     await fts5Service.HandleNoteRenamedAsync(oldPath, newPath);

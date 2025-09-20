@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NoteNest.UI.ViewModels;
 
-namespace NoteNest.UI.Services
+namespace NoteNest.UI.Interfaces
 {
     /// <summary>
     /// UI-layer search service interface that SearchViewModel expects
