@@ -181,11 +181,11 @@
                                         <!-- Title and Preview -->
                                         <StackPanel Grid.Column="1" 
                                                    VerticalAlignment="Center">
-                            <TextBlock Text="{Binding DisplayTitle}" 
+                            <TextBlock Text="{Binding Title}" 
                                       FontWeight="SemiBold" 
                                       FontSize="14"
                                       TextTrimming="CharacterEllipsis"/>
-                            <ContentPresenter Content="{Binding DisplayPreview, Converter={StaticResource HighlightedTextConverter}}" 
+                            <ContentPresenter Content="{Binding Preview, Converter={StaticResource HighlightedTextConverter}}" 
                                             MaxHeight="32"
                                             Margin="0,2,0,0">
                                 <ContentPresenter.Resources>
