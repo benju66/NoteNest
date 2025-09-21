@@ -185,12 +185,71 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
-                _logger.Debug($"PerformSearchAsync calling SearchService with query: '{SearchQuery.Trim()}'");
-                _logger.Debug($"SearchService.IsIndexReady: {_searchService.IsIndexReady}");
+                // === COMPREHENSIVE SEARCH DIAGNOSTICS ===
+                _logger.Debug($"=== SEARCH DEBUG START ===");
+                _logger.Debug($"Timestamp: {DateTime.Now:HH:mm:ss.fff}");
+                _logger.Debug($"Query: '{SearchQuery.Trim()}'");
+                _logger.Debug($"SearchService Type: {_searchService.GetType().FullName}");
+                _logger.Debug($"IsIndexReady: {_searchService.IsIndexReady}");
+
+                // Check index status if possible
+                if (_searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
+                {
+                    try
+                    {
+                        var docCount = await fts5Service.GetIndexedDocumentCountAsync();
+                        _logger.Debug($"Indexed Documents: {docCount}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Debug($"Failed to get document count: {ex.Message}");
+                    }
+                }
+
+                // Check for RTF files in ACTUAL configured location (from FirstTimeSetupService)
+                try
+                {
+                    // Use the SAME path logic as the rest of the application
+                    var configuredPath = NoteNest.Core.Services.FirstTimeSetupService.ConfiguredNotesPath;
+                    if (string.IsNullOrEmpty(configuredPath))
+                    {
+                        configuredPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
+                    }
+                    
+                    var notesPath = System.IO.Path.Combine(configuredPath, "Notes");
+                    _logger.Debug($"Checking configured notes path: {notesPath}");
+                    
+                    if (System.IO.Directory.Exists(notesPath))
+                    {
+                        var rtfFiles = System.IO.Directory.GetFiles(notesPath, "*.rtf", System.IO.SearchOption.AllDirectories);
+                        _logger.Debug($"RTF Files Found: {rtfFiles.Length} in {notesPath}");
+                        if (rtfFiles.Length > 0)
+                        {
+                            _logger.Debug($"Sample RTF Files: {string.Join(", ", rtfFiles.Take(3).Select(System.IO.Path.GetFileName))}");
+                        }
+                    }
+                    else
+                    {
+                        _logger.Debug($"Configured notes directory does not exist: {notesPath}");
+                        
+                        // Also check if files exist in the root (without "Notes" subfolder)
+                        if (System.IO.Directory.Exists(configuredPath))
+                        {
+                            var rootRtfFiles = System.IO.Directory.GetFiles(configuredPath, "*.rtf", System.IO.SearchOption.AllDirectories);
+                            _logger.Debug($"RTF Files Found in root: {rootRtfFiles.Length} in {configuredPath}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug($"Failed to check RTF files: {ex.Message}");
+                }
                 
+                // Perform search
                 var results = await _searchService.SearchAsync(SearchQuery.Trim(), _cancellationTokenSource.Token);
                 
-                _logger.Debug($"SearchService returned {results.Count} results");
+                // Debug: Log results
+                _logger.Debug($"Results Count: {results.Count}");
                 if (results.Count > 0)
                 {
                     foreach (var result in results.Take(3)) // Log first 3 results
@@ -206,6 +265,7 @@ namespace NoteNest.UI.ViewModels
                 foreach (var result in results)
                 {
                     SearchResults.Add(result);
+                    _logger.Debug($"Added to SearchResults: {result.Title}");
                 }
                 
                 // Auto-select first result for keyboard navigation
@@ -217,15 +277,23 @@ namespace NoteNest.UI.ViewModels
                 HasResults = SearchResults.Count > 0;
                 ShowDropdown = HasResults;  // Show dropdown when results exist
                 
-                StatusText = HasResults 
-                    ? $"Found {SearchResults.Count} result{(SearchResults.Count == 1 ? "" : "s")}"
-                    : "No results found";
-                    
-                _logger.Debug($"Search completed: {SearchResults.Count} results, ShowDropdown={ShowDropdown}, HasResults={HasResults}");
+                // Debug: Log UI state before and after
+                _logger.Debug($"Before UI Update - HasResults: {HasResults}, ShowDropdown: {ShowDropdown}");
                 
                 // Force property change notifications
                 OnPropertyChanged(nameof(ShowDropdown));
                 OnPropertyChanged(nameof(HasResults));
+                OnPropertyChanged(nameof(SearchResults));
+                
+                _logger.Debug($"After UI Update - HasResults: {HasResults}, ShowDropdown: {ShowDropdown}");
+                _logger.Debug($"SearchResults.Count: {SearchResults.Count}");
+                _logger.Debug($"ObservableCollection Hash: {SearchResults.GetHashCode()}");
+                
+                StatusText = HasResults 
+                    ? $"Found {SearchResults.Count} result{(SearchResults.Count == 1 ? "" : "s")}"
+                    : "No results found";
+                    
+                _logger.Debug($"Final Status: {StatusText}");
             }
             catch (OperationCanceledException)
             {
@@ -235,7 +303,9 @@ namespace NoteNest.UI.ViewModels
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Search failed for query: '{SearchQuery}'");
+                _logger.Error(ex, $"Search failed for query: '{SearchQuery}' - {ex.Message}");
+                _logger.Debug($"Exception Type: {ex.GetType().FullName}");
+                _logger.Debug($"Stack Trace: {ex.StackTrace}");
                 StatusText = "Search failed";
                 HasResults = false;
                 ShowDropdown = false;
@@ -243,6 +313,7 @@ namespace NoteNest.UI.ViewModels
             finally
             {
                 IsSearching = false;
+                _logger.Debug($"=== SEARCH DEBUG END ===");
             }
         }
 

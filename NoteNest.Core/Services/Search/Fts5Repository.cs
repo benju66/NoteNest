@@ -110,20 +110,32 @@ namespace NoteNest.Core.Services.Search
         {
             ThrowIfNotInitialized();
 
+            // Defensive validation
+            if (document == null)
+                throw new ArgumentNullException(nameof(document));
+            if (string.IsNullOrEmpty(document.NoteId))
+                throw new ArgumentException("NoteId cannot be empty", nameof(document));
+            if (string.IsNullOrEmpty(document.FilePath))
+                throw new ArgumentException("FilePath cannot be empty", nameof(document));
+
+            _logger?.Debug($"Indexing document: ID={document.NoteId}, Title='{document.Title}', Path='{document.FilePath}'");
+
             try
             {
                 const string sql = @"
                     INSERT OR REPLACE INTO notes_fts (title, content, category_id, file_path, note_id, last_modified)
-                    VALUES (?, ?, ?, ?, ?, ?)";
+                    VALUES (@title, @content, @category_id, @file_path, @note_id, @last_modified)";
 
                 using var command = _connection!.CreateCommand();
                 command.CommandText = sql;
 
-                var parameters = document.ToFtsParameters();
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    command.Parameters.Add(new SqliteParameter($"@p{i}", parameters[i]));
-                }
+                // Use named parameters matching the SQL exactly
+                command.Parameters.AddWithValue("@title", document.Title ?? "");
+                command.Parameters.AddWithValue("@content", document.Content ?? "");
+                command.Parameters.AddWithValue("@category_id", document.CategoryId ?? "");
+                command.Parameters.AddWithValue("@file_path", document.FilePath ?? "");
+                command.Parameters.AddWithValue("@note_id", document.NoteId ?? "");
+                command.Parameters.AddWithValue("@last_modified", document.LastModified.ToString("O"));
 
                 var rowsAffected = await command.ExecuteNonQueryAsync();
 
@@ -187,11 +199,11 @@ namespace NoteNest.Core.Services.Search
 
             try
             {
-                const string sql = "DELETE FROM notes_fts WHERE file_path = ?";
+                const string sql = "DELETE FROM notes_fts WHERE file_path = @file_path";
 
                 using var command = _connection!.CreateCommand();
                 command.CommandText = sql;
-                command.Parameters.AddWithValue("@filePath", filePath);
+                command.Parameters.AddWithValue("@file_path", filePath);
 
                 var rowsAffected = await command.ExecuteNonQueryAsync();
                 _logger?.Debug($"Removed document by path: {filePath} ({rowsAffected} rows)");
@@ -353,16 +365,35 @@ namespace NoteNest.Core.Services.Search
         {
             ThrowIfNotInitialized();
 
+            if (documents == null)
+                throw new ArgumentNullException(nameof(documents));
+
             var documentList = documents.ToList();
-            if (!documentList.Any()) return;
+            if (!documentList.Any()) 
+            {
+                _logger?.Debug("No documents to index in batch");
+                return;
+            }
+
+            // Validate all documents before starting transaction
+            foreach (var doc in documentList)
+            {
+                if (string.IsNullOrEmpty(doc.NoteId))
+                    throw new ArgumentException($"Document with empty NoteId found in batch");
+                if (string.IsNullOrEmpty(doc.FilePath))
+                    throw new ArgumentException($"Document {doc.NoteId} has empty FilePath");
+            }
+
+            _logger?.Debug($"Starting batch index of {documentList.Count} documents");
 
             try
             {
                 using var transaction = _connection!.BeginTransaction();
 
+                // Use named parameters for clarity and reliability
                 const string sql = @"
                     INSERT OR REPLACE INTO notes_fts (title, content, category_id, file_path, note_id, last_modified)
-                    VALUES (?, ?, ?, ?, ?, ?)";
+                    VALUES (@title, @content, @category_id, @file_path, @note_id, @last_modified)";
 
                 foreach (var document in documentList)
                 {
@@ -370,11 +401,13 @@ namespace NoteNest.Core.Services.Search
                     command.Transaction = transaction;
                     command.CommandText = sql;
 
-                    var parameters = document.ToFtsParameters();
-                    for (int i = 0; i < parameters.Length; i++)
-                    {
-                        command.Parameters.Add(new SqliteParameter($"@p{i}", parameters[i]));
-                    }
+                    // Use named parameters matching the SQL exactly
+                    command.Parameters.AddWithValue("@title", document.Title ?? "");
+                    command.Parameters.AddWithValue("@content", document.Content ?? "");
+                    command.Parameters.AddWithValue("@category_id", document.CategoryId ?? "");
+                    command.Parameters.AddWithValue("@file_path", document.FilePath ?? "");
+                    command.Parameters.AddWithValue("@note_id", document.NoteId ?? "");
+                    command.Parameters.AddWithValue("@last_modified", document.LastModified.ToString("O"));
 
                     await command.ExecuteNonQueryAsync();
 
@@ -461,18 +494,18 @@ namespace NoteNest.Core.Services.Search
             {
                 const string sql = @"
                     INSERT INTO note_metadata (note_id, usage_count, last_accessed)
-                    VALUES (?, 1, ?)
+                    VALUES (@note_id, 1, @last_accessed)
                     ON CONFLICT(note_id) DO UPDATE SET
                         usage_count = usage_count + 1,
-                        last_accessed = ?";
+                        last_accessed = @last_accessed2";
 
                 var now = DateTime.Now.ToString("O");
 
                 using var command = _connection!.CreateCommand();
                 command.CommandText = sql;
-                command.Parameters.AddWithValue("@noteId", noteId);
-                command.Parameters.AddWithValue("@lastAccessed1", now);
-                command.Parameters.AddWithValue("@lastAccessed2", now);
+                command.Parameters.AddWithValue("@note_id", noteId);
+                command.Parameters.AddWithValue("@last_accessed", now);
+                command.Parameters.AddWithValue("@last_accessed2", now);
 
                 await command.ExecuteNonQueryAsync();
             }
@@ -620,19 +653,19 @@ namespace NoteNest.Core.Services.Search
         {
             var sql = new StringBuilder();
             sql.AppendLine("SELECT");
-            sql.AppendLine("    f.note_id,");
-            sql.AppendLine("    f.title,");
+            sql.AppendLine("    notes_fts.note_id,");
+            sql.AppendLine("    notes_fts.title,");
             if (options.IncludeContent)
-                sql.AppendLine("    f.content,");
+                sql.AppendLine("    notes_fts.content,");
             else
                 sql.AppendLine("    '' as content,");
-            sql.AppendLine("    f.category_id,");
-            sql.AppendLine("    f.file_path,");
-            sql.AppendLine("    f.last_modified,");
-            sql.AppendLine("    bm25(f) as relevance,");
+            sql.AppendLine("    notes_fts.category_id,");
+            sql.AppendLine("    notes_fts.file_path,");
+            sql.AppendLine("    notes_fts.last_modified,");
+            sql.AppendLine("    bm25(notes_fts) as relevance,");
             
             if (options.HighlightSnippets)
-                sql.AppendLine($"    snippet(f, 0, '<mark>', '</mark>', '...', {options.SnippetContextWords}) as snippet,");
+                sql.AppendLine($"    snippet(notes_fts, 0, '<mark>', '</mark>', '...', {options.SnippetContextWords}) as snippet,");
             else
                 sql.AppendLine("    '' as snippet,");
                 
@@ -640,36 +673,36 @@ namespace NoteNest.Core.Services.Search
             sql.AppendLine("    COALESCE(m.last_accessed, '') as last_accessed,");
             sql.AppendLine("    COALESCE(m.file_size, 0) as file_size,");
             sql.AppendLine("    COALESCE(m.created_date, '') as created_date");
-            sql.AppendLine("FROM notes_fts f");
-            sql.AppendLine("LEFT JOIN note_metadata m ON f.note_id = m.note_id");
-            sql.AppendLine("WHERE f MATCH @query0");
+            sql.AppendLine("FROM notes_fts");
+            sql.AppendLine("LEFT JOIN note_metadata m ON notes_fts.note_id = m.note_id");
+            sql.AppendLine("WHERE notes_fts MATCH @query0");
 
             var paramIndex = 1;
 
             // Add filters
             if (options.CategoryFilter != null)
-                sql.AppendLine($"AND f.category_id = @category{paramIndex++}");
+                sql.AppendLine($"AND notes_fts.category_id = @category{paramIndex++}");
 
             if (options.ModifiedAfter.HasValue)
-                sql.AppendLine($"AND f.last_modified >= @modifiedAfter{paramIndex++}");
+                sql.AppendLine($"AND notes_fts.last_modified >= @modifiedAfter{paramIndex++}");
 
             if (options.ModifiedBefore.HasValue)
-                sql.AppendLine($"AND f.last_modified <= @modifiedBefore{paramIndex++}");
+                sql.AppendLine($"AND notes_fts.last_modified <= @modifiedBefore{paramIndex++}");
 
             // Add ordering
             switch (options.SortOrder)
             {
                 case SearchSortOrder.Relevance:
-                    sql.AppendLine("ORDER BY (bm25(f) + (COALESCE(m.usage_count, 0) * 0.1)) ASC");
+                    sql.AppendLine("ORDER BY (bm25(notes_fts) + (COALESCE(m.usage_count, 0) * 0.1)) ASC");
                     break;
                 case SearchSortOrder.LastModified:
-                    sql.AppendLine("ORDER BY f.last_modified DESC");
+                    sql.AppendLine("ORDER BY notes_fts.last_modified DESC");
                     break;
                 case SearchSortOrder.Usage:
-                    sql.AppendLine("ORDER BY COALESCE(m.usage_count, 0) DESC, bm25(f) ASC");
+                    sql.AppendLine("ORDER BY COALESCE(m.usage_count, 0) DESC, bm25(notes_fts) ASC");
                     break;
                 case SearchSortOrder.Title:
-                    sql.AppendLine("ORDER BY f.title ASC");
+                    sql.AppendLine("ORDER BY notes_fts.title ASC");
                     break;
                 case SearchSortOrder.CreatedDate:
                     sql.AppendLine("ORDER BY COALESCE(m.created_date, '') DESC");
@@ -706,22 +739,22 @@ namespace NoteNest.Core.Services.Search
         {
             const string sql = @"
                 INSERT INTO note_metadata (note_id, file_size, created_date, usage_count, last_accessed)
-                VALUES (?, ?, ?, 0, ?)
+                VALUES (@note_id, @file_size, @created_date, 0, @last_accessed)
                 ON CONFLICT(note_id) DO UPDATE SET
-                    file_size = ?,
-                    created_date = ?";
+                    file_size = @file_size2,
+                    created_date = @created_date2";
 
             using var command = _connection!.CreateCommand();
             if (transaction != null)
                 command.Transaction = transaction;
 
             command.CommandText = sql;
-            command.Parameters.AddWithValue("@noteId", document.NoteId);
-            command.Parameters.AddWithValue("@fileSize", document.FileSize);
-            command.Parameters.AddWithValue("@createdDate", document.CreatedDate.ToString("O"));
-            command.Parameters.AddWithValue("@lastAccessed", DateTime.Now.ToString("O"));
-            command.Parameters.AddWithValue("@fileSize2", document.FileSize);
-            command.Parameters.AddWithValue("@createdDate2", document.CreatedDate.ToString("O"));
+            command.Parameters.AddWithValue("@note_id", document.NoteId);
+            command.Parameters.AddWithValue("@file_size", document.FileSize);
+            command.Parameters.AddWithValue("@created_date", document.CreatedDate.ToString("O"));
+            command.Parameters.AddWithValue("@last_accessed", DateTime.Now.ToString("O"));
+            command.Parameters.AddWithValue("@file_size2", document.FileSize);
+            command.Parameters.AddWithValue("@created_date2", document.CreatedDate.ToString("O"));
 
             await command.ExecuteNonQueryAsync();
         }

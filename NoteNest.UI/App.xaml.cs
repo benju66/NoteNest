@@ -114,7 +114,26 @@ namespace NoteNest.UI
                 SimpleMemoryTracker.SetBaseline();
                 
                 _startupTimer.Stop();
-                _logger.Info($"App started in {_startupTimer.ElapsedMilliseconds}ms");
+                _logger.Info($"App started in {_startupTimer.ElapsedMilliseconds}ms at {DateTime.Now:HH:mm:ss.fff}");
+                
+                // === SEARCH SERVICE DIAGNOSTIC ===
+                try
+                {
+                    var searchService = ServiceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
+                    if (searchService != null)
+                    {
+                        _logger.Debug($"[App] Search service available: {searchService.GetType().FullName}");
+                        _logger.Debug($"[App] Initial IsIndexReady: {searchService.IsIndexReady}");
+                    }
+                    else
+                    {
+                        _logger.Warning("[App] Search service not available in DI container!");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "[App] Failed to get search service during startup");
+                }
                 
                 try
                 {

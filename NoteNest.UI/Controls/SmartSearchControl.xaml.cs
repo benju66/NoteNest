@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -55,22 +56,40 @@ namespace NoteNest.UI.Controls
 
         private void OnViewModelChanged(SearchViewModel? oldViewModel, SearchViewModel? newViewModel)
         {
-            _logger.Debug($"SmartSearchControl ViewModel changed: old={oldViewModel?.GetType().Name}, new={newViewModel?.GetType().Name}");
+            _logger.Debug($"[SmartSearchControl] ViewModel changed: old={oldViewModel?.GetType().Name}, new={newViewModel?.GetType().Name}");
             
             if (oldViewModel != null)
             {
                 oldViewModel.ResultSelected -= OnResultSelected;
+                oldViewModel.PropertyChanged -= OnViewModelPropertyChanged;
             }
 
             if (newViewModel != null)
             {
                 newViewModel.ResultSelected += OnResultSelected;
+                newViewModel.PropertyChanged += OnViewModelPropertyChanged;
                 DataContext = newViewModel;
-                _logger.Debug($"SmartSearchControl DataContext set to SearchViewModel");
+                _logger.Debug($"[SmartSearchControl] DataContext set to SearchViewModel, PropertyChanged hooked");
             }
             else
             {
-                _logger.Warning("SmartSearchControl ViewModel set to null!");
+                _logger.Warning("[SmartSearchControl] ViewModel set to null!");
+            }
+        }
+
+        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(SearchViewModel.ShowDropdown))
+            {
+                var viewModel = sender as SearchViewModel;
+                _logger.Debug($"[SmartSearchControl] ShowDropdown changed to: {viewModel?.ShowDropdown}");
+                _logger.Debug($"[SmartSearchControl] ResultsPopup.IsOpen: {ResultsPopup.IsOpen}");
+                _logger.Debug($"[SmartSearchControl] SearchResults.Count: {viewModel?.SearchResults?.Count}");
+            }
+            else if (e.PropertyName == nameof(SearchViewModel.SearchResults))
+            {
+                var viewModel = sender as SearchViewModel;
+                _logger.Debug($"[SmartSearchControl] SearchResults changed, Count: {viewModel?.SearchResults?.Count}");
             }
         }
 
