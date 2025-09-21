@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using NoteNest.Core.Configuration;
 using NoteNest.Core.Interfaces.Search;
 using NoteNest.Core.Models;
 using NoteNest.Core.Models.Search;
@@ -19,6 +20,7 @@ namespace NoteNest.Core.Services.Search
     {
         private readonly IFts5Repository _repository;
         private readonly ISearchResultMapper _mapper;
+        private readonly IStorageOptions _storageOptions;
         private readonly IAppLogger? _logger;
         private readonly object _lockObject = new();
         private readonly List<string> _recentlyProcessedFiles = new();
@@ -41,10 +43,15 @@ namespace NoteNest.Core.Services.Search
 
         #endregion
 
-        public Fts5IndexManager(IFts5Repository repository, ISearchResultMapper mapper, IAppLogger? logger = null)
+        public Fts5IndexManager(
+            IFts5Repository repository, 
+            ISearchResultMapper mapper, 
+            IStorageOptions storageOptions,
+            IAppLogger? logger = null)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+            _storageOptions = storageOptions ?? throw new ArgumentNullException(nameof(storageOptions));
             _logger = logger;
             _settings = new IndexManagerSettings(); // Default settings
         }
@@ -515,8 +522,8 @@ namespace NoteNest.Core.Services.Search
 
             try
             {
-                // Get the notes directory from PathService
-                var notesPath = PathService.ProjectsPath;
+                // Use clean configuration instead of static PathService
+                var notesPath = Path.Combine(_storageOptions.NotesPath, "Notes");
                 
                 if (!Directory.Exists(notesPath))
                 {
@@ -542,7 +549,7 @@ namespace NoteNest.Core.Services.Search
             return files;
         }
 
-        private static string ExtractCategoryIdFromPath(string filePath)
+        private string ExtractCategoryIdFromPath(string filePath)
         {
             try
             {
@@ -552,7 +559,7 @@ namespace NoteNest.Core.Services.Search
                 if (string.IsNullOrEmpty(directory))
                     return string.Empty;
 
-                var notesPath = PathService.ProjectsPath;
+                var notesPath = Path.Combine(_storageOptions.NotesPath, "Notes");
                 if (directory.StartsWith(notesPath, StringComparison.OrdinalIgnoreCase))
                 {
                     var relativePath = directory.Substring(notesPath.Length).TrimStart(Path.DirectorySeparatorChar);

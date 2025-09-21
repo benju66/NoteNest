@@ -134,8 +134,15 @@ namespace NoteNest.UI.Services
 
             try
             {
-                var searchOptions = SearchOptions.RealTime;
-                searchOptions.MaxResults = 50; // Default for UI
+                // Use proper SearchOptions class for FTS5 queries (not configuration class)
+                var searchOptions = new NoteNest.Core.Models.Search.SearchOptions
+                {
+                    MaxResults = _searchOptions.MaxResults,
+                    HighlightSnippets = true,
+                    IncludeContent = false, // For performance in real-time search
+                    SortOrder = SearchSortOrder.Relevance,
+                    SnippetContextWords = 6
+                };
 
                 var ftsResults = await _repository.SearchAsync(query, searchOptions);
                 var dtos = _mapper.MapToDtos(ftsResults, query);

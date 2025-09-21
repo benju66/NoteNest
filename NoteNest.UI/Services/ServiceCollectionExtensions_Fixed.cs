@@ -42,6 +42,10 @@ namespace NoteNest.UI.Services
                 
                 var storageOptions = StorageOptions.FromNotesPath(notesPath);
                 storageOptions.ValidatePaths(); // Ensure paths are accessible
+                
+                // CRITICAL: Keep legacy PathService in sync for existing components
+                NoteNest.Core.Services.PathService.RootPath = storageOptions.NotesPath;
+                
                 return storageOptions;
             });
 
@@ -305,6 +309,7 @@ namespace NoteNest.UI.Services
                 return new Fts5IndexManager(
                     serviceProvider.GetRequiredService<IFts5Repository>(),
                     serviceProvider.GetRequiredService<ISearchResultMapper>(),
+                    serviceProvider.GetRequiredService<IStorageOptions>(),
                     serviceProvider.GetService<IAppLogger>()
                 );
             });
