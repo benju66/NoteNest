@@ -38,11 +38,13 @@ namespace NoteNest.Core.Services.Search
         /// <summary>
         /// FTS5 virtual table creation SQL
         /// Uses porter stemming and ASCII folding for better search
+        /// Enhanced with smart preview caching for optimal performance
         /// </summary>
         public const string CreateFtsTableSql = @"
             CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
                 title,                      -- Note title (searchable)
                 content,                    -- Extracted plain text (searchable)  
+                content_preview UNINDEXED,  -- Pre-generated smart preview (not searchable)
                 category_id UNINDEXED,      -- Category UUID (filterable, not searchable)
                 file_path UNINDEXED,        -- Full file path (for result mapping)
                 note_id UNINDEXED,          -- Note UUID (for result mapping)

@@ -659,6 +659,7 @@ namespace NoteNest.Core.Services.Search
                 sql.AppendLine("    notes_fts.content,");
             else
                 sql.AppendLine("    '' as content,");
+            sql.AppendLine("    notes_fts.content_preview,");  // Always include pre-generated preview
             sql.AppendLine("    notes_fts.category_id,");
             sql.AppendLine("    notes_fts.file_path,");
             sql.AppendLine("    notes_fts.last_modified,");

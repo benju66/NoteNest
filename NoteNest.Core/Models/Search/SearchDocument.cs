@@ -25,6 +25,11 @@ namespace NoteNest.Core.Models.Search
         public string Content { get; set; } = string.Empty;
 
         /// <summary>
+        /// Pre-generated smart preview (150 chars) - optimized for UI display
+        /// </summary>
+        public string ContentPreview { get; set; } = string.Empty;
+
+        /// <summary>
         /// Category UUID for filtering search results
         /// </summary>
         public string CategoryId { get; set; } = string.Empty;
@@ -56,13 +61,15 @@ namespace NoteNest.Core.Models.Search
 
         /// <summary>
         /// Convert to FTS5 insertion parameters
+        /// Order matches database schema: title, content, content_preview, category_id, file_path, note_id, last_modified
         /// </summary>
         public object[] ToFtsParameters()
         {
             return new object[]
             {
                 Title ?? string.Empty,
-                Content ?? string.Empty, 
+                Content ?? string.Empty,
+                ContentPreview ?? string.Empty, // New smart preview field
                 CategoryId ?? string.Empty,
                 FilePath ?? string.Empty,
                 NoteId ?? string.Empty,

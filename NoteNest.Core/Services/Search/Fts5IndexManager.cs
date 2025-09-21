@@ -491,8 +491,11 @@ namespace NoteNest.Core.Services.Search
                 // Read RTF content
                 var rtfContent = await File.ReadAllTextAsync(filePath);
                 
-                // Extract plain text using simplified RTF extractor
-                var plainText = NoteNest.Core.Utils.RTFTextExtractor.ExtractPlainText(rtfContent);
+                // Extract plain text using enhanced SmartRtfExtractor
+                var plainText = NoteNest.Core.Utils.SmartRtfExtractor.ExtractPlainText(rtfContent);
+                
+                // Generate smart preview at index-time (one-time cost for optimal search performance)
+                var smartPreview = NoteNest.Core.Utils.SmartRtfExtractor.GenerateSmartPreview(plainText, 150);
 
                 // Create note model for mapping
                 var noteModel = new NoteModel
@@ -506,8 +509,16 @@ namespace NoteNest.Core.Services.Search
                     IsDirty = false
                 };
 
-                // Map to search document
-                return _mapper.MapFromNoteModel(noteModel, plainText);
+                // Map to search document with enhanced preview
+                var searchDocument = _mapper.MapFromNoteModel(noteModel, plainText);
+                
+                // Set the pre-generated smart preview
+                if (searchDocument != null)
+                {
+                    searchDocument.ContentPreview = smartPreview;
+                }
+                
+                return searchDocument;
             }
             catch (Exception ex)
             {

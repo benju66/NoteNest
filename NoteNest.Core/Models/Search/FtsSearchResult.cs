@@ -24,6 +24,11 @@ namespace NoteNest.Core.Models.Search
         public string Content { get; set; } = string.Empty;
 
         /// <summary>
+        /// Pre-generated smart preview (optimized for UI display)
+        /// </summary>
+        public string ContentPreview { get; set; } = string.Empty;
+
+        /// <summary>
         /// Category identifier for filtering
         /// </summary>
         public string CategoryId { get; set; } = string.Empty;
@@ -129,6 +134,7 @@ namespace NoteNest.Core.Models.Search
                 NoteId = reader.IsDBNull(reader.GetOrdinal("note_id")) ? string.Empty : reader.GetString(reader.GetOrdinal("note_id")),
                 Title = reader.IsDBNull(reader.GetOrdinal("title")) ? string.Empty : reader.GetString(reader.GetOrdinal("title")),
                 Content = reader.IsDBNull(reader.GetOrdinal("content")) ? string.Empty : reader.GetString(reader.GetOrdinal("content")),
+                ContentPreview = reader.IsDBNull(reader.GetOrdinal("content_preview")) ? string.Empty : reader.GetString(reader.GetOrdinal("content_preview")),
                 CategoryId = reader.IsDBNull(reader.GetOrdinal("category_id")) ? string.Empty : reader.GetString(reader.GetOrdinal("category_id")),
                 FilePath = reader.IsDBNull(reader.GetOrdinal("file_path")) ? string.Empty : reader.GetString(reader.GetOrdinal("file_path")),
                 LastModified = reader.IsDBNull(reader.GetOrdinal("last_modified")) ? DateTime.MinValue : 

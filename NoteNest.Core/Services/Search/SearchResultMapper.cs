@@ -10,11 +10,21 @@ namespace NoteNest.Core.Services.Search
 {
     /// <summary>
     /// Maps FTS5 search results to UI ViewModels and converts NoteModels to SearchDocuments
+    /// Enhanced with smart preview caching for optimal performance
     /// Single Responsibility: Data transformation and mapping between layers
     /// </summary>
     public class SearchResultMapper : ISearchResultMapper
     {
         private readonly Dictionary<string, string> _categoryNameCache = new();
+        private readonly MinimalPreviewCache _previewCache;
+
+        /// <summary>
+        /// Initialize mapper with smart preview caching
+        /// </summary>
+        public SearchResultMapper()
+        {
+            _previewCache = new MinimalPreviewCache(50); // 50 items = ~7.5KB memory
+        }
 
         #region FTS Result to ViewModel Mapping
 
@@ -26,7 +36,7 @@ namespace NoteNest.Core.Services.Search
                 Title = ftsResult.Title ?? "Untitled",
                 FilePath = ftsResult.FilePath,
                 CategoryId = ftsResult.CategoryId,
-                Preview = GeneratePreview(ftsResult, 200),
+                Preview = _previewCache.GetPreview(ftsResult), // Use smart preview cache
                 Relevance = (float)ftsResult.Relevance,
                 Score = CalculateCompositeScore(ftsResult, originalQuery),
                 ResultType = DetermineResultType(ftsResult),
@@ -312,6 +322,22 @@ namespace NoteNest.Core.Services.Search
             {
                 _categoryNameCache[categoryId] = displayName;
             }
+        }
+
+        /// <summary>
+        /// Clear preview cache (call when preview logic changes or for memory management)
+        /// </summary>
+        public void ClearPreviewCache()
+        {
+            _previewCache.Clear();
+        }
+
+        /// <summary>
+        /// Get cache statistics for monitoring and debugging
+        /// </summary>
+        public MinimalPreviewCache.CacheStatistics GetCacheStatistics()
+        {
+            return _previewCache.GetStatistics();
         }
 
         #endregion
