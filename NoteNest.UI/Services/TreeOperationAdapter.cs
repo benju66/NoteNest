@@ -143,5 +143,16 @@ namespace NoteNest.UI.Services
 
             return await _treeOperationService.MoveNoteAsync(request);
         }
+
+        /// <summary>
+        /// Moves a category to a new parent location
+        /// </summary>
+        public async Task<TreeOperationResult<bool>> MoveCategoryAsync(string categoryId, string newParentId)
+        {
+            if (_treeOperationService == null)
+                return TreeOperationResult<bool>.CreateFailure("Tree operation service not available");
+                
+            return await _treeOperationService.MoveCategoryAsync(categoryId, newParentId);
+        }
     }
 }

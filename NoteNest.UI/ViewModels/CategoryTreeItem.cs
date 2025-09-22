@@ -236,37 +236,43 @@ namespace NoteNest.UI.ViewModels
         public void Dispose()
         {
             if (_disposed) return;
-
-            // Unsubscribe from collection events to avoid memory leaks
-            if (_subCategories != null)
-                _subCategories.CollectionChanged -= OnChildrenCollectionChanged;
-            if (_notes != null)
-                _notes.CollectionChanged -= OnChildrenCollectionChanged;
-
-            // Dispose synchronization primitive
-            try { _loadLock?.Dispose(); } catch { }
-
-            // Dispose child items
+            
             try
             {
+                // Dispose children first (recursive)
                 if (_subCategories != null)
                 {
-                    foreach (var sub in _subCategories)
+                    foreach (var child in _subCategories.ToList())
                     {
-                        try { sub?.Dispose(); } catch { }
+                        child?.Dispose();
                     }
+                    _subCategories.CollectionChanged -= OnChildrenCollectionChanged;
+                    _subCategories.Clear();
                 }
+                
+                // Dispose notes and unsubscribe from collection events
                 if (_notes != null)
                 {
-                    foreach (var n in _notes)
+                    foreach (var n in _notes.ToList())
                     {
                         try { n?.Dispose(); } catch { }
                     }
+                    _notes.CollectionChanged -= OnChildrenCollectionChanged;
+                    _notes.Clear();
                 }
+                
+                // Clear combined children collection
+                _children?.Clear();
+                
+                // Dispose synchronization primitives
+                _loadLock?.Dispose();
+                
+                _disposed = true;
             }
-            catch { }
-
-            _disposed = true;
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error disposing CategoryTreeItem: {ex.Message}");
+            }
         }
     }
 

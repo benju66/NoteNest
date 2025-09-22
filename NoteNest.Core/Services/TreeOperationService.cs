@@ -17,15 +17,21 @@ namespace NoteNest.Core.Services
         private readonly ICategoryManagementService _categoryService;
         private readonly INoteOperationsService _noteOperationsService;
         private readonly IAppLogger _logger;
+        private readonly ITreeStructureValidationService _treeStructureValidationService;
+        private readonly ITreeCacheService _cacheService;
 
         public TreeOperationService(
             ICategoryManagementService categoryService,
             INoteOperationsService noteOperationsService,
-            IAppLogger logger)
+            IAppLogger logger,
+            ITreeStructureValidationService treeStructureValidationService = null,
+            ITreeCacheService cacheService = null)
         {
             _categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
             _noteOperationsService = noteOperationsService ?? throw new ArgumentNullException(nameof(noteOperationsService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _treeStructureValidationService = treeStructureValidationService;  // Can be null
+            _cacheService = cacheService;  // Can be null
         }
 
         /// <summary>
@@ -74,6 +80,19 @@ namespace NoteNest.Core.Services
                 if (string.IsNullOrWhiteSpace(request.NewCategoryName))
                 {
                     return TreeOperationResult<CategoryModel>.CreateFailure("Subcategory name cannot be empty");
+                }
+
+                // Validate if service is available
+                if (_treeStructureValidationService != null)
+                {
+                    var categories = await _categoryService.LoadCategoriesAsync();
+                    var validation = _treeStructureValidationService.ValidateCreate(
+                        request.NewCategoryName, 
+                        request.ParentCategory.CategoryModel.Id, 
+                        categories);
+                    
+                    if (!validation.IsValid)
+                        return TreeOperationResult<CategoryModel>.CreateFailure(validation.Errors.FirstOrDefault() ?? "Validation failed");
                 }
 
                 _logger.Debug($"TreeOperationService: Creating subcategory '{request.NewCategoryName}' under '{request.ParentCategory.CategoryName}'");
@@ -290,6 +309,60 @@ namespace NoteNest.Core.Services
             {
                 _logger.Error(ex, $"Error moving note '{request?.Note?.NoteTitle}' to category '{request?.TargetCategory?.CategoryName}'");
                 return TreeOperationResult<bool>.CreateFailure($"Error moving note: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Moves a category to a new parent location
+        /// </summary>
+        public async Task<TreeOperationResult<bool>> MoveCategoryAsync(string categoryId, string newParentId)
+        {
+            try
+            {
+                _logger.Debug($"Moving category {categoryId} to parent {newParentId}");
+                
+                // Load all categories
+                var categories = await _categoryService.LoadCategoriesAsync();
+                
+                // Find the category to move
+                var category = categories.FirstOrDefault(c => c.Id == categoryId);
+                if (category == null)
+                    return TreeOperationResult<bool>.CreateFailure("Category not found");
+                
+                // Don't move if already in the right place
+                if (category.ParentId == newParentId)
+                    return TreeOperationResult<bool>.CreateSuccess(true, "Category already in target location");
+                
+                // Store old parent for cache invalidation
+                var oldParentId = category.ParentId;
+                
+                // Validate the move if validation service is available
+                if (_treeStructureValidationService != null)
+                {
+                    var validation = _treeStructureValidationService.ValidateMove(categoryId, newParentId, categories);
+                    if (!validation.IsValid)
+                        return TreeOperationResult<bool>.CreateFailure(validation.Errors.FirstOrDefault() ?? "Move validation failed");
+                }
+                
+                // Update parent
+                category.ParentId = newParentId;
+                
+                // Save categories
+                await _categoryService.SaveCategoriesAsync(categories);
+                
+                // Invalidate cache if available
+                _cacheService?.InvalidateCategory(categoryId);
+                _cacheService?.InvalidateCategory(oldParentId);
+                _cacheService?.InvalidateCategory(newParentId);
+                
+                _logger.Info($"Successfully moved category {category.Name}");
+                
+                return TreeOperationResult<bool>.CreateSuccess(true, $"Moved {category.Name}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to move category {categoryId}");
+                return TreeOperationResult<bool>.CreateFailure($"Failed to move category: {ex.Message}");
             }
         }
     }

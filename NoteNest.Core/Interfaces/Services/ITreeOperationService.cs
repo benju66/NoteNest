@@ -49,6 +49,14 @@ namespace NoteNest.Core.Interfaces.Services
         /// Moves a note to a different category
         /// </summary>
         Task<TreeOperationResult<bool>> MoveNoteAsync(TreeNoteMoveRequest request);
+        
+        /// <summary>
+        /// Moves a category to a new parent location
+        /// </summary>
+        /// <param name="categoryId">ID of category to move</param>
+        /// <param name="newParentId">ID of new parent (null for root)</param>
+        /// <returns>Operation result with success/failure status</returns>
+        Task<TreeOperationResult<bool>> MoveCategoryAsync(string categoryId, string newParentId);
     }
     
     /// <summary>

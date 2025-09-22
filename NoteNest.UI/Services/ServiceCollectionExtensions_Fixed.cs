@@ -103,14 +103,36 @@ namespace NoteNest.UI.Services
                 );
             });
 
-            // Tree Services - PREVIOUSLY MISSING
-            services.AddSingleton<ITreeDataService, TreeDataService>();
+            // Tree Services - Enhanced with validation and caching
+            // Register new tree services FIRST (before services that depend on them)
+            services.AddSingleton<ITreeStructureValidationService, TreeStructureValidationService>();
+            services.AddSingleton<ITreeCacheService, TreeCacheService>();
+            
+            // Update TreeDataService with optional cache service
+            services.AddSingleton<ITreeDataService>(serviceProvider =>
+            {
+                var cacheService = serviceProvider.GetService<ITreeCacheService>();
+                return new TreeDataService(
+                    serviceProvider.GetRequiredService<ICategoryManagementService>(),
+                    serviceProvider.GetRequiredService<NoteService>(),
+                    serviceProvider.GetRequiredService<IAppLogger>(),
+                    cacheService  // Can be null
+                );
+            });
+            
+            // Update TreeOperationService with optional validation and cache services
             services.AddSingleton<ITreeOperationService>(serviceProvider =>
             {
+                // Try to get optional services (can be null)
+                var validationService = serviceProvider.GetService<ITreeStructureValidationService>();
+                var cacheService = serviceProvider.GetService<ITreeCacheService>();
+                
                 return new TreeOperationService(
                     serviceProvider.GetRequiredService<ICategoryManagementService>(),
                     serviceProvider.GetRequiredService<INoteOperationsService>(),
-                    serviceProvider.GetRequiredService<IAppLogger>()
+                    serviceProvider.GetRequiredService<IAppLogger>(),
+                    validationService,    // Can be null - safe
+                    cacheService         // Can be null - safe
                 );
             });
             services.AddSingleton<ITreeStateManager, TreeStateManager>();

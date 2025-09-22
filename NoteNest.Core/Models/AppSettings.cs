@@ -85,6 +85,15 @@ namespace NoteNest.Core.Models
         public bool RestoreTabs { get; set; } = true;
         public List<string> ExpandedCategoryIds { get; set; } = new();
 
+        // Tree configuration settings
+        public int MaxTreeDepth { get; set; } = 10;
+        public bool EnableTreeValidation { get; set; } = true;
+        public bool EnableDragDrop { get; set; } = true;
+        public bool EnableTreeUndo { get; set; } = false;  // Start disabled as recommended
+        public bool CacheTreeData { get; set; } = true;
+        public int TreeCacheMinutes { get; set; } = 5;
+        public bool WarmTreeCacheOnStartup { get; set; } = false;  // Conservative default
+
         // Feature flags
         public EditorSettings EditorSettings { get; set; } = new EditorSettings();
         
