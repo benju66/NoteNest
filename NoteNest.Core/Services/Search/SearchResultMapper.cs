@@ -110,56 +110,6 @@ namespace NoteNest.Core.Services.Search
             return Math.Max(1, totalScore);
         }
 
-        public string GeneratePreview(FtsSearchResult ftsResult, int maxLength = 200)
-        {
-            // Prefer highlighted snippet from FTS5
-            if (!string.IsNullOrEmpty(ftsResult.Snippet))
-            {
-                var snippet = ftsResult.Snippet;
-                
-                // Truncate if needed
-                if (snippet.Length > maxLength)
-                {
-                    snippet = snippet.Substring(0, maxLength);
-                    
-                    // Try to end at word boundary
-                    var lastSpace = snippet.LastIndexOf(' ');
-                    if (lastSpace > maxLength * 0.8) // If we can trim to a space without losing too much
-                    {
-                        snippet = snippet.Substring(0, lastSpace);
-                    }
-                    
-                    snippet += "...";
-                }
-                
-                return snippet;
-            }
-
-            // Fallback to content
-            if (!string.IsNullOrEmpty(ftsResult.Content))
-            {
-                var content = ftsResult.Content;
-                
-                if (content.Length > maxLength)
-                {
-                    content = content.Substring(0, maxLength);
-                    
-                    // Try to end at word boundary
-                    var lastSpace = content.LastIndexOf(' ');
-                    if (lastSpace > maxLength * 0.8)
-                    {
-                        content = content.Substring(0, lastSpace);
-                    }
-                    
-                    content += "...";
-                }
-                
-                return content;
-            }
-
-            // Fallback to title if no content
-            return ftsResult.Title ?? "No preview available";
-        }
 
         public string ProcessSnippetHighlighting(string snippet, HighlightFormat targetFormat = HighlightFormat.Html)
         {

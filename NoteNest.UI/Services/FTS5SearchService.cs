@@ -141,9 +141,9 @@ namespace NoteNest.UI.Services
                 {
                     MaxResults = _searchOptions.MaxResults,
                     HighlightSnippets = true,
-                    IncludeContent = false, // For performance in real-time search
+                    IncludeContent = true, // ✅ IMMEDIATE FIX: Enable content for previews
                     SortOrder = SearchSortOrder.Relevance,
-                    SnippetContextWords = 6
+                    SnippetContextWords = 15 // More context for better snippets
                 };
 
                 var ftsResults = await _repository.SearchAsync(query, searchOptions);

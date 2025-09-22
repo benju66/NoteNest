@@ -61,14 +61,6 @@ namespace NoteNest.Core.Interfaces.Search
         /// <returns>Composite score (higher = better match)</returns>
         int CalculateCompositeScore(FtsSearchResult ftsResult, string originalQuery);
 
-        /// <summary>
-        /// Generate preview text with proper formatting
-        /// Uses snippet if available, falls back to content excerpt
-        /// </summary>
-        /// <param name="ftsResult">FTS5 result with snippet and content</param>
-        /// <param name="maxLength">Maximum preview length</param>
-        /// <returns>Formatted preview text</returns>
-        string GeneratePreview(FtsSearchResult ftsResult, int maxLength = 200);
 
         /// <summary>
         /// Extract and clean snippet highlighting for UI display
