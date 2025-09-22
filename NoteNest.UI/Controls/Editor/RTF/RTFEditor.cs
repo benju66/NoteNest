@@ -324,12 +324,15 @@ namespace NoteNest.UI.Controls.Editor.RTF
         }
         
         /// <summary>
-        /// Exit list mode and return to normal paragraph
+        /// Exit list mode with nesting-aware logic and return to appropriate level
+        /// Fixed: Graduated exit logic prevents malformed structure creation
         /// </summary>
         private void ExitListMode()
         {
             try
             {
+                BeginUndoGroup(); // Group all operations for single undo
+                
                 var context = GetCurrentListContext();
                 if (context?.ListItem == null) return;
                 
@@ -337,57 +340,94 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 var listToCheck = context.List;
                 listToCheck.ListItems.Remove(context.ListItem);
                 
-                // Create new paragraph after the list
-                var newParagraph = new Paragraph();
-                
-                // Handle different parent types
-                if (listToCheck.Parent is FlowDocument flowDoc)
+                // Clean up empty list if needed
+                if (listToCheck.ListItems.Count == 0)
                 {
-                    flowDoc.Blocks.InsertAfter(listToCheck, newParagraph);
-                    
-                    // If list is now empty, remove it entirely
-                    if (listToCheck.ListItems.Count == 0)
+                    if (listToCheck.Parent is FlowDocument flowDoc)
                     {
                         flowDoc.Blocks.Remove(listToCheck);
                     }
+                    else if (listToCheck.Parent is ListItem parentItem)
+                    {
+                        parentItem.Blocks.Remove(listToCheck);
+                    }
+                }
+                
+                // FIXED: Nesting-aware exit logic
+                if (listToCheck.Parent is FlowDocument flowDoc2)
+                {
+                    // Level 1: Exit to document level (unchanged behavior)
+                    var newParagraph = new Paragraph();
+                    if (listToCheck.ListItems.Count > 0)
+                    {
+                        // List still has items, insert after it
+                        flowDoc2.Blocks.InsertAfter(listToCheck, newParagraph);
+                    }
+                    else
+                    {
+                        // List was removed, add at end of document
+                        flowDoc2.Blocks.Add(newParagraph);
+                    }
+                    CaretPosition = newParagraph.ContentStart;
+                    
+                    System.Diagnostics.Debug.WriteLine("[RTFEditor] Exited Level 1 list to document");
                 }
                 else if (listToCheck.Parent is ListItem parentListItem)
                 {
-                    parentListItem.Blocks.InsertAfter(listToCheck, newParagraph);
-                    
-                    // If list is now empty, remove it entirely
-                    if (listToCheck.ListItems.Count == 0)
+                    // FIXED: Level 2+: Exit UP to parent list level (prevents malformed structure)
+                    if (parentListItem.Parent is List parentList)
                     {
-                        parentListItem.Blocks.Remove(listToCheck);
+                        // Create new sibling at parent level
+                        var newSiblingItem = new ListItem(new Paragraph());
+                        
+                        // CORRECT: Reuse existing helper that handles API limitations
+                        InsertListItemAfter(parentList, parentListItem, newSiblingItem);
+                        
+                        // Position caret in the new sibling
+                        CaretPosition = newSiblingItem.ContentStart;
+                        
+                        System.Diagnostics.Debug.WriteLine("[RTFEditor] Exited nested list to parent level");
+                    }
+                    else
+                    {
+                        // Fallback to document level
+                        var rootParagraph = new Paragraph();
+                        Document.Blocks.Add(rootParagraph);
+                        CaretPosition = rootParagraph.ContentStart;
+                        
+                        System.Diagnostics.Debug.WriteLine("[RTFEditor] Fallback exit to document level");
                     }
                 }
                 else
                 {
-                    // Fallback: insert at document level
+                    // Final fallback: Insert at document level
                     var rootParagraph = new Paragraph();
                     Document.Blocks.Add(rootParagraph);
-                    newParagraph = rootParagraph;
+                    CaretPosition = rootParagraph.ContentStart;
+                    
+                    System.Diagnostics.Debug.WriteLine("[RTFEditor] Final fallback exit to document level");
                 }
                 
-                // Position caret in the new paragraph
-                CaretPosition = newParagraph.ContentStart;
                 Focus(); // Ensure editor maintains focus
-                
-                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Successfully exited list mode");
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Successfully exited list mode");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[RTFEditor] ExitListMode failed: {ex.Message}");
                 
-                // Fallback: try to position caret at document end
+                // Emergency fallback: try to position caret at document end
                 try
                 {
                     CaretPosition = Document.ContentEnd;
                 }
                 catch
                 {
-                    // Final fallback: do nothing rather than crash
+                    // Silent fail rather than crash
                 }
+            }
+            finally
+            {
+                EndUndoGroup(); // Complete undo group
             }
         }
         
