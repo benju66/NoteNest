@@ -656,6 +656,11 @@ namespace NoteNest.UI.ViewModels
                         _logger.Warning("No categories loaded. Check notes folder configuration.");
                         _dialogService.ShowInfo("No categories found in the configured notes folder. You can change the folder in Settings.", "No Categories");
                     }
+                    else
+                    {
+                        // Migrate note positions for existing notes (safe to call multiple times)
+                        await MigrateNotePositionsIfNeededAsync();
+                    }
                 }
                 catch (Exception catEx)
                 {
@@ -1655,6 +1660,103 @@ namespace NoteNest.UI.ViewModels
             }
             
             return result.Success;
+        }
+
+        #endregion
+
+        #region Position Migration
+
+        /// <summary>
+        /// Migrates note positions for existing notes that don't have positions assigned
+        /// Safe to call multiple times - only assigns positions to notes without them
+        /// </summary>
+        private async Task MigrateNotePositionsIfNeededAsync()
+        {
+            try
+            {
+                StatusMessage = "Checking note positions...";
+                
+                var positionService = _serviceProvider.GetService<NoteNest.Core.Utils.NotePositionService>();
+                if (positionService == null)
+                {
+                    _logger.Warning("NotePositionService not available, skipping position migration");
+                    return;
+                }
+                
+                int totalAssigned = 0;
+                
+                // Process each category to assign positions to notes without them
+                foreach (var categoryItem in Categories)
+                {
+                    var assignedInCategory = await ProcessCategoryForPositionMigration(categoryItem, positionService);
+                    totalAssigned += assignedInCategory;
+                }
+                
+                if (totalAssigned > 0)
+                {
+                    _logger.Info($"Position migration completed: assigned positions to {totalAssigned} notes");
+                    StatusMessage = $"Assigned positions to {totalAssigned} notes";
+                    await Task.Delay(1500); // Show the message briefly
+                }
+                else
+                {
+                    _logger.Debug("Position migration completed: no notes needed position assignment");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to migrate note positions");
+                // Don't throw - this is not critical for app functionality
+            }
+        }
+        
+        /// <summary>
+        /// Recursively processes a category and its subcategories for position migration
+        /// </summary>
+        private async Task<int> ProcessCategoryForPositionMigration(CategoryTreeItem categoryItem, 
+            NoteNest.Core.Utils.NotePositionService positionService)
+        {
+            int totalAssigned = 0;
+            
+            try
+            {
+                // Ensure the category's notes are loaded
+                if (!categoryItem.IsLoaded)
+                {
+                    await categoryItem.LoadChildrenAsync();
+                }
+                
+                // Process notes in this category
+                if (categoryItem.Notes?.Count > 0)
+                {
+                    var noteModels = categoryItem.Notes.Select(ni => ni.Model).ToList();
+                    var assignedCount = await positionService.AssignInitialPositionsAsync(noteModels);
+                    totalAssigned += assignedCount;
+                    
+                    if (assignedCount > 0)
+                    {
+                        _logger.Debug($"Assigned {assignedCount} positions in category '{categoryItem.Name}'");
+                    }
+                }
+                
+                // Process subcategories recursively
+                if (categoryItem.SubCategories?.Count > 0)
+                {
+                    foreach (var subCategory in categoryItem.SubCategories)
+                    {
+                        var subCategoryCount = await ProcessCategoryForPositionMigration(subCategory, positionService);
+                        totalAssigned += subCategoryCount;
+                    }
+                }
+                
+                return totalAssigned;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to process category '{categoryItem.Name}' for position migration: {ex.Message}");
+                // Return whatever we managed to assign before the error
+                return totalAssigned;
+            }
         }
 
         #endregion

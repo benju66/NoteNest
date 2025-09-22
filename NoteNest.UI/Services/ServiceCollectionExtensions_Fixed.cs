@@ -108,6 +108,14 @@ namespace NoteNest.UI.Services
             services.AddSingleton<ITreeStructureValidationService, TreeStructureValidationService>();
             services.AddSingleton<ITreeCacheService, TreeCacheService>();
             
+            // Note position management service
+            services.AddSingleton<NoteNest.Core.Utils.NotePositionService>(serviceProvider =>
+            {
+                var metadataManager = serviceProvider.GetRequiredService<NoteMetadataManager>();
+                var logger = serviceProvider.GetRequiredService<IAppLogger>();
+                return new NoteNest.Core.Utils.NotePositionService(metadataManager, logger);
+            });
+            
             // Update TreeDataService with optional cache service
             services.AddSingleton<ITreeDataService>(serviceProvider =>
             {
