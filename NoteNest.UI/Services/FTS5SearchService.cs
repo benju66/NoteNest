@@ -43,12 +43,14 @@ namespace NoteNest.UI.Services
             IStorageOptions storageOptions,
             IAppLogger? logger = null)
         {
+            System.Diagnostics.Debug.WriteLine($"[FTS5] FTS5SearchService constructor called at {DateTime.Now:HH:mm:ss.fff}");
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
             _indexManager = indexManager ?? throw new ArgumentNullException(nameof(indexManager));
             _searchOptions = searchOptions ?? throw new ArgumentNullException(nameof(searchOptions));
             _storageOptions = storageOptions ?? throw new ArgumentNullException(nameof(storageOptions));
             _logger = logger;
+            System.Diagnostics.Debug.WriteLine($"[FTS5] FTS5SearchService constructor completed successfully");
         }
 
         #region Service Lifecycle

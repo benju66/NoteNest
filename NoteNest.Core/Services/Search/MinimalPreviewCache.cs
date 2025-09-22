@@ -36,8 +36,13 @@ namespace NoteNest.Core.Services.Search
         /// <returns>Optimized preview text</returns>
         public string GetPreview(FtsSearchResult result)
         {
+            System.Diagnostics.Debug.WriteLine($"[CACHE] GetPreview called for: {result?.Title ?? "null"}");
+            
             if (result == null || string.IsNullOrEmpty(result.NoteId))
+            {
+                System.Diagnostics.Debug.WriteLine($"[CACHE] Returning early - null result or empty NoteId");
                 return "No preview available";
+            }
 
             lock (_lockObject)
             {
@@ -51,7 +56,9 @@ namespace NoteNest.Core.Services.Search
                 }
 
                 // Generate preview using intelligent fallback hierarchy
+                System.Diagnostics.Debug.WriteLine($"[CACHE] Cache miss for {result.NoteId}, generating new preview");
                 var preview = GeneratePreview(result);
+                System.Diagnostics.Debug.WriteLine($"[CACHE] Generated preview: '{preview}' for {result.Title}");
                 
                 // Cache the generated preview
                 AddToCache(result.NoteId, preview);
@@ -93,26 +100,34 @@ namespace NoteNest.Core.Services.Search
         private string GeneratePreview(FtsSearchResult result)
         {
             // Strategy 1: Use pre-generated preview from index (best performance)
+            System.Diagnostics.Debug.WriteLine($"[CACHE] Strategy 1 Check: ContentPreview = '{result.ContentPreview}' (length: {result.ContentPreview?.Length ?? 0})");
             if (!string.IsNullOrEmpty(result.ContentPreview))
             {
+                System.Diagnostics.Debug.WriteLine($"[CACHE] Using Strategy 1 (ContentPreview): '{result.ContentPreview}'");
                 return result.ContentPreview;
             }
 
             // Strategy 2: Clean and use FTS5 snippet (good for search context)
+            System.Diagnostics.Debug.WriteLine($"[CACHE] Strategy 2 Check: Snippet = '{result.Snippet}' (length: {result.Snippet?.Length ?? 0})");
             if (!string.IsNullOrEmpty(result.Snippet))
             {
+                System.Diagnostics.Debug.WriteLine($"[CACHE] Using Strategy 2 (Snippet)");
                 return CleanSnippet(result.Snippet);
             }
 
             // Strategy 3: Generate from full content (fallback)
+            System.Diagnostics.Debug.WriteLine($"[CACHE] Strategy 3 Check: Content = '{result.Content?.Substring(0, Math.Min(50, result.Content?.Length ?? 0))}...' (length: {result.Content?.Length ?? 0})");
             if (!string.IsNullOrEmpty(result.Content))
             {
+                System.Diagnostics.Debug.WriteLine($"[CACHE] Using Strategy 3 (Content)");
                 return GeneratePreviewFromContent(result.Content, 150);
             }
 
             // Strategy 4: Use title as last resort
+            System.Diagnostics.Debug.WriteLine($"[CACHE] Strategy 4 Check: Title = '{result.Title}' (length: {result.Title?.Length ?? 0})");
             if (!string.IsNullOrEmpty(result.Title))
             {
+                System.Diagnostics.Debug.WriteLine($"[CACHE] Using Strategy 4 (Title)");
                 return $"Note: {result.Title}";
             }
 

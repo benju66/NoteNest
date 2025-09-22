@@ -49,29 +49,31 @@ namespace NoteNest.Core.Utils
             {
                 var text = rtfContent;
 
-                // Step 1: Skip RTF header (find actual content start)
-                var contentStart = FindContentStart(text);
-                if (contentStart > 0 && contentStart < text.Length)
-                {
-                    text = text.Substring(contentStart);
-                }
+                // Step 1: Remove font table (major pollution source)
+                text = RemoveFontTable(text);
 
-                // Step 2: Remove RTF control codes
+                // Step 2: Extract actual content from ltrch blocks
+                text = ExtractContentFromLtrchBlocks(text);
+
+                // Step 3: Remove remaining RTF control codes
                 text = RtfStripper.Replace(text, " ");
 
-                // Step 3: Remove braces
+                // Step 4: Remove braces
                 text = BraceRemover.Replace(text, "");
 
-                // Step 4: Decode special characters
+                // Step 5: Decode special characters
                 foreach (var (rtf, plain) in SpecialCharacters)
                 {
                     text = text.Replace(rtf, plain);
                 }
 
-                // Step 5: Normalize whitespace
+                // Step 6: Clean up font names and orphaned semicolons
+                text = CleanFontPollution(text);
+
+                // Step 7: Normalize whitespace
                 text = WhitespaceNormalizer.Replace(text, " ").Trim();
 
-                // Step 6: Validate result
+                // Step 8: Validate result
                 return string.IsNullOrWhiteSpace(text) ? "No text content" : text;
             }
             catch (Exception ex)
@@ -141,6 +143,63 @@ namespace NoteNest.Core.Utils
 
         #region Private Helper Methods
 
+        private static string RemoveFontTable(string rtfContent)
+        {
+            // Remove font table definitions that pollute extracted text
+            // Pattern: {\fonttbl{...}} 
+            var fontTableRegex = new Regex(@"\{\\fonttbl\{[^}]*\}[^}]*\}", RegexOptions.IgnoreCase);
+            var text = fontTableRegex.Replace(rtfContent, "");
+            
+            // Also remove color table
+            var colorTableRegex = new Regex(@"\{\\colortbl[^}]*\}", RegexOptions.IgnoreCase);
+            text = colorTableRegex.Replace(text, "");
+            
+            return text;
+        }
+
+        private static string ExtractContentFromLtrchBlocks(string rtfContent)
+        {
+            // Extract content from {\ltrch actual content} blocks
+            var ltrchRegex = new Regex(@"\{\\ltrch\s+([^}]*)\}", RegexOptions.IgnoreCase);
+            var matches = ltrchRegex.Matches(rtfContent);
+            
+            if (matches.Count > 0)
+            {
+                // Combine all ltrch content
+                var contentParts = matches.Cast<Match>()
+                    .Select(m => m.Groups[1].Value.Trim())
+                    .Where(content => !string.IsNullOrWhiteSpace(content))
+                    .ToArray();
+                
+                if (contentParts.Length > 0)
+                {
+                    return string.Join(" ", contentParts);
+                }
+            }
+            
+            // If no ltrch blocks found, return original (will be processed further)
+            return rtfContent;
+        }
+
+        private static string CleanFontPollution(string text)
+        {
+            // Remove common font names that leak through
+            var fontNames = new[] { 
+                "Times New Roman", "Segoe UI", "Calibri", "Arial", "Helvetica", 
+                "Verdana", "Georgia", "Trebuchet MS", "Comic Sans MS" 
+            };
+            
+            foreach (var fontName in fontNames)
+            {
+                text = text.Replace(fontName, "");
+            }
+            
+            // Clean up orphaned semicolons and extra spaces
+            text = text.Replace(";;;", "").Replace(";;", "").Replace("; ; ;", "").Replace("; ;", "");
+            
+            return text;
+        }
+
         private static int FindContentStart(string rtfContent)
         {
             // Common RTF content markers
@@ -189,7 +248,7 @@ namespace NoteNest.Core.Utils
 
         private static bool IsBoilerplate(string text)
         {
-            if (text.Length < 10) 
+            if (text.Length < 5)  // Changed from 10 to 5 to allow shorter meaningful content
                 return true;
 
             // Common boilerplate patterns

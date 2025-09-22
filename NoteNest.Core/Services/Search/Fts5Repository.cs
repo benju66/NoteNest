@@ -123,8 +123,8 @@ namespace NoteNest.Core.Services.Search
             try
             {
                 const string sql = @"
-                    INSERT OR REPLACE INTO notes_fts (title, content, category_id, file_path, note_id, last_modified)
-                    VALUES (@title, @content, @category_id, @file_path, @note_id, @last_modified)";
+                    INSERT OR REPLACE INTO notes_fts (title, content, content_preview, category_id, file_path, note_id, last_modified)
+                    VALUES (@title, @content, @content_preview, @category_id, @file_path, @note_id, @last_modified)";
 
                 using var command = _connection!.CreateCommand();
                 command.CommandText = sql;
@@ -132,6 +132,7 @@ namespace NoteNest.Core.Services.Search
                 // Use named parameters matching the SQL exactly
                 command.Parameters.AddWithValue("@title", document.Title ?? "");
                 command.Parameters.AddWithValue("@content", document.Content ?? "");
+                command.Parameters.AddWithValue("@content_preview", document.ContentPreview ?? "");
                 command.Parameters.AddWithValue("@category_id", document.CategoryId ?? "");
                 command.Parameters.AddWithValue("@file_path", document.FilePath ?? "");
                 command.Parameters.AddWithValue("@note_id", document.NoteId ?? "");
@@ -392,8 +393,8 @@ namespace NoteNest.Core.Services.Search
 
                 // Use named parameters for clarity and reliability
                 const string sql = @"
-                    INSERT OR REPLACE INTO notes_fts (title, content, category_id, file_path, note_id, last_modified)
-                    VALUES (@title, @content, @category_id, @file_path, @note_id, @last_modified)";
+                    INSERT OR REPLACE INTO notes_fts (title, content, content_preview, category_id, file_path, note_id, last_modified)
+                    VALUES (@title, @content, @content_preview, @category_id, @file_path, @note_id, @last_modified)";
 
                 foreach (var document in documentList)
                 {

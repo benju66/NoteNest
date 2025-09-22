@@ -191,7 +191,9 @@ namespace NoteNest.UI.Services
             services.AddSingleton<IWorkspaceService, NoteNest.Core.Services.Implementation.WorkspaceService>();
             
             // FTS5 Search Services
+            System.Diagnostics.Debug.WriteLine($"[DI] About to register FTS5 search services at {DateTime.Now:HH:mm:ss.fff}");
             services.AddFTS5SearchServices();
+            System.Diagnostics.Debug.WriteLine($"[DI] FTS5 search services registered successfully");
             
             // Window and ViewModels
             services.AddSingleton<MainWindow>();
@@ -315,7 +317,18 @@ namespace NoteNest.UI.Services
             });
 
             // Modern FTS5SearchService with clean IOptions<T> dependencies
-            services.AddSingleton<NoteNest.UI.Interfaces.ISearchService, FTS5SearchService>();
+            services.AddSingleton<NoteNest.UI.Interfaces.ISearchService>(serviceProvider =>
+            {
+                System.Diagnostics.Debug.WriteLine($"[DI] Creating FTS5SearchService instance at {DateTime.Now:HH:mm:ss.fff}");
+                return new FTS5SearchService(
+                    serviceProvider.GetRequiredService<IFts5Repository>(),
+                    serviceProvider.GetRequiredService<ISearchResultMapper>(),
+                    serviceProvider.GetRequiredService<ISearchIndexManager>(),
+                    serviceProvider.GetRequiredService<ISearchOptions>(),
+                    serviceProvider.GetRequiredService<IStorageOptions>(),
+                    serviceProvider.GetService<IAppLogger>()
+                );
+            });
             
             // Clean SearchViewModel registration (no complex factory logic)
             services.AddSingleton<NoteNest.UI.ViewModels.SearchViewModel>();

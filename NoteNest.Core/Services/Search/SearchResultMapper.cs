@@ -24,6 +24,7 @@ namespace NoteNest.Core.Services.Search
         public SearchResultMapper()
         {
             _previewCache = new MinimalPreviewCache(50); // 50 items = ~7.5KB memory
+            System.Diagnostics.Debug.WriteLine($"[MAPPER] SearchResultMapper initialized with preview cache");
         }
 
         #region FTS Result to ViewModel Mapping

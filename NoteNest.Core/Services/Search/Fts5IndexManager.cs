@@ -490,12 +490,15 @@ namespace NoteNest.Core.Services.Search
 
                 // Read RTF content
                 var rtfContent = await File.ReadAllTextAsync(filePath);
+                _logger?.Debug($"[INDEXING] Processing file: {Path.GetFileName(filePath)} ({rtfContent.Length} chars)");
                 
                 // Extract plain text using enhanced SmartRtfExtractor
                 var plainText = NoteNest.Core.Utils.SmartRtfExtractor.ExtractPlainText(rtfContent);
+                _logger?.Debug($"[INDEXING] Extracted plain text: '{plainText.Substring(0, Math.Min(100, plainText.Length))}...' ({plainText.Length} chars)");
                 
                 // Generate smart preview at index-time (one-time cost for optimal search performance)
                 var smartPreview = NoteNest.Core.Utils.SmartRtfExtractor.GenerateSmartPreview(plainText, 150);
+                _logger?.Debug($"[INDEXING] Generated preview: '{smartPreview}' ({smartPreview.Length} chars)");
 
                 // Create note model for mapping
                 var noteModel = new NoteModel
@@ -516,6 +519,7 @@ namespace NoteNest.Core.Services.Search
                 if (searchDocument != null)
                 {
                     searchDocument.ContentPreview = smartPreview;
+                    _logger?.Debug($"[INDEXING] ContentPreview set: '{smartPreview}' for document {searchDocument.NoteId}");
                 }
                 
                 return searchDocument;
