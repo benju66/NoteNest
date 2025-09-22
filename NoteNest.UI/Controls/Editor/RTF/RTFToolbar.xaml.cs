@@ -282,14 +282,23 @@ namespace NoteNest.UI.Controls.Editor.RTF
 
         /// <summary>
         /// Check if current selection is in a bullet list
+        /// Fixed: Added paragraph-parent fallback logic from GetCurrentListContext()
         /// </summary>
         private bool IsSelectionInBulletList()
         {
             if (TargetEditor?.CaretPosition == null) return false;
             try
             {
+                // Check adjacent elements first (same as before)
                 var listItem = TargetEditor.CaretPosition.GetAdjacentElement(LogicalDirection.Backward) as ListItem ??
                                TargetEditor.CaretPosition.GetAdjacentElement(LogicalDirection.Forward) as ListItem;
+                
+                // THE FIX: Add missing paragraph-parent check (copied from GetCurrentListContext)
+                if (listItem == null)
+                {
+                    var paragraph = TargetEditor.CaretPosition.Paragraph;
+                    listItem = paragraph?.Parent as ListItem;
+                }
                 
                 if (listItem?.Parent is List list)
                 {
@@ -304,14 +313,23 @@ namespace NoteNest.UI.Controls.Editor.RTF
 
         /// <summary>
         /// Check if current selection is in a numbered list
+        /// Fixed: Added paragraph-parent fallback logic for consistency
         /// </summary>
         private bool IsSelectionInNumberedList()
         {
             if (TargetEditor?.CaretPosition == null) return false;
             try
             {
+                // Check adjacent elements first (same as before)
                 var listItem = TargetEditor.CaretPosition.GetAdjacentElement(LogicalDirection.Backward) as ListItem ??
                                TargetEditor.CaretPosition.GetAdjacentElement(LogicalDirection.Forward) as ListItem;
+                
+                // CONSISTENCY FIX: Add missing paragraph-parent check
+                if (listItem == null)
+                {
+                    var paragraph = TargetEditor.CaretPosition.Paragraph;
+                    listItem = paragraph?.Parent as ListItem;
+                }
                 
                 if (listItem?.Parent is List list)
                 {
