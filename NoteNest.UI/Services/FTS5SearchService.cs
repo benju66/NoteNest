@@ -10,6 +10,7 @@ using NoteNest.Core.Interfaces.Search;
 using NoteNest.Core.Models.Search;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Services.Search;
+using NoteNest.Core.Utils;
 using NoteNest.UI.Interfaces;
 using NoteNest.UI.ViewModels;
 
@@ -27,6 +28,7 @@ namespace NoteNest.UI.Services
         private readonly IAppLogger? _logger;
         private readonly ISearchOptions _searchOptions;
         private readonly IStorageOptions _storageOptions;
+        private readonly CancellationTokenSource _cancellationTokenSource;
 
         private bool _isInitialized = false;
 
@@ -50,6 +52,7 @@ namespace NoteNest.UI.Services
             _searchOptions = searchOptions ?? throw new ArgumentNullException(nameof(searchOptions));
             _storageOptions = storageOptions ?? throw new ArgumentNullException(nameof(storageOptions));
             _logger = logger;
+            _cancellationTokenSource = new CancellationTokenSource();
             System.Diagnostics.Debug.WriteLine($"[FTS5] FTS5SearchService constructor completed successfully");
         }
 
@@ -77,7 +80,19 @@ namespace NoteNest.UI.Services
                 if (documentCount == 0)
                 {
                     _logger?.Info("Empty search index detected, starting initial build");
-                    _ = Task.Run(async () => await _indexManager.RebuildIndexAsync());
+                    _ = SafeBackgroundTask.RunSafelyAsync(
+                        async ct => 
+                        {
+                            _logger?.Info("Starting background index rebuild...");
+                            var progress = new Progress<IndexingProgress>(p => 
+                                _logger?.Debug($"Index rebuild: {p.Processed}/{p.Total} files ({p.PercentComplete:F1}%)"));
+                            await _indexManager.RebuildIndexAsync(progress);
+                            _logger?.Info("Background index rebuild completed successfully");
+                        },
+                        _cancellationTokenSource.Token,
+                        _logger,
+                        "IndexRebuild"
+                    );
                 }
 
                 _isInitialized = true;
@@ -150,21 +165,27 @@ namespace NoteNest.UI.Services
                 var dtos = _mapper.MapToDtos(ftsResults, query);
                 var viewModels = SearchResultViewModel.FromDtos(dtos);
 
-                // Update usage stats for accessed results (fire and forget)
-                _ = Task.Run(async () => 
-                {
-                    foreach (var result in ftsResults.Take(5)) // Only track top 5 results
+                // Update usage stats for accessed results (supervised background task)
+                _ = SafeBackgroundTask.RunSafelyAsync(
+                    async ct =>
                     {
-                        try
+                        foreach (var result in ftsResults.Take(5)) // Only track top 5 results
                         {
-                            await _repository.UpdateUsageStatsAsync(result.NoteId);
+                            ct.ThrowIfCancellationRequested();
+                            try
+                            {
+                                await _repository.UpdateUsageStatsAsync(result.NoteId);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger?.Debug($"Failed to update usage stats for note: {result.NoteId}. Error: {ex.Message}");
+                            }
                         }
-                        catch
-                        {
-                            // Ignore usage stat failures
-                        }
-                    }
-                }, cancellationToken);
+                    },
+                    _cancellationTokenSource.Token,
+                    _logger,
+                    "UsageStatsUpdate"
+                );
 
                 return viewModels;
             }
@@ -468,7 +489,14 @@ namespace NoteNest.UI.Services
         {
             try
             {
+                // Cancel any ongoing background tasks
+                _cancellationTokenSource?.Cancel();
+                
+                // Dispose repository
                 _repository?.Dispose();
+                
+                // Dispose cancellation token source
+                _cancellationTokenSource?.Dispose();
             }
             catch (Exception ex)
             {
