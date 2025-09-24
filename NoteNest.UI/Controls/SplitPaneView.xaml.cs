@@ -496,9 +496,8 @@ namespace NoteNest.UI.Controls
                 var currentName = tab.Note.Title;
                 var newName = await dialog.ShowInputDialogAsync("Rename Note", "Enter new name:", currentName, text =>
                 {
-                    if (string.IsNullOrWhiteSpace(text)) return "Name cannot be empty";
-                    if (text.Equals(currentName, StringComparison.OrdinalIgnoreCase)) return null;
-                    return null;
+                    // Use unified validation (note: tab context doesn't have sibling checking yet)
+                    return NoteNest.Core.Services.RenameValidation.ValidateNoteName(text, currentName, Enumerable.Empty<string>());
                 });
                 if (string.IsNullOrWhiteSpace(newName) || newName == currentName) return;
 

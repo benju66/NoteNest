@@ -87,6 +87,9 @@ namespace NoteNest.UI.ViewModels
             set => SetProperty(ref _pinnedNotes, value);
         }
 
+        public bool HasPinnedItems => 
+            (PinnedNotes?.Count > 0) || (PinnedCategories?.Count > 0);
+
         // Raised to request opening a note in the active split pane (handled by NoteNestPanel)
         public event Action<NoteTreeItem> NoteOpenRequested;
 
@@ -386,6 +389,242 @@ namespace NoteNest.UI.ViewModels
         public ICommand DeleteCategoryCommand { get; private set; }
         public ICommand RefreshCommand { get; private set; }
         public ICommand ExitCommand { get; private set; }
+
+        #endregion
+
+        #region Context Menu Commands
+
+        private ICommand _renameNoteCommand;
+        public ICommand RenameNoteCommand => _renameNoteCommand ??= new AsyncRelayCommand<NoteTreeItem>(
+            async (note) => await ExecuteRenameNoteAsync(note),
+            (note) => note != null);
+
+        private ICommand _toggleNotePinCommand;
+        public ICommand ToggleNotePinCommand => _toggleNotePinCommand ??= new AsyncRelayCommand<NoteTreeItem>(
+            async (note) => await ExecuteToggleNotePinAsync(note),
+            (note) => note != null);
+
+        private ICommand _deleteNoteCommand;
+        public ICommand DeleteNoteCommand => _deleteNoteCommand ??= new AsyncRelayCommand<NoteTreeItem>(
+            async (note) => await ExecuteDeleteNoteAsync(note),
+            (note) => note != null);
+
+        private ICommand _openNoteCommand;
+        public ICommand OpenNoteCommand => _openNoteCommand ??= new RelayCommand<NoteTreeItem>(
+            (note) => ExecuteOpenNote(note),
+            (note) => note != null);
+
+        private ICommand _renameCategoryCommand;
+        public ICommand RenameCategoryCommand => _renameCategoryCommand ??= new AsyncRelayCommand<CategoryTreeItem>(
+            async (cat) => await ExecuteRenameCategoryAsync(cat),
+            (cat) => cat != null);
+
+        private ICommand _deleteCategoryMenuCommand;
+        public ICommand DeleteCategoryMenuCommand => _deleteCategoryMenuCommand ??= new AsyncRelayCommand<CategoryTreeItem>(
+            async (cat) => await ExecuteDeleteCategoryAsync(cat),
+            (cat) => cat != null && !cat.SubCategories.Any() && !cat.Notes.Any());
+
+        private ICommand _newSubcategoryCommand;
+        public ICommand NewSubcategoryCommand => _newSubcategoryCommand ??= new AsyncRelayCommand<CategoryTreeItem>(
+            async (cat) => await CreateNewSubCategoryAsync(cat),
+            (cat) => cat != null);
+
+        private ICommand _toggleCategoryPinCommand;
+        public ICommand ToggleCategoryPinCommand => _toggleCategoryPinCommand ??= new AsyncRelayCommand<CategoryTreeItem>(
+            async (cat) => await ToggleCategoryPinAsync(cat),
+            (cat) => cat != null);
+
+        private async Task ExecuteRenameNoteAsync(NoteTreeItem noteItem)
+        {
+            if (noteItem == null) return;
+            
+            try
+            {
+                var currentName = noteItem.Title;
+                var siblingNames = SelectedCategory?.Notes?
+                    .Where(n => n != noteItem)
+                    .Select(n => n.Title)
+                    .Where(title => !string.IsNullOrEmpty(title)) ?? Enumerable.Empty<string>();
+                
+                var newName = await _dialogService.ShowInputDialogAsync(
+                    "Rename Note",
+                    "Enter new name:",
+                    currentName,
+                    text => NoteNest.Core.Services.RenameValidation.ValidateNoteName(text, currentName, siblingNames));
+                
+                if (!string.IsNullOrWhiteSpace(newName) && newName != currentName)
+                {
+                    await RenameNoteAsync(noteItem, newName);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to execute rename note command");
+                _dialogService?.ShowError($"Failed to rename note: {ex.Message}", "Rename Error");
+            }
+        }
+
+        private async Task ExecuteToggleNotePinAsync(NoteTreeItem noteItem)
+        {
+            if (noteItem == null) return;
+            
+            try
+            {
+                noteItem.Model.Pinned = !noteItem.Model.Pinned;
+                
+                // Save the note to persist the pinned state
+                var saveManager = _serviceProvider.GetService<ISaveManager>();
+                if (saveManager != null)
+                {
+                    await saveManager.SaveNoteAsync(noteItem.Model.Id);
+                }
+                
+                // Refresh pinned items collection
+                await RefreshPinnedItemsAsync();
+                
+                var status = noteItem.Model.Pinned ? "Pinned" : "Unpinned";
+                StatusMessage = $"{status} '{noteItem.Title}'";
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to toggle note pin");
+                _dialogService?.ShowError($"Failed to pin/unpin note: {ex.Message}", "Pin Error");
+            }
+        }
+
+        private async Task ExecuteDeleteNoteAsync(NoteTreeItem noteItem)
+        {
+            if (noteItem == null) return;
+            
+            try
+            {
+                var result = await _dialogService.ShowConfirmationDialogAsync(
+                    $"Are you sure you want to delete '{noteItem.Title}'?\n\nThis action cannot be undone.",
+                    "Confirm Delete");
+                
+                if (result)
+                {
+                    await DeleteNoteAsync(noteItem);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to delete note");
+                _dialogService?.ShowError($"Failed to delete note: {ex.Message}", "Delete Error");
+            }
+        }
+
+        private void ExecuteOpenNote(NoteTreeItem noteItem)
+        {
+            if (noteItem == null) return;
+            
+            try
+            {
+                NoteOpenRequested?.Invoke(noteItem);
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to open note");
+                _dialogService?.ShowError($"Failed to open note: {ex.Message}", "Open Error");
+            }
+        }
+
+        private async Task ExecuteRenameCategoryAsync(CategoryTreeItem categoryItem)
+        {
+            if (categoryItem == null) return;
+            
+            try
+            {
+                var currentName = categoryItem.Name;
+                var siblingNames = GetSiblingCategoryNames(categoryItem);
+                
+                var newName = await _dialogService.ShowInputDialogAsync(
+                    "Rename Category",
+                    "Enter new name:",
+                    currentName,
+                    text => NoteNest.Core.Services.RenameValidation.ValidateCategoryName(text, currentName, siblingNames));
+                
+                if (!string.IsNullOrWhiteSpace(newName) && newName != currentName)
+                {
+                    await RenameCategoryAsync(categoryItem, newName);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to rename category");
+                _dialogService?.ShowError($"Failed to rename category: {ex.Message}", "Rename Error");
+            }
+        }
+
+        private async Task ExecuteDeleteCategoryAsync(CategoryTreeItem categoryItem)
+        {
+            if (categoryItem == null) return;
+            
+            try
+            {
+                if (categoryItem.SubCategories.Any() || categoryItem.Notes.Any())
+                {
+                    _dialogService.ShowError(
+                        "Cannot delete a category that contains notes or subcategories.\n\nPlease move or delete all contents first.",
+                        "Category Not Empty");
+                    return;
+                }
+                
+                var result = await _dialogService.ShowConfirmationDialogAsync(
+                    $"Are you sure you want to delete the category '{categoryItem.Name}'?",
+                    "Confirm Delete");
+                
+                if (result)
+                {
+                    // Use existing delete method
+                    SelectedCategory = categoryItem;
+                    await DeleteCategoryAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to delete category");
+                _dialogService?.ShowError($"Failed to delete category: {ex.Message}", "Delete Error");
+            }
+        }
+
+        private IEnumerable<string> GetSiblingCategoryNames(CategoryTreeItem categoryItem)
+        {
+            if (categoryItem?.Model == null) return Enumerable.Empty<string>();
+            
+            if (categoryItem.Model.ParentId == null)
+            {
+                // Root level - check against other root categories
+                return Categories?
+                    .Where(c => c != categoryItem)
+                    .Select(c => c.Name)
+                    .Where(name => !string.IsNullOrEmpty(name)) ?? Enumerable.Empty<string>();
+            }
+            else
+            {
+                // Find parent and get siblings
+                var parent = FindCategoryById(Categories, categoryItem.Model.ParentId);
+                return parent?.SubCategories?
+                    .Where(c => c != categoryItem)
+                    .Select(c => c.Name)
+                    .Where(name => !string.IsNullOrEmpty(name)) ?? Enumerable.Empty<string>();
+            }
+        }
+
+        private CategoryTreeItem FindCategoryById(ObservableCollection<CategoryTreeItem> categories, string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+            
+            foreach (var category in categories ?? Enumerable.Empty<CategoryTreeItem>())
+            {
+                if (string.Equals(category.Model?.Id, id, StringComparison.OrdinalIgnoreCase))
+                    return category;
+                
+                var found = FindCategoryById(category.SubCategories, id);
+                if (found != null) return found;
+            }
+            return null;
+        }
 
         #endregion
 
@@ -980,25 +1219,15 @@ namespace NoteNest.UI.ViewModels
                 var uiCollections = GetTreeViewModelAdapter().ConvertToUICollections(treeData);
 
                 // Apply tree data to UI collections
-                await Application.Current.Dispatcher.InvokeAsync(() =>
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
                     foreach (var item in uiCollections.RootCategories)
                     {
                         Categories.Add(item);
                     }
                     
-                    // Set pinned collections from adapter results
-                    PinnedCategories.Clear();
-                    foreach (var pinnedCategory in uiCollections.PinnedCategories)
-                    {
-                        PinnedCategories.Add(pinnedCategory);
-                    }
-                    
-                    PinnedNotes.Clear();
-                    foreach (var pinnedNote in uiCollections.PinnedNotes)
-                    {
-                        PinnedNotes.Add(pinnedNote);
-                    }
+                    // Set pinned collections using model properties
+                    await RefreshPinnedItemsAsync();
                 });
 
                 // Restore expansion state using TreeStateAdapter
@@ -1547,13 +1776,54 @@ namespace NoteNest.UI.ViewModels
             var result = await GetTreeOperationAdapter().ToggleCategoryPinAsync(categoryItem);
             if (result.Success)
             {
-                await LoadCategoriesAsync(); // Refresh to reorder by pin status
+                await RefreshPinnedItemsAsync(); // Use unified refresh instead of full reload
                 _stateManager.StatusMessage = result.StatusMessage ?? 
                     (categoryItem.Model.Pinned ? $"Pinned category: {categoryItem.Name}" : $"Unpinned category: {categoryItem.Name}");
             }
             else
             {
                 _dialogService.ShowError(result.ErrorMessage ?? "Failed to toggle category pin", "Error");
+            }
+        }
+
+        public async Task RefreshPinnedItemsAsync()
+        {
+            try
+            {
+                PinnedNotes.Clear();
+                PinnedCategories.Clear();
+                
+                foreach (var category in Categories)
+                {
+                    // Categories use existing Model.Pinned
+                    if (category.Model.Pinned)
+                        PinnedCategories.Add(category);
+                        
+                    // Notes now use Model.Pinned instead of NotePinService
+                    CollectPinnedNotesFromCategory(category);
+                }
+                
+                OnPropertyChanged(nameof(HasPinnedItems));
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to refresh pinned items");
+            }
+        }
+
+        private void CollectPinnedNotesFromCategory(CategoryTreeItem category)
+        {
+            foreach (var note in category.Notes)
+            {
+                if (note.Model.Pinned)
+                    PinnedNotes.Add(new NoteNest.UI.Services.PinnedNoteItem(note, category.Name));
+            }
+            
+            foreach (var sub in category.SubCategories)
+            {
+                if (sub.Model.Pinned)
+                    PinnedCategories.Add(sub);
+                CollectPinnedNotesFromCategory(sub);
             }
         }
 
