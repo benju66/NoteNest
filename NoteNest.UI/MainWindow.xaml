@@ -188,15 +188,14 @@
                 
                 <!-- DEBUG: Memory Dashboard Menu -->
                 <Separator x:Name="DebugSeparator" Visibility="Collapsed"/>
-                <!-- DEBUG-only menu item removed for Release builds -->
-                <!-- <MenuItem x:Name="MemoryDashboardMenuItem" Header="_Memory Dashboard" 
+                <MenuItem x:Name="MemoryDashboardMenuItem" Header="Memory _Dashboard (Debug)" 
                           Click="MemoryDashboard_Click" 
                           InputGestureText="Ctrl+Alt+M"
                           Visibility="Collapsed">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="Setting"/>
                     </MenuItem.Icon>
-                </MenuItem> -->
+                </MenuItem>
             </MenuItem>
             </Menu>
 
