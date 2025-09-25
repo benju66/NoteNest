@@ -21,13 +21,14 @@ namespace NoteNest.Core.Services
 			_logger = logger ?? AppLogger.Instance;
 		}
 
-		public class NoteMetadata
-		{
-			public int Version { get; set; } = 1;
-			public string Id { get; set; } = string.Empty;
-			public DateTime Created { get; set; } = DateTime.UtcNow;
-			public Dictionary<string, object> Extensions { get; set; } = new();
-		}
+	public class NoteMetadata
+	{
+		public int Version { get; set; } = 1;
+		public string Id { get; set; } = string.Empty;
+		public DateTime Created { get; set; } = DateTime.UtcNow;
+		public bool Pinned { get; set; } = false;
+		public Dictionary<string, object> Extensions { get; set; } = new();
+	}
 
 		public async Task<string> GetOrCreateNoteIdAsync(NoteModel note)
 		{
@@ -41,6 +42,7 @@ namespace NoteNest.Core.Services
 					if (!string.IsNullOrWhiteSpace(metadata?.Id))
 					{
 						note.Id = metadata.Id;
+						note.Pinned = metadata.Pinned; // Restore pinned state
 						return metadata.Id;
 					}
 				}
@@ -125,7 +127,8 @@ namespace NoteNest.Core.Services
 			var meta = new NoteMetadata
 			{
 				Id = note.Id,
-				Created = DateTime.UtcNow
+				Created = DateTime.UtcNow,
+				Pinned = note.Pinned
 			};
 			var json = JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true });
 			var metaPath = GetMetaPath(note.FilePath);
@@ -145,6 +148,29 @@ namespace NoteNest.Core.Services
 			catch (Exception ex)
 			{
 				_logger.Error(ex, $"Failed to write metadata: {metaPath}");
+				throw;
+			}
+		}
+
+		/// <summary>
+		/// Update metadata for a note with current model state (including Pinned status)
+		/// </summary>
+		public async Task UpdateMetadataAsync(NoteModel note)
+		{
+			if (note == null) throw new ArgumentNullException(nameof(note));
+			
+			try
+			{
+				_logger.Debug($"UpdateMetadataAsync called for note: {note.Title}, Pinned: {note.Pinned}, Id: {note.Id}");
+				var metaPath = GetMetaPath(note.FilePath);
+				_logger.Debug($"Metadata path: {metaPath}");
+				
+				await WriteMetadataAsync(note);
+				_logger.Debug($"Successfully updated metadata for note: {note.Title} (Pinned: {note.Pinned})");
+			}
+			catch (Exception ex)
+			{
+				_logger.Error(ex, $"Failed to update metadata for note: {note.Title}");
 				throw;
 			}
 		}

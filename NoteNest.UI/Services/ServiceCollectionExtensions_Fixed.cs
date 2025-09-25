@@ -183,6 +183,14 @@ namespace NoteNest.UI.Services
                 return new ContentCache(bus);
             });
             
+            // Register NoteMetadataManager as a proper service (was missing!)
+            services.AddSingleton<NoteNest.Core.Services.NoteMetadataManager>(serviceProvider =>
+            {
+                return new NoteNest.Core.Services.NoteMetadataManager(
+                    serviceProvider.GetRequiredService<IFileSystemProvider>(),
+                    serviceProvider.GetRequiredService<IAppLogger>());
+            });
+            
             services.AddSingleton<NoteService>(serviceProvider => 
             {
                 return new NoteService(
@@ -193,9 +201,7 @@ namespace NoteNest.UI.Services
                     serviceProvider.GetService<NoteNest.Core.Services.Safety.SafeFileService>(),
                     serviceProvider.GetService<NoteNest.Core.Services.Notes.INoteStorageService>(),
                     serviceProvider.GetService<IUserNotificationService>(),
-                    new NoteNest.Core.Services.NoteMetadataManager(
-                        serviceProvider.GetRequiredService<IFileSystemProvider>(),
-                        serviceProvider.GetRequiredService<IAppLogger>())
+                    serviceProvider.GetRequiredService<NoteNest.Core.Services.NoteMetadataManager>()
                 );
             });
 

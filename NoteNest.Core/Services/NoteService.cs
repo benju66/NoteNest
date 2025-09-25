@@ -88,8 +88,17 @@ namespace NoteNest.Core.Services
                     IsDirty = false
                 };
                 // Ensure stable Note Id via metadata sidecar
-                try { if (_metadataManager != null) { await _metadataManager.GetOrCreateNoteIdAsync(note); } }
-                catch { }
+                try { 
+                    if (_metadataManager != null) { 
+                        await _metadataManager.GetOrCreateNoteIdAsync(note); 
+                        _logger.Debug($"Metadata loaded for note: {note.Title}, Pinned: {note.Pinned}");
+                    } else {
+                        _logger.Warning($"No metadata manager available for note: {note.Title}");
+                    }
+                }
+                catch (Exception ex) { 
+                    _logger.Error(ex, $"Failed to load metadata for note: {note.Title}");
+                }
                 // RTF-only: All notes are RTF format
                 note.Format = NoteFormat.RTF;
                 

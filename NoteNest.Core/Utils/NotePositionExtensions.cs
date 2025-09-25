@@ -138,9 +138,10 @@ namespace NoteNest.Core.Utils
         /// </summary>
         private static string GetMetaPath(string notePath)
         {
-            var directory = Path.GetDirectoryName(notePath) ?? "";
-            var filenameWithoutExt = Path.GetFileNameWithoutExtension(notePath);
-            return Path.Combine(directory, $"{filenameWithoutExt}.meta.json");
+            // Fixed: Use same extension as NoteMetadataManager (.meta, not .meta.json)
+            if (string.IsNullOrWhiteSpace(notePath)) return string.Empty;
+            var idx = notePath.LastIndexOf('.');
+            return idx >= 0 ? notePath.Substring(0, idx) + ".meta" : notePath + ".meta";
         }
     }
     

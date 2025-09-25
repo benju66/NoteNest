@@ -163,6 +163,11 @@ namespace NoteNest.UI.ViewModels
         }
 
 
+        private NoteNest.Core.Services.NoteMetadataManager GetMetadataManager()
+        {
+            return _metadataManager ??= _serviceProvider.GetRequiredService<NoteNest.Core.Services.NoteMetadataManager>();
+        }
+
         private ICategoryManagementService GetCategoryService()
         {
             return _categoryService ??= new CategoryManagementService(
@@ -466,28 +471,43 @@ namespace NoteNest.UI.ViewModels
 
         private async Task ExecuteToggleNotePinAsync(NoteTreeItem noteItem)
         {
-            if (noteItem == null) return;
+            _logger?.Debug($"ExecuteToggleNotePinAsync called with note: {noteItem?.Title ?? "NULL"}");
+            if (noteItem == null) 
+            {
+                _logger?.Warning("ExecuteToggleNotePinAsync called with null noteItem");
+                return;
+            }
             
             try
             {
+                var oldState = noteItem.Model.Pinned;
                 noteItem.Model.Pinned = !noteItem.Model.Pinned;
+                _logger?.Debug($"Changed pin state for '{noteItem.Title}': {oldState} -> {noteItem.Model.Pinned}");
                 
-                // Save the note to persist the pinned state
-                var saveManager = _serviceProvider.GetService<ISaveManager>();
-                if (saveManager != null)
+                // Persist the pinned state to metadata
+                var metadataManager = GetMetadataManager();
+                if (metadataManager != null)
                 {
-                    await saveManager.SaveNoteAsync(noteItem.Model.Id);
+                    _logger?.Debug($"Updating metadata for note: {noteItem.Title}");
+                    await metadataManager.UpdateMetadataAsync(noteItem.Model);
+                    _logger?.Debug($"Metadata updated successfully for note: {noteItem.Title}");
+                }
+                else
+                {
+                    _logger?.Error("MetadataManager is null - cannot persist pin state");
                 }
                 
                 // Refresh pinned items collection
+                _logger?.Debug("Refreshing pinned items collection...");
                 await RefreshPinnedItemsAsync();
                 
                 var status = noteItem.Model.Pinned ? "Pinned" : "Unpinned";
                 StatusMessage = $"{status} '{noteItem.Title}'";
+                _logger?.Debug($"Pin state changed: {noteItem.Title} -> {status}");
             }
             catch (Exception ex)
             {
-                _logger?.Error(ex, "Failed to toggle note pin");
+                _logger?.Error(ex, $"Failed to toggle note pin for: {noteItem?.Title}");
                 _dialogService?.ShowError($"Failed to pin/unpin note: {ex.Message}", "Pin Error");
             }
         }
@@ -1790,18 +1810,33 @@ namespace NoteNest.UI.ViewModels
         {
             try
             {
+                _logger?.Debug("RefreshPinnedItemsAsync started");
+                var originalPinnedNotesCount = PinnedNotes.Count;
+                var originalPinnedCategoriesCount = PinnedCategories.Count;
+                
                 PinnedNotes.Clear();
                 PinnedCategories.Clear();
+                
+                var pinnedNotesFound = 0;
+                var pinnedCategoriesFound = 0;
                 
                 foreach (var category in Categories)
                 {
                     // Categories use existing Model.Pinned
                     if (category.Model.Pinned)
+                    {
                         PinnedCategories.Add(category);
+                        pinnedCategoriesFound++;
+                        _logger?.Debug($"Found pinned category: {category.Name}");
+                    }
                         
                     // Notes now use Model.Pinned instead of NotePinService
                     CollectPinnedNotesFromCategory(category);
                 }
+                
+                pinnedNotesFound = PinnedNotes.Count;
+                _logger?.Debug($"RefreshPinnedItemsAsync completed: Found {pinnedNotesFound} pinned notes, {pinnedCategoriesFound} pinned categories");
+                _logger?.Debug($"Previous counts: {originalPinnedNotesCount} pinned notes, {originalPinnedCategoriesCount} pinned categories");
                 
                 OnPropertyChanged(nameof(HasPinnedItems));
             }
@@ -1816,13 +1851,19 @@ namespace NoteNest.UI.ViewModels
             foreach (var note in category.Notes)
             {
                 if (note.Model.Pinned)
+                {
                     PinnedNotes.Add(new NoteNest.UI.Services.PinnedNoteItem(note, category.Name));
+                    _logger?.Debug($"Found pinned note: {note.Title} in category: {category.Name}");
+                }
             }
             
             foreach (var sub in category.SubCategories)
             {
                 if (sub.Model.Pinned)
+                {
                     PinnedCategories.Add(sub);
+                    _logger?.Debug($"Found pinned subcategory: {sub.Name}");
+                }
                 CollectPinnedNotesFromCategory(sub);
             }
         }
