@@ -5,8 +5,11 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows;
+using Microsoft.Extensions.DependencyInjection;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
+using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Diagnostics;
 
 namespace NoteNest.UI.ViewModels
@@ -280,9 +283,11 @@ namespace NoteNest.UI.ViewModels
     {
         private readonly NoteModel _model;
         private readonly PropertyChangedEventHandler _modelPropertyChangedHandler;
+        private readonly IPinService _pinService;
         private bool _isVisible = true;
         private bool _isSelected;
         private bool _isDirty;
+        private bool _isPinned;
 
         public NoteModel Model => _model;
         public string Title => _model.Title;
@@ -306,9 +311,20 @@ namespace NoteNest.UI.ViewModels
             set => SetProperty(ref _isSelected, value);
         }
 
+        public bool IsPinned
+        {
+            get => _isPinned;
+            private set => SetProperty(ref _isPinned, value);
+        }
+
         public NoteTreeItem(NoteModel model)
         {
-            _model = model;
+            _model = model ?? throw new ArgumentNullException(nameof(model));
+            
+            // Get pin service from DI container
+            var app = Application.Current as App;
+            _pinService = app?.ServiceProvider?.GetService<IPinService>();
+            
             _modelPropertyChangedHandler = (s, e) =>
             {
                 if (e.PropertyName == nameof(NoteModel.Title))
@@ -332,6 +348,13 @@ namespace NoteNest.UI.ViewModels
 
             // Initialize dirty state
             _isDirty = _model.IsDirty;
+            
+            // Initialize pin state and subscribe to changes
+            if (_pinService != null)
+            {
+                _pinService.PinChanged += OnPinChanged;
+                _ = LoadInitialPinStateAsync();
+            }
         }
 
         // Public wrapper to notify property changes from outside this class
@@ -340,11 +363,47 @@ namespace NoteNest.UI.ViewModels
             base.OnPropertyChanged(propertyName);
         }
 
+        private async Task LoadInitialPinStateAsync()
+        {
+            try
+            {
+                if (_pinService != null && !string.IsNullOrEmpty(_model.Id))
+                {
+                    IsPinned = await _pinService.IsPinnedAsync(_model.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log error but don't crash - pin state is not critical for basic functionality
+                System.Diagnostics.Debug.WriteLine($"Error loading initial pin state for {_model.Title}: {ex.Message}");
+            }
+        }
+
+        private void OnPinChanged(object sender, PinChangedEventArgs e)
+        {
+            try
+            {
+                if (e.NoteId == _model.Id)
+                {
+                    IsPinned = e.IsPinned;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error handling pin change event for {_model.Title}: {ex.Message}");
+            }
+        }
+
         public void Dispose()
         {
             if (_model is INotifyPropertyChanged inpc)
             {
                 inpc.PropertyChanged -= _modelPropertyChangedHandler;
+            }
+
+            if (_pinService != null)
+            {
+                _pinService.PinChanged -= OnPinChanged;
             }
         }
     }

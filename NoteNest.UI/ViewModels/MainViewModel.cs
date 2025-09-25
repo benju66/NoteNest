@@ -39,6 +39,7 @@ namespace NoteNest.UI.ViewModels
         // Lazy Services (created only when needed)
         private FileWatcherService _fileWatcher;
         private NoteNest.Core.Services.NoteMetadataManager _metadataManager;
+        private IPinService _pinService;
         private ICategoryManagementService _categoryService;
         private INoteOperationsService _noteOperationsService;
         private ITreeDataService _treeDataService;
@@ -168,6 +169,11 @@ namespace NoteNest.UI.ViewModels
             return _metadataManager ??= _serviceProvider.GetRequiredService<NoteNest.Core.Services.NoteMetadataManager>();
         }
 
+        private IPinService GetPinService()
+        {
+            return _pinService ??= _serviceProvider.GetRequiredService<IPinService>();
+        }
+
         private ICategoryManagementService GetCategoryService()
         {
             return _categoryService ??= new CategoryManagementService(
@@ -240,6 +246,19 @@ namespace NoteNest.UI.ViewModels
                 if (_metadataManager != null)
                 {
                     await _metadataManager.MoveMetadataAsync(e.OldPath, e.NewPath);
+                }
+
+                // Update pin service file paths
+                var pinService = GetPinService();
+                if (pinService != null)
+                {
+                    // Find the note ID by checking all notes
+                    var noteId = await FindNoteIdByFilePathAsync(e.NewPath);
+                    if (!string.IsNullOrEmpty(noteId))
+                    {
+                        await pinService.UpdateFilePathAsync(noteId, e.NewPath);
+                        _logger.Debug($"Updated pin service file path: {e.OldPath} -> {e.NewPath}");
+                    }
                 }
 
                 // Update FTS5 search index for file rename
@@ -480,37 +499,34 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
-                var oldState = noteItem.Model.Pinned;
-                noteItem.Model.Pinned = !noteItem.Model.Pinned;
-                _logger?.Debug($"Changed pin state for '{noteItem.Title}': {oldState} -> {noteItem.Model.Pinned}");
-                
-                // Persist the pinned state to metadata
-                var metadataManager = GetMetadataManager();
-                if (metadataManager != null)
+                var pinService = GetPinService();
+                if (pinService == null)
                 {
-                    _logger?.Debug($"Updating metadata for note: {noteItem.Title}");
-                    await metadataManager.UpdateMetadataAsync(noteItem.Model);
+                    _logger?.Error("Pin service not available");
+                    _dialogService?.ShowError("Pin service is not available", "Pin Error");
+                    return;
+                }
+                
+                // Toggle the pin state using the service
+                var success = await pinService.TogglePinAsync(noteItem.Model.Id, noteItem.Model.FilePath);
+                
+                if (success)
+                {
+                    // Refresh pinned items collection
+                    _logger?.Debug("Refreshing pinned items collection...");
+                    await RefreshPinnedItemsAsync();
                     
-                    // Add a small delay to ensure file write completes
-                    await Task.Delay(100);
-                    
-                    _logger?.Debug($"Metadata updated successfully for note: {noteItem.Title}");
+                    // Check current pin state for status message
+                    var isPinned = await pinService.IsPinnedAsync(noteItem.Model.Id);
+                    var status = isPinned ? "Pinned" : "Unpinned";
+                    StatusMessage = $"{status} '{noteItem.Title}'";
+                    _logger?.Debug($"Pin state changed: {noteItem.Title} -> {status}");
                 }
                 else
                 {
-                    _logger?.Error("MetadataManager is null - cannot persist pin state");
+                    _logger?.Warning($"Failed to toggle pin state for: {noteItem.Title}");
+                    _dialogService?.ShowError("Failed to update pin state", "Pin Error");
                 }
-                
-                // Force the UI to update
-                noteItem.OnPropertyChanged(nameof(NoteTreeItem.Model));
-                
-                // Refresh pinned items collection
-                _logger?.Debug("Refreshing pinned items collection...");
-                await RefreshPinnedItemsAsync();
-                
-                var status = noteItem.Model.Pinned ? "Pinned" : "Unpinned";
-                StatusMessage = $"{status} '{noteItem.Title}'";
-                _logger?.Debug($"Pin state changed: {noteItem.Title} -> {status}");
             }
             catch (Exception ex)
             {
@@ -1827,9 +1843,21 @@ namespace NoteNest.UI.ViewModels
                 var pinnedNotesFound = 0;
                 var pinnedCategoriesFound = 0;
                 
+                // Get pin service
+                var pinService = GetPinService();
+                if (pinService == null)
+                {
+                    _logger?.Warning("Pin service not available for refresh");
+                    return;
+                }
+                
+                // Get all pinned note IDs from the service
+                var pinnedNoteIds = await pinService.GetPinnedNoteIdsAsync();
+                var pinnedSet = new HashSet<string>(pinnedNoteIds, StringComparer.OrdinalIgnoreCase);
+                
                 foreach (var category in Categories)
                 {
-                    // Categories use existing Model.Pinned
+                    // Categories still use existing Model.Pinned
                     if (category.Model.Pinned)
                     {
                         PinnedCategories.Add(category);
@@ -1837,8 +1865,8 @@ namespace NoteNest.UI.ViewModels
                         _logger?.Debug($"Found pinned category: {category.Name}");
                     }
                         
-                    // Notes now use Model.Pinned instead of NotePinService
-                    CollectPinnedNotesFromCategory(category);
+                    // Notes now use pin service
+                    await CollectPinnedNotesFromCategoryAsync(category, pinnedSet);
                 }
                 
                 pinnedNotesFound = PinnedNotes.Count;
@@ -1853,11 +1881,11 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        private void CollectPinnedNotesFromCategory(CategoryTreeItem category)
+        private async Task CollectPinnedNotesFromCategoryAsync(CategoryTreeItem category, HashSet<string> pinnedNoteIds)
         {
             foreach (var note in category.Notes)
             {
-                if (note.Model.Pinned)
+                if (!string.IsNullOrEmpty(note.Model.Id) && pinnedNoteIds.Contains(note.Model.Id))
                 {
                     PinnedNotes.Add(new NoteNest.UI.Services.PinnedNoteItem(note, category.Name));
                     _logger?.Debug($"Found pinned note: {note.Title} in category: {category.Name}");
@@ -1868,8 +1896,51 @@ namespace NoteNest.UI.ViewModels
             {
                 // DON'T add subcategories here - they're already handled in the main loop
                 // Just recurse to get their notes
-                CollectPinnedNotesFromCategory(sub);
+                await CollectPinnedNotesFromCategoryAsync(sub, pinnedNoteIds);
             }
+        }
+
+        private async Task<string> FindNoteIdByFilePathAsync(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(filePath)) return null;
+                
+                // Search through all loaded notes to find the one with matching file path
+                foreach (var category in Categories)
+                {
+                    var noteId = FindNoteIdInCategory(category, filePath);
+                    if (!string.IsNullOrEmpty(noteId))
+                        return noteId;
+                }
+                
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning($"Error finding note ID by file path {filePath}: {ex.Message}");
+                return null;
+            }
+        }
+
+        private string FindNoteIdInCategory(CategoryTreeItem category, string filePath)
+        {
+            foreach (var note in category.Notes)
+            {
+                if (string.Equals(note.Model.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return note.Model.Id;
+                }
+            }
+            
+            foreach (var sub in category.SubCategories)
+            {
+                var noteId = FindNoteIdInCategory(sub, filePath);
+                if (!string.IsNullOrEmpty(noteId))
+                    return noteId;
+            }
+            
+            return null;
         }
 
         public async Task RenameNoteAsync(NoteTreeItem noteItem, string newName)

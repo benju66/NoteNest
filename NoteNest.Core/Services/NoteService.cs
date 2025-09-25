@@ -91,7 +91,7 @@ namespace NoteNest.Core.Services
                 try { 
                     if (_metadataManager != null) { 
                         await _metadataManager.GetOrCreateNoteIdAsync(note); 
-                        _logger.Debug($"Metadata loaded for note: {note.Title}, Pinned: {note.Pinned}");
+                        _logger.Debug($"Metadata loaded for note: {note.Title}");
                     } else {
                         _logger.Warning($"No metadata manager available for note: {note.Title}");
                     }

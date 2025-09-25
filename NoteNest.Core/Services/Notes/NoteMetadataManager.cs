@@ -42,7 +42,7 @@ namespace NoteNest.Core.Services
 					if (!string.IsNullOrWhiteSpace(metadata?.Id))
 					{
 						note.Id = metadata.Id;
-						note.Pinned = metadata.Pinned; // Restore pinned state
+						// Note: Pin state now managed by IPinService, not NoteModel
 						return metadata.Id;
 					}
 				}
@@ -150,8 +150,7 @@ namespace NoteNest.Core.Services
 			};
 		}
 		
-		// Update the pinned state (and any other properties that should be updated)
-		meta.Pinned = note.Pinned;
+		// Update the metadata (pinned state now managed by IPinService)
 		meta.Id = note.Id; // Ensure ID is set
 		
 		// Write the metadata
@@ -185,12 +184,12 @@ namespace NoteNest.Core.Services
 			
 			try
 			{
-				_logger.Debug($"UpdateMetadataAsync called for note: {note.Title}, Pinned: {note.Pinned}, Id: {note.Id}");
+				_logger.Debug($"UpdateMetadataAsync called for note: {note.Title}, Id: {note.Id}");
 				var metaPath = GetMetaPath(note.FilePath);
 				_logger.Debug($"Metadata path: {metaPath}");
 				
 				await WriteMetadataAsync(note);
-				_logger.Debug($"Successfully updated metadata for note: {note.Title} (Pinned: {note.Pinned})");
+				_logger.Debug($"Successfully updated metadata for note: {note.Title}");
 			}
 			catch (Exception ex)
 			{

@@ -191,6 +191,15 @@ namespace NoteNest.UI.Services
                     serviceProvider.GetRequiredService<IAppLogger>());
             });
             
+            // Register Pin Service for user preference management
+            services.AddSingleton<IPinService, NoteNest.Core.Services.FilePinService>(serviceProvider =>
+            {
+                return new NoteNest.Core.Services.FilePinService(
+                    serviceProvider.GetRequiredService<IFileSystemProvider>(),
+                    serviceProvider.GetRequiredService<ConfigurationService>(),
+                    serviceProvider.GetRequiredService<IAppLogger>());
+            });
+            
             services.AddSingleton<NoteService>(serviceProvider => 
             {
                 return new NoteService(
