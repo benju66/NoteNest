@@ -9,6 +9,7 @@ using NoteNest.Core.Interfaces;
 using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Configuration;
 
 namespace NoteNest.Core.Services
 {
@@ -35,12 +36,27 @@ namespace NoteNest.Core.Services
             _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
-            // Store pins in metadata directory
-            var metadataPath = config?.Settings?.MetadataPath ?? 
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NoteNest");
+            // FIX: Use PathService.MetadataPath which correctly points to the .metadata folder
+            string metadataPath;
+            
+            // First try to use PathService which is the authoritative source
+            try
+            {
+                metadataPath = PathService.MetadataPath;
+                _logger.Debug($"Using PathService.MetadataPath: {metadataPath}");
+            }
+            catch
+            {
+                // Fallback to config if PathService isn't initialized
+                metadataPath = config?.Settings?.MetadataPath ?? 
+                    Path.Combine(PathService.RootPath, ".metadata");
+                _logger.Debug($"Using fallback metadata path: {metadataPath}");
+            }
             
             _pinsFilePath = Path.Combine(metadataPath, "pins.json");
             _backupPath = Path.Combine(metadataPath, "pins.backup.json");
+            
+            _logger.Info($"FilePinService initialized with pins file at: {_pinsFilePath}");
         }
         
         private async Task EnsureInitializedAsync()
@@ -72,7 +88,11 @@ namespace NoteNest.Core.Services
         
         public async Task<bool> TogglePinAsync(string noteId, string filePath)
         {
-            if (string.IsNullOrEmpty(noteId)) return false;
+            if (string.IsNullOrEmpty(noteId)) 
+            {
+                _logger.Warning("TogglePinAsync called with empty noteId");
+                return false;
+            }
             
             await EnsureInitializedAsync();
             
@@ -80,6 +100,7 @@ namespace NoteNest.Core.Services
             try
             {
                 bool wasPinned = _pinnedNoteIds.Contains(noteId);
+                _logger.Debug($"TogglePinAsync for {noteId}: currently {(wasPinned ? "pinned" : "unpinned")}");
                 
                 if (wasPinned)
                 {
@@ -94,6 +115,7 @@ namespace NoteNest.Core.Services
                     _logger.Info($"Pinned note: {noteId}");
                 }
                 
+                // Save immediately
                 await SavePinsAsync();
                 
                 // Notify UI of change
@@ -221,15 +243,21 @@ namespace NoteNest.Core.Services
         {
             try
             {
+                _logger.Debug($"LoadPinsAsync: Looking for pins file at {_pinsFilePath}");
+                
                 if (!await _fileSystem.ExistsAsync(_pinsFilePath))
                 {
+                    _logger.Debug($"LoadPinsAsync: Pins file does not exist at {_pinsFilePath}");
                     _pinnedNoteIds.Clear();
                     _pinEntries.Clear();
                     return;
                 }
                 
                 var json = await _fileSystem.ReadTextAsync(_pinsFilePath);
+                _logger.Debug($"LoadPinsAsync: Read JSON content, length={json?.Length ?? 0}");
+                
                 var entries = JsonSerializer.Deserialize<List<PinEntry>>(json) ?? new List<PinEntry>();
+                _logger.Debug($"LoadPinsAsync: Deserialized {entries.Count} pin entries");
                 
                 // Rebuild collections
                 _pinnedNoteIds.Clear();
@@ -241,10 +269,11 @@ namespace NoteNest.Core.Services
                     {
                         _pinnedNoteIds.Add(entry.NoteId);
                         _pinEntries[entry.NoteId] = entry;
+                        _logger.Debug($"LoadPinsAsync: Loaded pin for note {entry.NoteId}");
                     }
                 }
                 
-                _logger.Debug($"Loaded {_pinnedNoteIds.Count} pinned items from {_pinsFilePath}");
+                _logger.Info($"Loaded {_pinnedNoteIds.Count} pinned items from {_pinsFilePath}");
             }
             catch (Exception ex)
             {
@@ -268,6 +297,8 @@ namespace NoteNest.Core.Services
         {
             try
             {
+                _logger.Debug($"SavePinsAsync: Saving {_pinEntries.Count} pins to {_pinsFilePath}");
+                
                 // Create backup first
                 await CreateBackupAsync();
                 
@@ -275,6 +306,7 @@ namespace NoteNest.Core.Services
                 var directory = Path.GetDirectoryName(_pinsFilePath);
                 if (!string.IsNullOrEmpty(directory) && !await _fileSystem.ExistsAsync(directory))
                 {
+                    _logger.Debug($"SavePinsAsync: Creating directory {directory}");
                     await _fileSystem.CreateDirectoryAsync(directory);
                 }
                 
@@ -285,11 +317,18 @@ namespace NoteNest.Core.Services
                 // Write to file
                 await _fileSystem.WriteTextAsync(_pinsFilePath, json);
                 
-                _logger.Debug($"Saved {entries.Count} pins to {_pinsFilePath}");
+                _logger.Info($"Saved {entries.Count} pins to {_pinsFilePath}");
+                
+                // Verify the save worked
+                if (await _fileSystem.ExistsAsync(_pinsFilePath))
+                {
+                    var verifyJson = await _fileSystem.ReadTextAsync(_pinsFilePath);
+                    _logger.Debug($"SavePinsAsync: Verified file exists, content length={verifyJson?.Length ?? 0}");
+                }
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to save pins");
+                _logger.Error(ex, $"Failed to save pins to {_pinsFilePath}");
                 throw;
             }
         }
@@ -302,12 +341,12 @@ namespace NoteNest.Core.Services
                 {
                     var content = await _fileSystem.ReadTextAsync(_pinsFilePath);
                     await _fileSystem.WriteTextAsync(_backupPath, content);
+                    _logger.Debug($"Created backup at {_backupPath}");
                 }
             }
             catch (Exception ex)
             {
                 _logger.Warning($"Failed to create backup: {ex.Message}");
-                // Don't throw - backup failure shouldn't stop the main operation
             }
         }
         
@@ -315,31 +354,34 @@ namespace NoteNest.Core.Services
         {
             try
             {
-                if (await _fileSystem.ExistsAsync(_backupPath))
+                if (!await _fileSystem.ExistsAsync(_backupPath))
                 {
-                    var content = await _fileSystem.ReadTextAsync(_backupPath);
-                    await _fileSystem.WriteTextAsync(_pinsFilePath, content);
-                    _logger.Info("Restored pins from backup");
-                    return true;
+                    _logger.Debug($"No backup file exists at {_backupPath}");
+                    return false;
                 }
+                
+                var content = await _fileSystem.ReadTextAsync(_backupPath);
+                await _fileSystem.WriteTextAsync(_pinsFilePath, content);
+                _logger.Info($"Restored pins from backup at {_backupPath}");
+                return true;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Failed to restore from backup");
+                return false;
             }
-            
-            return false;
         }
         
         protected virtual void OnPinChanged(string noteId, string filePath, bool isPinned)
         {
             try
             {
+                _logger.Debug($"OnPinChanged: Raising event for {noteId}, isPinned={isPinned}");
                 PinChanged?.Invoke(this, new PinChangedEventArgs(noteId, filePath, isPinned));
             }
             catch (Exception ex)
             {
-                _logger.Warning($"Error in PinChanged event handler: {ex.Message}");
+                _logger.Error(ex, $"Error raising PinChanged event for {noteId}");
             }
         }
         

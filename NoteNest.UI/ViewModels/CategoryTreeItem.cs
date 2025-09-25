@@ -385,7 +385,12 @@ namespace NoteNest.UI.ViewModels
             {
                 if (e.NoteId == _model.Id)
                 {
-                    IsPinned = e.IsPinned;
+                    // Ensure UI update happens on UI thread
+                    Application.Current?.Dispatcher?.Invoke(() =>
+                    {
+                        IsPinned = e.IsPinned;
+                        System.Diagnostics.Debug.WriteLine($"NoteTreeItem: Updated pin state for {_model.Title} to {e.IsPinned}");
+                    });
                 }
             }
             catch (Exception ex)
