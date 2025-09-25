@@ -490,12 +490,19 @@ namespace NoteNest.UI.ViewModels
                 {
                     _logger?.Debug($"Updating metadata for note: {noteItem.Title}");
                     await metadataManager.UpdateMetadataAsync(noteItem.Model);
+                    
+                    // Add a small delay to ensure file write completes
+                    await Task.Delay(100);
+                    
                     _logger?.Debug($"Metadata updated successfully for note: {noteItem.Title}");
                 }
                 else
                 {
                     _logger?.Error("MetadataManager is null - cannot persist pin state");
                 }
+                
+                // Force the UI to update
+                noteItem.OnPropertyChanged(nameof(NoteTreeItem.Model));
                 
                 // Refresh pinned items collection
                 _logger?.Debug("Refreshing pinned items collection...");
@@ -1859,11 +1866,8 @@ namespace NoteNest.UI.ViewModels
             
             foreach (var sub in category.SubCategories)
             {
-                if (sub.Model.Pinned)
-                {
-                    PinnedCategories.Add(sub);
-                    _logger?.Debug($"Found pinned subcategory: {sub.Name}");
-                }
+                // DON'T add subcategories here - they're already handled in the main loop
+                // Just recurse to get their notes
                 CollectPinnedNotesFromCategory(sub);
             }
         }

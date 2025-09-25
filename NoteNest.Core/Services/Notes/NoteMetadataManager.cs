@@ -122,18 +122,42 @@ namespace NoteNest.Core.Services
 			}
 		}
 
-		private async Task WriteMetadataAsync(NoteModel note)
+	private async Task WriteMetadataAsync(NoteModel note)
+	{
+		var metaPath = GetMetaPath(note.FilePath);
+		NoteMetadata meta = null;
+		
+		// Try to load existing metadata first
+		try
 		{
-			var meta = new NoteMetadata
+			if (await _fileSystem.ExistsAsync(metaPath))
+			{
+				meta = await ReadMetadataAsync(metaPath);
+			}
+		}
+		catch (Exception ex)
+		{
+			_logger.Warning($"Could not read existing metadata for update: {ex.Message}");
+		}
+		
+		// If no existing metadata, create new
+		if (meta == null)
+		{
+			meta = new NoteMetadata
 			{
 				Id = note.Id,
-				Created = DateTime.UtcNow,
-				Pinned = note.Pinned
+				Created = DateTime.UtcNow
 			};
-			var json = JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true });
-			var metaPath = GetMetaPath(note.FilePath);
-			await _fileSystem.WriteTextAsync(metaPath, json);
 		}
+		
+		// Update the pinned state (and any other properties that should be updated)
+		meta.Pinned = note.Pinned;
+		meta.Id = note.Id; // Ensure ID is set
+		
+		// Write the metadata
+		var json = JsonSerializer.Serialize(meta, new JsonSerializerOptions { WriteIndented = true });
+		await _fileSystem.WriteTextAsync(metaPath, json);
+	}
 
 		/// <summary>
 		/// Write metadata to file - made public for AtomicMetadataSaver integration
