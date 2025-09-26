@@ -54,8 +54,8 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<NoteNest.Application.Common.Interfaces.IEventBus, InMemoryEventBus>();
             services.AddScoped<IFileService, FileService>();
             
-            // Core services (reuse existing ones)
-            services.AddSingleton<IAppLogger, AppLogger>();
+            // Core services - use our simple console logger for Clean Architecture testing  
+            services.AddSingleton<IAppLogger, ConsoleAppLogger>();
             services.AddSingleton<IFileSystemProvider, DefaultFileSystemProvider>();
             
             // UI services (reuse existing ones)

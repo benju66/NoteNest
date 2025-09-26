@@ -68,8 +68,17 @@ namespace NoteNest.UI
 
                 // Create new Clean Architecture window via DI
                 var newMainWindow = new NewMainWindow();
-                var mainShellViewModel = ServiceProvider.GetRequiredService<NoteNest.UI.ViewModels.Shell.MainShellViewModel>();
-                newMainWindow.DataContext = mainShellViewModel;
+                try
+                {
+                    var mainShellViewModel = ServiceProvider.GetRequiredService<NoteNest.UI.ViewModels.Shell.MainShellViewModel>();
+                    newMainWindow.DataContext = mainShellViewModel;
+                    _logger?.Info("MainShellViewModel resolved successfully");
+                }
+                catch (Exception vmEx)
+                {
+                    _logger?.Error(vmEx, "Failed to resolve MainShellViewModel");
+                    throw;
+                }
                 
                 try
                 {
