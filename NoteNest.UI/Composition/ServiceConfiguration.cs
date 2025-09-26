@@ -1,0 +1,134 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using MediatR;
+using FluentValidation;
+using NoteNest.Domain.Common;
+using NoteNest.Domain.Categories;
+using NoteNest.Application.Common.Interfaces;
+using NoteNest.Application.Common.Behaviors;
+using NoteNest.Application.Notes.Commands.CreateNote;
+using NoteNest.Infrastructure.Persistence.Repositories;
+using NoteNest.Infrastructure.Services;
+using NoteNest.Infrastructure.EventBus;
+using NoteNest.UI.ViewModels.Shell;
+using NoteNest.UI.ViewModels.Categories;
+using NoteNest.UI.Services;
+using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Interfaces;
+using NoteNest.Core.Services;
+
+namespace NoteNest.UI.Composition
+{
+    public static class ServiceConfiguration
+    {
+        public static IServiceCollection ConfigureServices(this IServiceCollection services, IConfiguration configuration)
+        {
+            // MediatR
+            services.AddMediatR(cfg =>
+            {
+                cfg.RegisterServicesFromAssembly(typeof(CreateNoteCommand).Assembly);
+            });
+            
+            // Add pipeline behaviors
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+            
+            // Validation
+            services.AddValidatorsFromAssembly(typeof(CreateNoteCommand).Assembly);
+            
+            // Configuration
+            services.AddSingleton(configuration);
+            
+            // Repositories
+            services.AddScoped<INoteRepository, FileSystemNoteRepository>();
+            services.AddScoped<ICategoryRepository, FileSystemCategoryRepository>();
+            
+            // Infrastructure services
+            services.AddSingleton<IEventBus, InMemoryEventBus>();
+            services.AddScoped<IFileService, FileService>();
+            
+            // Core services (reuse existing ones)
+            services.AddSingleton<IAppLogger, AppLogger>();
+            services.AddSingleton<IFileSystemProvider, FileSystemProvider>();
+            
+            // UI services (reuse existing ones)
+            services.AddScoped<IDialogService, DialogService>();
+            
+            // ViewModels
+            services.AddTransient<MainShellViewModel>();
+            services.AddTransient<CategoryTreeViewModel>();
+            
+            return services;
+        }
+    }
+
+    // Temporary implementation of ICategoryRepository for testing
+    public class FileSystemCategoryRepository : ICategoryRepository
+    {
+        private readonly IAppLogger _logger;
+        
+        public FileSystemCategoryRepository(IAppLogger logger)
+        {
+            _logger = logger;
+        }
+
+        public async Task<Category> GetByIdAsync(CategoryId id)
+        {
+            // TODO: Implement properly - for now return a test category
+            await Task.CompletedTask;
+            return new Category 
+            { 
+                Id = id, 
+                Name = "Test Category", 
+                Path = @"C:\Test\Category",
+                ParentId = null 
+            };
+        }
+
+        public async Task<IReadOnlyList<Category>> GetAllAsync()
+        {
+            await Task.CompletedTask;
+            return new List<Category>().AsReadOnly();
+        }
+
+        public async Task<IReadOnlyList<Category>> GetRootCategoriesAsync()
+        {
+            // TODO: Implement properly - for now return test data
+            await Task.CompletedTask;
+            return new List<Category>
+            {
+                new Category { Id = CategoryId.Create(), Name = "Documents", Path = @"C:\Documents", ParentId = null },
+                new Category { Id = CategoryId.Create(), Name = "Projects", Path = @"C:\Projects", ParentId = null }
+            }.AsReadOnly();
+        }
+
+        public async Task<Result> CreateAsync(Category category)
+        {
+            await Task.CompletedTask;
+            return Result.Ok();
+        }
+
+        public async Task<Result> UpdateAsync(Category category)
+        {
+            await Task.CompletedTask;
+            return Result.Ok();
+        }
+
+        public async Task<Result> DeleteAsync(CategoryId id)
+        {
+            await Task.CompletedTask;
+            return Result.Ok();
+        }
+
+        public async Task<bool> ExistsAsync(CategoryId id)
+        {
+            await Task.CompletedTask;
+            return true;
+        }
+    }
+}
