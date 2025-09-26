@@ -52,6 +52,8 @@ namespace NoteNest.UI.ViewModels
         private TreeControllerAdapter _treeControllerAdapter;
         private readonly IWorkspaceService _workspaceService;
         private WorkspaceViewModel _workspaceViewModel;
+        private FileSystemEventCoordinator _fileSystemEventCoordinator;
+        private TabPersistenceCoordinator _tabPersistenceCoordinator;
         // Auto-save timer removed - per-tab timers handle all auto-save operations
         // NotePinService removed - will be reimplemented with better architecture later
         private bool _disposed;
@@ -239,167 +241,54 @@ namespace NoteNest.UI.ViewModels
             return _treeStateAdapter ??= new TreeStateAdapter(GetTreeStateManager());
         }
 
+        private FileSystemEventCoordinator GetFileSystemEventCoordinator()
+        {
+            return _fileSystemEventCoordinator ??= new FileSystemEventCoordinator(
+                _logger, 
+                _serviceProvider,
+                FindNoteIdByFilePathAsync);
+        }
+
+        private TabPersistenceCoordinator GetTabPersistenceCoordinator()
+        {
+            return _tabPersistenceCoordinator ??= new TabPersistenceCoordinator(
+                _tabPersistence,
+                _saveManager,
+                _workspaceService,
+                _logger,
+                () => _recoveryInProgress,
+                () => _pendingRecoveryNotes,
+                (noteId) => _pendingRecoveryNotes.Remove(noteId),
+                () => _recoveryInProgress = false);
+        }
+
         private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
         {
-            try
-            {
-                if (_metadataManager != null)
-                {
-                    await _metadataManager.MoveMetadataAsync(e.OldPath, e.NewPath);
-                }
-
-                // Update pin service file paths
-                var pinService = GetPinService();
-                if (pinService != null)
-                {
-                    // Find the note ID by checking all notes
-                    var noteId = await FindNoteIdByFilePathAsync(e.NewPath);
-                    if (!string.IsNullOrEmpty(noteId))
-                    {
-                        await pinService.UpdateFilePathAsync(noteId, e.NewPath);
-                        _logger.Debug($"Updated pin service file path: {e.OldPath} -> {e.NewPath}");
-                    }
-                }
-
-                // Update FTS5 search index for file rename
-                await UpdateSearchIndexForFileRename(e.OldPath, e.NewPath);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Failed to move metadata on rename: {ex.Message}");
-            }
+            var coordinator = GetFileSystemEventCoordinator();
+            await coordinator.HandleFileRenamedAsync(e.OldPath, e.NewPath);
         }
 
         private async void OnFileDeleted(object sender, FileChangedEventArgs e)
         {
-            try
-            {
-                // Keep sidecar for recovery; add marker
-                if (_metadataManager != null && System.IO.Path.GetExtension(e.FilePath) != ".meta")
-                {
-                    var metaPath = _metadataManager.GetMetaPath(e.FilePath);
-                    if (System.IO.File.Exists(metaPath))
-                    {
-                        var manager = _metadataManager;
-                        // Best-effort: append marker without throwing
-                        try
-                        {
-                            var existing = await System.IO.File.ReadAllTextAsync(metaPath);
-                            // Minimal mutation to avoid schema coupling
-                            await System.IO.File.WriteAllTextAsync(metaPath, existing);
-                        }
-                        catch { }
-                    }
-                }
-
-                // Update FTS5 search index
-                await UpdateSearchIndexForFileDelete(e.FilePath);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Error handling file deletion: {ex.Message}");
-            }
+            var coordinator = GetFileSystemEventCoordinator();
+            await coordinator.HandleFileDeletedAsync(e.FilePath);
         }
 
         private async void OnFileCreated(object sender, FileChangedEventArgs e)
         {
-            try
-            {
-                // Only index RTF files
-                if (System.IO.Path.GetExtension(e.FilePath).Equals(".rtf", StringComparison.OrdinalIgnoreCase))
-                {
-                    await UpdateSearchIndexForFileCreate(e.FilePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Error handling file creation: {ex.Message}");
-            }
+            var coordinator = GetFileSystemEventCoordinator();
+            await coordinator.HandleFileCreatedAsync(e.FilePath);
         }
 
         private async void OnFileModified(object sender, FileChangedEventArgs e)
         {
-            try
-            {
-                // Only index RTF files
-                if (System.IO.Path.GetExtension(e.FilePath).Equals(".rtf", StringComparison.OrdinalIgnoreCase))
-                {
-                    await UpdateSearchIndexForFileModify(e.FilePath);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Error handling file modification: {ex.Message}");
-            }
+            var coordinator = GetFileSystemEventCoordinator();
+            await coordinator.HandleFileModifiedAsync(e.FilePath);
         }
 
-        private async Task UpdateSearchIndexForFileCreate(string filePath)
-        {
-            try
-            {
-                var searchService = _serviceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
-                if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
-                {
-                    await fts5Service.HandleNoteCreatedAsync(filePath);
-                    _logger.Debug($"Updated search index for created file: {filePath}");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Failed to update search index for created file {filePath}: {ex.Message}");
-            }
-        }
 
-        private async Task UpdateSearchIndexForFileModify(string filePath)
-        {
-            try
-            {
-                var searchService = _serviceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
-                if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
-                {
-                    await fts5Service.HandleNoteUpdatedAsync(filePath);
-                    _logger.Debug($"Updated search index for modified file: {filePath}");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Failed to update search index for modified file {filePath}: {ex.Message}");
-            }
-        }
 
-        private async Task UpdateSearchIndexForFileDelete(string filePath)
-        {
-            try
-            {
-                var searchService = _serviceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
-                if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
-                {
-                    await fts5Service.HandleNoteDeletedAsync(filePath);
-                    _logger.Debug($"Updated search index for deleted file: {filePath}");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Failed to update search index for deleted file {filePath}: {ex.Message}");
-            }
-        }
 
-        private async Task UpdateSearchIndexForFileRename(string oldPath, string newPath)
-        {
-            try
-            {
-                var searchService = _serviceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
-                if (searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
-                {
-                    await fts5Service.HandleNoteRenamedAsync(oldPath, newPath);
-                    _logger.Debug($"Updated search index for renamed file: {oldPath} -> {newPath}");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Failed to update search index for renamed file {oldPath} -> {newPath}: {ex.Message}");
-            }
-        }
 
         #region Commands
 
@@ -507,8 +396,35 @@ namespace NoteNest.UI.ViewModels
                     return;
                 }
                 
-                // Toggle the pin state using the service
-                var success = await pinService.TogglePinAsync(noteItem.Model.Id, noteItem.Model.FilePath);
+                // CRITICAL FIX: Always use metadata ID for consistency
+                // Get the correct metadata ID instead of using noteItem.Model.Id
+                var metadataManager = _serviceProvider?.GetService<NoteNest.Core.Services.NoteMetadataManager>();
+                string noteId = noteItem.Model.Id; // fallback to current ID
+                
+                if (metadataManager != null && !string.IsNullOrEmpty(noteItem.Model.FilePath))
+                {
+                    try
+                    {
+                        // Create a temporary note model to get metadata ID
+                        var tempNote = new NoteNest.Core.Models.NoteModel
+                        {
+                            FilePath = noteItem.Model.FilePath,
+                            Id = noteItem.Model.Id
+                        };
+                        
+                        // Get the canonical metadata ID
+                        noteId = await metadataManager.GetOrCreateNoteIdAsync(tempNote);
+                        _logger?.Debug($"Using metadata ID for pin operation: {noteId} (was: {noteItem.Model.Id})");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Warning($"Failed to get metadata ID for {noteItem.Title}, using fallback: {noteItem.Model.Id}. Error: {ex.Message}");
+                        noteId = noteItem.Model.Id;
+                    }
+                }
+                
+                // Toggle the pin state using the correct metadata ID
+                var success = await pinService.TogglePinAsync(noteId, noteItem.Model.FilePath);
                 
                 if (success)
                 {
@@ -516,8 +432,8 @@ namespace NoteNest.UI.ViewModels
                     _logger?.Debug("Refreshing pinned items collection...");
                     await RefreshPinnedItemsAsync();
                     
-                    // Check current pin state for status message
-                    var isPinned = await pinService.IsPinnedAsync(noteItem.Model.Id);
+                    // Check current pin state for status message using the same metadata ID
+                    var isPinned = await pinService.IsPinnedAsync(noteId);
                     var status = isPinned ? "Pinned" : "Unpinned";
                     StatusMessage = $"{status} '{noteItem.Title}'";
                     _logger?.Debug($"Pin state changed: {noteItem.Title} -> {status}");
@@ -724,10 +640,7 @@ namespace NoteNest.UI.ViewModels
                 // Start async initialization (doesn't block startup)
                 _initializationTask = InitializeAsync(_cancellationTokenSource.Token);
 
-                // Hook workspace events to persist session state
-                _workspaceService.TabOpened += OnWorkspaceTabOpened;
-                _workspaceService.TabClosed += OnWorkspaceTabClosed;
-                _workspaceService.TabSelectionChanged += OnWorkspaceTabSelectionChangedForPersistence;
+                // TabPersistenceCoordinator will handle workspace events for persistence
                 
                 _logger.Info("MainViewModel ready - total time < 50ms");
             }
@@ -739,67 +652,8 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        private async void OnWorkspaceTabOpened(object sender, TabEventArgs e)
-        {
-            try { _tabPersistence.MarkChanged(); } catch { }
-            
-            // Check if this tab has recovered content that needs to be saved
-            if (_recoveryInProgress && e?.Tab?.Note != null && _pendingRecoveryNotes.Contains(e.Tab.Note.Id))
-            {
-                try
-                {
-                    _logger.Info($"Saving recovered content for opened tab: {e.Tab.Note.Title}");
-                    
-                    // Wait a moment for the tab to fully initialize
-                    await Task.Delay(500);
-                    
-                    // Force save the recovered content (bypass dirty check for recovery)
-                    // First ensure the tab knows it has dirty content
-                    if (e.Tab is NoteTabItem nti)
-                    {
-                        nti.IsDirty = true;
-                    }
-                    
-                    bool success = false;
-                    if (e.Tab is ITabItem tabItem)
-                    {
-                        success = await _saveManager.SaveNoteAsync(tabItem.NoteId);
-                    }
-                    
-                    if (success)
-                    {
-                        _pendingRecoveryNotes.Remove(e.Tab.Note.Id);
-                        _logger.Info($"Successfully saved recovered content for: {e.Tab.Note.Title}");
-                        
-                        // Clear recovery tracking if all notes are saved
-                        if (_pendingRecoveryNotes.Count == 0)
-                        {
-                            _recoveryInProgress = false;
-                            
-                            // Recovery cleanup removed - StartupRecoveryService handles all recovery
-                        }
-                    }
-                    else
-                    {
-                        _logger.Warning($"Failed to save recovered content for: {e.Tab.Note.Title}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, $"Error saving recovered content for tab: {e.Tab?.Note?.Title}");
-                }
-            }
-        }
 
-        private void OnWorkspaceTabClosed(object sender, TabEventArgs e)
-        {
-            try { _tabPersistence.MarkChanged(); } catch { }
-        }
 
-        private void OnWorkspaceTabSelectionChangedForPersistence(object sender, TabChangedEventArgs e)
-        {
-            try { _tabPersistence.MarkChanged(); } catch { }
-        }
 
         // Event handler for emergency save notifications
         private void OnSaveCompleted(object? sender, SaveProgressEventArgs e)
@@ -956,7 +810,7 @@ namespace NoteNest.UI.ViewModels
                 _ = GetWorkspaceViewModel();
 
                 // Restore previous tabs
-                await RestoreTabsAsync();
+                await GetTabPersistenceCoordinator().RestoreTabsAsync();
                 
                 // 4. Subscribe to save events
                 _saveManager.ExternalChangeDetected += OnExternalChangeDetected;
@@ -1116,88 +970,6 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        private async Task RestoreTabsAsync()
-        {
-            var persistedState = await _tabPersistence.LoadAsync();
-            if (persistedState?.Tabs == null) return;
-            
-            foreach (var tabInfo in persistedState.Tabs)
-        {
-            try
-            {
-                    if (!File.Exists(tabInfo.Path))
-                    {
-                        _logger.Warning($"Tab file no longer exists: {tabInfo.Path}");
-                        continue;
-                    }
-                    
-                    // Open the note
-                    var noteId = await _saveManager.OpenNoteAsync(tabInfo.Path);
-                    
-                    // If tab was dirty and we have dirty content, restore it
-                    if (tabInfo.IsDirty && !string.IsNullOrEmpty(tabInfo.DirtyContent))
-                    {
-                        // Verify the file hasn't changed since persistence
-                        bool canRestoreDirty = false;
-                        
-                        if (!string.IsNullOrEmpty(tabInfo.FileContentHash))
-                        {
-                            try
-                            {
-                                var currentFileContent = await File.ReadAllTextAsync(tabInfo.Path);
-                                using (var sha256 = System.Security.Cryptography.SHA256.Create())
-                                {
-                                    var currentHash = Convert.ToBase64String(
-                                        sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(currentFileContent))
-                                    );
-                                    
-                                    if (currentHash == tabInfo.FileContentHash)
-                                    {
-                                        canRestoreDirty = true;
-                                    }
-                                    else
-                                    {
-                                        _logger.Warning($"File changed since last session, not restoring dirty content: {tabInfo.Path}");
-                                    }
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.Error(ex, $"Failed to verify file content for: {tabInfo.Path}");
-                            }
-                        }
-                        
-                        if (canRestoreDirty)
-                        {
-                            // Restore dirty content
-                            _saveManager.UpdateContent(noteId, tabInfo.DirtyContent);
-                            _logger.Info($"Restored dirty content for: {tabInfo.Path}");
-                        }
-                    }
-                    
-                    // Create tab
-                    var note = new NoteModel
-                    {
-                        Id = noteId,
-                        FilePath = tabInfo.Path,
-                        Title = tabInfo.Title,
-                        Content = _saveManager.GetContent(noteId)
-                    };
-                    
-                    var tab = await _workspaceService.OpenNoteAsync(note);
-                    
-                    // Set active if needed
-                    if (tabInfo.Id == persistedState.ActiveTabId)
-                    {
-                        _workspaceService.SelectedTab = tab;
-                }
-            }
-            catch (Exception ex)
-            {
-                    _logger.Error(ex, $"Failed to restore tab: {tabInfo.Path}");
-                }
-            }
-        }
 
         // Centralized handler to allow proper unsubscription on dispose
         private void OnStateManagerPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -1883,12 +1655,54 @@ namespace NoteNest.UI.ViewModels
 
         private async Task CollectPinnedNotesFromCategoryAsync(CategoryTreeItem category, HashSet<string> pinnedNoteIds)
         {
+            var pinService = GetPinService();
+            
             foreach (var note in category.Notes)
             {
+                bool isPinned = false;
+                
+                // First try direct ID match
                 if (!string.IsNullOrEmpty(note.Model.Id) && pinnedNoteIds.Contains(note.Model.Id))
                 {
+                    isPinned = true;
+                    _logger?.Debug($"Found pinned note by ID: {note.Title} (ID: {note.Model.Id})");
+                }
+                // Fallback: check by file path if ID doesn't match
+                else if (!string.IsNullOrEmpty(note.Model.FilePath) && pinService != null)
+                {
+                    try
+                    {
+                        // Get the correct metadata ID for this file path
+                        var metadataManager = _serviceProvider?.GetService<NoteNest.Core.Services.NoteMetadataManager>();
+                        if (metadataManager != null)
+                        {
+                            var tempNote = new NoteNest.Core.Models.NoteModel
+                            {
+                                FilePath = note.Model.FilePath,
+                                Id = note.Model.Id
+                            };
+                            var metadataId = await metadataManager.GetOrCreateNoteIdAsync(tempNote);
+                            
+                            if (pinnedNoteIds.Contains(metadataId))
+                            {
+                                isPinned = true;
+                                _logger?.Debug($"Found pinned note by metadata ID: {note.Title} (Tree ID: {note.Model.Id}, Metadata ID: {metadataId})");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Debug($"Failed to check metadata ID for {note.Title}: {ex.Message}");
+                    }
+                }
+                
+                if (isPinned)
+                {
                     PinnedNotes.Add(new NoteNest.UI.Services.PinnedNoteItem(note, category.Name));
-                    _logger?.Debug($"Found pinned note: {note.Title} in category: {category.Name}");
+                }
+                else
+                {
+                    _logger?.Debug($"Note not pinned: {note.Title} (ID: {note.Model.Id})");
                 }
             }
             
@@ -2170,9 +1984,6 @@ namespace NoteNest.UI.ViewModels
                     if (_workspaceService != null)
                     {
                         _workspaceService.TabSelectionChanged -= OnServiceTabSelectionChanged;
-                        _workspaceService.TabOpened -= OnWorkspaceTabOpened;
-                        _workspaceService.TabClosed -= OnWorkspaceTabClosed;
-                        _workspaceService.TabSelectionChanged -= OnWorkspaceTabSelectionChangedForPersistence;
                     }
                     if (_stateManager != null)
                     {
@@ -2186,6 +1997,8 @@ namespace NoteNest.UI.ViewModels
 
                     // Dispose only what was actually created
                     _fileWatcher?.Dispose();
+                    _fileSystemEventCoordinator?.Dispose();
+                    _tabPersistenceCoordinator?.Dispose();
                     (_workspaceViewModel as IDisposable)?.Dispose();
                     (_workspaceService as IDisposable)?.Dispose();
 
