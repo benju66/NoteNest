@@ -5,7 +5,10 @@ using MediatR;
 using NoteNest.Application.Notes.Commands.CreateNote;
 using NoteNest.UI.ViewModels.Common;
 using NoteNest.UI.ViewModels.Categories;
+using NoteNest.UI.ViewModels.Notes;
+using NoteNest.UI.ViewModels.Workspace;
 using NoteNest.UI.Services;
+using System.Linq;
 
 namespace NoteNest.UI.ViewModels.Shell
 {
@@ -13,31 +16,41 @@ namespace NoteNest.UI.ViewModels.Shell
     {
         private readonly IMediator _mediator;
         private readonly IDialogService _dialogService;
-        private CategoryViewModel _selectedCategory;
         private bool _isLoading;
         private string _statusMessage;
 
         public MainShellViewModel(
             IMediator mediator,
             IDialogService dialogService,
-            CategoryTreeViewModel categoryTree)
+            CategoryTreeViewModel categoryTree,
+            NoteOperationsViewModel noteOperations,
+            CategoryOperationsViewModel categoryOperations,
+            ModernWorkspaceViewModel workspace)
         {
             _mediator = mediator;
             _dialogService = dialogService;
             
+            // Composed ViewModels - each with single responsibility
             CategoryTree = categoryTree;
+            NoteOperations = noteOperations;
+            CategoryOperations = categoryOperations;
+            Workspace = workspace;
             
             InitializeCommands();
             SubscribeToEvents();
         }
 
+        // Focused ViewModels - Clean Architecture approach
         public CategoryTreeViewModel CategoryTree { get; }
+        public NoteOperationsViewModel NoteOperations { get; }
+        public CategoryOperationsViewModel CategoryOperations { get; }
+        public ModernWorkspaceViewModel Workspace { get; }
 
-        public CategoryViewModel SelectedCategory
-        {
-            get => _selectedCategory;
-            set => SetProperty(ref _selectedCategory, value);
-        }
+        // Expose selected category from CategoryTree
+        public CategoryViewModel SelectedCategory => CategoryTree.SelectedCategory;
+
+        // Additional aggregated properties for convenience
+        public bool HasOpenTabs => Workspace.OpenTabs.Any();
 
         public bool IsLoading
         {
@@ -51,82 +64,15 @@ namespace NoteNest.UI.ViewModels.Shell
             set => SetProperty(ref _statusMessage, value);
         }
 
-        public ICommand CreateNoteCommand { get; private set; }
-        public ICommand SaveNoteCommand { get; private set; }
-        public ICommand SaveAllCommand { get; private set; }
+        // Commands are now delegated to focused ViewModels
+        public ICommand CreateNoteCommand => NoteOperations.CreateNoteCommand;
+        public ICommand SaveNoteCommand => Workspace.SaveTabCommand;
+        public ICommand SaveAllCommand => Workspace.SaveAllTabsCommand;
         public ICommand RefreshCommand { get; private set; }
 
         private void InitializeCommands()
         {
-            CreateNoteCommand = new AsyncRelayCommand(ExecuteCreateNote, CanCreateNote);
-            SaveNoteCommand = new AsyncRelayCommand(ExecuteSaveNote, CanSaveNote);
-            SaveAllCommand = new AsyncRelayCommand(ExecuteSaveAll);
             RefreshCommand = new AsyncRelayCommand(ExecuteRefresh);
-        }
-
-        private async Task ExecuteCreateNote()
-        {
-            if (SelectedCategory == null)
-            {
-                StatusMessage = "Please select a category first.";
-                return;
-            }
-
-            try
-            {
-                IsLoading = true;
-                StatusMessage = "Creating note...";
-
-                var command = new CreateNoteCommand
-                {
-                    CategoryId = SelectedCategory.Id,
-                    Title = $"New Note {DateTime.Now:yyyy-MM-dd HH-mm-ss}",
-                    InitialContent = "",
-                    OpenInEditor = true
-                };
-
-                var result = await _mediator.Send(command);
-                
-                if (result.IsFailure)
-                {
-                    StatusMessage = $"Failed to create note: {result.Error}";
-                }
-                else
-                {
-                    StatusMessage = $"Created note: {result.Value.Title}";
-                    // TODO: Open note in editor and trigger rename
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Error creating note: {ex.Message}";
-            }
-            finally
-            {
-                IsLoading = false;
-            }
-        }
-
-        private bool CanCreateNote() => SelectedCategory != null && !IsLoading;
-
-        private async Task ExecuteSaveNote()
-        {
-            // TODO: Implement save current note
-            StatusMessage = "Save note not yet implemented";
-            await Task.CompletedTask;
-        }
-
-        private bool CanSaveNote()
-        {
-            // TODO: Check if there's a selected note that needs saving
-            return false;
-        }
-
-        private async Task ExecuteSaveAll()
-        {
-            // TODO: Implement save all notes
-            StatusMessage = "Save all not yet implemented";
-            await Task.CompletedTask;
         }
 
         private async Task ExecuteRefresh()
@@ -152,13 +98,53 @@ namespace NoteNest.UI.ViewModels.Shell
 
         private void SubscribeToEvents()
         {
+            // Wire up cross-ViewModel communication
             CategoryTree.CategorySelected += OnCategorySelected;
+            NoteOperations.NoteCreated += OnNoteCreated;
+            NoteOperations.NoteDeleted += OnNoteDeleted;
+            Workspace.TabSelected += OnTabSelected;
+            Workspace.NoteOpened += OnNoteOpened;
         }
 
         private void OnCategorySelected(CategoryViewModel category)
         {
-            SelectedCategory = category;
-            (CreateNoteCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            // Update NoteOperations with selected category
+            NoteOperations.SelectedCategoryId = category?.Id;
+            
+            // Update status
+            StatusMessage = category != null ? $"Selected: {category.Name}" : "No category selected";
+        }
+
+        private async void OnNoteCreated(string noteId)
+        {
+            // Open the newly created note in the workspace
+            var createdNote = CategoryTree.SelectedCategory; // This would need proper note lookup
+            if (createdNote != null)
+            {
+                await Workspace.OpenNoteAsync(noteId, "New Note"); // Title would come from creation result
+                StatusMessage = "Note created and opened";
+            }
+        }
+
+        private void OnNoteDeleted(string noteId)
+        {
+            // Close tab if note was open
+            var openTab = Workspace.OpenTabs.FirstOrDefault(t => t.NoteId == noteId);
+            if (openTab != null)
+            {
+                Workspace.OpenTabs.Remove(openTab);
+            }
+            StatusMessage = "Note deleted";
+        }
+
+        private void OnTabSelected(TabViewModel tab)
+        {
+            StatusMessage = tab != null ? $"Editing: {tab.Title}" : "No note selected";
+        }
+
+        private void OnNoteOpened(string noteId)
+        {
+            StatusMessage = "Note opened in editor";
         }
     }
 }

@@ -196,7 +196,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
             }
             
             // Alternative: Search in MainWindow
-            var mainWindow = Application.Current.MainWindow;
+            var mainWindow = System.Windows.Application.Current.MainWindow;
             if (mainWindow != null)
             {
                 return FindVisualChild<SplitWorkspace>(mainWindow);

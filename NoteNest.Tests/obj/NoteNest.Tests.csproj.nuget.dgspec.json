@@ -330,6 +330,9 @@
           "net9.0-windows7.0": {
             "targetAlias": "net9.0-windows7.0",
             "projectReferences": {
+              "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
+                "projectPath": "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
+              },
               "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj": {
                 "projectPath": "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj"
               },

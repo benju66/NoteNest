@@ -72,7 +72,7 @@ namespace NoteNest.UI.Windows
 
         private async void Start_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
+            var dlg = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
             // Validate paths first
             if (!Directory.Exists(_sourcePath))
             {
@@ -151,7 +151,7 @@ namespace NoteNest.UI.Windows
             if (!_cleanupAvailable)
                 return;
 
-            var dlg = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
+            var dlg = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
             var ok = await dlg!.ShowConfirmationDialogAsync(
                 $"This will delete the old location and all its contents:\n\n{_sourcePath}\n\nAre you sure?",
                 "Confirm Cleanup");

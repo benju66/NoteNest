@@ -15,7 +15,7 @@ namespace NoteNest.UI.Services
 
 		public DialogService()
 		{
-			_dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+                       _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 		}
 
 		public async Task<string?> ShowInputDialogAsync(string title, string prompt, string defaultValue = "",
@@ -161,7 +161,7 @@ namespace NoteNest.UI.Services
 		private Window? GetSafeOwner()
 		{
 			if (!_dispatcher.CheckAccess()) return null;
-			var owner = OwnerWindow ?? Application.Current?.MainWindow;
+                      var owner = OwnerWindow ?? System.Windows.Application.Current?.MainWindow;
 			if (owner == null || !owner.IsLoaded || !owner.IsVisible) return null;
 			return owner;
 		}

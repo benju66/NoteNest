@@ -69,7 +69,7 @@ namespace NoteNest.UI.Services.DragDrop
             }
 
             // Batch the update on the UI thread at render priority
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 try
                 {
@@ -140,7 +140,7 @@ namespace NoteNest.UI.Services.DragDrop
             }
 
             // Schedule immediate hide on UI thread
-            Application.Current.Dispatcher.BeginInvoke(() =>
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
             {
                 HideInsertionLineImmediate();
             }, DispatcherPriority.Send);
@@ -236,7 +236,7 @@ namespace NoteNest.UI.Services.DragDrop
                         bool isValid = false;
                         try
                         {
-                            Application.Current.Dispatcher.Invoke(() =>
+                            System.Windows.Application.Current.Dispatcher.Invoke(() =>
                             {
                                 isValid = PresentationSource.FromVisual(element) != null && element.IsLoaded;
                             });
@@ -249,7 +249,7 @@ namespace NoteNest.UI.Services.DragDrop
 
                 if (staleKeys.Count > 0)
                 {
-                    Application.Current.Dispatcher.Invoke(() =>
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
                         foreach (var key in staleKeys)
                         {
@@ -290,7 +290,7 @@ namespace NoteNest.UI.Services.DragDrop
                         try
                         {
                             bool isValid = false;
-                            Application.Current.Dispatcher.Invoke(() =>
+                            System.Windows.Application.Current.Dispatcher.Invoke(() =>
                             {
                                 isValid = PresentationSource.FromVisual(element) != null;
                             });

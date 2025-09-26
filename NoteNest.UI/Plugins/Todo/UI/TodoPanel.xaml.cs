@@ -269,7 +269,7 @@ namespace NoteNest.UI.Plugins.Todo.UI
 		{
 			if (sender is MenuItem mi && mi.DataContext is TodoItem task)
 			{
-				var dialog = new TaskEditDialog { Owner = Application.Current.MainWindow };
+                             var dialog = new TaskEditDialog { Owner = System.Windows.Application.Current.MainWindow };
 				dialog.DataContext = new {
 					Text = task.Text,
 					Category = task.Category,
@@ -344,7 +344,7 @@ namespace NoteNest.UI.Plugins.Todo.UI
 			{
 				// FIX: Use injected dependency instead of service locator
 				var wnd = new NoteNest.UI.Windows.IntegrityDiagnosticsWindow(_integrityChecker);
-				wnd.Owner = Application.Current?.MainWindow;
+                             wnd.Owner = System.Windows.Application.Current?.MainWindow;
 				wnd.Show();
 			}
 			catch { }

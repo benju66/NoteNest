@@ -17,9 +17,9 @@ namespace NoteNest.UI.Helpers
                 DefaultButton = ContentDialogButton.Primary
             };
 
-            if (Application.Current.MainWindow != null)
+            if (System.Windows.Application.Current.MainWindow != null)
             {
-                dialog.Owner = Application.Current.MainWindow;
+                dialog.Owner = System.Windows.Application.Current.MainWindow;
             }
 
             return await dialog.ShowAsync();

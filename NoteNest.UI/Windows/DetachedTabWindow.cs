@@ -51,7 +51,7 @@ namespace NoteNest.UI.Windows
             // Apply current theme based on main application theme
             try 
             {
-                var mainWindow = Application.Current?.MainWindow;
+                var mainWindow = System.Windows.Application.Current?.MainWindow;
                 if (mainWindow != null)
                 {
                     var currentTheme = ModernWpf.ThemeManager.GetRequestedTheme(mainWindow);
@@ -104,7 +104,7 @@ namespace NoteNest.UI.Windows
                 try
                 {
                     // Get save manager to save
-                    var saveManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
+                    var saveManager = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
                     if (saveManager != null)
                     {
                         // Content is up-to-date since debouncing was removed
@@ -142,7 +142,7 @@ namespace NoteNest.UI.Windows
             // Reset dialog owner back to main window
             if (_dialogService != null)
             {
-                _dialogService.OwnerWindow = Application.Current?.MainWindow;
+                _dialogService.OwnerWindow = System.Windows.Application.Current?.MainWindow;
             }
             _workspaceService?.UnregisterPane(_pane);
             // no event unhook needed for SplitWorkspace

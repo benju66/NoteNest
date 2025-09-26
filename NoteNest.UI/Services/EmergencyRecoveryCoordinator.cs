@@ -118,7 +118,7 @@ namespace NoteNest.UI.Services
             if (e != null && e.FilePath.Contains("EMERGENCY"))
             {
                 // Show notification to user
-                Application.Current.Dispatcher.Invoke(() =>
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     var message = $"File could not be saved to original location.\n" +
                                  $"Emergency backup saved to:\n{e.FilePath}";
@@ -137,7 +137,7 @@ namespace NoteNest.UI.Services
         private async void OnExternalChangeDetected(object sender, ExternalChangeEventArgs e)
         {
             // Run on UI thread
-            await Application.Current.Dispatcher.InvokeAsync(async () =>
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
             {
                 var result = MessageBox.Show(
                     $"The file '{Path.GetFileName(e.FilePath)}' has been modified externally.\n\n" +

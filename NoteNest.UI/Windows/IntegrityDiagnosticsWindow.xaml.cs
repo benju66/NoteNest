@@ -41,7 +41,7 @@ namespace NoteNest.UI.Windows
 					await _checker.ClearLinkAsync(issue.Task); // Clear first
 					issue.Task.LinkedNoteId = issue.Task.LinkedNoteId; // keep id
 					// Re-add path by updating task
-					var sp = (Application.Current as App)?.ServiceProvider;
+                     var sp = (System.Windows.Application.Current as App)?.ServiceProvider;
 					var todos = sp?.GetService(typeof(NoteNest.UI.Plugins.Todo.Services.ITodoService)) as NoteNest.UI.Plugins.Todo.Services.ITodoService;
 					if (todos != null)
 					{

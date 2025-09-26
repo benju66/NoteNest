@@ -119,7 +119,7 @@ namespace NoteNest.UI.Services.Tab
         {
             try
             {
-                if (Application.Current.TryFindResource(styleKey) is Style style)
+                if (System.Windows.Application.Current.TryFindResource(styleKey) is Style style)
                 {
                     element.Style = style;
                 }
@@ -547,7 +547,7 @@ namespace NoteNest.UI.Services.Tab
                 {
                     if (_editor is RTFEditor rtfEditor)
                     {
-                        Application.Current.Dispatcher.Invoke(() =>
+                        System.Windows.Application.Current.Dispatcher.Invoke(() =>
                         {
                             rtfEditor.LoadContent(content ?? "");
                         });

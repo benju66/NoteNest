@@ -36,11 +36,11 @@ namespace NoteNest.UI.Controls
             set => SetValue(IsActiveProperty, value);
         }
         
-         private readonly IWorkspaceService? _workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+         private readonly IWorkspaceService? _workspaceService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
         // Removed: IWorkspaceStateService - now using SaveManager
-        private readonly NoteNest.Core.Services.ConfigurationService? _configService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
-        private readonly NoteNest.Core.Services.Logging.IAppLogger? _logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
-        private readonly NoteNest.Core.Services.NoteMetadataManager? _metadataManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.NoteMetadataManager)) as NoteNest.Core.Services.NoteMetadataManager;
+        private readonly NoteNest.Core.Services.ConfigurationService? _configService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ConfigurationService)) as NoteNest.Core.Services.ConfigurationService;
+        private readonly NoteNest.Core.Services.Logging.IAppLogger? _logger = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
+        private readonly NoteNest.Core.Services.NoteMetadataManager? _metadataManager = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.NoteMetadataManager)) as NoteNest.Core.Services.NoteMetadataManager;
         private bool _isDragging;
 
         // Expose commands for input bindings
@@ -52,7 +52,7 @@ namespace NoteNest.UI.Controls
             InitializeComponent();
             try
             {
-                var bus = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IEventBus)) as IEventBus;
+                var bus = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IEventBus)) as NoteNest.Core.Services.IEventBus;
                 bus?.Subscribe<AppSettingsChangedEvent>(_ =>
                 {
                     // Apply to current active editor when settings change
@@ -156,7 +156,7 @@ namespace NoteNest.UI.Controls
             {
                 try
                 {
-                    var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                    var workspaceService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
                     if (workspaceService != null)
                     {
                         _ = workspaceService.ClosePaneAsync(Pane);
@@ -368,7 +368,7 @@ namespace NoteNest.UI.Controls
             // Notify workspace that this pane is now active
             if (Pane != null)
             {
-                var mainWindow = Application.Current.MainWindow;
+                var mainWindow = System.Windows.Application.Current.MainWindow;
                 var panel = FindNoteNestPanel(mainWindow);
                 if (panel != null)
                 {
@@ -475,7 +475,7 @@ namespace NoteNest.UI.Controls
             if (selected == null) return;
             try
             {
-                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                var closeService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
                 if (closeService != null)
                 {
                     await closeService.CloseTabWithPromptAsync(selected);
@@ -489,8 +489,8 @@ namespace NoteNest.UI.Controls
             if (tab?.Note == null) return;
             try
             {
-                var dialog = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.IDialogService)) as NoteNest.UI.Services.IDialogService;
-                var ops = (Application.Current as App)?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
+                var dialog = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.IDialogService)) as NoteNest.UI.Services.IDialogService;
+                var ops = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(INoteOperationsService)) as INoteOperationsService;
                 if (dialog == null || ops == null) return;
 
                 var currentName = tab.Note.Title;
@@ -532,7 +532,7 @@ namespace NoteNest.UI.Controls
         {
             try
             {
-                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                var closeService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
                 if (closeService != null)
                 {
                     await closeService.CloseAllTabsWithPromptAsync();
@@ -553,7 +553,7 @@ namespace NoteNest.UI.Controls
             
             try
             {
-                var dialog = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.IDialogService)) as NoteNest.UI.Services.IDialogService;
+                var dialog = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.IDialogService)) as NoteNest.UI.Services.IDialogService;
                 if (dialog == null) return;
 
                 var others = Pane.Tabs.Where(t => !ReferenceEquals(t, keepTab)).ToList();
@@ -584,7 +584,7 @@ namespace NoteNest.UI.Controls
                     if (result == null) return;
                     if (result == true)
                     {
-                        var saveManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
+                        var saveManager = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
                         if (saveManager != null)
                         {
                             foreach (var t in dirty)
@@ -612,7 +612,7 @@ namespace NoteNest.UI.Controls
                 // BULLETPROOF: Force immediate persistence save for RTF close others operation
                 try
                 {
-                    var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
+                    var persistence = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
                     var workspaceService = _workspaceService;
                     
                     if (persistence != null && workspaceService != null)
@@ -654,7 +654,7 @@ namespace NoteNest.UI.Controls
                 
                 try
                 {
-                    var app = Application.Current as App;
+                    var app = System.Windows.Application.Current as App;
                     
                     // Use RTF-integrated save system (now the only system)
                     System.Diagnostics.Debug.WriteLine($"[SAVE] Using RTF-integrated save engine for: {tab.Title}");
@@ -741,7 +741,7 @@ namespace NoteNest.UI.Controls
                         editor.MarkClean();
                     }
                 }
-                var saveManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
+                var saveManager = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
                 var success = saveManager != null && await saveManager.SaveNoteAsync(tab.NoteId);
                 if (success)
                 {
@@ -763,7 +763,7 @@ namespace NoteNest.UI.Controls
             e.Handled = true;
             try
             {
-                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                var closeService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
                 if (closeService != null)
                 {
                     _ = closeService.CloseTabWithPromptAsync(tab);
@@ -805,7 +805,7 @@ namespace NoteNest.UI.Controls
         /// </summary>
         private ISaveManager GetSaveManager()
         {
-            return (Application.Current as App)?.ServiceProvider
+            return (System.Windows.Application.Current as App)?.ServiceProvider
                 ?.GetService(typeof(ISaveManager)) as ISaveManager;
         }
         
@@ -871,7 +871,7 @@ namespace NoteNest.UI.Controls
         private void NotifyTreeOfRename(NoteModel renamedNote)
         {
             if (renamedNote == null) return;
-            var mainWindow = Application.Current?.MainWindow as MainWindow;
+            var mainWindow = System.Windows.Application.Current?.MainWindow as MainWindow;
             if (mainWindow?.DataContext is not MainViewModel vm) return;
             foreach (var category in vm.Categories)
             {
@@ -927,7 +927,7 @@ namespace NoteNest.UI.Controls
                 }
 
                 // PHASE 2: COORDINATED CLOSE WITH FORCE PERSISTENCE
-                var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                var closeService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
                 if (closeService != null)
                 {
                     var closed = await closeService.CloseTabWithPromptAsync(tab);
@@ -940,7 +940,7 @@ namespace NoteNest.UI.Controls
                         // RTF-integrated save (eliminates ForceSaveAsync bypass)
                         try
                         {
-                            var app = Application.Current as App;
+                            var app = System.Windows.Application.Current as App;
                             
                             // Use RTF-integrated save for tab close (now the only system)
                             var rtfSaveWrapper = app?.ServiceProvider?.GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
@@ -990,7 +990,7 @@ namespace NoteNest.UI.Controls
                             // Fallback to regular marking
                             try
                             {
-                                var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
+                                var persistence = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabPersistenceService)) as ITabPersistenceService;
                                 persistence?.MarkChanged();
                             }
                             catch { }
@@ -1015,7 +1015,7 @@ namespace NoteNest.UI.Controls
                     // Try workspace service directly
                     try
                     {
-                        var workspaceService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                        var workspaceService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
                         if (workspaceService != null)
                         {
                             _ = Task.Run(async () => await workspaceService.CloseTabAsync(tab));

@@ -34,7 +34,7 @@ namespace NoteNest.UI.Plugins.Todo
 		await _todoService.LoadTasksAsync();
 		
 		// FIX: Get dependencies through DI instead of service locator
-		var app = Application.Current as NoteNest.UI.App;
+              var app = System.Windows.Application.Current as NoteNest.UI.App;
 		var serviceProvider = app?.ServiceProvider;
 		
 		if (serviceProvider != null)
@@ -54,7 +54,7 @@ namespace NoteNest.UI.Plugins.Todo
 			// Subscribe to core note events to keep linked tasks in sync
 			try
 			{
-				var bus = (Application.Current as NoteNest.UI.App)?.ServiceProvider?.GetService(typeof(IEventBus)) as IEventBus;
+                              var bus = (System.Windows.Application.Current as NoteNest.UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IEventBus)) as NoteNest.Core.Services.IEventBus;
 				if (bus != null)
 				{
 					_eventBus = bus;

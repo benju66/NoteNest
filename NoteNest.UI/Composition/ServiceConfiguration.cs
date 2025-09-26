@@ -17,6 +17,8 @@ using NoteNest.Infrastructure.Services;
 using NoteNest.Infrastructure.EventBus;
 using NoteNest.UI.ViewModels.Shell;
 using NoteNest.UI.ViewModels.Categories;
+using NoteNest.UI.ViewModels.Notes;
+using NoteNest.UI.ViewModels.Workspace;
 using NoteNest.UI.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Interfaces;
@@ -49,19 +51,22 @@ namespace NoteNest.UI.Composition
             services.AddScoped<ICategoryRepository, FileSystemCategoryRepository>();
             
             // Infrastructure services
-            services.AddSingleton<IEventBus, InMemoryEventBus>();
+            services.AddSingleton<NoteNest.Application.Common.Interfaces.IEventBus, InMemoryEventBus>();
             services.AddScoped<IFileService, FileService>();
             
             // Core services (reuse existing ones)
             services.AddSingleton<IAppLogger, AppLogger>();
-            services.AddSingleton<IFileSystemProvider, FileSystemProvider>();
+            services.AddSingleton<IFileSystemProvider, DefaultFileSystemProvider>();
             
             // UI services (reuse existing ones)
             services.AddScoped<IDialogService, DialogService>();
             
-            // ViewModels
+            // ViewModels - Focused and Single Responsibility
             services.AddTransient<MainShellViewModel>();
             services.AddTransient<CategoryTreeViewModel>();
+            services.AddTransient<NoteOperationsViewModel>();
+            services.AddTransient<CategoryOperationsViewModel>();
+            services.AddTransient<ModernWorkspaceViewModel>();
             
             return services;
         }

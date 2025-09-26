@@ -17,7 +17,7 @@ namespace NoteNest.UI.Services
 		public UserNotificationService(Window? mainWindow = null, IAppLogger? logger = null)
 		{
 			_logger = logger ?? AppLogger.Instance;
-			_dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+                     _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 			_mainWindow = mainWindow;
 		}
 
@@ -152,7 +152,7 @@ namespace NoteNest.UI.Services
 		private Window? GetSafeOwner()
 		{
 			if (!_dispatcher.CheckAccess()) return null;
-			var owner = _mainWindow ?? Application.Current?.MainWindow;
+                    var owner = _mainWindow ?? System.Windows.Application.Current?.MainWindow;
 			return (owner != null && owner.IsLoaded && owner.IsVisible) ? owner : null;
 		}
 	}

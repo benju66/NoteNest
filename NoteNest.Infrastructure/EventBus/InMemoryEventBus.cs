@@ -5,7 +5,7 @@ using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.Infrastructure.EventBus
 {
-    public class InMemoryEventBus : IEventBus
+    public class InMemoryEventBus : NoteNest.Application.Common.Interfaces.IEventBus
     {
         private readonly IAppLogger _logger;
 

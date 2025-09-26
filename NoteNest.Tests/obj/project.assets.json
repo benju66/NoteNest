@@ -4304,6 +4304,7 @@
       "NUnit >= 4.2.2",
       "NUnit.Analyzers >= 4.4.0",
       "NUnit3TestAdapter >= 4.6.0",
+      "NoteNest.Application >= 1.0.0",
       "NoteNest.Core >= 1.0.0",
       "NoteNest.UI >= 1.0.0",
       "coverlet.collector >= 6.0.2"
@@ -4334,6 +4335,9 @@
         "net9.0-windows7.0": {
           "targetAlias": "net9.0-windows7.0",
           "projectReferences": {
+            "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
+              "projectPath": "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
+            },
             "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj": {
               "projectPath": "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj"
             },

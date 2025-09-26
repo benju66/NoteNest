@@ -11,7 +11,7 @@ namespace NoteNest.UI.Services.DragDrop
         private Timer? _timer;
         private WeakReference<FrameworkElement>? _hoveredPane;
         private int DelayMs => DragConfig.Instance.SpringLoadDelayMs;
-        private readonly Dispatcher _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+        private readonly Dispatcher _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
         public event EventHandler<FrameworkElement>? PaneActivated;
 

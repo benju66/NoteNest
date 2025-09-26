@@ -87,7 +87,7 @@ namespace NoteNest.UI
 
                 try
                 {
-                    var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                     if (config?.Settings != null && FindName("ShowActivityBarMenuItem") is System.Windows.Controls.MenuItem mi)
                     {
                         mi.IsChecked = config.Settings.ShowActivityBar;
@@ -111,7 +111,7 @@ namespace NoteNest.UI
                         }
                         try
                         {
-                            var pm = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IPluginManager)) as IPluginManager;
+                            var pm = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IPluginManager)) as IPluginManager;
                             if (pm != null)
                             {
                                 var abvm = new ActivityBarViewModel(pm);
@@ -155,7 +155,7 @@ namespace NoteNest.UI
                 // Wire up toast host to service
                 try
                 {
-                    var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ToastNotificationService)) as ToastNotificationService;
+                    var toast = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ToastNotificationService)) as ToastNotificationService;
                     if (toast != null && ToastHost != null)
                     {
                         ToastHost.DataContext = toast;
@@ -166,8 +166,8 @@ namespace NoteNest.UI
                 // Hook errors to toasts with light throttling (5s)
                 try
                 {
-                    var err = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IServiceErrorHandler)) as IServiceErrorHandler;
-                    var toast = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ToastNotificationService)) as ToastNotificationService;
+                    var err = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IServiceErrorHandler)) as IServiceErrorHandler;
+                    var toast = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ToastNotificationService)) as ToastNotificationService;
                     if (err != null && toast != null)
                     {
                         DateTime lastShown = DateTime.MinValue;
@@ -301,7 +301,7 @@ namespace NoteNest.UI
 
         private void UpdateRightPanelVisibility(bool visible)
         {
-            var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+            var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
             if (visible)
             {
                 // Ensure container visible
@@ -374,7 +374,7 @@ namespace NoteNest.UI
                 // Ensure plugin column has visible width
                 try
                 {
-                    var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                     var targetWidth = (config?.Settings?.PluginPanelWidth ?? 0) > 0 ? config.Settings.PluginPanelWidth : 300;
                     if (PluginColumn.Width.Value <= 0.1)
                     {
@@ -393,7 +393,7 @@ namespace NoteNest.UI
                 // Persist active plugin id
                 try
                 {
-                    var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                    var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                     if (config?.Settings != null)
                     {
                         if (isSecondary)
@@ -413,7 +413,7 @@ namespace NoteNest.UI
         {
             try
             {
-                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                 if (config?.Settings != null)
                 {
                     var w = PluginColumn.ActualWidth;
@@ -442,7 +442,7 @@ namespace NoteNest.UI
         {
             try
             {
-                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                 if (config?.Settings == null) return;
                 var collapsed = EditorColumn.Width.Value <= 0.1;
                 if (collapsed)
@@ -465,7 +465,7 @@ namespace NoteNest.UI
         {
             PluginPanelHostSecondary.Visibility = enable ? Visibility.Visible : Visibility.Collapsed;
             InnerPluginSplitter.Visibility = enable ? Visibility.Visible : Visibility.Collapsed;
-            var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+            var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
             if (config?.Settings != null)
             {
                 config.Settings.RightPanelSplitEnabled = enable;
@@ -491,7 +491,7 @@ namespace NoteNest.UI
             {
                 var top = PluginPanelContainer.RowDefinitions[0].ActualHeight;
                 var bottom = PluginPanelContainer.RowDefinitions[2].ActualHeight;
-                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                 if (config?.Settings != null)
                 {
                     config.Settings.RightPanelTopHeight = top;
@@ -523,7 +523,7 @@ namespace NoteNest.UI
                 var hoveredPaneControl = FindPaneControlAtPoint(e.GetPosition(this));
                 if (hoveredPaneControl != null)
                 {
-                    var spring = (Application.Current as App)?.ServiceProvider?.GetService(typeof(SpringLoadedPaneManager)) as SpringLoadedPaneManager;
+                    var spring = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(SpringLoadedPaneManager)) as SpringLoadedPaneManager;
                     spring?.BeginHover(hoveredPaneControl);
                     spring!.PaneActivated -= OnPaneActivated;
                     spring.PaneActivated += OnPaneActivated;
@@ -546,7 +546,7 @@ namespace NoteNest.UI
                 var targetPane = FindPaneAtPoint(point);
                 if (targetPane != null)
                 {
-                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                    var workspace = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
                     if (workspace != null)
                     {
                         await workspace.MoveTabToPaneAsync(tab, targetPane);
@@ -637,7 +637,7 @@ namespace NoteNest.UI
         private void OnPaneActivated(object? sender, FrameworkElement paneControl)
         {
             var spv = FindAncestor<SplitPaneView>(paneControl);
-            var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+            var workspace = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
             if (spv?.Pane != null && workspace != null)
             {
                 workspace.SetActivePane(spv.Pane);
@@ -810,7 +810,7 @@ namespace NoteNest.UI
         {
             try
             {
-                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
                 if (config?.Settings != null && sender is System.Windows.Controls.MenuItem mi)
                 {
                     config.Settings.ShowActivityBar = mi.IsChecked;
@@ -931,8 +931,8 @@ namespace NoteNest.UI
 
             try
             {
-                var config = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
-                var logger = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
+                var config = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ConfigurationService)) as ConfigurationService;
+                var logger = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.Logging.IAppLogger)) as NoteNest.Core.Services.Logging.IAppLogger;
                 var treeState = new TreeStateService(config, logger);
                 var expandedIds = await treeState.LoadExpansionStateAsync();
                 if (expandedIds != null && expandedIds.Count > 0)
@@ -961,8 +961,8 @@ namespace NoteNest.UI
             {
                 try
                 {
-                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
-                    var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+                    var workspace = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
+                    var closeService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
                     if (workspace?.HasUnsavedChanges == true && closeService != null)
                     {
                         e.Cancel = true;
@@ -1034,7 +1034,7 @@ namespace NoteNest.UI
                 try
                 {
                     // Save all dirty notes via SaveManager
-                    var saveManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
+                    var saveManager = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ISaveManager)) as ISaveManager;
                     if (saveManager != null)
                     {
                         var task = saveManager.SaveAllDirtyAsync();
@@ -1046,8 +1046,8 @@ namespace NoteNest.UI
                 try
                 {
                     // Persist session tabs best-effort
-                    var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ITabPersistenceService)) as NoteNest.Core.Services.ITabPersistenceService;
-                    var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
+                    var persistence = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ITabPersistenceService)) as NoteNest.Core.Services.ITabPersistenceService;
+                    var workspace = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
                     if (persistence != null && workspace != null)
                     {
                         var activeId = workspace.SelectedTab?.Note?.Id;
@@ -1076,8 +1076,8 @@ namespace NoteNest.UI
             try
             {
                 // Quick synchronous session save on shutdown (best-effort)
-                var persistence = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ITabPersistenceService)) as NoteNest.Core.Services.ITabPersistenceService;
-                var workspace = (Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
+                var persistence = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.ITabPersistenceService)) as NoteNest.Core.Services.ITabPersistenceService;
+                var workspace = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Interfaces.Services.IWorkspaceService)) as NoteNest.Core.Interfaces.Services.IWorkspaceService;
                 if (persistence != null && workspace != null)
                 {
                     var activeId = workspace.SelectedTab?.Note?.Id;

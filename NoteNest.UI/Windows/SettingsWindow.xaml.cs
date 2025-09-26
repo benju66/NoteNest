@@ -72,7 +72,7 @@ namespace NoteNest.UI.Windows
                 // Small polish: broadcast settings changed so open editors apply spell check/format immediately
                 try
                 {
-                    var bus = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IEventBus)) as IEventBus;
+                    var bus = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IEventBus)) as NoteNest.Core.Services.IEventBus;
                     if (bus != null)
                     {
                         await bus.PublishAsync(new AppSettingsChangedEvent());
@@ -102,7 +102,7 @@ namespace NoteNest.UI.Windows
                 var currentPath = _viewModel.GetCurrentSavedPath();
                 var newPath = _viewModel.GetSelectedDestinationPath();
 
-                var dlg = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
+                var dlg = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
 
                 if (string.IsNullOrEmpty(currentPath) || string.IsNullOrEmpty(newPath))
                 {
@@ -161,7 +161,7 @@ namespace NoteNest.UI.Windows
             }
             catch (Exception ex)
             {
-                var dlg = (Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
+                var dlg = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
                 dlg?.ShowError($"An error occurred: {ex.Message}", "Error");
             }
         }

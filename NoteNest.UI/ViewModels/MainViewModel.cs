@@ -188,7 +188,7 @@ namespace NoteNest.UI.ViewModels
                 _errorHandler,
                 _logger,
                 _fileSystem,
-                (Application.Current as NoteNest.UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IEventBus)) as NoteNest.Core.Services.IEventBus);
+                (System.Windows.Application.Current as NoteNest.UI.App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IEventBus)) as NoteNest.Core.Services.IEventBus);
         }
 
         private INoteOperationsService GetNoteOperationsService()
@@ -649,7 +649,7 @@ namespace NoteNest.UI.ViewModels
                 {
                     _logger.Info("ExitCommand triggered - initiating shutdown");
                     // Directly shutdown; Window_Closing will force-save
-                    Application.Current.Shutdown();
+                    System.Windows.Application.Current.Shutdown();
                 }
                 catch (Exception ex)
                 {
@@ -888,7 +888,7 @@ namespace NoteNest.UI.ViewModels
                 var uiCollections = GetTreeViewModelAdapter().ConvertToUICollections(treeData);
 
                 // Apply tree data to UI collections
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
                     foreach (var item in uiCollections.RootCategories)
                     {
@@ -1021,7 +1021,7 @@ namespace NoteNest.UI.ViewModels
             
             // TRIGGER IMMEDIATE RENAME for better UX
             // Give user chance to provide proper name right away
-            Application.Current.Dispatcher.BeginInvoke(new Action(async () =>
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(async () =>
             {
                 try
                 {
@@ -1098,7 +1098,7 @@ namespace NoteNest.UI.ViewModels
                 try
                 {
                     // Use RTF-integrated save system (now the only system)
-                    var rtfSaveWrapper = (Application.Current as App)?.ServiceProvider?
+                    var rtfSaveWrapper = (System.Windows.Application.Current as App)?.ServiceProvider?
                         .GetService(typeof(RTFSaveEngineWrapper)) as RTFSaveEngineWrapper;
                     
                     if (rtfSaveWrapper != null && current is NoteTabItem noteTabItem && noteTabItem.Editor != null)
@@ -1175,7 +1175,7 @@ namespace NoteNest.UI.ViewModels
         {
             if (tab == null) return;
 
-            var closeService = (Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
+            var closeService = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(ITabCloseService)) as ITabCloseService;
             if (closeService == null) return;
 
             // Prefer closing via ITabItem if present; otherwise close via workspace mapping

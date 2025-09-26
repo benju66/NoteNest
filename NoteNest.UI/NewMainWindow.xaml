@@ -12,9 +12,10 @@
         
         <!-- Toolbar -->
         <ToolBar Grid.Row="0">
-            <Button Content="New Note" Command="{Binding CreateNoteCommand}" />
-            <Button Content="Save" Command="{Binding SaveNoteCommand}" />
-            <Button Content="Save All" Command="{Binding SaveAllCommand}" />
+            <Button Content="New Note" Command="{Binding NoteOperations.CreateNoteCommand}" />
+            <Button Content="Save" Command="{Binding Workspace.SaveTabCommand}" 
+                    CommandParameter="{Binding Workspace.SelectedTab}" />
+            <Button Content="Save All" Command="{Binding Workspace.SaveAllTabsCommand}" />
             <Separator />
             <Button Content="Refresh" Command="{Binding RefreshCommand}" />
         </ToolBar>
@@ -40,12 +41,43 @@
             
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
             
-            <!-- Notes Area (Placeholder) -->
-            <GroupBox Grid.Column="2" Header="Notes">
-                <TextBlock Text="Note editor will be implemented here" 
-                          HorizontalAlignment="Center" 
-                          VerticalAlignment="Center" 
-                          Foreground="Gray"/>
+            <!-- Workspace Area -->
+            <GroupBox Grid.Column="2" Header="Workspace">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Tab Bar -->
+                    <TabControl Grid.Row="0" ItemsSource="{Binding Workspace.OpenTabs}" 
+                               SelectedItem="{Binding Workspace.SelectedTab}">
+                        <TabControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Title}" />
+                                    <TextBlock Text="*" Visibility="{Binding IsDirty, Converter={x:Static local:BoolToVisibilityConverter.Instance}}" 
+                                              Foreground="Red" Margin="2,0,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </TabControl.ItemTemplate>
+                        <TabControl.ContentTemplate>
+                            <DataTemplate>
+                                <TextBox Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}" 
+                                        AcceptsReturn="True" 
+                                        VerticalScrollBarVisibility="Auto"
+                                        HorizontalScrollBarVisibility="Auto"/>
+                            </DataTemplate>
+                        </TabControl.ContentTemplate>
+                    </TabControl>
+                    
+                    <!-- Placeholder when no tabs -->
+                    <TextBlock Grid.Row="1" Text="No notes open. Select a category and click 'New Note' to get started." 
+                              HorizontalAlignment="Center" 
+                              VerticalAlignment="Center" 
+                              Foreground="Gray"
+                              Visibility="{Binding Workspace.OpenTabs.Count, Converter={x:Static local:CountToVisibilityConverter.Instance}}"/>
+                </Grid>
             </GroupBox>
         </Grid>
         

@@ -16,7 +16,7 @@ namespace NoteNest.UI.Services
 
 		public ToastNotificationService()
 		{
-			_dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+                    _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 			Messages = new ObservableCollection<ToastMessage>();
 		}
 

@@ -322,7 +322,7 @@ namespace NoteNest.UI.ViewModels
             _model = model ?? throw new ArgumentNullException(nameof(model));
             
             // Get pin service from DI container
-            var app = Application.Current as App;
+            var app = System.Windows.Application.Current as App;
             _pinService = app?.ServiceProvider?.GetService<IPinService>();
             
             _modelPropertyChangedHandler = (s, e) =>
@@ -386,7 +386,7 @@ namespace NoteNest.UI.ViewModels
                 if (e.NoteId == _model.Id)
                 {
                     // Ensure UI update happens on UI thread
-                    Application.Current?.Dispatcher?.Invoke(() =>
+                    System.Windows.Application.Current?.Dispatcher?.Invoke(() =>
                     {
                         IsPinned = e.IsPinned;
                         System.Diagnostics.Debug.WriteLine($"NoteTreeItem: Updated pin state for {_model.Title} to {e.IsPinned}");

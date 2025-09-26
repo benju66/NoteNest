@@ -259,7 +259,7 @@ namespace NoteNest.UI.ViewModels
             // Apply grid style from resources if available
             try
             {
-                if (Application.Current.TryFindResource("TabContentGridStyle") is Style gridStyle)
+                if (System.Windows.Application.Current.TryFindResource("TabContentGridStyle") is Style gridStyle)
                 {
                     grid.Style = gridStyle;
                 }
@@ -276,7 +276,7 @@ namespace NoteNest.UI.ViewModels
             // Apply toolbar style if available
             try
             {
-                if (Application.Current.TryFindResource("RTFToolbarStyle") is Style toolbarStyle)
+                if (System.Windows.Application.Current.TryFindResource("RTFToolbarStyle") is Style toolbarStyle)
                 {
                     _toolbar.Style = toolbarStyle;
                 }
@@ -293,7 +293,7 @@ namespace NoteNest.UI.ViewModels
             // Apply editor style if available
             try
             {
-                if (Application.Current.TryFindResource("RTFEditorStyle") is Style editorStyle)
+                if (System.Windows.Application.Current.TryFindResource("RTFEditorStyle") is Style editorStyle)
                 {
                     _editor.Style = editorStyle;
                 }

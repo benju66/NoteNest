@@ -52,10 +52,10 @@ namespace NoteNest.UI.Converters
             try
             {
                 // Use a single brush for all note icons
-                return Application.Current.FindResource("NoteIconBrush");
+                return System.Windows.Application.Current.FindResource("NoteIconBrush");
             }
             catch { }
-            return Application.Current.FindResource("GenericFileIconBrush");
+            return System.Windows.Application.Current.FindResource("GenericFileIconBrush");
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

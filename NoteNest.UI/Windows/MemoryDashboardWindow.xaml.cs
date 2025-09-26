@@ -37,7 +37,7 @@ namespace NoteNest.UI.Windows
             // Match main window theme
             try
             {
-                var mainWindow = Application.Current?.MainWindow;
+                var mainWindow = System.Windows.Application.Current?.MainWindow;
                 if (mainWindow != null)
                 {
                     var currentTheme = ModernWpf.ThemeManager.GetRequestedTheme(mainWindow);

@@ -60,8 +60,8 @@ namespace NoteNest.UI.Controls
 
         public DraggableTabControl()
         {
-            _dragManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(TabDragManager)) as TabDragManager ?? new TabDragManager();
-            _dropZoneManager = (Application.Current as App)?.ServiceProvider?.GetService(typeof(DropZoneManager)) as DropZoneManager ?? new DropZoneManager();
+            _dragManager = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(TabDragManager)) as TabDragManager ?? new TabDragManager();
+            _dropZoneManager = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(DropZoneManager)) as DropZoneManager ?? new DropZoneManager();
             AllowDrop = true;
             Focusable = true;
             KeyboardNavigation.SetTabNavigation(this, KeyboardNavigationMode.Cycle);
@@ -406,7 +406,7 @@ namespace NoteNest.UI.Controls
                         else
                         {
                             // Cross-window/tabcontrol drop: move via service at computed index
-                            var services = (Application.Current as App)?.ServiceProvider;
+                            var services = (System.Windows.Application.Current as App)?.ServiceProvider;
                             var workspace = services?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
                             var targetPane = GetPaneFromControl(this);
                             if (workspace != null && targetPane != null)
@@ -473,7 +473,7 @@ namespace NoteNest.UI.Controls
         {
             try
             {
-                var services = (Application.Current as App)?.ServiceProvider;
+                var services = (System.Windows.Application.Current as App)?.ServiceProvider;
                 var workspace = services?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
                 var targetPane = GetPaneFromControl(targetControl);
                 if (workspace != null && targetPane != null)
@@ -535,7 +535,7 @@ namespace NoteNest.UI.Controls
                 {
                     list.Remove(tab);
                 }
-                var services = (Application.Current as App)?.ServiceProvider;
+                var services = (System.Windows.Application.Current as App)?.ServiceProvider;
                 var window = new DetachedTabWindow(tab, screenPoint, services);
                 window.Show();
             }
@@ -759,7 +759,7 @@ namespace NoteNest.UI.Controls
         {
             try
             {
-                var app = Application.Current as App;
+                var app = System.Windows.Application.Current as App;
                 return app?.ServiceProvider?.GetService(typeof(IWorkspaceService)) as IWorkspaceService;
             }
             catch
@@ -792,7 +792,7 @@ namespace NoteNest.UI.Controls
                     }
                 }
 
-                Application.Current.Dispatcher.BeginInvoke(() =>
+                System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
                 {
                     try
                     {

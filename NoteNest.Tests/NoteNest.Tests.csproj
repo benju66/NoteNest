@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\NoteNest.Core\NoteNest.Core.csproj" />
     <ProjectReference Include="..\NoteNest.UI\NoteNest.UI.csproj" />
+    <ProjectReference Include="..\NoteNest.Application\NoteNest.Application.csproj" />
   </ItemGroup>
 
 </Project>
