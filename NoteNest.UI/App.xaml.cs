@@ -48,114 +48,46 @@ namespace NoteNest.UI
                 // Ultra-fast startup sequence
                 ShutdownMode = ShutdownMode.OnMainWindowClose;
 
-                // CRITICAL FIX: Run first-time setup BEFORE DI container initialization
-                // This ensures storage paths are configured before any path-dependent services are created
-                FirstTimeSetupService.UserSelectionCallback = ShowFolderSelectionDialog;
-                FirstTimeSetupService.EmptyFolderChoiceCallback = ShowEmptyFolderChoiceDialog;
-                
-                bool setupSucceeded = await FirstTimeSetupService.EnsureStorageConfigurationAsync();
-                if (!setupSucceeded)
-                {
-                    // User cancelled or setup failed - exit gracefully
-                    Shutdown(0);
-                    return;
-                }
+                // Skip complex first-time setup for Clean Architecture testing
+                // TODO: Re-implement simplified first-time setup later
 
-                // Minimal DI container (only essential services)
-                // Now all services can safely use the configured storage path
+                // Clean Architecture DI container with CQRS and focused services
                 _host = Host.CreateDefaultBuilder()
                     .ConfigureServices((context, services) =>
                     {
-                        services.AddNoteNestServices(); // Core services
-                        services.AddRTFIntegratedSaveSystem(); // Unified save engine with RTF integration
-                        services.AddStorageTransactionUI(); // Storage location transaction system
+                        // Use our new Clean Architecture service configuration
+                        NoteNest.UI.Composition.ServiceConfiguration.ConfigureServices(services, context.Configuration);
                     })
                     .Build();
 
                 ServiceProvider = _host.Services;
                 _logger = ServiceProvider.GetRequiredService<IAppLogger>();
 
-                // Skip validation in production for speed
-                #if DEBUG
-                ValidateCriticalServices();
-                #endif
+                // Skip theme and validation for now - Clean Architecture testing
+                _logger?.Info("Clean Architecture app starting...");
 
-                // Initialize theme (fast)
-                try
-                {
-                    ThemeService.Initialize();
-                }
-                catch (Exception themeEx)
-                {
-                    _logger?.Warning($"Theme init failed: {themeEx.Message}");
-                }
-
-                // Create window via DI, wire services, then show
-                var mainWindow = ServiceProvider.GetRequiredService<MainWindow>();
-                var mainViewModel = ServiceProvider.GetRequiredService<MainViewModel>();
-                mainWindow.DataContext = mainViewModel;
+                // Create new Clean Architecture window via DI
+                var newMainWindow = new NewMainWindow();
+                var mainShellViewModel = ServiceProvider.GetRequiredService<NoteNest.UI.ViewModels.Shell.MainShellViewModel>();
+                newMainWindow.DataContext = mainShellViewModel;
                 
                 try
                 {
                     var dlg = ServiceProvider.GetService<IDialogService>();
                     if (dlg != null)
                     {
-                        dlg.OwnerWindow = mainWindow;
+                        dlg.OwnerWindow = newMainWindow;
                     }
                 }
                 catch { }
                 
-                MainWindow = mainWindow;
-                mainWindow.Show();
-                
-                // RTF-integrated save system is now active and doesn't need timer coordination
-                
-                // HIGH-IMPACT MEMORY FIX: Set memory baseline after startup
-                SimpleMemoryTracker.SetBaseline();
+                MainWindow = newMainWindow;
+                newMainWindow.Show();
                 
                 _startupTimer.Stop();
-                _logger.Info($"App started in {_startupTimer.ElapsedMilliseconds}ms at {DateTime.Now:HH:mm:ss.fff}");
+                _logger?.Info($"Clean Architecture app started in {_startupTimer.ElapsedMilliseconds}ms");
                 
-                // === SEARCH SERVICE DIAGNOSTIC ===
-                try
-                {
-                    var searchService = ServiceProvider.GetService<NoteNest.UI.Interfaces.ISearchService>();
-                    if (searchService != null)
-                    {
-                        _logger.Debug($"[App] Search service available: {searchService.GetType().FullName}");
-                        _logger.Debug($"[App] Initial IsIndexReady: {searchService.IsIndexReady}");
-                    }
-                    else
-                    {
-                        _logger.Warning("[App] Search service not available in DI container!");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "[App] Failed to get search service during startup");
-                }
-                
-                try
-                {
-                    var metricsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup_metrics.txt");
-                    File.AppendAllText(metricsPath, $"{DateTime.Now}: {_startupTimer.ElapsedMilliseconds}ms{Environment.NewLine}");
-                }
-                catch { }
-                
-                // Load plugins
-                try
-                {
-                    var pluginManager = ServiceProvider.GetRequiredService<IPluginManager>();
-                    await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.TestPlugin { IsEnabled = true });
-
-                    // Load Todo plugin via DI (fail fast if not registered)
-                    var todoService = ServiceProvider.GetRequiredService<NoteNest.UI.Plugins.Todo.Services.ITodoService>();
-                    await pluginManager.LoadPluginAsync(new NoteNest.UI.Plugins.Todo.TodoPlugin(todoService) { IsEnabled = true });
-                }
-                catch { }
-
-                // Setup exception handling after startup
-                SetupExceptionHandling();
+                // Skip complex plugin loading for now - Clean Architecture testing
             }
             catch (Exception ex)
             {
@@ -169,14 +101,13 @@ namespace NoteNest.UI
         #if DEBUG
         private void ValidateCriticalServices()
         {
-            // Only validate essential services in debug mode
+                // Only validate essential services in debug mode
             try
             {
                 ServiceProvider.GetRequiredService<IAppLogger>();
-                ServiceProvider.GetRequiredService<NoteNest.Core.Services.ConfigurationService>();
-                ServiceProvider.GetRequiredService<NoteNest.Core.Services.NoteService>();
-                ServiceProvider.GetRequiredService<MainViewModel>();
-                _logger.Debug("Critical services validated");
+                ServiceProvider.GetRequiredService<NoteNest.UI.ViewModels.Shell.MainShellViewModel>();
+                ServiceProvider.GetRequiredService<MediatR.IMediator>();
+                _logger.Debug("Clean Architecture services validated");
             }
             catch (Exception ex)
             {
