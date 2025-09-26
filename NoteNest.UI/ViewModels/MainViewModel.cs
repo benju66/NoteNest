@@ -56,6 +56,8 @@ namespace NoteNest.UI.ViewModels
         private TabPersistenceCoordinator _tabPersistenceCoordinator;
         private PinnedItemsManager _pinnedItemsManager;
         private NotePositionMigrationCoordinator _notePositionMigrationCoordinator;
+        private SimpleCommandCoordinator _simpleCommandCoordinator;
+        private EmergencyRecoveryCoordinator _emergencyRecoveryCoordinator;
         // Auto-save timer removed - per-tab timers handle all auto-save operations
         // NotePinService removed - will be reimplemented with better architecture later
         private bool _disposed;
@@ -283,6 +285,26 @@ namespace NoteNest.UI.ViewModels
                 (status) => StatusMessage = status);
         }
 
+        private SimpleCommandCoordinator GetSimpleCommandCoordinator()
+        {
+            return _simpleCommandCoordinator ??= new SimpleCommandCoordinator(
+                _logger,
+                _dialogService,
+                DeleteNoteAsync,
+                (noteItem) => NoteOpenRequested?.Invoke(noteItem));
+        }
+
+        private EmergencyRecoveryCoordinator GetEmergencyRecoveryCoordinator()
+        {
+            return _emergencyRecoveryCoordinator ??= new EmergencyRecoveryCoordinator(
+                _serviceProvider,
+                _dialogService,
+                _stateManager,
+                _saveManager,
+                _logger,
+                GetWorkspaceService);
+        }
+
         private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
         {
             var coordinator = GetFileSystemEventCoordinator();
@@ -340,12 +362,12 @@ namespace NoteNest.UI.ViewModels
 
         private ICommand _deleteNoteCommand;
         public ICommand DeleteNoteCommand => _deleteNoteCommand ??= new AsyncRelayCommand<NoteTreeItem>(
-            async (note) => await ExecuteDeleteNoteAsync(note),
+            async (note) => await GetSimpleCommandCoordinator().ExecuteDeleteNoteAsync(note),
             (note) => note != null);
 
         private ICommand _openNoteCommand;
         public ICommand OpenNoteCommand => _openNoteCommand ??= new RelayCommand<NoteTreeItem>(
-            (note) => ExecuteOpenNote(note),
+            (note) => GetSimpleCommandCoordinator().ExecuteOpenNote(note),
             (note) => note != null);
 
         private ICommand _renameCategoryCommand;
@@ -472,42 +494,6 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        private async Task ExecuteDeleteNoteAsync(NoteTreeItem noteItem)
-        {
-            if (noteItem == null) return;
-            
-            try
-            {
-                var result = await _dialogService.ShowConfirmationDialogAsync(
-                    $"Are you sure you want to delete '{noteItem.Title}'?\n\nThis action cannot be undone.",
-                    "Confirm Delete");
-                
-                if (result)
-                {
-                    await DeleteNoteAsync(noteItem);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger?.Error(ex, "Failed to delete note");
-                _dialogService?.ShowError($"Failed to delete note: {ex.Message}", "Delete Error");
-            }
-        }
-
-        private void ExecuteOpenNote(NoteTreeItem noteItem)
-        {
-            if (noteItem == null) return;
-            
-            try
-            {
-                NoteOpenRequested?.Invoke(noteItem);
-            }
-            catch (Exception ex)
-            {
-                _logger?.Error(ex, "Failed to open note");
-                _dialogService?.ShowError($"Failed to open note: {ex.Message}", "Open Error");
-            }
-        }
 
         private async Task ExecuteRenameCategoryAsync(CategoryTreeItem categoryItem)
         {
@@ -644,66 +630,7 @@ namespace NoteNest.UI.ViewModels
 
 
 
-        // Event handler for emergency save notifications
-        private void OnSaveCompleted(object? sender, SaveProgressEventArgs e)
-        {
-            if (e != null && e.FilePath.Contains("EMERGENCY"))
-            {
-                // Show notification to user
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    var message = $"File could not be saved to original location.\n" +
-                                 $"Emergency backup saved to:\n{e.FilePath}";
-                    
-                    _dialogService?.ShowError(message, "Emergency Save");
-                    
-                    // Update status bar
-                    _stateManager.StatusMessage = "Emergency save completed - check Documents/NoteNest_Emergency";
-                });
-            }
-        }
-
-        // ADD method for external change handling:
-        private async void OnExternalChangeDetected(object sender, ExternalChangeEventArgs e)
-        {
-            // Run on UI thread
-            await Application.Current.Dispatcher.InvokeAsync(async () =>
-            {
-                var result = MessageBox.Show(
-                    $"The file '{Path.GetFileName(e.FilePath)}' has been modified externally.\n\n" +
-                    "Do you want to reload it?\n\n" +
-                    "Yes = Reload from disk (lose local changes)\n" +
-                    "No = Keep local version (overwrite on next save)",
-                    "External Change Detected",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-                
-                if (result == MessageBoxResult.Yes)
-                {
-                    var saveManager = _serviceProvider.GetService<ISaveManager>();
-                    await saveManager.ResolveExternalChangeAsync(e.NoteId, ConflictResolution.KeepExternal);
-                    
-                    // Refresh UI
-                    var workspace = GetWorkspaceService();
-                    var tab = workspace.FindTabByPath(e.FilePath);
-                    if (tab != null)
-                    {
-                        tab.Content = saveManager.GetContent(e.NoteId);
-                    }
-                }
-                else
-                {
-                    var saveManager = _serviceProvider.GetService<ISaveManager>();
-                    await saveManager.ResolveExternalChangeAsync(e.NoteId, ConflictResolution.KeepLocal);
-                }
-            });
-        }
         
-        private async Task LoadTemplatesAsync()
-        {
-            // TODO: Implement template loading if needed
-            await Task.CompletedTask;
-        }
 
 
         private void InitializeCommands()
@@ -768,10 +695,10 @@ namespace NoteNest.UI.ViewModels
                 }
 
                 // Check for recovery and notify user
-                await CheckForRecovery();
+                await GetEmergencyRecoveryCoordinator().CheckForRecoveryAsync();
                 
                 // Check for emergency saves from previous sessions
-                await CheckForEmergencySaves();
+                await GetEmergencyRecoveryCoordinator().CheckForEmergencySavesAsync();
 
                 try
                 {
@@ -801,9 +728,7 @@ namespace NoteNest.UI.ViewModels
                 // Restore previous tabs
                 await GetTabPersistenceCoordinator().RestoreTabsAsync();
                 
-                // 4. Subscribe to save events
-                _saveManager.ExternalChangeDetected += OnExternalChangeDetected;
-                _saveManager.SaveCompleted += OnSaveCompleted;
+                // 4. EmergencyRecoveryCoordinator handles save event subscriptions
 
                 StatusMessage = "Ready";
                 _logger.Info("Application initialized successfully");
@@ -891,73 +816,13 @@ namespace NoteNest.UI.ViewModels
         // These fallback mechanisms are no longer needed since FirstTimeSetupService
         // handles path configuration before DI container initialization
 
-        private async Task CheckForRecovery()
-        {
-            try
-            {
-                var wal = GetService<IWriteAheadLog>();
-                if (wal == null) return;
-                
-                var recovered = await wal.RecoverAllAsync();
-                if (recovered.Count > 0)
-                {
-                    _logger.Info($"Found {recovered.Count} unsaved notes from previous session");
-                    
-                    // Optional: Show notification to user
-                    var message = recovered.Count == 1 
-                        ? "Recovered 1 unsaved note from previous session" 
-                        : $"Recovered {recovered.Count} unsaved notes from previous session";
-                        
-                    _stateManager.StatusMessage = message;
-                    
-                    // Note: The recovered content will be loaded when notes are opened
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to check for recovery");
-            }
-        }
 
-        private async Task RecoverUnpersistedChangesAsync(CancellationToken cancellationToken)
-        {
-            // Recovery is now handled by StartupRecoveryService during initialization
-            // This method is kept for compatibility but does nothing
-            await Task.CompletedTask;
-        }
 
         private T GetService<T>()
         {
             return _serviceProvider.GetService<T>();
         }
 
-        private async Task CheckForEmergencySaves()
-        {
-            try
-            {
-                var emergencyDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    "NoteNest_Emergency");
-                
-                if (Directory.Exists(emergencyDir))
-                {
-                    var emergencyFiles = Directory.GetFiles(emergencyDir, "EMERGENCY_*.txt");
-                    if (emergencyFiles.Length > 0)
-                    {
-                        var message = $"Found {emergencyFiles.Length} emergency backup(s) from previous sessions.\n" +
-                                     $"Check {emergencyDir} to recover your content.";
-                        
-                        _dialogService?.ShowInfo(message, "Emergency Backups Found");
-                        
-                        _stateManager.StatusMessage = $"Found {emergencyFiles.Length} emergency backup(s) - check Documents folder";
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to check for emergency saves");
-            }
-        }
 
 
         // Centralized handler to allow proper unsubscription on dispose
@@ -1443,43 +1308,6 @@ namespace NoteNest.UI.ViewModels
 
         // Global auto-save timer removed - per-tab timers handle all auto-save operations
 
-        private async Task SafeExecuteAsync(Func<Task> operation, string operationName)
-        {
-            try
-            {
-                _logger.Debug($"Starting operation: {operationName}");
-                await operation();
-                _logger.Debug($"Completed operation: {operationName}");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Failed operation: {operationName}");
-                _errorHandler?.LogError(ex, operationName);
-                _dialogService?.ShowError(
-                    $"Operation failed: {operationName}\n\nError: {ex.Message}",
-                    "Error");
-                StatusMessage = $"Error: {operationName}";
-            }
-        }
-
-        private async Task SafeExecuteAsync(Action operation, string operationName)
-        {
-            try
-            {
-                _logger.Debug($"Starting operation: {operationName}");
-                await Task.Run(operation);
-                _logger.Debug($"Completed operation: {operationName}");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Failed operation: {operationName}");
-                _errorHandler?.LogError(ex, operationName);
-                _dialogService?.ShowError(
-                    $"Operation failed: {operationName}\n\nError: {ex.Message}",
-                    "Error");
-                StatusMessage = $"Error: {operationName}";
-            }
-        }
 
 
 
@@ -1790,11 +1618,6 @@ namespace NoteNest.UI.ViewModels
                     {
                         _stateManager.PropertyChanged -= OnStateManagerPropertyChanged;
                     }
-                    if (_saveManager != null)
-                    {
-                        _saveManager.ExternalChangeDetected -= OnExternalChangeDetected;
-                        _saveManager.SaveCompleted -= OnSaveCompleted;
-                    }
 
                     // Dispose only what was actually created
                     _fileWatcher?.Dispose();
@@ -1802,6 +1625,8 @@ namespace NoteNest.UI.ViewModels
                     _tabPersistenceCoordinator?.Dispose();
                     _pinnedItemsManager?.Dispose();
                     _notePositionMigrationCoordinator?.Dispose();
+                    _simpleCommandCoordinator?.Dispose();
+                    _emergencyRecoveryCoordinator?.Dispose();
                     (_workspaceViewModel as IDisposable)?.Dispose();
                     (_workspaceService as IDisposable)?.Dispose();
 
