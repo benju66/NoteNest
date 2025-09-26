@@ -54,6 +54,7 @@ namespace NoteNest.UI.ViewModels
         private WorkspaceViewModel _workspaceViewModel;
         private FileSystemEventCoordinator _fileSystemEventCoordinator;
         private TabPersistenceCoordinator _tabPersistenceCoordinator;
+        private PinnedItemsManager _pinnedItemsManager;
         // Auto-save timer removed - per-tab timers handle all auto-save operations
         // NotePinService removed - will be reimplemented with better architecture later
         private bool _disposed;
@@ -262,6 +263,16 @@ namespace NoteNest.UI.ViewModels
                 () => _recoveryInProgress = false);
         }
 
+        private PinnedItemsManager GetPinnedItemsManager()
+        {
+            return _pinnedItemsManager ??= new PinnedItemsManager(
+                _logger,
+                _serviceProvider,
+                () => Categories,
+                GetPinService,
+                OnPropertyChanged);
+        }
+
         private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
         {
             var coordinator = GetFileSystemEventCoordinator();
@@ -430,7 +441,7 @@ namespace NoteNest.UI.ViewModels
                 {
                     // Refresh pinned items collection
                     _logger?.Debug("Refreshing pinned items collection...");
-                    await RefreshPinnedItemsAsync();
+                    await GetPinnedItemsManager().RefreshPinnedItemsAsync(PinnedCategories, PinnedNotes);
                     
                     // Check current pin state for status message using the same metadata ID
                     var isPinned = await pinService.IsPinnedAsync(noteId);
@@ -549,41 +560,9 @@ namespace NoteNest.UI.ViewModels
 
         private IEnumerable<string> GetSiblingCategoryNames(CategoryTreeItem categoryItem)
         {
-            if (categoryItem?.Model == null) return Enumerable.Empty<string>();
-            
-            if (categoryItem.Model.ParentId == null)
-            {
-                // Root level - check against other root categories
-                return Categories?
-                    .Where(c => c != categoryItem)
-                    .Select(c => c.Name)
-                    .Where(name => !string.IsNullOrEmpty(name)) ?? Enumerable.Empty<string>();
-            }
-            else
-            {
-                // Find parent and get siblings
-                var parent = FindCategoryById(Categories, categoryItem.Model.ParentId);
-                return parent?.SubCategories?
-                    .Where(c => c != categoryItem)
-                    .Select(c => c.Name)
-                    .Where(name => !string.IsNullOrEmpty(name)) ?? Enumerable.Empty<string>();
-            }
+            return TreeHelperUtility.GetSiblingCategoryNames(categoryItem, Categories);
         }
 
-        private CategoryTreeItem FindCategoryById(ObservableCollection<CategoryTreeItem> categories, string id)
-        {
-            if (string.IsNullOrEmpty(id)) return null;
-            
-            foreach (var category in categories ?? Enumerable.Empty<CategoryTreeItem>())
-            {
-                if (string.Equals(category.Model?.Id, id, StringComparison.OrdinalIgnoreCase))
-                    return category;
-                
-                var found = FindCategoryById(category.SubCategories, id);
-                if (found != null) return found;
-            }
-            return null;
-        }
 
         #endregion
 
@@ -1042,7 +1021,7 @@ namespace NoteNest.UI.ViewModels
                     }
                     
                     // Set pinned collections using model properties
-                    await RefreshPinnedItemsAsync();
+                    await GetPinnedItemsManager().RefreshPinnedItemsAsync(PinnedCategories, PinnedNotes);
                 });
 
                 // Restore expansion state using TreeStateAdapter
@@ -1405,8 +1384,8 @@ namespace NoteNest.UI.ViewModels
         {
             if (SelectedCategory == null) return;
 
-                int subCount = CountAllCategories(new ObservableCollection<CategoryTreeItem>(new[] { SelectedCategory })) - 1;
-                int noteCount = CountAllNotes(SelectedCategory);
+                int subCount = TreeHelperUtility.CountAllCategories(new ObservableCollection<CategoryTreeItem>(new[] { SelectedCategory })) - 1;
+                int noteCount = TreeHelperUtility.CountAllNotes(SelectedCategory);
 
                 var warning = $"Delete category '{SelectedCategory.Name}'" +
                           (subCount > 0 || noteCount > 0 ? 
@@ -1436,55 +1415,9 @@ namespace NoteNest.UI.ViewModels
 
 
 
-        // Helper method to collect all notes
-        private void CollectAllNotes(CategoryTreeItem category, List<NoteModel> allNotes)
-        {
-            foreach (var note in category.Notes)
-            {
-                allNotes.Add(note.Model);
-            }
-            
-            foreach (var subCategory in category.SubCategories)
-            {
-                CollectAllNotes(subCategory, allNotes);
-            }
-        }
 
-        // Helper methods delegated to TreeControllerAdapter
-        private CategoryTreeItem FindCategoryContainingNote(CategoryTreeItem category, NoteTreeItem note)
-        {
-            if (category.Notes.Contains(note)) return category;
-            foreach (var subCategory in category.SubCategories)
-            {
-                var found = FindCategoryContainingNote(subCategory, note);
-                if (found != null) return found;
-            }
-            return null;
-        }
 
-        private NoteTreeItem FindNoteById(string noteId)
-        {
-            foreach (var category in Categories)
-            {
-                var found = FindNoteInCategory(category, noteId);
-                if (found != null) return found;
-            }
-            return null;
-        }
 
-        private NoteTreeItem FindNoteInCategory(CategoryTreeItem category, string noteId)
-        {
-            var note = category.Notes.FirstOrDefault(n => n.Model.Id == noteId);
-            if (note != null) return note;
-
-            foreach (var subCategory in category.SubCategories)
-            {
-                var found = FindNoteInCategory(subCategory, noteId);
-                if (found != null) return found;
-            }
-            
-            return null;
-        }
 
         #endregion
 
@@ -1538,26 +1471,6 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        // Tree helper methods - simplified for UI use only
-        private int CountAllCategories(ObservableCollection<CategoryTreeItem> nodes)
-        {
-            int count = nodes.Count;
-            foreach (var n in nodes)
-            {
-                count += CountAllCategories(n.SubCategories);
-            }
-            return count;
-        }
-
-        private int CountAllNotes(CategoryTreeItem category)
-        {
-            int count = category.Notes.Count;
-            foreach (var sub in category.SubCategories)
-            {
-                count += CountAllNotes(sub);
-            }
-            return count;
-        }
 
 
 
@@ -1591,7 +1504,7 @@ namespace NoteNest.UI.ViewModels
             var result = await GetTreeOperationAdapter().ToggleCategoryPinAsync(categoryItem);
             if (result.Success)
             {
-                await RefreshPinnedItemsAsync(); // Use unified refresh instead of full reload
+                await GetPinnedItemsManager().RefreshPinnedItemsAsync(PinnedCategories, PinnedNotes); // Use unified refresh instead of full reload
                 _stateManager.StatusMessage = result.StatusMessage ?? 
                     (categoryItem.Model.Pinned ? $"Pinned category: {categoryItem.Name}" : $"Unpinned category: {categoryItem.Name}");
             }
@@ -1601,118 +1514,7 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        public async Task RefreshPinnedItemsAsync()
-        {
-            try
-            {
-                _logger?.Debug("RefreshPinnedItemsAsync started");
-                var originalPinnedNotesCount = PinnedNotes.Count;
-                var originalPinnedCategoriesCount = PinnedCategories.Count;
-                
-                PinnedNotes.Clear();
-                PinnedCategories.Clear();
-                
-                var pinnedNotesFound = 0;
-                var pinnedCategoriesFound = 0;
-                
-                // Get pin service
-                var pinService = GetPinService();
-                if (pinService == null)
-                {
-                    _logger?.Warning("Pin service not available for refresh");
-                    return;
-                }
-                
-                // Get all pinned note IDs from the service
-                var pinnedNoteIds = await pinService.GetPinnedNoteIdsAsync();
-                var pinnedSet = new HashSet<string>(pinnedNoteIds, StringComparer.OrdinalIgnoreCase);
-                
-                foreach (var category in Categories)
-                {
-                    // Categories still use existing Model.Pinned
-                    if (category.Model.Pinned)
-                    {
-                        PinnedCategories.Add(category);
-                        pinnedCategoriesFound++;
-                        _logger?.Debug($"Found pinned category: {category.Name}");
-                    }
-                        
-                    // Notes now use pin service
-                    await CollectPinnedNotesFromCategoryAsync(category, pinnedSet);
-                }
-                
-                pinnedNotesFound = PinnedNotes.Count;
-                _logger?.Debug($"RefreshPinnedItemsAsync completed: Found {pinnedNotesFound} pinned notes, {pinnedCategoriesFound} pinned categories");
-                _logger?.Debug($"Previous counts: {originalPinnedNotesCount} pinned notes, {originalPinnedCategoriesCount} pinned categories");
-                
-                OnPropertyChanged(nameof(HasPinnedItems));
-            }
-            catch (Exception ex)
-            {
-                _logger?.Error(ex, "Failed to refresh pinned items");
-            }
-        }
 
-        private async Task CollectPinnedNotesFromCategoryAsync(CategoryTreeItem category, HashSet<string> pinnedNoteIds)
-        {
-            var pinService = GetPinService();
-            
-            foreach (var note in category.Notes)
-            {
-                bool isPinned = false;
-                
-                // First try direct ID match
-                if (!string.IsNullOrEmpty(note.Model.Id) && pinnedNoteIds.Contains(note.Model.Id))
-                {
-                    isPinned = true;
-                    _logger?.Debug($"Found pinned note by ID: {note.Title} (ID: {note.Model.Id})");
-                }
-                // Fallback: check by file path if ID doesn't match
-                else if (!string.IsNullOrEmpty(note.Model.FilePath) && pinService != null)
-                {
-                    try
-                    {
-                        // Get the correct metadata ID for this file path
-                        var metadataManager = _serviceProvider?.GetService<NoteNest.Core.Services.NoteMetadataManager>();
-                        if (metadataManager != null)
-                        {
-                            var tempNote = new NoteNest.Core.Models.NoteModel
-                            {
-                                FilePath = note.Model.FilePath,
-                                Id = note.Model.Id
-                            };
-                            var metadataId = await metadataManager.GetOrCreateNoteIdAsync(tempNote);
-                            
-                            if (pinnedNoteIds.Contains(metadataId))
-                            {
-                                isPinned = true;
-                                _logger?.Debug($"Found pinned note by metadata ID: {note.Title} (Tree ID: {note.Model.Id}, Metadata ID: {metadataId})");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger?.Debug($"Failed to check metadata ID for {note.Title}: {ex.Message}");
-                    }
-                }
-                
-                if (isPinned)
-                {
-                    PinnedNotes.Add(new NoteNest.UI.Services.PinnedNoteItem(note, category.Name));
-                }
-                else
-                {
-                    _logger?.Debug($"Note not pinned: {note.Title} (ID: {note.Model.Id})");
-                }
-            }
-            
-            foreach (var sub in category.SubCategories)
-            {
-                // DON'T add subcategories here - they're already handled in the main loop
-                // Just recurse to get their notes
-                await CollectPinnedNotesFromCategoryAsync(sub, pinnedNoteIds);
-            }
-        }
 
         private async Task<string> FindNoteIdByFilePathAsync(string filePath)
         {
@@ -1723,7 +1525,7 @@ namespace NoteNest.UI.ViewModels
                 // Search through all loaded notes to find the one with matching file path
                 foreach (var category in Categories)
                 {
-                    var noteId = FindNoteIdInCategory(category, filePath);
+                    var noteId = TreeHelperUtility.FindNoteIdInCategory(category, filePath);
                     if (!string.IsNullOrEmpty(noteId))
                         return noteId;
                 }
@@ -1737,25 +1539,6 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
-        private string FindNoteIdInCategory(CategoryTreeItem category, string filePath)
-        {
-            foreach (var note in category.Notes)
-            {
-                if (string.Equals(note.Model.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
-                {
-                    return note.Model.Id;
-                }
-            }
-            
-            foreach (var sub in category.SubCategories)
-            {
-                var noteId = FindNoteIdInCategory(sub, filePath);
-                if (!string.IsNullOrEmpty(noteId))
-                    return noteId;
-            }
-            
-            return null;
-        }
 
         public async Task RenameNoteAsync(NoteTreeItem noteItem, string newName)
         {
@@ -1799,7 +1582,7 @@ namespace NoteNest.UI.ViewModels
             CategoryTreeItem containingCategory = null;
             foreach (var cat in Categories)
             {
-                    containingCategory = FindCategoryContainingNote(cat, noteItem);
+                    containingCategory = TreeHelperUtility.FindCategoryContainingNote(cat, noteItem);
                 if (containingCategory != null) break;
             }
             
@@ -1837,7 +1620,7 @@ namespace NoteNest.UI.ViewModels
                 CategoryTreeItem oldCategory = null;
                 foreach (var cat in Categories)
                 {
-                    oldCategory = FindCategoryContainingNote(cat, noteItem);
+                    oldCategory = TreeHelperUtility.FindCategoryContainingNote(cat, noteItem);
                     if (oldCategory != null) break;
                 }
                 
@@ -1959,6 +1742,14 @@ namespace NoteNest.UI.ViewModels
             }
         }
 
+        /// <summary>
+        /// Public method for external callers to refresh pinned items
+        /// </summary>
+        public async Task RefreshPinnedItemsAsync()
+        {
+            await GetPinnedItemsManager().RefreshPinnedItemsAsync(PinnedCategories, PinnedNotes);
+        }
+
         #endregion
 
         #region IDisposable
@@ -1999,6 +1790,7 @@ namespace NoteNest.UI.ViewModels
                     _fileWatcher?.Dispose();
                     _fileSystemEventCoordinator?.Dispose();
                     _tabPersistenceCoordinator?.Dispose();
+                    _pinnedItemsManager?.Dispose();
                     (_workspaceViewModel as IDisposable)?.Dispose();
                     (_workspaceService as IDisposable)?.Dispose();
 
