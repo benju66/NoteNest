@@ -55,6 +55,7 @@ namespace NoteNest.UI.ViewModels
         private FileSystemEventCoordinator _fileSystemEventCoordinator;
         private TabPersistenceCoordinator _tabPersistenceCoordinator;
         private PinnedItemsManager _pinnedItemsManager;
+        private NotePositionMigrationCoordinator _notePositionMigrationCoordinator;
         // Auto-save timer removed - per-tab timers handle all auto-save operations
         // NotePinService removed - will be reimplemented with better architecture later
         private bool _disposed;
@@ -271,6 +272,15 @@ namespace NoteNest.UI.ViewModels
                 () => Categories,
                 GetPinService,
                 OnPropertyChanged);
+        }
+
+        private NotePositionMigrationCoordinator GetNotePositionMigrationCoordinator()
+        {
+            return _notePositionMigrationCoordinator ??= new NotePositionMigrationCoordinator(
+                _serviceProvider,
+                _logger,
+                () => Categories,
+                (status) => StatusMessage = status);
         }
 
         private async void OnFileRenamed(object sender, FileRenamedEventArgs e)
@@ -774,7 +784,7 @@ namespace NoteNest.UI.ViewModels
                     else
                     {
                         // Migrate note positions for existing notes (safe to call multiple times)
-                        await MigrateNotePositionsIfNeededAsync();
+                        await GetNotePositionMigrationCoordinator().MigrateNotePositionsIfNeededAsync();
                     }
                 }
                 catch (Exception catEx)
@@ -1791,6 +1801,7 @@ namespace NoteNest.UI.ViewModels
                     _fileSystemEventCoordinator?.Dispose();
                     _tabPersistenceCoordinator?.Dispose();
                     _pinnedItemsManager?.Dispose();
+                    _notePositionMigrationCoordinator?.Dispose();
                     (_workspaceViewModel as IDisposable)?.Dispose();
                     (_workspaceService as IDisposable)?.Dispose();
 
