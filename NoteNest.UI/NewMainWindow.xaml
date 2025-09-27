@@ -18,6 +18,8 @@
             <Button Content="Save All" Command="{Binding Workspace.SaveAllTabsCommand}" />
             <Separator />
             <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+            <Separator />
+            <Button Content="Settings" Click="SettingsMenuItem_Click" ToolTip="Open application settings" />
         </ToolBar>
         
         <!-- Main Content -->

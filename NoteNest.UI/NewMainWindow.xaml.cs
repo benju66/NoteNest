@@ -2,6 +2,10 @@ using System;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Controls;
+using Microsoft.Extensions.DependencyInjection;
+using NoteNest.UI.Windows;
+using NoteNest.Core.Services;
 
 namespace NoteNest.UI
 {
@@ -10,6 +14,57 @@ namespace NoteNest.UI
         public NewMainWindow()
         {
             InitializeComponent();
+        }
+
+        private void CategoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (DataContext is NoteNest.UI.ViewModels.Shell.MainShellViewModel viewModel && e.NewValue is NoteNest.UI.ViewModels.Categories.CategoryViewModel category)
+            {
+                viewModel.CategoryTree.SelectedCategory = category;
+            }
+        }
+        
+        private void SettingsMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            OpenSettings();
+        }
+        
+        private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+        
+        private void DatabaseHealthMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            // TODO: Implement database health window when database architecture is active
+            MessageBox.Show("Database health monitoring will be available when database architecture is enabled.", 
+                "Database Architecture", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        
+        public void OpenSettings()
+        {
+            try
+            {
+                // Get ConfigurationService from DI container
+                var app = (App)System.Windows.Application.Current;
+                var configService = app.ServiceProvider?.GetService<ConfigurationService>();
+                
+                if (configService == null)
+                {
+                    // Fallback - create a basic config service
+                    var fileSystem = new NoteNest.Core.Services.DefaultFileSystemProvider();
+                    configService = new ConfigurationService(fileSystem);
+                }
+                
+                var settingsWindow = new SettingsWindow(configService);
+                settingsWindow.Owner = this;
+                settingsWindow.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to open settings: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 
