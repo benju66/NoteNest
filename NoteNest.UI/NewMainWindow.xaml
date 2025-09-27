@@ -61,14 +61,41 @@
                                 </StackPanel>
                             </DataTemplate>
                         </TabControl.ItemTemplate>
-                        <TabControl.ContentTemplate>
-                            <DataTemplate>
-                                <TextBox Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}" 
-                                        AcceptsReturn="True" 
-                                        VerticalScrollBarVisibility="Auto"
-                                        HorizontalScrollBarVisibility="Auto"/>
-                            </DataTemplate>
-                        </TabControl.ContentTemplate>
+                           <TabControl.ContentTemplate>
+                               <DataTemplate>
+                                   <Grid>
+                                       <!-- Rich Text Editor -->
+                                       <RichTextBox Name="NoteEditor"
+                                                   AcceptsReturn="True"
+                                                   AcceptsTab="True"
+                                                   VerticalScrollBarVisibility="Auto"
+                                                   HorizontalScrollBarVisibility="Auto"
+                                                   FontFamily="Consolas"
+                                                   FontSize="12"
+                                                   Padding="10"
+                                                   Background="White"
+                                                   BorderBrush="LightGray"
+                                                   BorderThickness="1">
+                                           <!-- For now, we'll use a simple binding approach -->
+                                           <!-- In a full implementation, we'd create a custom attached property for RTF binding -->
+                                       </RichTextBox>
+                                       
+                                       <!-- Fallback TextBox for now (while we implement RTF binding) -->
+                                       <TextBox Text="{Binding Content, UpdateSourceTrigger=PropertyChanged}" 
+                                                AcceptsReturn="True" 
+                                                AcceptsTab="True"
+                                                VerticalScrollBarVisibility="Auto"
+                                                HorizontalScrollBarVisibility="Auto"
+                                                FontFamily="Consolas"
+                                                FontSize="12"
+                                                Padding="10"
+                                                Background="White"
+                                                BorderBrush="LightGray"
+                                                BorderThickness="1"
+                                                TextWrapping="Wrap"/>
+                                   </Grid>
+                               </DataTemplate>
+                           </TabControl.ContentTemplate>
                     </TabControl>
                     
                     <!-- Placeholder when no tabs -->

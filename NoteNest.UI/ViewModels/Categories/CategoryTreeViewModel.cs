@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading.Tasks;
 using MediatR;
 using NoteNest.Application.Common.Interfaces;
+using NoteNest.Domain.Categories;
 using NoteNest.UI.ViewModels.Common;
 
 namespace NoteNest.UI.ViewModels.Categories
@@ -21,6 +24,9 @@ namespace NoteNest.UI.ViewModels.Categories
         }
 
         public ObservableCollection<CategoryViewModel> Categories { get; }
+        
+        // Alias for XAML binding compatibility
+        public ObservableCollection<CategoryViewModel> RootCategories => Categories;
 
         public CategoryViewModel SelectedCategory
         {
@@ -45,18 +51,35 @@ namespace NoteNest.UI.ViewModels.Categories
         {
             try
             {
+                var allCategories = await _categoryRepository.GetAllAsync();
                 var rootCategories = await _categoryRepository.GetRootCategoriesAsync();
                 
                 Categories.Clear();
+                
+                // Create CategoryViewModels for root categories
                 foreach (var category in rootCategories)
                 {
-                    Categories.Add(new CategoryViewModel(category));
+                    var categoryViewModel = new CategoryViewModel(category);
+                    await LoadChildrenAsync(categoryViewModel, allCategories);
+                    Categories.Add(categoryViewModel);
                 }
             }
             catch (Exception ex)
             {
                 // TODO: Better error handling
                 System.Diagnostics.Debug.WriteLine($"Failed to load categories: {ex.Message}");
+            }
+        }
+        
+        private async Task LoadChildrenAsync(CategoryViewModel parentViewModel, IReadOnlyList<Category> allCategories)
+        {
+            var children = allCategories.Where(c => c.ParentId?.Value == parentViewModel.Id).ToList();
+            
+            foreach (var child in children)
+            {
+                var childViewModel = new CategoryViewModel(child);
+                await LoadChildrenAsync(childViewModel, allCategories);
+                parentViewModel.Children.Add(childViewModel);
             }
         }
     }

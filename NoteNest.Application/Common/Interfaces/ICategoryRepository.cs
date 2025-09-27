@@ -15,13 +15,4 @@ namespace NoteNest.Application.Common.Interfaces
         Task<Result> DeleteAsync(CategoryId id);
         Task<bool> ExistsAsync(CategoryId id);
     }
-
-    // Placeholder Category domain model for now
-    public class Category
-    {
-        public CategoryId Id { get; set; }
-        public string Name { get; set; }
-        public string Path { get; set; }
-        public CategoryId ParentId { get; set; }
-    }
 }

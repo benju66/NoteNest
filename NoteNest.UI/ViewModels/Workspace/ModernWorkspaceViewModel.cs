@@ -7,6 +7,7 @@ using MediatR;
 using NoteNest.Application.Notes.Commands.SaveNote;
 using NoteNest.UI.ViewModels.Common;
 using NoteNest.UI.Services;
+using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.ViewModels.Workspace
 {
@@ -17,16 +18,19 @@ namespace NoteNest.UI.ViewModels.Workspace
     {
         private readonly IMediator _mediator;
         private readonly IDialogService _dialogService;
+        private readonly IAppLogger _logger;
         private TabViewModel _selectedTab;
         private bool _isLoading;
         private string _statusMessage;
 
         public ModernWorkspaceViewModel(
             IMediator mediator,
-            IDialogService dialogService)
+            IDialogService dialogService,
+            IAppLogger logger)
         {
             _mediator = mediator;
             _dialogService = dialogService;
+            _logger = logger;
             
             OpenTabs = new ObservableCollection<TabViewModel>();
             InitializeCommands();
@@ -145,6 +149,7 @@ namespace NoteNest.UI.ViewModels.Workspace
             {
                 StatusMessage = $"Error saving {tab.Title}: {ex.Message}";
                 _dialogService.ShowError(ex.Message, "Save Error");
+                _logger.Error(ex, $"Exception saving note: {tab.NoteId}");
             }
             finally
             {
@@ -238,6 +243,8 @@ namespace NoteNest.UI.ViewModels.Workspace
                     }
                 }
 
+                // Note: TabViewModel automatically handles IsDirty state
+                
                 OpenTabs.Remove(tab);
                 TabClosed?.Invoke(tab);
                 

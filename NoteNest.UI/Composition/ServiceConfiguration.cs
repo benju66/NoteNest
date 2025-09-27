@@ -47,8 +47,8 @@ namespace NoteNest.UI.Composition
             services.AddSingleton(configuration);
             
             // Repositories
-            services.AddScoped<INoteRepository, FileSystemNoteRepository>();
-            services.AddScoped<ICategoryRepository, FileSystemCategoryRepository>();
+            services.AddScoped<INoteRepository, NoteNest.Infrastructure.Persistence.Repositories.FileSystemNoteRepository>();
+            services.AddScoped<ICategoryRepository, NoteNest.Infrastructure.Repositories.FileSystemCategoryRepository>();
             
             // Infrastructure services
             services.AddSingleton<NoteNest.Application.Common.Interfaces.IEventBus, InMemoryEventBus>();
@@ -56,7 +56,7 @@ namespace NoteNest.UI.Composition
             
             // Core services - use our simple console logger for Clean Architecture testing  
             services.AddSingleton<IAppLogger, ConsoleAppLogger>();
-            services.AddSingleton<IFileSystemProvider, DefaultFileSystemProvider>();
+            services.AddSingleton<IFileSystemProvider, NoteNest.Infrastructure.Services.DefaultFileSystemProvider>();
             
             // UI services (reuse existing ones)
             services.AddScoped<IDialogService, DialogService>();
@@ -86,13 +86,7 @@ namespace NoteNest.UI.Composition
         {
             // TODO: Implement properly - for now return a test category
             await Task.CompletedTask;
-            return new Category 
-            { 
-                Id = id, 
-                Name = "Test Category", 
-                Path = @"C:\Test\Category",
-                ParentId = null 
-            };
+            return new Category(id, "Test Category", @"C:\Test\Category", null);
         }
 
         public async Task<IReadOnlyList<Category>> GetAllAsync()
@@ -107,8 +101,8 @@ namespace NoteNest.UI.Composition
             await Task.CompletedTask;
             return new List<Category>
             {
-                new Category { Id = CategoryId.Create(), Name = "Documents", Path = @"C:\Documents", ParentId = null },
-                new Category { Id = CategoryId.Create(), Name = "Projects", Path = @"C:\Projects", ParentId = null }
+                new Category(CategoryId.Create(), "Documents", @"C:\Documents", null),
+                new Category(CategoryId.Create(), "Projects", @"C:\Projects", null)
             }.AsReadOnly();
         }
 
