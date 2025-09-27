@@ -1,3 +1,17 @@
+/*
+❌❌❌ DEPRECATED - DO NOT USE THIS FILE ❌❌❌
+
+This is the OLD MainViewModel.cs - replaced by Clean Architecture:
+- MainShellViewModel.cs (orchestrator)
+- CategoryTreeViewModel.cs (tree view)  
+- NoteOperationsViewModel.cs (note operations)
+- CategoryOperationsViewModel.cs (category operations)
+- ModernWorkspaceViewModel.cs (workspace)
+
+Use the NEW Clean Architecture ViewModels instead!
+❌❌❌ DEPRECATED - DO NOT USE THIS FILE ❌❌❌
+*/
+
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
