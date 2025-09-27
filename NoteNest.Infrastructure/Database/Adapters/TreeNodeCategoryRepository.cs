@@ -62,11 +62,12 @@ namespace NoteNest.Infrastructure.Database.Adapters
                     .Where(c => c != null)
                     .ToList();
 
+                _logger.Info($"Loaded {categories.Count} categories from TreeNode database");
                 return categories.AsReadOnly();
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to get all categories");
+                _logger.Error(ex, "Failed to get all categories from TreeNode database");
                 return new List<Category>().AsReadOnly();
             }
         }
@@ -83,11 +84,12 @@ namespace NoteNest.Infrastructure.Database.Adapters
                     .Where(c => c != null)
                     .ToList();
 
+                _logger.Info($"Loaded {categories.Count} root categories from TreeNode database");
                 return categories.AsReadOnly();
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to get root categories");
+                _logger.Error(ex, "Failed to get root categories from TreeNode database");
                 return new List<Category>().AsReadOnly();
             }
         }

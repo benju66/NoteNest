@@ -74,66 +74,18 @@ namespace NoteNest.UI.Composition
             services.AddSingleton(configuration);
             
             // =============================================================================
-            // DATABASE SERVICES - ENTERPRISE ARCHITECTURE ACTIVE!
+            // TEMPORARY: Use legacy repositories until IDE compilation errors are resolved
             // =============================================================================
             
-            // Database paths (LOCAL AppData - not synced)
-            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var databasePath = Path.Combine(localAppData, "NoteNest");
-            Directory.CreateDirectory(databasePath);
-            
-            var treeDbPath = Path.Combine(databasePath, "tree.db");
-            var stateDbPath = Path.Combine(databasePath, "state.db");
-            
-            // Connection strings with performance optimization
-            var treeConnectionString = new SqliteConnectionStringBuilder
-            {
-                DataSource = treeDbPath,
-                Mode = SqliteOpenMode.ReadWriteCreate,
-                Cache = SqliteCacheMode.Shared,
-                Pooling = true,
-                DefaultTimeout = 30
-            }.ToString();
-            
-            // Database services
-            services.AddSingleton(provider => new TreeDatabaseConnection(treeConnectionString));
-            
-            services.AddSingleton<ITreeDatabaseInitializer>(provider => 
-                new TreeDatabaseInitializer(treeConnectionString, provider.GetRequiredService<IAppLogger>()));
-            
-            var notesRootPath = configuration.GetValue<string>("NotesPath") 
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
-            
-            services.AddSingleton<ITreeDatabaseRepository>(provider => 
-                new TreeDatabaseRepository(treeConnectionString, provider.GetRequiredService<IAppLogger>(), notesRootPath));
-            
-            services.AddSingleton<IHashCalculationService, HashCalculationService>();
-            
-            services.AddSingleton<IDatabaseBackupService>(provider =>
-                new DatabaseBackupService(
-                    treeConnectionString,
-                    provider.GetRequiredService<ITreeDatabaseRepository>(),
-                    provider.GetRequiredService<IAppLogger>()));
-            
-            services.AddSingleton<ITreeMigrationService>(provider =>
-                new TreeMigrationService(
-                    provider.GetRequiredService<ITreeDatabaseRepository>(),
-                    configuration,
-                    provider.GetRequiredService<IAppLogger>()));
-            
-            services.AddSingleton<ITreePerformanceMonitor, TreePerformanceMonitor>();
-            
-            // Register hosted services for automatic database operations
-            services.AddHostedService<DatabaseBackupService>();
-            services.AddHostedService<DatabaseInitializationHostedService>();
-            services.AddHostedService<DatabaseMaintenanceService>();
-            
-            // =============================================================================
-            // ENHANCED REPOSITORIES (TreeNode-based) - ACTIVE!
-            // =============================================================================
-            
-            services.AddScoped<INoteRepository, NoteNest.Infrastructure.Database.Adapters.TreeNodeNoteRepository>();
-            services.AddScoped<ICategoryRepository, NoteNest.Infrastructure.Database.Adapters.TreeNodeCategoryRepository>();
+            services.AddScoped<INoteRepository>(provider => 
+                new NoteNest.Infrastructure.Persistence.Repositories.FileSystemNoteRepository(
+                    provider.GetRequiredService<IFileSystemProvider>(),
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<IConfiguration>()));
+            services.AddScoped<ICategoryRepository>(provider => 
+                new FileSystemCategoryRepository(
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<IConfiguration>()));
             
             // =============================================================================
             // INFRASTRUCTURE SERVICES
@@ -151,10 +103,9 @@ namespace NoteNest.UI.Composition
             services.AddScoped<IDialogService, DialogService>();
             
             // =============================================================================
-            // ENHANCED VIEWMODELS (TreeNode-aware) - Ready for tree view integration
+            // VIEWMODELS - Focus on tree view functionality
             // =============================================================================
             
-            // Use existing ViewModels - they'll automatically use the new TreeNode repositories
             services.AddTransient<MainShellViewModel>();
             services.AddTransient<CategoryTreeViewModel>();
             services.AddTransient<NoteOperationsViewModel>();
@@ -188,8 +139,15 @@ namespace NoteNest.UI.Composition
             services.AddSingleton(configuration);
             
             // LEGACY REPOSITORIES (file system based)
-            services.AddScoped<INoteRepository, NoteNest.Infrastructure.Persistence.Repositories.FileSystemNoteRepository>();
-            services.AddScoped<ICategoryRepository, FileSystemCategoryRepository>();
+            services.AddScoped<INoteRepository>(provider => 
+                new NoteNest.Infrastructure.Persistence.Repositories.FileSystemNoteRepository(
+                    provider.GetRequiredService<IFileSystemProvider>(),
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<IConfiguration>()));
+            services.AddScoped<ICategoryRepository>(provider => 
+                new FileSystemCategoryRepository(
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<IConfiguration>()));
             
             // Infrastructure services
             services.AddSingleton<NoteNest.Application.Common.Interfaces.IEventBus, InMemoryEventBus>();
@@ -213,60 +171,201 @@ namespace NoteNest.UI.Composition
         }
     }
     
-    // Temporary implementation for legacy architecture
+    // Enhanced FileSystemCategoryRepository that scans real directory structure
     public class FileSystemCategoryRepository : ICategoryRepository
     {
         private readonly IAppLogger _logger;
+        private readonly IConfiguration _configuration;
+        private readonly string _rootPath;
         
-        public FileSystemCategoryRepository(IAppLogger logger)
+        public FileSystemCategoryRepository(IAppLogger logger, IConfiguration configuration)
         {
-            _logger = logger;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            
+            // Get NotesPath with validation and fallback
+            _rootPath = configuration.GetValue<string>("NotesPath");
+            if (string.IsNullOrWhiteSpace(_rootPath))
+            {
+                _rootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MyNotes");
+                _logger.Warning($"NotesPath not configured, using default: {_rootPath}");
+            }
+            
+            // Validate and create directory
+            try
+            {
+                if (!Directory.Exists(_rootPath))
+                {
+                    Directory.CreateDirectory(_rootPath);
+                    _logger.Info($"Created notes directory: {_rootPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to create notes directory: {_rootPath}");
+                // Use a safe fallback directory
+                _rootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
+                Directory.CreateDirectory(_rootPath);
+            }
+                
+            _logger.Info($"FileSystemCategoryRepository initialized with root path: {_rootPath}");
         }
 
         public async Task<Category> GetByIdAsync(CategoryId id)
         {
             await Task.CompletedTask;
-            return new Category(id, "Test Category", @"C:\Test\Category", null);
+            
+            // Parse the path from the ID (we use path-based IDs)
+            var path = id.Value;
+            if (Directory.Exists(path))
+            {
+                var dirInfo = new DirectoryInfo(path);
+                var parentPath = dirInfo.Parent?.FullName;
+                var parentId = !string.IsNullOrEmpty(parentPath) && parentPath != _rootPath 
+                    ? CategoryId.From(parentPath) 
+                    : null;
+                    
+                return new Category(id, dirInfo.Name, path, parentId);
+            }
+            
+            return null;
         }
 
         public async Task<IReadOnlyList<Category>> GetAllAsync()
         {
             await Task.CompletedTask;
-            return new List<Category>().AsReadOnly();
+            return await ScanAllDirectoriesAsync();
         }
 
         public async Task<IReadOnlyList<Category>> GetRootCategoriesAsync()
         {
             await Task.CompletedTask;
-            return new List<Category>
+            
+            try
             {
-                new Category(CategoryId.Create(), "Documents", @"C:\Documents", null),
-                new Category(CategoryId.Create(), "Projects", @"C:\Projects", null)
-            }.AsReadOnly();
+                if (!Directory.Exists(_rootPath))
+                {
+                    _logger.Warning($"Notes root path does not exist: {_rootPath}");
+                    Directory.CreateDirectory(_rootPath);
+                }
+                
+                var rootCategories = new List<Category>();
+                var rootDirInfo = new DirectoryInfo(_rootPath);
+                
+                // Get immediate subdirectories
+                var subdirectories = rootDirInfo.GetDirectories()
+                    .Where(d => !d.Name.StartsWith(".") && !d.Attributes.HasFlag(FileAttributes.Hidden))
+                    .OrderBy(d => d.Name);
+                
+                foreach (var subdir in subdirectories)
+                {
+                    var categoryId = CategoryId.From(subdir.FullName);
+                    var category = new Category(categoryId, subdir.Name, subdir.FullName, null);
+                    rootCategories.Add(category);
+                }
+                
+                _logger.Info($"Found {rootCategories.Count} root categories in: {_rootPath}");
+                return rootCategories.AsReadOnly();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to scan root categories from: {_rootPath}");
+                return new List<Category>().AsReadOnly();
+            }
         }
 
         public async Task<Result> CreateAsync(Category category)
         {
             await Task.CompletedTask;
-            return Result.Ok();
+            try
+            {
+                Directory.CreateDirectory(category.Path);
+                _logger.Info($"Created category directory: {category.Path}");
+                return Result.Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to create category: {category.Path}");
+                return Result.Fail($"Failed to create category: {ex.Message}");
+            }
         }
 
         public async Task<Result> UpdateAsync(Category category)
         {
             await Task.CompletedTask;
+            // Category updates would typically involve directory renames
             return Result.Ok();
         }
 
         public async Task<Result> DeleteAsync(CategoryId id)
         {
             await Task.CompletedTask;
-            return Result.Ok();
+            try
+            {
+                var path = id.Value;
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive: true);
+                    _logger.Info($"Deleted category directory: {path}");
+                }
+                return Result.Ok();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to delete category: {id.Value}");
+                return Result.Fail($"Failed to delete category: {ex.Message}");
+            }
         }
 
         public async Task<bool> ExistsAsync(CategoryId id)
         {
             await Task.CompletedTask;
-            return false;
+            return Directory.Exists(id.Value);
+        }
+        
+        private async Task<IReadOnlyList<Category>> ScanAllDirectoriesAsync()
+        {
+            try
+            {
+                var allCategories = new List<Category>();
+                await ScanDirectoryRecursive(_rootPath, null, allCategories);
+                return allCategories.AsReadOnly();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to scan all directories");
+                return new List<Category>().AsReadOnly();
+            }
+        }
+        
+        private async Task ScanDirectoryRecursive(string path, CategoryId parentId, List<Category> categories)
+        {
+            try
+            {
+                var dirInfo = new DirectoryInfo(path);
+                if (!dirInfo.Exists) return;
+                
+                var categoryId = CategoryId.From(path);
+                var category = new Category(categoryId, dirInfo.Name, path, parentId);
+                categories.Add(category);
+                
+                // Scan subdirectories
+                var subdirectories = dirInfo.GetDirectories()
+                    .Where(d => !d.Name.StartsWith(".") && !d.Attributes.HasFlag(FileAttributes.Hidden));
+                
+                foreach (var subdir in subdirectories)
+                {
+                    await ScanDirectoryRecursive(subdir.FullName, categoryId, categories);
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _logger.Warning($"Access denied to directory: {path}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Error scanning directory: {path}");
+            }
         }
     }
 }

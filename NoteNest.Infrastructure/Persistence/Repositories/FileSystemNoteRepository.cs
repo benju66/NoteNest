@@ -22,11 +22,33 @@ namespace NoteNest.Infrastructure.Persistence.Repositories
 
         public FileSystemNoteRepository(IFileSystemProvider fileSystem, IAppLogger logger, IConfiguration config)
         {
-            _fileSystem = fileSystem;
-            _logger = logger;
-            _metadataPath = config.GetValue<string>("MetadataPath") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NoteNest", "Metadata");
+            _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
-            Directory.CreateDirectory(_metadataPath);
+            // Get MetadataPath with validation and fallback
+            _metadataPath = config?.GetValue<string>("MetadataPath");
+            if (string.IsNullOrWhiteSpace(_metadataPath))
+            {
+                _metadataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NoteNest", "Metadata");
+                _logger.Info($"MetadataPath not configured, using default: {_metadataPath}");
+            }
+            
+            // Validate path is not empty before creating directory
+            if (string.IsNullOrWhiteSpace(_metadataPath))
+            {
+                throw new InvalidOperationException("MetadataPath cannot be empty or null");
+            }
+            
+            try
+            {
+                Directory.CreateDirectory(_metadataPath);
+                _logger.Info($"FileSystemNoteRepository initialized with metadata path: {_metadataPath}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to create metadata directory: {_metadataPath}");
+                throw;
+            }
         }
 
         public async Task<Note> GetByIdAsync(NoteId id)
