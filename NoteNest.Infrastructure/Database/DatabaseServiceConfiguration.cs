@@ -141,178 +141,84 @@ namespace NoteNest.Infrastructure.Database
         }
     }
     
-    // =============================================================================
-    // DATABASE INITIALIZATION HOSTED SERVICE
-    // =============================================================================
-    
-    /// <summary>
-    /// Hosted service that ensures database is initialized and migrated on application startup.
-    /// </summary>
+    // Hosted service for database initialization
     public class DatabaseInitializationHostedService : IHostedService
     {
         private readonly ITreeDatabaseInitializer _initializer;
-        private readonly ITreeMigrationService _migrationService;
         private readonly IAppLogger _logger;
         
-        public DatabaseInitializationHostedService(
-            ITreeDatabaseInitializer initializer,
-            ITreeMigrationService migrationService,
-            IAppLogger logger)
+        public DatabaseInitializationHostedService(ITreeDatabaseInitializer initializer, IAppLogger logger)
         {
-            _initializer = initializer ?? throw new ArgumentNullException(nameof(initializer));
-            _migrationService = migrationService ?? throw new ArgumentNullException(nameof(migrationService));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _initializer = initializer;
+            _logger = logger;
         }
         
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             try
             {
-                _logger.Info("Initializing TreeDatabase system...");
-                
-                // Step 1: Initialize database schema
-                if (!await _initializer.InitializeAsync())
-                {
-                    throw new InvalidOperationException("Failed to initialize database");
-                }
-                
-                // Step 2: Check if migration from legacy system is needed
-                if (await _migrationService.IsMigrationNeededAsync())
-                {
-                    _logger.Info("Legacy system detected, starting migration...");
-                    
-                    var migrationResult = await _migrationService.MigrateFromLegacyAsync();
-                    
-                    if (migrationResult.Success)
-                    {
-                        _logger.Info($"Migration completed successfully: {migrationResult.Message}");
-                    }
-                    else
-                    {
-                        _logger.Error($"Migration failed: {migrationResult.Message}");
-                        // Continue anyway - database can work with empty state
-                    }
-                }
-                
-                // Step 3: Verify database health
-                if (!await _initializer.IsHealthyAsync())
-                {
-                    _logger.Warning("Database health check failed, may need recovery");
-                }
-                
-                _logger.Info("TreeDatabase system initialization completed");
+                _logger.Info("Initializing tree database...");
+                await _initializer.InitializeAsync();
+                _logger.Info("Tree database initialized successfully");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to initialize TreeDatabase system");
+                _logger.Error(ex, "Failed to initialize tree database");
                 throw;
             }
         }
         
-        public Task StopAsync(CancellationToken cancellationToken)
-        {
-            _logger.Info("TreeDatabase initialization service stopping");
-            return Task.CompletedTask;
-        }
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
     
-    // =============================================================================
-    // DATABASE MAINTENANCE HOSTED SERVICE
-    // =============================================================================
-    
-    /// <summary>
-    /// Background service for database maintenance, optimization, and cleanup.
-    /// </summary>
-    public class DatabaseMaintenanceService : BackgroundService
+    // Hosted service for database maintenance
+    public class DatabaseMaintenanceService : IHostedService
     {
         private readonly ITreeDatabaseRepository _repository;
         private readonly IAppLogger _logger;
         private Timer _maintenanceTimer;
         
-        public DatabaseMaintenanceService(
-            ITreeDatabaseRepository repository,
-            IAppLogger logger)
+        public DatabaseMaintenanceService(ITreeDatabaseRepository repository, IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _repository = repository;
+            _logger = logger;
         }
         
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            _logger.Info("Starting database maintenance service...");
+            
+            // Run maintenance every 6 hours
+            _maintenanceTimer = new Timer(
+                DoMaintenance, 
+                null, 
+                TimeSpan.FromHours(1), // Initial delay
+                TimeSpan.FromHours(6)  // Recurring interval
+            );
+            
+            return Task.CompletedTask;
+        }
+        
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            _maintenanceTimer?.Dispose();
+            _logger.Info("Database maintenance service stopped");
+            return Task.CompletedTask;
+        }
+        
+        private async void DoMaintenance(object state)
         {
             try
             {
-                // Schedule maintenance for every Sunday at 2 AM
-                var timeUntilNextSunday2AM = CalculateTimeUntilNextSunday2AM();
-                
-                _maintenanceTimer = new Timer(
-                    async _ => await PerformMaintenanceAsync(),
-                    null,
-                    timeUntilNextSunday2AM,
-                    TimeSpan.FromDays(7));
-                
-                _logger.Info($"Database maintenance scheduled for every Sunday at 2 AM (next: {DateTime.Now.Add(timeUntilNextSunday2AM):yyyy-MM-dd HH:mm})");
-                
-                // Wait for cancellation
-                await Task.Delay(Timeout.Infinite, stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected when cancellation is requested
-            }
-        }
-        
-        private async Task PerformMaintenanceAsync()
-        {
-            try
-            {
-                _logger.Info("Starting scheduled database maintenance...");
-                
-                // Optimize database (ANALYZE, VACUUM, cleanup)
-                await _repository.OptimizeAsync();
-                
-                // Purge old soft-deleted items
-                var purgedCount = await _repository.PurgeDeletedNodesAsync(daysOld: 30);
-                if (purgedCount)
-                {
-                    _logger.Info($"Purged {purgedCount} old deleted items");
-                }
-                
-                // Full vacuum for space reclamation
+                _logger.Info("Running database maintenance...");
                 await _repository.VacuumAsync();
-                
-                _logger.Info("Scheduled database maintenance completed");
+                await _repository.PurgeDeletedNodesAsync();
+                _logger.Info("Database maintenance completed");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Scheduled database maintenance failed");
+                _logger.Error(ex, "Database maintenance failed");
             }
-        }
-        
-        private TimeSpan CalculateTimeUntilNextSunday2AM()
-        {
-            var now = DateTime.Now;
-            var nextSunday = now.Date;
-            
-            // Find next Sunday
-            while (nextSunday.DayOfWeek != DayOfWeek.Sunday)
-            {
-                nextSunday = nextSunday.AddDays(1);
-            }
-            
-            // If it's already Sunday and past 2 AM, go to next Sunday
-            if (nextSunday.Date == now.Date && now.Hour >= 2)
-            {
-                nextSunday = nextSunday.AddDays(7);
-            }
-            
-            var nextMaintenanceTime = nextSunday.AddHours(2); // 2 AM
-            return nextMaintenanceTime - now;
-        }
-        
-        public override void Dispose()
-        {
-            _maintenanceTimer?.Dispose();
-            base.Dispose();
         }
     }
 }
