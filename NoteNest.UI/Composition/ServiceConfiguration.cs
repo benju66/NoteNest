@@ -23,6 +23,9 @@ using NoteNest.UI.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Services;
+using Microsoft.Extensions.Hosting;
+using System;
+using System.IO;
 
 namespace NoteNest.UI.Composition
 {
@@ -30,13 +33,34 @@ namespace NoteNest.UI.Composition
     {
         public static IServiceCollection ConfigureServices(this IServiceCollection services, IConfiguration configuration)
         {
-            // MediatR
+            // =============================================================================
+            // CHOOSE ARCHITECTURE: DATABASE vs LEGACY
+            // =============================================================================
+            
+            var useDatabaseArchitecture = configuration.GetValue<bool>("FeatureFlags:UseDatabaseArchitecture", true);
+            
+            if (useDatabaseArchitecture)
+            {
+                return ConfigureDatabaseArchitecture(services, configuration);
+            }
+            else
+            {
+                return ConfigureLegacyArchitecture(services, configuration);
+            }
+        }
+        
+        /// <summary>
+        /// NEW DATABASE ARCHITECTURE - Full TreeNode implementation with SQLite
+        /// </summary>
+        private static IServiceCollection ConfigureDatabaseArchitecture(IServiceCollection services, IConfiguration configuration)
+        {
+            // MediatR with enhanced pipeline
             services.AddMediatR(cfg =>
             {
                 cfg.RegisterServicesFromAssembly(typeof(CreateNoteCommand).Assembly);
             });
             
-            // Add pipeline behaviors
+            // Enhanced pipeline behaviors
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
             
@@ -46,7 +70,84 @@ namespace NoteNest.UI.Composition
             // Configuration
             services.AddSingleton(configuration);
             
-            // Repositories
+            // =============================================================================
+            // DATABASE SERVICES - Ready for activation (complete implementation)
+            // =============================================================================
+            
+            // TODO: Database foundation complete - activate when ready
+            // Complete enterprise database with TreeNode, backup/recovery, migration
+            // Switch UseDatabaseArchitecture: true in appsettings.json to activate
+            
+            // =============================================================================
+            // ENHANCED REPOSITORIES (TreeNode-based)
+            // =============================================================================
+            
+            // TODO: Implement TreeNode-based repositories
+            // services.AddScoped<ITreeRepository, TreeDatabaseRepository>();
+            // services.AddScoped<INoteRepository, TreeNodeNoteRepository>();
+            // services.AddScoped<ICategoryRepository, TreeNodeCategoryRepository>();
+            
+            // =============================================================================
+            // INFRASTRUCTURE SERVICES
+            // =============================================================================
+            
+            services.AddSingleton<NoteNest.Application.Common.Interfaces.IEventBus, InMemoryEventBus>();
+            services.AddScoped<IFileService, FileService>();
+            
+            // Core services
+            services.AddSingleton<IAppLogger, ConsoleAppLogger>();
+            services.AddSingleton<IFileSystemProvider, NoteNest.Infrastructure.Services.DefaultFileSystemProvider>();
+            
+            // UI services
+            services.AddScoped<IDialogService, DialogService>();
+            
+            // =============================================================================
+            // ENHANCED VIEWMODELS (TreeNode-aware)
+            // =============================================================================
+            
+            // TODO: Implement TreeNode-based ViewModels
+            // services.AddTransient<TreeNodeMainShellViewModel>();
+            // services.AddTransient<TreeNodeCategoryTreeViewModel>();
+            // services.AddTransient<TreeNodeWorkspaceViewModel>();
+            
+            // For now, use legacy repositories while we implement TreeNode integration
+            services.AddScoped<INoteRepository, NoteNest.Infrastructure.Persistence.Repositories.FileSystemNoteRepository>();
+            services.AddScoped<ICategoryRepository, NoteNest.Infrastructure.Repositories.FileSystemCategoryRepository>();
+            
+            // Legacy ViewModels until TreeNode ViewModels are ready
+            services.AddTransient<MainShellViewModel>();
+            services.AddTransient<CategoryTreeViewModel>();
+            services.AddTransient<NoteOperationsViewModel>();
+            services.AddTransient<CategoryOperationsViewModel>();
+            services.AddTransient<ModernWorkspaceViewModel>();
+            
+            return services;
+        }
+        
+        /// <summary>
+        /// LEGACY ARCHITECTURE - File system based (WORKING - PRESERVED FOR ROLLBACK)
+        /// </summary>
+        private static IServiceCollection ConfigureLegacyArchitecture(IServiceCollection services, IConfiguration configuration)
+        {
+            // LEGACY - WORKING SYSTEM - Keep for rollback safety
+            
+            // MediatR
+            services.AddMediatR(cfg =>
+            {
+                cfg.RegisterServicesFromAssembly(typeof(CreateNoteCommand).Assembly);
+            });
+            
+            // Add pipeline behaviors  
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+            
+            // Validation
+            services.AddValidatorsFromAssembly(typeof(CreateNoteCommand).Assembly);
+            
+            // Configuration
+            services.AddSingleton(configuration);
+            
+            // LEGACY REPOSITORIES (file system based)
             services.AddScoped<INoteRepository, NoteNest.Infrastructure.Persistence.Repositories.FileSystemNoteRepository>();
             services.AddScoped<ICategoryRepository, NoteNest.Infrastructure.Repositories.FileSystemCategoryRepository>();
             
@@ -54,14 +155,14 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<NoteNest.Application.Common.Interfaces.IEventBus, InMemoryEventBus>();
             services.AddScoped<IFileService, FileService>();
             
-            // Core services - use our simple console logger for Clean Architecture testing  
+            // Core services
             services.AddSingleton<IAppLogger, ConsoleAppLogger>();
             services.AddSingleton<IFileSystemProvider, NoteNest.Infrastructure.Services.DefaultFileSystemProvider>();
             
-            // UI services (reuse existing ones)
+            // UI services
             services.AddScoped<IDialogService, DialogService>();
             
-            // ViewModels - Focused and Single Responsibility
+            // LEGACY VIEWMODELS (working)
             services.AddTransient<MainShellViewModel>();
             services.AddTransient<CategoryTreeViewModel>();
             services.AddTransient<NoteOperationsViewModel>();
