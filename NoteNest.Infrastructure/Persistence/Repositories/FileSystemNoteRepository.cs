@@ -75,27 +75,52 @@ namespace NoteNest.Infrastructure.Persistence.Repositories
         {
             try
             {
-                var metadataFiles = Directory.GetFiles(_metadataPath, "*.json");
-                var notes = new List<Note>();
-
-                foreach (var file in metadataFiles)
+                // The categoryId.Value should be the directory path
+                var categoryPath = categoryId.Value;
+                
+                if (!Directory.Exists(categoryPath))
                 {
-                    try
+                    _logger.Warning($"Category directory does not exist: {categoryPath}");
+                    return new List<Note>().AsReadOnly();
+                }
+
+                var notes = new List<Note>();
+                var supportedExtensions = new[] { "*.txt", "*.rtf", "*.md" };
+
+                // Scan directory for note files
+                foreach (var pattern in supportedExtensions)
+                {
+                    var files = Directory.GetFiles(categoryPath, pattern);
+                    
+                    foreach (var filePath in files)
                     {
-                        var json = await File.ReadAllTextAsync(file);
-                        var metadata = JsonSerializer.Deserialize<NoteMetadata>(json);
-                        
-                        if (metadata.CategoryId == categoryId.Value)
+                        try
                         {
-                            notes.Add(MapToDomain(metadata));
+                            var fileInfo = new FileInfo(filePath);
+                            var noteTitle = Path.GetFileNameWithoutExtension(fileInfo.Name);
+                            
+                            // Create a Note domain object from the file
+                            var note = new Note(categoryId, noteTitle);
+                            note.SetFilePath(filePath);
+                            
+                            // Load content from file
+                            if (fileInfo.Exists)
+                            {
+                                var content = await File.ReadAllTextAsync(filePath);
+                                note.UpdateContent(content);
+                            }
+
+                            notes.Add(note);
+                            _logger.Debug($"Loaded note: {noteTitle} from {filePath}");
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Warning($"Failed to read metadata file {file}: {ex.Message}");
+                        catch (Exception ex)
+                        {
+                            _logger.Warning($"Failed to load note from {filePath}: {ex.Message}");
+                        }
                     }
                 }
 
+                _logger.Info($"Loaded {notes.Count} notes from category: {categoryPath}");
                 return notes.AsReadOnly();
             }
             catch (Exception ex)
