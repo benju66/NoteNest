@@ -71,10 +71,11 @@ namespace NoteNest.UI.Converters
             try
             {
                 if (value is int count)
-                    return count > 0 ? Visibility.Visible : Visibility.Collapsed;
+                    // 🔧 FIXED: Show placeholder when count is 0, hide when count > 0
+                    return count == 0 ? Visibility.Visible : Visibility.Collapsed;
             }
             catch { }
-            return Visibility.Collapsed;
+            return Visibility.Visible; // Show by default on error
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
