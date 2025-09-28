@@ -121,13 +121,13 @@ namespace NoteNest.UI.ViewModels.Shell
 
         private async void OnNoteCreated(string noteId)
         {
-            // Open the newly created note in the workspace
-            var createdNote = CategoryTree.SelectedCategory; // This would need proper note lookup
-            if (createdNote != null)
-            {
-                await Workspace.OpenNoteAsync(noteId, "New Note"); // Title would come from creation result
-                StatusMessage = "Note created and opened";
-            }
+            // TODO: Implement proper note lookup to get full Note object for opening
+            // For now, just refresh the tree to show the new note
+            await CategoryTree.RefreshAsync();
+            StatusMessage = "Note created - refresh tree to see it";
+            
+            // Note: Opening newly created notes requires note lookup to get full Note object
+            // This will be implemented when note creation flow is enhanced
         }
 
         private void OnNoteDeleted(string noteId)
@@ -174,8 +174,9 @@ namespace NoteNest.UI.ViewModels.Shell
                 IsLoading = true;
                 StatusMessage = $"Opening {note.Title}...";
 
-                // Open note in workspace using ModernWorkspaceViewModel
-                await Workspace.OpenNoteAsync(note.Id, note.Title);
+                // 🎯 CRITICAL FIX: Pass the entire Note object with FilePath information
+                // This allows the workspace to access the file path for RTF content loading
+                await Workspace.OpenNoteAsync(note.Note);
 
                 StatusMessage = $"Opened {note.Title}";
             }

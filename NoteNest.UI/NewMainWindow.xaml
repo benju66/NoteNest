@@ -132,14 +132,11 @@
             <!-- Workspace Area -->
             <GroupBox Grid.Column="2" Header="Workspace">
                 <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    
-                    <!-- Tab Bar -->
-                    <TabControl Grid.Row="0" ItemsSource="{Binding Workspace.OpenTabs}" 
-                               SelectedItem="{Binding Workspace.SelectedTab}">
+                    <!-- 🔥 FIXED: TabControl spans full workspace area for RTF editor display -->
+                    <TabControl ItemsSource="{Binding Workspace.OpenTabs}" 
+                               SelectedItem="{Binding Workspace.SelectedTab}"
+                               HorizontalAlignment="Stretch"
+                               VerticalAlignment="Stretch">
                         <TabControl.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
@@ -149,21 +146,24 @@
                                 </StackPanel>
                             </DataTemplate>
                         </TabControl.ItemTemplate>
-                           <TabControl.ContentTemplate>
-                               <DataTemplate>
-                                   <!-- 🎯 SOPHISTICATED RTF EDITOR INTEGRATION -->
-                                   <!-- Use your existing RTFEditor + RTFToolbar system -->
-                                   <ContentPresenter Content="{Binding TabContent}" />
-                               </DataTemplate>
-                           </TabControl.ContentTemplate>
+                        <TabControl.ContentTemplate>
+                            <DataTemplate>
+                                <!-- 🎯 SOPHISTICATED RTF EDITOR INTEGRATION -->
+                                <!-- Displays the complete RTF editor (toolbar + editor) built by NoteTabItem -->
+                                <ContentPresenter Content="{Binding TabContent}" 
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Stretch"/>
+                            </DataTemplate>
+                        </TabControl.ContentTemplate>
                     </TabControl>
                     
-                    <!-- Placeholder when no tabs -->
-                    <TextBlock Grid.Row="1" Text="No notes open. Select a category and click 'New Note' to get started." 
+                    <!-- Placeholder when no tabs (behind the TabControl) -->
+                    <TextBlock Text="No notes open. Select a category and click 'New Note' to get started." 
                               HorizontalAlignment="Center" 
                               VerticalAlignment="Center" 
                               Foreground="Gray"
-                              Visibility="{Binding Workspace.OpenTabs.Count, Converter={StaticResource CountToVisibilityConverter}}"/>
+                              Visibility="{Binding Workspace.OpenTabs.Count, Converter={StaticResource CountToVisibilityConverter}}"
+                              IsHitTestVisible="False"/>
                 </Grid>
             </GroupBox>
         </Grid>

@@ -91,69 +91,68 @@ namespace NoteNest.UI.ViewModels.Workspace
             CloseAllTabsCommand = new AsyncRelayCommand(ExecuteCloseAllTabs, CanCloseAllTabs);
         }
 
-        public async Task OpenNoteAsync(string noteId, string noteTitle)
+        public async Task OpenNoteAsync(Note note)
         {
             try
             {
                 IsLoading = true;
-                StatusMessage = $"Opening {noteTitle}...";
+                StatusMessage = $"Opening {note.Title}...";
 
                 // Check if already open
-                var existingTab = OpenTabs.FirstOrDefault(t => t.NoteId == noteId);
+                var existingTab = OpenTabs.FirstOrDefault(t => t.NoteId == note.Id.Value);
                 if (existingTab != null)
                 {
                     SelectedTab = existingTab;
-                    StatusMessage = $"Switched to {noteTitle}";
+                    StatusMessage = $"Switched to {note.Title}";
                     return;
                 }
 
-                // Load note from database and create NoteModel for RTF editor
+                // 🎯 DIRECT RTF FILE LOADING - We have the Note object with FilePath!
                 NoteModel noteModel = null;
                 try
                 {
-                    var noteIdValue = NoteId.From(noteId);
-                    var domainNote = await _noteRepository.GetByIdAsync(noteIdValue);
-                    if (domainNote != null)
+                    _logger.Info($"🎯 Loading RTF content directly from file: {note.FilePath}");
+                    
+                    // Load content from RTF file if FilePath is available
+                    var noteContent = note.Content ?? "";
+                    if (string.IsNullOrEmpty(noteContent) && !string.IsNullOrEmpty(note.FilePath))
                     {
-                        // Convert Domain.Note to Core.Models.NoteModel for RTF editor
-                        noteModel = new NoteModel
+                        if (System.IO.File.Exists(note.FilePath))
                         {
-                            Id = domainNote.Id.Value,
-                            Title = domainNote.Title,
-                            Content = domainNote.Content ?? "",
-                            FilePath = domainNote.FilePath ?? "",
-                            CategoryId = domainNote.CategoryId.Value,
-                            LastModified = domainNote.UpdatedAt
-                        };
-                        
-                        _logger.Info($"⚡ Loaded note from database for RTF editor: {noteModel.Title}");
+                            noteContent = await System.IO.File.ReadAllTextAsync(note.FilePath);
+                            _logger.Info($"📄 RTF content loaded from file: {note.FilePath} ({noteContent.Length} chars)");
+                        }
+                        else
+                        {
+                            _logger.Warning($"📄 RTF file not found: {note.FilePath}");
+                            noteContent = $"RTF file not found: {note.FilePath}";
+                        }
                     }
-                    else
+                    
+                    // Convert Domain.Note to Core.Models.NoteModel for RTF editor
+                    noteModel = new NoteModel
                     {
-                        _logger.Warning($"Note not found in database: {noteId}");
-                        // Create placeholder note model
-                        noteModel = new NoteModel
-                        {
-                            Id = noteId,
-                            Title = noteTitle,
-                            Content = "Note not found in database.",
-                            FilePath = "",
-                            CategoryId = "",
-                            LastModified = DateTime.Now
-                        };
-                    }
+                        Id = note.Id.Value,
+                        Title = note.Title,
+                        Content = noteContent,
+                        FilePath = note.FilePath ?? "",
+                        CategoryId = note.CategoryId.Value,
+                        LastModified = note.UpdatedAt
+                    };
+                    
+                    _logger.Info($"✅ NoteModel created for RTF editor: {note.Title} ({noteContent.Length} chars)");
                 }
                 catch (Exception loadEx)
                 {
-                    _logger.Error(loadEx, $"Failed to load note from database: {noteId}");
+                    _logger.Error(loadEx, $"Failed to load RTF content for: {note.Title}");
                     // Create error note model
                     noteModel = new NoteModel
                     {
-                        Id = noteId,
-                        Title = noteTitle,
-                        Content = $"Error loading note: {loadEx.Message}",
-                        FilePath = "",
-                        CategoryId = "",
+                        Id = note.Id.Value,
+                        Title = note.Title,
+                        Content = $"Error loading RTF content: {loadEx.Message}",
+                        FilePath = note.FilePath ?? "",
+                        CategoryId = note.CategoryId.Value,
                         LastModified = DateTime.Now
                     };
                 }
@@ -161,17 +160,25 @@ namespace NoteNest.UI.ViewModels.Workspace
                 // Create sophisticated NoteTabItem with RTF editor (correct parameter order)
                 var noteTabItem = new NoteTabItem(noteModel, _saveManager);
                 
-                // Load content into RTF editor
-                if (!string.IsNullOrEmpty(noteModel.Content))
+                // CRITICAL: Always load content into RTF editor (handles RTF file fallback content)
+                var contentToLoad = noteModel.Content ?? "";
+                if (!string.IsNullOrEmpty(contentToLoad))
                 {
-                    noteTabItem.LoadContent(noteModel.Content);
+                    noteTabItem.LoadContent(contentToLoad);
+                    _logger.Info($"📄 Content loaded into RTF editor: {contentToLoad.Length} chars");
+                }
+                else
+                {
+                    // Load empty content to initialize editor properly
+                    noteTabItem.LoadContent("");
+                    _logger.Info("📝 Empty content loaded into RTF editor");
                 }
 
                 OpenTabs.Add(noteTabItem);
                 SelectedTab = noteTabItem;
                 
                 StatusMessage = $"Opened {noteModel.Title} in RTF editor";
-                NoteOpened?.Invoke(noteId);
+                NoteOpened?.Invoke(note.Id.Value);
                 
                 _logger.Info($"🎯 RTF editor integrated: {noteModel.Title}");
             }
@@ -179,7 +186,7 @@ namespace NoteNest.UI.ViewModels.Workspace
             {
                 StatusMessage = $"Failed to open note: {ex.Message}";
                 _dialogService.ShowError(ex.Message, "Open Note Error");
-                _logger.Error(ex, $"Exception opening note: {noteId}");
+                _logger.Error(ex, $"Exception opening note: {note.Id.Value}");
             }
             finally
             {

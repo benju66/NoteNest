@@ -99,7 +99,7 @@ namespace NoteNest.Infrastructure.Persistence.Repositories
                             var fileInfo = new FileInfo(filePath);
                             var noteTitle = Path.GetFileNameWithoutExtension(fileInfo.Name);
                             
-                            // Create a Note domain object from the file
+                            // Create a Note domain object from the file (use standard constructor)
                             var note = new Note(categoryId, noteTitle);
                             note.SetFilePath(filePath);
                             

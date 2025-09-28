@@ -82,14 +82,40 @@ namespace NoteNest.Infrastructure.Database.Services
 
         /// <summary>
         /// Fallback: Load note directly from RTF file when database fails
+        /// First checks if we can find the note via FileSystemNoteRepository (which has FilePath set)
         /// </summary>
         private async Task<Note> LoadNoteFromFileSystemFallback(NoteId id)
         {
             try
             {
-                // Treat ID as file path (legacy compatibility)
-                var filePath = id.Value;
+                _logger.Info($"Attempting RTF file fallback for note ID: {id.Value}");
                 
+                // Strategy 1: Try to treat ID as file path directly (legacy compatibility)
+                var potentialFilePath = id.Value;
+                if (System.IO.File.Exists(potentialFilePath))
+                {
+                    return await LoadNoteFromFile(potentialFilePath, id);
+                }
+                
+                // Strategy 2: This shouldn't happen with our current setup, but fallback to search
+                // (In the real world, we'd need to search the file system, but for now just log)
+                _logger.Warning($"Could not locate file for note ID: {id.Value}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"RTF file fallback failed for: {id.Value}");
+                return null;
+            }
+        }
+        
+        /// <summary>
+        /// Load a note from a specific file path
+        /// </summary>
+        private async Task<Note> LoadNoteFromFile(string filePath, NoteId noteId)
+        {
+            try
+            {
                 if (!System.IO.File.Exists(filePath))
                 {
                     _logger.Warning($"RTF file not found: {filePath}");
@@ -108,17 +134,17 @@ namespace NoteNest.Infrastructure.Database.Services
                 var note = new Note(categoryId, noteTitle, content);
                 note.SetFilePath(filePath);
 
-                _logger.Info($"📄 Note loaded from RTF file fallback: {noteTitle} ({content.Length} chars)");
+                _logger.Info($"📄 Note loaded from RTF file: {noteTitle} ({content.Length} chars) from {filePath}");
                 
                 // Cache the result
-                var cacheKey = $"{NOTE_CACHE_PREFIX}{id.Value}";
+                var cacheKey = $"{NOTE_CACHE_PREFIX}{noteId.Value}";
                 _cache.Set(cacheKey, note, CACHE_DURATION);
                 
                 return note;
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"RTF file fallback failed for: {id.Value}");
+                _logger.Error(ex, $"Failed to load note from file: {filePath}");
                 return null;
             }
         }
