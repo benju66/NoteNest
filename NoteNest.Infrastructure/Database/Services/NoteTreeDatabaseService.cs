@@ -38,7 +38,7 @@ namespace NoteNest.Infrastructure.Database.Services
         }
 
         /// <summary>
-        /// Get note by ID - FAST database lookup with caching
+        /// Get note by ID - FAST database lookup with RTF file fallback
         /// </summary>
         public async Task<Note> GetByIdAsync(NoteId id)
         {
@@ -51,31 +51,74 @@ namespace NoteNest.Infrastructure.Database.Services
                     return cached;
                 }
 
-                if (!Guid.TryParse(id.Value, out var guid))
+                // Try database lookup first (fast path)
+                if (Guid.TryParse(id.Value, out var guid))
                 {
-                    _logger.Warning($"Invalid NoteId format: {id.Value}");
-                    return null;
+                    var treeNode = await _treeRepository.GetNodeByIdAsync(guid);
+                    if (treeNode?.NodeType == TreeNodeType.Note)
+                    {
+                        var note = await ConvertTreeNodeToNote(treeNode);
+                        if (note != null)
+                        {
+                            _cache.Set(cacheKey, note, CACHE_DURATION);
+                            _logger.Info($"⚡ Note loaded from database: {note.Title}");
+                            return note;
+                        }
+                    }
                 }
 
-                var treeNode = await _treeRepository.GetNodeByIdAsync(guid);
-                if (treeNode?.NodeType != TreeNodeType.Note)
-                {
-                    return null;
-                }
-
-                var note = await ConvertTreeNodeToNote(treeNode);
-                
-                // Cache the result
-                if (note != null)
-                {
-                    _cache.Set(cacheKey, note, CACHE_DURATION);
-                }
-
-                return note;
+                // Database failed - try RTF file fallback (for path-based IDs)
+                _logger.Info($"Database lookup failed for note {id.Value}, trying RTF file fallback...");
+                return await LoadNoteFromFileSystemFallback(id);
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed to get note by id: {id.Value}");
+                
+                // Final fallback - try file system
+                return await LoadNoteFromFileSystemFallback(id);
+            }
+        }
+
+        /// <summary>
+        /// Fallback: Load note directly from RTF file when database fails
+        /// </summary>
+        private async Task<Note> LoadNoteFromFileSystemFallback(NoteId id)
+        {
+            try
+            {
+                // Treat ID as file path (legacy compatibility)
+                var filePath = id.Value;
+                
+                if (!System.IO.File.Exists(filePath))
+                {
+                    _logger.Warning($"RTF file not found: {filePath}");
+                    return null;
+                }
+
+                var fileInfo = new System.IO.FileInfo(filePath);
+                var noteTitle = System.IO.Path.GetFileNameWithoutExtension(fileInfo.Name);
+                var content = await System.IO.File.ReadAllTextAsync(filePath);
+                
+                // Create category ID from directory path
+                var categoryPath = System.IO.Path.GetDirectoryName(filePath);
+                var categoryId = NoteNest.Domain.Categories.CategoryId.From(categoryPath);
+                
+                // Create note domain object
+                var note = new Note(categoryId, noteTitle, content);
+                note.SetFilePath(filePath);
+
+                _logger.Info($"📄 Note loaded from RTF file fallback: {noteTitle} ({content.Length} chars)");
+                
+                // Cache the result
+                var cacheKey = $"{NOTE_CACHE_PREFIX}{id.Value}";
+                _cache.Set(cacheKey, note, CACHE_DURATION);
+                
+                return note;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"RTF file fallback failed for: {id.Value}");
                 return null;
             }
         }

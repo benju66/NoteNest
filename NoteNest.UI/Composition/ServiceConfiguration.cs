@@ -158,6 +158,24 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<IFileSystemProvider, NoteNest.Core.Services.DefaultFileSystemProvider>();
             services.AddSingleton<ConfigurationService>();
             
+            // =============================================================================
+            // RTF EDITOR SERVICES - Sophisticated RTF Editor Integration
+            // =============================================================================
+            
+            // RTF Save Manager (for NoteTabItem RTF content saving)
+            services.AddSingleton<ISaveManager>(provider =>
+            {
+                var dataPath = notesRootPath; // Use same notes path
+                var statusNotifier = new NoteNest.Core.Services.BasicStatusNotifier(provider.GetRequiredService<IAppLogger>());
+                return new NoteNest.Core.Services.RTFIntegratedSaveEngine(dataPath, statusNotifier);
+            });
+            
+            // Note service for RTF content operations
+            services.AddScoped<NoteService>();
+            
+            // Metadata manager for RTF notes
+            services.AddScoped<NoteNest.Core.Services.NoteMetadataManager>();
+            
             // UI services
             services.AddScoped<IDialogService, DialogService>();
             
@@ -215,6 +233,28 @@ namespace NoteNest.UI.Composition
             // Core services
             services.AddSingleton<IAppLogger, ConsoleAppLogger>();
             services.AddSingleton<IFileSystemProvider, NoteNest.Core.Services.DefaultFileSystemProvider>();
+            services.AddSingleton<ConfigurationService>();
+            
+            // =============================================================================
+            // RTF EDITOR SERVICES - Sophisticated RTF Editor Integration (Legacy)
+            // =============================================================================
+            
+            var notesRootPath = configuration.GetValue<string>("NotesPath") 
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
+            
+            // RTF Save Manager (for NoteTabItem RTF content saving)
+            services.AddSingleton<ISaveManager>(provider =>
+            {
+                var dataPath = notesRootPath; // Use same notes path
+                var statusNotifier = new NoteNest.Core.Services.BasicStatusNotifier(provider.GetRequiredService<IAppLogger>());
+                return new NoteNest.Core.Services.RTFIntegratedSaveEngine(dataPath, statusNotifier);
+            });
+            
+            // Note service for RTF content operations
+            services.AddScoped<NoteService>();
+            
+            // Metadata manager for RTF notes
+            services.AddScoped<NoteNest.Core.Services.NoteMetadataManager>();
             
             // UI services
             services.AddScoped<IDialogService, DialogService>();

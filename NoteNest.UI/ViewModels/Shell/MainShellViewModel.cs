@@ -136,12 +136,13 @@ namespace NoteNest.UI.ViewModels.Shell
             var openTab = Workspace.OpenTabs.FirstOrDefault(t => t.NoteId == noteId);
             if (openTab != null)
             {
+                openTab.Dispose(); // Properly dispose RTF editor
                 Workspace.OpenTabs.Remove(openTab);
             }
             StatusMessage = "Note deleted";
         }
 
-        private void OnTabSelected(TabViewModel tab)
+        private void OnTabSelected(NoteTabItem tab)
         {
             StatusMessage = tab != null ? $"Editing: {tab.Title}" : "No note selected";
         }

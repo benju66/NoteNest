@@ -10,6 +10,9 @@ using NoteNest.UI.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Application.Common.Interfaces;
 using NoteNest.Domain.Notes;
+using NoteNest.Core.Models;
+using NoteNest.Core.Interfaces.Services;
+using NoteNest.Core.Services;
 
 namespace NoteNest.UI.ViewModels.Workspace
 {
@@ -22,7 +25,8 @@ namespace NoteNest.UI.ViewModels.Workspace
         private readonly IDialogService _dialogService;
         private readonly IAppLogger _logger;
         private readonly INoteRepository _noteRepository;
-        private TabViewModel _selectedTab;
+        private readonly ISaveManager _saveManager;
+        private NoteTabItem _selectedTab;
         private bool _isLoading;
         private string _statusMessage;
 
@@ -30,20 +34,22 @@ namespace NoteNest.UI.ViewModels.Workspace
             IMediator mediator,
             IDialogService dialogService,
             IAppLogger logger,
-            INoteRepository noteRepository)
+            INoteRepository noteRepository,
+            ISaveManager saveManager)
         {
             _mediator = mediator;
             _dialogService = dialogService;
             _logger = logger;
             _noteRepository = noteRepository;
+            _saveManager = saveManager;
             
-            OpenTabs = new ObservableCollection<TabViewModel>();
+            OpenTabs = new ObservableCollection<NoteTabItem>();
             InitializeCommands();
         }
 
-        public ObservableCollection<TabViewModel> OpenTabs { get; }
+        public ObservableCollection<NoteTabItem> OpenTabs { get; }
 
-        public TabViewModel SelectedTab
+        public NoteTabItem SelectedTab
         {
             get => _selectedTab;
             set
@@ -73,15 +79,15 @@ namespace NoteNest.UI.ViewModels.Workspace
         public ICommand CloseAllTabsCommand { get; private set; }
 
         // Events for coordination with other ViewModels
-        public event Action<TabViewModel> TabSelected;
-        public event Action<TabViewModel> TabClosed;
+        public event Action<NoteTabItem> TabSelected;
+        public event Action<NoteTabItem> TabClosed;
         public event Action<string> NoteOpened;
 
         private void InitializeCommands()
         {
-            SaveTabCommand = new AsyncRelayCommand<TabViewModel>(ExecuteSaveTab, CanSaveTab);
+            SaveTabCommand = new AsyncRelayCommand<NoteTabItem>(ExecuteSaveTab, CanSaveTab);
             SaveAllTabsCommand = new AsyncRelayCommand(ExecuteSaveAllTabs, CanSaveAllTabs);
-            CloseTabCommand = new AsyncRelayCommand<TabViewModel>(ExecuteCloseTab, CanCloseTab);
+            CloseTabCommand = new AsyncRelayCommand<NoteTabItem>(ExecuteCloseTab, CanCloseTab);
             CloseAllTabsCommand = new AsyncRelayCommand(ExecuteCloseAllTabs, CanCloseAllTabs);
         }
 
@@ -101,37 +107,73 @@ namespace NoteNest.UI.ViewModels.Workspace
                     return;
                 }
 
-                // Load note content from database/repository
-                var noteContent = "";
+                // Load note from database and create NoteModel for RTF editor
+                NoteModel noteModel = null;
                 try
                 {
                     var noteIdValue = NoteId.From(noteId);
-                    var note = await _noteRepository.GetByIdAsync(noteIdValue);
-                    if (note != null)
+                    var domainNote = await _noteRepository.GetByIdAsync(noteIdValue);
+                    if (domainNote != null)
                     {
-                        noteContent = note.Content ?? "";
-                        noteTitle = note.Title; // Use actual title from database
-                        _logger.Info($"⚡ Loaded note content from database: {noteTitle}");
+                        // Convert Domain.Note to Core.Models.NoteModel for RTF editor
+                        noteModel = new NoteModel
+                        {
+                            Id = domainNote.Id.Value,
+                            Title = domainNote.Title,
+                            Content = domainNote.Content ?? "",
+                            FilePath = domainNote.FilePath ?? "",
+                            CategoryId = domainNote.CategoryId.Value,
+                            LastModified = domainNote.UpdatedAt
+                        };
+                        
+                        _logger.Info($"⚡ Loaded note from database for RTF editor: {noteModel.Title}");
                     }
                     else
                     {
                         _logger.Warning($"Note not found in database: {noteId}");
-                        noteContent = "Note not found in database.";
+                        // Create placeholder note model
+                        noteModel = new NoteModel
+                        {
+                            Id = noteId,
+                            Title = noteTitle,
+                            Content = "Note not found in database.",
+                            FilePath = "",
+                            CategoryId = "",
+                            LastModified = DateTime.Now
+                        };
                     }
                 }
                 catch (Exception loadEx)
                 {
-                    _logger.Error(loadEx, $"Failed to load note content: {noteId}");
-                    noteContent = $"Error loading note content: {loadEx.Message}";
+                    _logger.Error(loadEx, $"Failed to load note from database: {noteId}");
+                    // Create error note model
+                    noteModel = new NoteModel
+                    {
+                        Id = noteId,
+                        Title = noteTitle,
+                        Content = $"Error loading note: {loadEx.Message}",
+                        FilePath = "",
+                        CategoryId = "",
+                        LastModified = DateTime.Now
+                    };
                 }
 
-                // Create new tab with loaded content
-                var tabViewModel = new TabViewModel(noteId, noteTitle, noteContent);
-                OpenTabs.Add(tabViewModel);
-                SelectedTab = tabViewModel;
+                // Create sophisticated NoteTabItem with RTF editor (correct parameter order)
+                var noteTabItem = new NoteTabItem(noteModel, _saveManager);
                 
-                StatusMessage = $"Opened {noteTitle}";
+                // Load content into RTF editor
+                if (!string.IsNullOrEmpty(noteModel.Content))
+                {
+                    noteTabItem.LoadContent(noteModel.Content);
+                }
+
+                OpenTabs.Add(noteTabItem);
+                SelectedTab = noteTabItem;
+                
+                StatusMessage = $"Opened {noteModel.Title} in RTF editor";
                 NoteOpened?.Invoke(noteId);
+                
+                _logger.Info($"🎯 RTF editor integrated: {noteModel.Title}");
             }
             catch (Exception ex)
             {
@@ -145,7 +187,7 @@ namespace NoteNest.UI.ViewModels.Workspace
             }
         }
 
-        private async Task ExecuteSaveTab(TabViewModel tab)
+        private async Task ExecuteSaveTab(NoteTabItem tab)
         {
             if (tab == null)
                 return;
@@ -155,31 +197,17 @@ namespace NoteNest.UI.ViewModels.Workspace
                 IsLoading = true;
                 StatusMessage = $"Saving {tab.Title}...";
 
-                var command = new SaveNoteCommand
-                {
-                    NoteId = tab.NoteId,
-                    Content = tab.Content,
-                    IsManualSave = true
-                };
-
-                var result = await _mediator.Send(command);
+                // Use the RTF-aware save system
+                await tab.SaveAsync();
                 
-                if (result.IsFailure)
-                {
-                    StatusMessage = $"Failed to save {tab.Title}: {result.Error}";
-                    _dialogService.ShowError(result.Error, "Save Error");
-                }
-                else
-                {
-                    tab.IsDirty = false;
-                    StatusMessage = $"Saved {tab.Title}";
-                }
+                StatusMessage = $"Saved {tab.Title}";
+                _logger.Info($"✅ RTF content saved: {tab.Title}");
             }
             catch (Exception ex)
             {
                 StatusMessage = $"Error saving {tab.Title}: {ex.Message}";
                 _dialogService.ShowError(ex.Message, "Save Error");
-                _logger.Error(ex, $"Exception saving note: {tab.NoteId}");
+                _logger.Error(ex, $"Exception saving RTF note: {tab.NoteId}");
             }
             finally
             {
@@ -208,23 +236,9 @@ namespace NoteNest.UI.ViewModels.Workspace
                 {
                     try
                     {
-                        var command = new SaveNoteCommand
-                        {
-                            NoteId = tab.NoteId,
-                            Content = tab.Content,
-                            IsManualSave = false
-                        };
-
-                        var result = await _mediator.Send(command);
-                        if (result.Success)
-                        {
-                            tab.IsDirty = false;
-                            savedCount++;
-                        }
-                        else
-                        {
-                            failedCount++;
-                        }
+                        // Use RTF-aware save system
+                        await tab.SaveAsync();
+                        savedCount++;
                     }
                     catch
                     {
@@ -253,7 +267,7 @@ namespace NoteNest.UI.ViewModels.Workspace
             }
         }
 
-        private async Task ExecuteCloseTab(TabViewModel tab)
+        private async Task ExecuteCloseTab(NoteTabItem tab)
         {
             if (tab == null)
                 return;
@@ -273,7 +287,8 @@ namespace NoteNest.UI.ViewModels.Workspace
                     }
                 }
 
-                // Note: TabViewModel automatically handles IsDirty state
+                // Properly dispose RTF editor resources
+                tab.Dispose();
                 
                 OpenTabs.Remove(tab);
                 TabClosed?.Invoke(tab);
@@ -285,6 +300,7 @@ namespace NoteNest.UI.ViewModels.Workspace
                 }
 
                 StatusMessage = $"Closed {tab.Title}";
+                _logger.Info($"🗑️ RTF tab closed and disposed: {tab.Title}");
             }
             catch (Exception ex)
             {
@@ -308,58 +324,28 @@ namespace NoteNest.UI.ViewModels.Workspace
                 }
             }
 
+            // Properly dispose all RTF editors
+            foreach (var tab in OpenTabs.ToList())
+            {
+                try
+                {
+                    tab.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"Error disposing RTF tab: {tab.Title}");
+                }
+            }
+            
             OpenTabs.Clear();
             SelectedTab = null;
             StatusMessage = "Closed all tabs";
+            _logger.Info("🗑️ All RTF tabs closed and disposed");
         }
 
-        private bool CanSaveTab(TabViewModel tab) => !IsLoading && tab?.IsDirty == true;
+        private bool CanSaveTab(NoteTabItem tab) => !IsLoading && tab?.IsDirty == true;
         private bool CanSaveAllTabs() => !IsLoading && OpenTabs.Any(t => t.IsDirty);
-        private bool CanCloseTab(TabViewModel tab) => !IsLoading && tab != null;
+        private bool CanCloseTab(NoteTabItem tab) => !IsLoading && tab != null;
         private bool CanCloseAllTabs() => !IsLoading && OpenTabs.Any();
-    }
-
-    /// <summary>
-    /// Simple tab representation for the new architecture
-    /// </summary>
-    public class TabViewModel : ViewModelBase
-    {
-        private string _title;
-        private string _content;
-        private bool _isDirty;
-
-        public TabViewModel(string noteId, string title, string content)
-        {
-            NoteId = noteId;
-            Title = title;
-            Content = content;
-            IsDirty = false;
-        }
-
-        public string NoteId { get; }
-
-        public string Title
-        {
-            get => _title;
-            set => SetProperty(ref _title, value);
-        }
-
-        public string Content
-        {
-            get => _content;
-            set
-            {
-                if (SetProperty(ref _content, value))
-                {
-                    IsDirty = true;
-                }
-            }
-        }
-
-        public bool IsDirty
-        {
-            get => _isDirty;
-            set => SetProperty(ref _isDirty, value);
-        }
     }
 }
