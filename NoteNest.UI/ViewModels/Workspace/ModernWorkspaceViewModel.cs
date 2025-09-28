@@ -8,6 +8,8 @@ using NoteNest.Application.Notes.Commands.SaveNote;
 using NoteNest.UI.ViewModels.Common;
 using NoteNest.UI.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
+using NoteNest.Domain.Notes;
 
 namespace NoteNest.UI.ViewModels.Workspace
 {
@@ -19,6 +21,7 @@ namespace NoteNest.UI.ViewModels.Workspace
         private readonly IMediator _mediator;
         private readonly IDialogService _dialogService;
         private readonly IAppLogger _logger;
+        private readonly INoteRepository _noteRepository;
         private TabViewModel _selectedTab;
         private bool _isLoading;
         private string _statusMessage;
@@ -26,11 +29,13 @@ namespace NoteNest.UI.ViewModels.Workspace
         public ModernWorkspaceViewModel(
             IMediator mediator,
             IDialogService dialogService,
-            IAppLogger logger)
+            IAppLogger logger,
+            INoteRepository noteRepository)
         {
             _mediator = mediator;
             _dialogService = dialogService;
             _logger = logger;
+            _noteRepository = noteRepository;
             
             OpenTabs = new ObservableCollection<TabViewModel>();
             InitializeCommands();
@@ -96,8 +101,32 @@ namespace NoteNest.UI.ViewModels.Workspace
                     return;
                 }
 
-                // Create new tab
-                var tabViewModel = new TabViewModel(noteId, noteTitle, "");
+                // Load note content from database/repository
+                var noteContent = "";
+                try
+                {
+                    var noteIdValue = NoteId.From(noteId);
+                    var note = await _noteRepository.GetByIdAsync(noteIdValue);
+                    if (note != null)
+                    {
+                        noteContent = note.Content ?? "";
+                        noteTitle = note.Title; // Use actual title from database
+                        _logger.Info($"⚡ Loaded note content from database: {noteTitle}");
+                    }
+                    else
+                    {
+                        _logger.Warning($"Note not found in database: {noteId}");
+                        noteContent = "Note not found in database.";
+                    }
+                }
+                catch (Exception loadEx)
+                {
+                    _logger.Error(loadEx, $"Failed to load note content: {noteId}");
+                    noteContent = $"Error loading note content: {loadEx.Message}";
+                }
+
+                // Create new tab with loaded content
+                var tabViewModel = new TabViewModel(noteId, noteTitle, noteContent);
                 OpenTabs.Add(tabViewModel);
                 SelectedTab = tabViewModel;
                 
@@ -108,6 +137,7 @@ namespace NoteNest.UI.ViewModels.Workspace
             {
                 StatusMessage = $"Failed to open note: {ex.Message}";
                 _dialogService.ShowError(ex.Message, "Open Note Error");
+                _logger.Error(ex, $"Exception opening note: {noteId}");
             }
             finally
             {

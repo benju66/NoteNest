@@ -122,6 +122,10 @@ namespace NoteNest.UI.ViewModels.Categories
         public ICommand CollapseCommand { get; }
         public ICommand ToggleExpandCommand { get; }
 
+        // Events for note interaction (bubble up to tree level)
+        public event Action<NoteItemViewModel> NoteOpenRequested;
+        public event Action<NoteItemViewModel> NoteSelectionRequested;
+
         public async Task ExpandAsync()
         {
             if (IsExpanded) return;
@@ -166,7 +170,13 @@ namespace NoteNest.UI.ViewModels.Categories
                 Notes.Clear();
                 foreach (var note in notes)
                 {
-                    Notes.Add(new NoteItemViewModel(note));
+                    var noteViewModel = new NoteItemViewModel(note);
+                    
+                    // Wire up note events to bubble up to tree level
+                    noteViewModel.OpenRequested += OnNoteOpenRequested;
+                    noteViewModel.SelectionRequested += OnNoteSelectionRequested;
+                    
+                    Notes.Add(noteViewModel);
                 }
                 
                 _notesLoaded = true;
@@ -220,9 +230,23 @@ namespace NoteNest.UI.ViewModels.Categories
             OnPropertyChanged(nameof(HasNotes));
             OnPropertyChanged(nameof(HasContent));
         }
+
+        // =============================================================================
+        // NOTE EVENT HANDLERS - Bubble events up to tree level
+        // =============================================================================
+
+        private void OnNoteOpenRequested(NoteItemViewModel note)
+        {
+            NoteOpenRequested?.Invoke(note);
+        }
+
+        private void OnNoteSelectionRequested(NoteItemViewModel note)
+        {
+            NoteSelectionRequested?.Invoke(note);
+        }
     }
 
-    // Simple ViewModel for notes within categories
+    // Enhanced ViewModel for notes within categories with interaction support
     public class NoteItemViewModel : ViewModelBase
     {
         private readonly Note _note;
@@ -230,6 +254,10 @@ namespace NoteNest.UI.ViewModels.Categories
         public NoteItemViewModel(Note note)
         {
             _note = note ?? throw new ArgumentNullException(nameof(note));
+            
+            // Initialize commands
+            OpenCommand = new RelayCommand(() => OnOpenRequested());
+            SelectCommand = new RelayCommand(() => OnSelectionRequested());
         }
 
         public string Id => _note.Id.Value;
@@ -239,5 +267,24 @@ namespace NoteNest.UI.ViewModels.Categories
         public string NoteIcon => IsPinned ? "[Pinned]" : "[Note]";
         public DateTime CreatedAt => _note.CreatedAt;
         public DateTime UpdatedAt => _note.UpdatedAt;
+        public Note Note => _note; // Expose underlying note for workspace operations
+
+        // Commands for UI interaction
+        public ICommand OpenCommand { get; }
+        public ICommand SelectCommand { get; }
+
+        // Events for parent coordination
+        public event Action<NoteItemViewModel> OpenRequested;
+        public event Action<NoteItemViewModel> SelectionRequested;
+
+        private void OnOpenRequested()
+        {
+            OpenRequested?.Invoke(this);
+        }
+
+        private void OnSelectionRequested()
+        {
+            SelectionRequested?.Invoke(this);
+        }
     }
 }

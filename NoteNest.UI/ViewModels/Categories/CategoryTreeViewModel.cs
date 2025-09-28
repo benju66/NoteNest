@@ -57,10 +57,30 @@ namespace NoteNest.UI.ViewModels.Categories
         }
 
         public event Action<CategoryViewModel> CategorySelected;
+        public event Action<NoteItemViewModel> NoteSelected;
+        public event Action<NoteItemViewModel> NoteOpenRequested;
 
         public async Task RefreshAsync()
         {
             await LoadCategoriesAsync();
+        }
+
+        public void SelectNote(NoteItemViewModel note)
+        {
+            if (note != null)
+            {
+                NoteSelected?.Invoke(note);
+                _logger.Debug($"Note selected: {note.Title}");
+            }
+        }
+
+        public void OpenNote(NoteItemViewModel note)
+        {
+            if (note != null)
+            {
+                NoteOpenRequested?.Invoke(note);
+                _logger.Info($"Note open requested: {note.Title}");
+            }
         }
 
         private async Task LoadCategoriesAsync()
@@ -79,6 +99,11 @@ namespace NoteNest.UI.ViewModels.Categories
                 foreach (var category in rootCategories)
                 {
                     var categoryViewModel = new CategoryViewModel(category, _noteRepository, _logger);
+                    
+                    // Wire up note events to bubble up
+                    categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
+                    categoryViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
+                    
                     await LoadChildrenAsync(categoryViewModel, allCategories);
                     Categories.Add(categoryViewModel);
                 }
@@ -102,9 +127,28 @@ namespace NoteNest.UI.ViewModels.Categories
             foreach (var child in children)
             {
                 var childViewModel = new CategoryViewModel(child, _noteRepository, _logger);
+                
+                // Wire up note events for child categories too
+                childViewModel.NoteOpenRequested += OnNoteOpenRequested;
+                childViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
+                
                 await LoadChildrenAsync(childViewModel, allCategories);
                 parentViewModel.Children.Add(childViewModel);
             }
+        }
+
+        // =============================================================================
+        // NOTE EVENT HANDLERS - Forward to MainShellViewModel
+        // =============================================================================
+
+        private void OnNoteOpenRequested(NoteItemViewModel note)
+        {
+            NoteOpenRequested?.Invoke(note);
+        }
+
+        private void OnNoteSelectionRequested(NoteItemViewModel note)
+        {
+            NoteSelected?.Invoke(note);
         }
     }
 }

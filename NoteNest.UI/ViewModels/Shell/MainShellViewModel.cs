@@ -100,8 +100,12 @@ namespace NoteNest.UI.ViewModels.Shell
         {
             // Wire up cross-ViewModel communication
             CategoryTree.CategorySelected += OnCategorySelected;
+            CategoryTree.NoteSelected += OnNoteSelected;
+            CategoryTree.NoteOpenRequested += OnNoteOpenRequested;
+            
             NoteOperations.NoteCreated += OnNoteCreated;
             NoteOperations.NoteDeleted += OnNoteDeleted;
+            
             Workspace.TabSelected += OnTabSelected;
             Workspace.NoteOpened += OnNoteOpened;
         }
@@ -145,6 +149,44 @@ namespace NoteNest.UI.ViewModels.Shell
         private void OnNoteOpened(string noteId)
         {
             StatusMessage = "Note opened in editor";
+        }
+
+        // =============================================================================
+        // NEW NOTE INTERACTION HANDLERS - Clean Architecture Event Orchestration
+        // =============================================================================
+
+        private void OnNoteSelected(NoteItemViewModel note)
+        {
+            if (note != null)
+            {
+                StatusMessage = $"Selected note: {note.Title}";
+                // Could add preview pane logic here in the future
+            }
+        }
+
+        private async void OnNoteOpenRequested(NoteItemViewModel note)
+        {
+            if (note == null) return;
+
+            try
+            {
+                IsLoading = true;
+                StatusMessage = $"Opening {note.Title}...";
+
+                // Open note in workspace using ModernWorkspaceViewModel
+                await Workspace.OpenNoteAsync(note.Id, note.Title);
+
+                StatusMessage = $"Opened {note.Title}";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to open {note.Title}: {ex.Message}";
+                _dialogService.ShowError($"Failed to open note: {ex.Message}", "Open Error");
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
     }
 }

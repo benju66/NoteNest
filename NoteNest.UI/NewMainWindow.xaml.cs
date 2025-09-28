@@ -3,9 +3,12 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using NoteNest.UI.Windows;
 using NoteNest.Core.Services;
+using NoteNest.UI.ViewModels.Categories;
+using NoteNest.UI.ViewModels.Shell;
 
 namespace NoteNest.UI
 {
@@ -64,6 +67,49 @@ namespace NoteNest.UI
             {
                 MessageBox.Show($"Failed to open settings: {ex.Message}", "Error", 
                     MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // =============================================================================
+        // TREE VIEW INTERACTION HANDLERS - Clean Architecture Event Forwarding
+        // =============================================================================
+
+        private void TreeView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (DataContext is MainShellViewModel viewModel)
+            {
+                var treeView = sender as TreeView;
+                
+                // Check if double-clicked item is a note
+                if (treeView?.SelectedItem is NoteItemViewModel note)
+                {
+                    // Request note opening through CategoryTreeViewModel
+                    viewModel.CategoryTree.OpenNote(note);
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void TreeView_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && DataContext is MainShellViewModel viewModel)
+            {
+                var treeView = sender as TreeView;
+                
+                // Check if Enter was pressed on a note item
+                if (treeView?.SelectedItem is NoteItemViewModel note)
+                {
+                    // Request note opening through CategoryTreeViewModel
+                    viewModel.CategoryTree.OpenNote(note);
+                    e.Handled = true;
+                }
+                // Check if Enter was pressed on a category
+                else if (treeView?.SelectedItem is CategoryViewModel category)
+                {
+                    // Toggle expansion of category
+                    _ = category.ToggleExpandAsync();
+                    e.Handled = true;
+                }
             }
         }
     }

@@ -45,10 +45,12 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     
-                    <!-- Enhanced TreeView with lazy loading -->
+                    <!-- Enhanced TreeView with interaction support -->
                     <TreeView Grid.Row="0" 
                               ItemsSource="{Binding CategoryTree.Categories}"
-                              SelectedItemChanged="CategoryTree_SelectedItemChanged">
+                              SelectedItemChanged="CategoryTree_SelectedItemChanged"
+                              MouseDoubleClick="TreeView_MouseDoubleClick"
+                              PreviewKeyDown="TreeView_PreviewKeyDown">
                         <TreeView.Resources>
                             <!-- Template for Category items -->
                             <HierarchicalDataTemplate DataType="{x:Type categories:CategoryViewModel}" 
@@ -85,30 +87,34 @@
                                 </StackPanel>
                             </HierarchicalDataTemplate>
                             
-                            <!-- Template for Note items -->
+                            <!-- Template for Note items with interaction -->
                             <DataTemplate DataType="{x:Type categories:NoteItemViewModel}">
-                                <StackPanel Orientation="Horizontal" Margin="20,1,2,1"
-                                            Background="Transparent"
-                                            Cursor="Hand">
-                                    <StackPanel.InputBindings>
+                                <Border Background="Transparent" 
+                                        Cursor="Hand"
+                                        Margin="20,1,2,1"
+                                        Padding="2">
+                                    <Border.InputBindings>
                                         <MouseBinding MouseAction="LeftDoubleClick" 
-                                                      Command="{Binding DataContext.Workspace.OpenNoteCommand, 
-                                                                        RelativeSource={RelativeSource AncestorType=Window}}"
-                                                      CommandParameter="{Binding}"/>
-                                    </StackPanel.InputBindings>
+                                                      Command="{Binding OpenCommand}"/>
+                                        <MouseBinding MouseAction="LeftClick" 
+                                                      Command="{Binding SelectCommand}"/>
+                                    </Border.InputBindings>
                                     
-                                    <TextBlock Text="{Binding NoteIcon}" 
-                                               Margin="0,0,4,0" 
-                                               FontSize="9"
-                                               Foreground="DarkGreen"/>
-                                    <TextBlock Text="{Binding Title}" 
-                                               Foreground="MidnightBlue" 
-                                               FontSize="11"/>
-                                    <TextBlock Text="{Binding UpdatedAt, StringFormat=' (Modified: {0:MMM dd, HH:mm})'}" 
-                                               Foreground="Gray" 
-                                               FontSize="8"
-                                               Margin="4,0,0,0"/>
-                                </StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding NoteIcon}" 
+                                                   Margin="0,0,4,0" 
+                                                   FontSize="9"
+                                                   Foreground="DarkGreen"/>
+                                        <TextBlock Text="{Binding Title}" 
+                                                   Foreground="MidnightBlue" 
+                                                   FontSize="11"
+                                                   FontWeight="Medium"/>
+                                        <TextBlock Text="{Binding UpdatedAt, StringFormat=' (Modified: {0:MMM dd, HH:mm})'}" 
+                                                   Foreground="Gray" 
+                                                   FontSize="8"
+                                                   Margin="4,0,0,0"/>
+                                    </StackPanel>
+                                </Border>
                             </DataTemplate>
                         </TreeView.Resources>
                     </TreeView>
