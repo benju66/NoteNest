@@ -90,25 +90,36 @@ namespace NoteNest.UI.ViewModels.Categories
                 IsLoading = true;
                 _logger.Info("Loading categories from repository...");
                 
-                var allCategories = await _categoryRepository.GetAllAsync();
-                var rootCategories = await _categoryRepository.GetRootCategoriesAsync();
+                // Retry mechanism for database initialization timing issues
+                var maxRetries = 3;
+                var retryDelay = TimeSpan.FromSeconds(2);
+                Exception lastException = null;
                 
-                Categories.Clear();
-                
-                // Create CategoryViewModels for root categories with dependency injection
-                foreach (var category in rootCategories)
+                for (int attempt = 1; attempt <= maxRetries; attempt++)
                 {
-                    var categoryViewModel = new CategoryViewModel(category, _noteRepository, _logger);
-                    
-                    // Wire up note events to bubble up
-                    categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
-                    categoryViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
-                    
-                    await LoadChildrenAsync(categoryViewModel, allCategories);
-                    Categories.Add(categoryViewModel);
+                    try
+                    {
+                        var allCategories = await _categoryRepository.GetAllAsync();
+                        var rootCategories = await _categoryRepository.GetRootCategoriesAsync();
+                        
+                        // If we get here successfully, continue with normal processing
+                        await ProcessLoadedCategories(allCategories, rootCategories);
+                        return; // Success - exit retry loop
+                    }
+                    catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("no such table"))
+                    {
+                        lastException = ex;
+                        _logger.Warning($"Database not ready on attempt {attempt}/{maxRetries}, retrying in {retryDelay.TotalSeconds}s...");
+                        
+                        if (attempt < maxRetries)
+                        {
+                            await Task.Delay(retryDelay);
+                        }
+                    }
                 }
                 
-                _logger.Info($"Loaded {Categories.Count} root categories");
+                // If all retries failed, throw the last exception
+                throw lastException;
             }
             catch (Exception ex)
             {
@@ -118,6 +129,26 @@ namespace NoteNest.UI.ViewModels.Categories
             {
                 IsLoading = false;
             }
+        }
+        
+        private async Task ProcessLoadedCategories(IReadOnlyList<Domain.Categories.Category> allCategories, IReadOnlyList<Domain.Categories.Category> rootCategories)
+        {
+            Categories.Clear();
+            
+            // Create CategoryViewModels for root categories with dependency injection
+            foreach (var category in rootCategories)
+            {
+                var categoryViewModel = new CategoryViewModel(category, _noteRepository, _logger);
+                
+                // Wire up note events to bubble up
+                categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
+                categoryViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
+                
+                await LoadChildrenAsync(categoryViewModel, allCategories);
+                Categories.Add(categoryViewModel);
+            }
+            
+            _logger.Info($"Loaded {Categories.Count} root categories");
         }
         
         private async Task LoadChildrenAsync(CategoryViewModel parentViewModel, IReadOnlyList<Category> allCategories)

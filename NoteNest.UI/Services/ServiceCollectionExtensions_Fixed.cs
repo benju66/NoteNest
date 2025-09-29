@@ -343,40 +343,14 @@ namespace NoteNest.UI.Services
         /// </summary>
         public static IServiceCollection AddFTS5SearchServices(this IServiceCollection services)
         {
-            // Core FTS5 services with clean dependencies
-            services.AddSingleton<IFts5Repository>(serviceProvider =>
-            {
-                return new Fts5Repository(serviceProvider.GetService<IAppLogger>());
-            });
-
-            services.AddSingleton<ISearchResultMapper, SearchResultMapper>();
-
-            services.AddSingleton<ISearchIndexManager>(serviceProvider =>
-            {
-                return new Fts5IndexManager(
-                    serviceProvider.GetRequiredService<IFts5Repository>(),
-                    serviceProvider.GetRequiredService<ISearchResultMapper>(),
-                    serviceProvider.GetRequiredService<IStorageOptions>(),
-                    serviceProvider.GetService<IAppLogger>()
-                );
-            });
-
-            // Modern FTS5SearchService with clean IOptions<T> dependencies
-            services.AddSingleton<NoteNest.UI.Interfaces.ISearchService>(serviceProvider =>
-            {
-                System.Diagnostics.Debug.WriteLine($"[DI] Creating FTS5SearchService instance at {DateTime.Now:HH:mm:ss.fff}");
-                return new FTS5SearchService(
-                    serviceProvider.GetRequiredService<IFts5Repository>(),
-                    serviceProvider.GetRequiredService<ISearchResultMapper>(),
-                    serviceProvider.GetRequiredService<ISearchIndexManager>(),
-                    serviceProvider.GetRequiredService<ISearchOptions>(),
-                    serviceProvider.GetRequiredService<IStorageOptions>(),
-                    serviceProvider.GetService<IAppLogger>()
-                );
-            });
+            // Note: All FTS5 service registrations moved to ServiceConfiguration for explicit dependency management
+            // This prevents conflicts between implicit and explicit registrations
             
-            // Note: SearchViewModel registration moved to ServiceConfiguration for explicit dependency management
-            // services.AddSingleton<NoteNest.UI.ViewModels.SearchViewModel>(); // REMOVED - conflicts with explicit registration
+            // services.AddSingleton<IFts5Repository>(...); // REMOVED - conflicts with explicit registration
+            // services.AddSingleton<ISearchResultMapper>(...); // REMOVED - conflicts with explicit registration  
+            // services.AddSingleton<ISearchIndexManager>(...); // REMOVED - conflicts with explicit registration
+            // services.AddSingleton<ISearchService>(...); // REMOVED - conflicts with explicit registration
+            // services.AddSingleton<SearchViewModel>(...); // REMOVED - conflicts with explicit registration
 
             return services;
         }

@@ -64,8 +64,15 @@ namespace NoteNest.Infrastructure.Database
         {
             try
             {
-                // Parse enum
-                var nodeType = Enum.Parse<TreeNodeType>(NodeType);
+                // Parse enum (handle both uppercase and lowercase database values, with null check)
+                if (string.IsNullOrEmpty(NodeType))
+                {
+                    throw new InvalidOperationException($"Node {Id} has null or empty NodeType - database value: '{NodeType ?? "NULL"}'");
+                }
+                
+                // Add diagnostic logging for troubleshooting
+                Console.WriteLine($"[DIAGNOSTIC] Reading node {Id} with NodeType='{NodeType}'");
+                var nodeType = Enum.Parse<TreeNodeType>(NodeType, ignoreCase: true);
                 
                 // Use database factory to avoid file system requirements
                 var node = TreeNode.CreateFromDatabase(

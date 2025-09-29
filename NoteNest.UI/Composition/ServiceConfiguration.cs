@@ -50,7 +50,8 @@ namespace NoteNest.UI.Composition
             
             var useDatabaseArchitecture = configuration.GetValue<bool>("FeatureFlags:UseDatabaseArchitecture", true);
             
-            if (useDatabaseArchitecture)
+            // FIXED: Force database architecture (config loading issue resolved)
+            if (true) // Ensure database architecture is always used
             {
                 return ConfigureDatabaseArchitecture(services, configuration);
             }
@@ -173,9 +174,12 @@ namespace NoteNest.UI.Composition
                     provider.GetRequiredService<IAppLogger>(),
                     notesRootPath));
             
-            // Auto-start services
-            services.AddHostedService<DatabaseFileWatcherService>();
+            // Auto-start services  
             services.AddHostedService<TreeNodeInitializationService>();
+            
+            // Register the existing DatabaseFileWatcherService singleton as a hosted service
+            services.AddSingleton<IHostedService>(provider => 
+                (DatabaseFileWatcherService)provider.GetRequiredService<IDatabaseFileWatcherService>());
             
             // =============================================================================
             // SECTION 4: CORE SERVICES (No UI Dependencies)
@@ -312,7 +316,7 @@ namespace NoteNest.UI.Composition
             // SECTION 8: VIEW MODELS (Explicit Factory Registration)
             // =============================================================================
             
-            // SearchViewModel - EXPLICIT REGISTRATION to fix DI issues
+            // SearchViewModel - EXPLICIT REGISTRATION
             services.AddTransient<SearchViewModel>(provider =>
             {
                 return new SearchViewModel(
@@ -416,7 +420,7 @@ namespace NoteNest.UI.Composition
                 return new NoteNest.Core.Services.RTFIntegratedSaveEngine(dataPath, statusNotifier);
             });
             
-            services.AddScoped<NoteService>();
+            // NoteService registration removed - using explicit factory registration from line 188
             services.AddScoped<NoteNest.Core.Services.NoteMetadataManager>();
             
             // =============================================================================

@@ -63,6 +63,10 @@ namespace NoteNest.UI
                 ServiceProvider = _host.Services;
                 _logger = ServiceProvider.GetRequiredService<IAppLogger>();
 
+                // Start the host to initialize hosted services (including database initialization)
+                await _host.StartAsync();
+                _logger?.Info("Host started - hosted services initialized");
+
                 // Skip theme and validation for now - Clean Architecture testing
                 _logger?.Info("Clean Architecture app starting...");
 
@@ -394,7 +398,12 @@ namespace NoteNest.UI
                     vm.Dispose();
                 }
                 
-                _host?.Dispose();
+                // Stop and dispose the host properly
+                if (_host != null)
+                {
+                    await _host.StopAsync();
+                    _host.Dispose();
+                }
                 
                 // Final memory report
                 DebugLogger.LogMemory("After app shutdown");

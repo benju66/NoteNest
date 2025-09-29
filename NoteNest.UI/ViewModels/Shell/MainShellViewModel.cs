@@ -29,7 +29,7 @@ namespace NoteNest.UI.ViewModels.Shell
             NoteOperationsViewModel noteOperations,
             CategoryOperationsViewModel categoryOperations,
             ModernWorkspaceViewModel workspace,
-            SearchViewModel search)
+            SearchViewModel search) // RESTORED FOR DIAGNOSTIC TESTING
         {
             _mediator = mediator;
             _dialogService = dialogService;
@@ -40,7 +40,7 @@ namespace NoteNest.UI.ViewModels.Shell
             NoteOperations = noteOperations;
             CategoryOperations = categoryOperations;
             Workspace = workspace;
-            Search = search;
+            Search = search; // RESTORED FOR DIAGNOSTIC TESTING
             
             InitializeCommands();
             SubscribeToEvents();
@@ -51,7 +51,7 @@ namespace NoteNest.UI.ViewModels.Shell
         public NoteOperationsViewModel NoteOperations { get; }
         public CategoryOperationsViewModel CategoryOperations { get; }
         public ModernWorkspaceViewModel Workspace { get; }
-        public SearchViewModel Search { get; }
+        public SearchViewModel Search { get; } // RESTORED FOR DIAGNOSTIC TESTING
 
         // Expose selected category from CategoryTree
         public CategoryViewModel SelectedCategory => CategoryTree.SelectedCategory;
@@ -117,7 +117,7 @@ namespace NoteNest.UI.ViewModels.Shell
             Workspace.NoteOpened += OnNoteOpened;
             
             // Wire up search events
-            Search.ResultSelected += OnSearchResultSelected;
+            Search.ResultSelected += OnSearchResultSelected; // RESTORED FOR DIAGNOSTIC TESTING
         }
 
         private void OnCategorySelected(CategoryViewModel category)
@@ -162,6 +162,7 @@ namespace NoteNest.UI.ViewModels.Shell
             StatusMessage = "Note opened in editor";
         }
 
+        // RESTORED FOR DIAGNOSTIC TESTING
         private async void OnSearchResultSelected(object sender, SearchResultSelectedEventArgs e)
         {
             var searchResult = e?.Result;
@@ -206,6 +207,7 @@ namespace NoteNest.UI.ViewModels.Shell
                 IsLoading = false;
             }
         }
+        // END RESTORED METHOD
 
         // =============================================================================
         // NEW NOTE INTERACTION HANDLERS - Clean Architecture Event Orchestration

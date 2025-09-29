@@ -658,6 +658,9 @@ namespace NoteNest.Infrastructure.Database
         
         private object MapToParameters(TreeNode node)
         {
+            var nodeTypeString = node.NodeType.ToString().ToLowerInvariant();
+            _logger.Debug($"[DIAGNOSTIC] Mapping node {node.Id} with NodeType='{nodeTypeString}' (from enum {node.NodeType})");
+            
             return new
             {
                 Id = node.Id.ToString(),
@@ -665,7 +668,7 @@ namespace NoteNest.Infrastructure.Database
                 CanonicalPath = node.CanonicalPath,
                 DisplayPath = node.DisplayPath,
                 AbsolutePath = node.AbsolutePath,
-                NodeType = node.NodeType.ToString(),
+                NodeType = nodeTypeString,
                 Name = node.Name,
                 FileExtension = node.FileExtension,
                 FileSize = node.FileSize,
