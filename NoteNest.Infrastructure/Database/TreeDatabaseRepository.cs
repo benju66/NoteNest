@@ -168,13 +168,37 @@ namespace NoteNest.Infrastructure.Database
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
                 
-                // Use the recursive CTE view for efficient tree loading
+                // Use the recursive CTE view for efficient tree loading  
                 var sql = @"
-                    SELECT id, parent_id, canonical_path, display_path, absolute_path,
-                           node_type, name, file_extension, file_size, created_at, modified_at,
-                           accessed_at, quick_hash, full_hash, hash_algorithm, hash_calculated_at,
-                           is_expanded, is_pinned, is_selected, sort_order, color_tag, icon_override,
-                           is_deleted, deleted_at, metadata_version, custom_properties, level, root_id
+                    SELECT 
+                        id as Id,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        node_type as NodeType,
+                        name as Name,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties,
+                        level as Level,
+                        root_id as RootId
                     FROM tree_hierarchy";
                 
                 var dtos = await QueryAsync<TreeNodeDto>(connection, sql);
@@ -195,7 +219,34 @@ namespace NoteNest.Infrastructure.Database
                 await connection.OpenAsync();
                 
                 var sql = @"
-                    SELECT * FROM tree_nodes 
+                    SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM tree_nodes 
                     WHERE parent_id IS NULL AND is_deleted = 0
                     ORDER BY node_type, sort_order, name";
                 
