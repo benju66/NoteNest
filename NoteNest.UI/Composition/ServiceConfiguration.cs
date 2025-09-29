@@ -9,7 +9,6 @@ using MediatR;
 using FluentValidation;
 using NoteNest.Domain.Common;
 using NoteNest.Domain.Categories;
-using NoteNest.Application.Common.Interfaces;
 using NoteNest.Application.Common.Behaviors;
 using NoteNest.Application.Notes.Commands.CreateNote;
 using NoteNest.Infrastructure.Persistence.Repositories;
@@ -19,10 +18,14 @@ using NoteNest.UI.ViewModels.Shell;
 using NoteNest.UI.ViewModels.Categories;
 using NoteNest.UI.ViewModels.Notes;
 using NoteNest.UI.ViewModels.Workspace;
+using NoteNest.UI.ViewModels;
 using NoteNest.UI.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Configuration;
 using NoteNest.Core.Interfaces;
+using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services;
+using NoteNest.Application.Common.Interfaces;
 using Microsoft.Extensions.Hosting;
 using System;
 using System.IO;
@@ -116,14 +119,14 @@ namespace NoteNest.UI.Composition
             // 🚀 LIGHTNING-FAST DATABASE REPOSITORIES (Scorched Earth Replacement)
             // =============================================================================
             
-            services.AddScoped<ICategoryRepository>(provider => 
+            services.AddScoped<NoteNest.Application.Common.Interfaces.ICategoryRepository>(provider => 
                 new NoteNest.Infrastructure.Database.Services.CategoryTreeDatabaseService(
                     provider.GetRequiredService<ITreeDatabaseRepository>(),
                     provider.GetRequiredService<IAppLogger>(),
                     provider.GetRequiredService<IMemoryCache>(),
                     notesRootPath));
             
-            services.AddScoped<INoteRepository>(provider => 
+            services.AddScoped<NoteNest.Application.Common.Interfaces.INoteRepository>(provider => 
                 new NoteNest.Infrastructure.Database.Services.NoteTreeDatabaseService(
                     provider.GetRequiredService<ITreeDatabaseRepository>(),
                     provider.GetRequiredService<IAppLogger>(),
@@ -180,6 +183,73 @@ namespace NoteNest.UI.Composition
             services.AddScoped<IDialogService, DialogService>();
             
             // =============================================================================
+            // 🔍 SEARCH SERVICES - Use existing working search infrastructure  
+            // =============================================================================
+            
+            // First register options that FTS5 services depend on
+            services.AddSingleton<NoteNest.Core.Configuration.IStorageOptions>(provider =>
+            {
+                var notesPath = NoteNest.Core.Services.FirstTimeSetupService.ConfiguredNotesPath;
+                if (string.IsNullOrWhiteSpace(notesPath))
+                {
+                    notesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
+                }
+
+                var storageOptions = NoteNest.Core.Configuration.StorageOptions.FromNotesPath(notesPath);
+                storageOptions.ValidatePaths();
+
+                // Keep legacy PathService in sync for existing components
+                NoteNest.Core.Services.PathService.RootPath = storageOptions.NotesPath;
+
+                return storageOptions;
+            });
+
+            services.AddSingleton<NoteNest.Core.Configuration.ISearchOptions>(provider =>
+            {
+                var storageOptions = provider.GetRequiredService<NoteNest.Core.Configuration.IStorageOptions>();
+                var searchOptions = NoteNest.Core.Configuration.SearchConfigurationOptions.FromStoragePath(storageOptions.MetadataPath);
+                searchOptions.ValidateConfiguration();
+                return searchOptions;
+            });
+
+            // =============================================================================
+            // 🔧 WORKSPACE SERVICES (Required by SearchViewModel - MUST BE BEFORE FTS5)
+            // =============================================================================
+            
+            // Core services that workspace depends on
+            services.AddSingleton<ContentCache>();
+            services.AddSingleton<IServiceErrorHandler, NoteNest.Core.Services.Implementation.ServiceErrorHandler>();
+            services.AddSingleton<INoteOperationsService>(provider =>
+            {
+                return new NoteNest.Core.Services.Implementation.NoteOperationsService(
+                    provider.GetRequiredService<NoteService>(),
+                    provider.GetRequiredService<IServiceErrorHandler>(),
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<IFileSystemProvider>(),
+                    provider.GetRequiredService<ConfigurationService>(),
+                    provider.GetRequiredService<ContentCache>(),
+                    provider.GetRequiredService<ISaveManager>());
+            });
+            services.AddSingleton<ITabFactory>(provider =>
+            {
+                return new NoteNest.UI.Services.UITabFactory(provider.GetRequiredService<ISaveManager>());
+            });
+            services.AddSingleton<IWorkspaceService>(provider =>
+            {
+                return new NoteNest.Core.Services.Implementation.WorkspaceService(
+                    provider.GetRequiredService<ContentCache>(),
+                    provider.GetRequiredService<NoteService>(),
+                    provider.GetRequiredService<IServiceErrorHandler>(),
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<INoteOperationsService>(),
+                    provider.GetRequiredService<ISaveManager>(),
+                    provider.GetRequiredService<ITabFactory>());
+            });
+
+            // Now register search services that can find all their dependencies
+            services.AddFTS5SearchServices();
+            
+            // =============================================================================
             // 🎯 CLEAN ARCHITECTURE VIEWMODELS (Enhanced with Database Performance)
             // =============================================================================
             
@@ -188,6 +258,7 @@ namespace NoteNest.UI.Composition
             services.AddTransient<NoteOperationsViewModel>();
             services.AddTransient<CategoryOperationsViewModel>();
             services.AddTransient<ModernWorkspaceViewModel>();
+            // SearchViewModel is registered by AddFTS5SearchServices()
             
             return services;
         }

@@ -35,6 +35,13 @@ namespace NoteNest.Infrastructure.Database
         Task<List<TreeNode>> GetRecentlyModifiedAsync(int count = 50);
         
         // =============================================================================
+        // SEARCH OPERATIONS - Database-powered search
+        // =============================================================================
+        
+        Task<List<TreeNode>> SearchNotesByTitleAsync(string searchTerm);
+        Task<List<TreeNode>> SearchNotesByContentAsync(string searchTerm);
+        
+        // =============================================================================
         // CRUD OPERATIONS
         // =============================================================================
         
@@ -1106,6 +1113,85 @@ namespace NoteNest.Infrastructure.Database
             {
                 _logger.Error(ex, "Failed to refresh all node metadata");
                 return 0;
+            }
+        }
+
+        // =============================================================================
+        // SEARCH OPERATIONS - Lightning-fast database search
+        // =============================================================================
+
+        public async Task<List<TreeNode>> SearchNotesByTitleAsync(string searchTerm)
+        {
+            if (string.IsNullOrWhiteSpace(searchTerm))
+                return new List<TreeNode>();
+
+            try
+            {
+                using var connection = new SqliteConnection(_connectionString);
+                await connection.OpenAsync();
+                
+                var sql = @"
+                    SELECT * FROM tree_nodes 
+                    WHERE node_type = 'Note' 
+                    AND is_deleted = 0
+                    AND name LIKE @SearchTerm 
+                    ORDER BY name";
+                
+                var searchPattern = $"%{searchTerm}%";
+                var dtos = await QueryAsync<TreeNodeDto>(connection, sql, new { SearchTerm = searchPattern });
+                
+                _logger.Info($"🔍 Title search for '{searchTerm}' found {dtos.Count} matches");
+                return dtos.Select(dto => dto.ToDomainModel()).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to search notes by title: {searchTerm}");
+                return new List<TreeNode>();
+            }
+        }
+
+        public async Task<List<TreeNode>> SearchNotesByContentAsync(string searchTerm)
+        {
+            if (string.IsNullOrWhiteSpace(searchTerm))
+                return new List<TreeNode>();
+
+            try
+            {
+                _logger.Info($"🔍 Starting content search for: '{searchTerm}'");
+                
+                // Get all note nodes from database (fast)
+                var allNotes = await GetAllNodesAsync();
+                var noteNodes = allNotes.Where(n => n.NodeType == TreeNodeType.Note).ToList();
+                
+                var matchingNotes = new List<TreeNode>();
+                
+                // Search through file content (slower but thorough)
+                foreach (var note in noteNodes)
+                {
+                    try
+                    {
+                        if (File.Exists(note.AbsolutePath))
+                        {
+                            var content = await File.ReadAllTextAsync(note.AbsolutePath);
+                            if (content.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                            {
+                                matchingNotes.Add(note);
+                            }
+                        }
+                    }
+                    catch (Exception fileEx)
+                    {
+                        _logger.Warning($"Failed to read file for search: {note.AbsolutePath} - {fileEx.Message}");
+                    }
+                }
+                
+                _logger.Info($"🔍 Content search for '{searchTerm}' found {matchingNotes.Count} matches in {noteNodes.Count} notes");
+                return matchingNotes;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to search notes by content: {searchTerm}");
+                return new List<TreeNode>();
             }
         }
     }

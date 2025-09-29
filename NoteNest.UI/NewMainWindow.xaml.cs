@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NoteNest.UI.Windows;
 using NoteNest.Core.Services;
 using NoteNest.UI.ViewModels.Categories;
+using NoteNest.UI.ViewModels;
 using NoteNest.UI.ViewModels.Shell;
 
 namespace NoteNest.UI
@@ -110,6 +111,23 @@ namespace NoteNest.UI
                     _ = category.ToggleExpandAsync();
                     e.Handled = true;
                 }
+            }
+        }
+
+        // =============================================================================
+        // YOUR EXISTING SEARCH EVENT HANDLERS
+        // =============================================================================
+
+        private void SmartSearch_ResultSelected(object sender, SearchResultSelectedEventArgs e)
+        {
+            // Forward to MainShellViewModel (which handles opening notes in RTF editor)
+            var viewModel = DataContext as NoteNest.UI.ViewModels.Shell.MainShellViewModel;
+            if (viewModel != null)
+            {
+                // Call the existing event handler we updated
+                viewModel.GetType().GetMethod("OnSearchResultSelected", 
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    ?.Invoke(viewModel, new object[] { sender, e });
             }
         }
     }

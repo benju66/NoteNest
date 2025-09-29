@@ -4,10 +4,12 @@
         xmlns:local="clr-namespace:NoteNest.UI"
         xmlns:categories="clr-namespace:NoteNest.UI.ViewModels.Categories"
         xmlns:converters="clr-namespace:NoteNest.UI.Converters"
+        xmlns:controls="clr-namespace:NoteNest.UI.Controls"
         Title="NoteNest - New Architecture" Height="600" Width="1000">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
         <local:BoolToTextConverter x:Key="BoolToTextConverter"/>
     </Window.Resources>
     <Grid>
@@ -17,17 +19,27 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
-        <!-- Toolbar -->
-        <ToolBar Grid.Row="0">
-            <Button Content="New Note" Command="{Binding NoteOperations.CreateNoteCommand}" />
-            <Button Content="Save" Command="{Binding Workspace.SaveTabCommand}" 
-                    CommandParameter="{Binding Workspace.SelectedTab}" />
-            <Button Content="Save All" Command="{Binding Workspace.SaveAllTabsCommand}" />
-            <Separator />
-            <Button Content="Refresh" Command="{Binding RefreshCommand}" />
-            <Separator />
-            <Button Content="Settings" Click="SettingsMenuItem_Click" ToolTip="Open application settings" />
-        </ToolBar>
+               <!-- Enhanced Toolbar with Database Search -->
+               <ToolBar Grid.Row="0">
+                   <Button Content="New Note" Command="{Binding NoteOperations.CreateNoteCommand}" />
+                   <Button Content="Save" Command="{Binding Workspace.SaveTabCommand}" 
+                           CommandParameter="{Binding Workspace.SelectedTab}" />
+                   <Button Content="Save All" Command="{Binding Workspace.SaveAllTabsCommand}" />
+                   <Separator />
+                   <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+                   <Separator />
+                   
+                   <!-- 🔍 YOUR EXISTING SOPHISTICATED SEARCH - FTS5 Powered -->
+                   <StackPanel Orientation="Horizontal" Margin="10,0">
+                       <TextBlock Text="Search:" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                       <controls:SmartSearchControl DataContext="{Binding Search}" 
+                                                   Width="300"
+                                                   ResultSelected="SmartSearch_ResultSelected"/>
+                   </StackPanel>
+                   
+                   <Separator />
+                   <Button Content="Settings" Click="SettingsMenuItem_Click" ToolTip="Open application settings" />
+               </ToolBar>
         
         <!-- Main Content -->
         <Grid Grid.Row="1">

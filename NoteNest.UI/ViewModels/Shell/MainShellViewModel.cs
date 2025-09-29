@@ -9,6 +9,7 @@ using NoteNest.UI.ViewModels.Notes;
 using NoteNest.UI.ViewModels.Workspace;
 using NoteNest.UI.Services;
 using System.Linq;
+using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.ViewModels.Shell
 {
@@ -16,25 +17,30 @@ namespace NoteNest.UI.ViewModels.Shell
     {
         private readonly IMediator _mediator;
         private readonly IDialogService _dialogService;
+        private readonly IAppLogger _logger;
         private bool _isLoading;
         private string _statusMessage;
 
         public MainShellViewModel(
             IMediator mediator,
             IDialogService dialogService,
+            IAppLogger logger,
             CategoryTreeViewModel categoryTree,
             NoteOperationsViewModel noteOperations,
             CategoryOperationsViewModel categoryOperations,
-            ModernWorkspaceViewModel workspace)
+            ModernWorkspaceViewModel workspace,
+            SearchViewModel search)
         {
             _mediator = mediator;
             _dialogService = dialogService;
+            _logger = logger;
             
             // Composed ViewModels - each with single responsibility
             CategoryTree = categoryTree;
             NoteOperations = noteOperations;
             CategoryOperations = categoryOperations;
             Workspace = workspace;
+            Search = search;
             
             InitializeCommands();
             SubscribeToEvents();
@@ -45,6 +51,7 @@ namespace NoteNest.UI.ViewModels.Shell
         public NoteOperationsViewModel NoteOperations { get; }
         public CategoryOperationsViewModel CategoryOperations { get; }
         public ModernWorkspaceViewModel Workspace { get; }
+        public SearchViewModel Search { get; }
 
         // Expose selected category from CategoryTree
         public CategoryViewModel SelectedCategory => CategoryTree.SelectedCategory;
@@ -108,6 +115,9 @@ namespace NoteNest.UI.ViewModels.Shell
             
             Workspace.TabSelected += OnTabSelected;
             Workspace.NoteOpened += OnNoteOpened;
+            
+            // Wire up search events
+            Search.ResultSelected += OnSearchResultSelected;
         }
 
         private void OnCategorySelected(CategoryViewModel category)
@@ -150,6 +160,51 @@ namespace NoteNest.UI.ViewModels.Shell
         private void OnNoteOpened(string noteId)
         {
             StatusMessage = "Note opened in editor";
+        }
+
+        private async void OnSearchResultSelected(object sender, SearchResultSelectedEventArgs e)
+        {
+            var searchResult = e?.Result;
+            if (searchResult == null) return;
+
+            try
+            {
+                IsLoading = true;
+                StatusMessage = $"Opening search result: {searchResult.Title}...";
+
+                // Use existing SearchResultViewModel.FilePath (your working search system)
+                if (!System.IO.File.Exists(searchResult.FilePath))
+                {
+                    StatusMessage = $"File not found: {searchResult.FilePath}";
+                    return;
+                }
+
+                // Create Note domain object from search result
+                var categoryPath = System.IO.Path.GetDirectoryName(searchResult.FilePath);
+                var categoryId = NoteNest.Domain.Categories.CategoryId.From(categoryPath ?? searchResult.CategoryId);
+                var note = new NoteNest.Domain.Notes.Note(categoryId, searchResult.Title);
+                note.SetFilePath(searchResult.FilePath);
+
+                // Load content from RTF file
+                var content = await System.IO.File.ReadAllTextAsync(searchResult.FilePath);
+                note.UpdateContent(content);
+
+                // Open in workspace with RTF editor
+                await Workspace.OpenNoteAsync(note);
+                
+                StatusMessage = $"Opened search result: {searchResult.Title}";
+                _logger.Info($"🔍 Search result opened: {searchResult.Title}");
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to open search result: {ex.Message}";
+                _dialogService.ShowError($"Failed to open search result: {ex.Message}", "Search Error");
+                _logger.Error(ex, $"Failed to open search result: {searchResult?.Title}");
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
 
         // =============================================================================
