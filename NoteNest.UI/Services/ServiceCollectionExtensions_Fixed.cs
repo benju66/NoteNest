@@ -375,8 +375,8 @@ namespace NoteNest.UI.Services
                 );
             });
             
-            // Clean SearchViewModel registration (no complex factory logic)
-            services.AddSingleton<NoteNest.UI.ViewModels.SearchViewModel>();
+            // Note: SearchViewModel registration moved to ServiceConfiguration for explicit dependency management
+            // services.AddSingleton<NoteNest.UI.ViewModels.SearchViewModel>(); // REMOVED - conflicts with explicit registration
 
             return services;
         }
