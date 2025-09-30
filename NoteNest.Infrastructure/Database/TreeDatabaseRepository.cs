@@ -105,7 +105,34 @@ namespace NoteNest.Infrastructure.Database
                 await connection.OpenAsync();
                 
                 var sql = @"
-                    SELECT * FROM tree_nodes 
+                    SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM tree_nodes 
                     WHERE id = @Id AND is_deleted = 0";
                 
                 var dto = await QuerySingleAsync<TreeNodeDto>(connection, sql, new { Id = id.ToString() });
@@ -126,7 +153,34 @@ namespace NoteNest.Infrastructure.Database
                 await connection.OpenAsync();
                 
                 var sql = @"
-                    SELECT * FROM tree_nodes 
+                    SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM tree_nodes 
                     WHERE canonical_path = @Path AND is_deleted = 0";
                 
                 var dto = await QuerySingleAsync<TreeNodeDto>(connection, sql, new { Path = canonicalPath });
@@ -147,7 +201,34 @@ namespace NoteNest.Infrastructure.Database
                 await connection.OpenAsync();
                 
                 var sql = @"
-                    SELECT * FROM tree_nodes 
+                    SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM tree_nodes 
                     WHERE parent_id = @ParentId AND is_deleted = 0
                     ORDER BY node_type, sort_order, name";
                 
@@ -746,6 +827,9 @@ namespace NoteNest.Infrastructure.Database
         private object MapToParametersForInsert(TreeNode node)
         {
             // Simplified parameters for bulk insert (only essential fields)
+            var nodeTypeString = node.NodeType.ToString().ToLowerInvariant();
+            _logger.Debug($"[DIAGNOSTIC] Mapping for insert node {node.Id} with NodeType='{nodeTypeString}' (from enum {node.NodeType})");
+            
             return new
             {
                 Id = node.Id.ToString(),
@@ -753,7 +837,7 @@ namespace NoteNest.Infrastructure.Database
                 CanonicalPath = node.CanonicalPath,
                 DisplayPath = node.DisplayPath,
                 AbsolutePath = node.AbsolutePath,
-                NodeType = node.NodeType.ToString(),
+                NodeType = nodeTypeString,  // FIXED: Now using lowercase like MapToParameters
                 Name = node.Name,
                 FileExtension = node.FileExtension,
                 FileSize = node.FileSize,
@@ -827,8 +911,62 @@ namespace NoteNest.Infrastructure.Database
                 await connection.OpenAsync();
                 
                 var sql = includeDeleted 
-                    ? "SELECT * FROM tree_nodes ORDER BY canonical_path"
-                    : "SELECT * FROM tree_nodes WHERE is_deleted = 0 ORDER BY canonical_path";
+                    ? @"SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM tree_nodes ORDER BY canonical_path"
+                    : @"SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM tree_nodes WHERE is_deleted = 0 ORDER BY canonical_path";
                 
                 var dtos = await QueryAsync<TreeNodeDto>(connection, sql);
                 return dtos.Select(dto => dto.ToDomainModel()).ToList();
@@ -965,13 +1103,52 @@ namespace NoteNest.Infrastructure.Database
                 
                 var sql = @"
                     WITH RECURSIVE descendants AS (
-                        SELECT * FROM tree_nodes WHERE parent_id = @NodeId AND is_deleted = 0
+                        SELECT 
+                            id, name, node_type, parent_id, canonical_path, display_path, absolute_path,
+                            file_extension, file_size, created_at, modified_at, accessed_at,
+                            quick_hash, full_hash, hash_algorithm, hash_calculated_at,
+                            is_expanded, is_pinned, is_selected, sort_order, color_tag, icon_override,
+                            is_deleted, deleted_at, metadata_version, custom_properties
+                        FROM tree_nodes WHERE parent_id = @NodeId AND is_deleted = 0
                         UNION ALL
-                        SELECT t.* FROM tree_nodes t
+                        SELECT 
+                            t.id, t.name, t.node_type, t.parent_id, t.canonical_path, t.display_path, t.absolute_path,
+                            t.file_extension, t.file_size, t.created_at, t.modified_at, t.accessed_at,
+                            t.quick_hash, t.full_hash, t.hash_algorithm, t.hash_calculated_at,
+                            t.is_expanded, t.is_pinned, t.is_selected, t.sort_order, t.color_tag, t.icon_override,
+                            t.is_deleted, t.deleted_at, t.metadata_version, t.custom_properties
+                        FROM tree_nodes t
                         INNER JOIN descendants d ON t.parent_id = d.id
                         WHERE t.is_deleted = 0
                     )
-                    SELECT * FROM descendants ORDER BY canonical_path";
+                    SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM descendants ORDER BY canonical_path";
                 
                 var dtos = await QueryAsync<TreeNodeDto>(connection, sql, new { NodeId = nodeId.ToString() });
                 return dtos.Select(dto => dto.ToDomainModel()).ToList();
@@ -992,13 +1169,52 @@ namespace NoteNest.Infrastructure.Database
                 
                 var sql = @"
                     WITH RECURSIVE ancestors AS (
-                        SELECT * FROM tree_nodes WHERE id = @NodeId
+                        SELECT 
+                            id, name, node_type, parent_id, canonical_path, display_path, absolute_path,
+                            file_extension, file_size, created_at, modified_at, accessed_at,
+                            quick_hash, full_hash, hash_algorithm, hash_calculated_at,
+                            is_expanded, is_pinned, is_selected, sort_order, color_tag, icon_override,
+                            is_deleted, deleted_at, metadata_version, custom_properties
+                        FROM tree_nodes WHERE id = @NodeId
                         UNION ALL
-                        SELECT t.* FROM tree_nodes t
+                        SELECT 
+                            t.id, t.name, t.node_type, t.parent_id, t.canonical_path, t.display_path, t.absolute_path,
+                            t.file_extension, t.file_size, t.created_at, t.modified_at, t.accessed_at,
+                            t.quick_hash, t.full_hash, t.hash_algorithm, t.hash_calculated_at,
+                            t.is_expanded, t.is_pinned, t.is_selected, t.sort_order, t.color_tag, t.icon_override,
+                            t.is_deleted, t.deleted_at, t.metadata_version, t.custom_properties
+                        FROM tree_nodes t
                         INNER JOIN ancestors a ON t.id = a.parent_id
                         WHERE t.is_deleted = 0
                     )
-                    SELECT * FROM ancestors 
+                    SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM ancestors 
                     WHERE node_type = @AncestorType AND id != @NodeId
                     ORDER BY canonical_path
                     LIMIT 1";
@@ -1068,7 +1284,34 @@ namespace NoteNest.Infrastructure.Database
                 await connection.OpenAsync();
                 
                 var sql = @"
-                    SELECT * FROM tree_nodes 
+                    SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM tree_nodes 
                     WHERE node_type = 'note' 
                     AND is_deleted = 0 
                     AND (quick_hash IS NULL OR hash_calculated_at IS NULL)
@@ -1124,7 +1367,34 @@ namespace NoteNest.Infrastructure.Database
                 
                 // Get all note nodes that exist on disk
                 var sql = @"
-                    SELECT * FROM tree_nodes 
+                    SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM tree_nodes 
                     WHERE node_type = 'note' AND is_deleted = 0
                     ORDER BY canonical_path";
                 
@@ -1185,7 +1455,34 @@ namespace NoteNest.Infrastructure.Database
                 await connection.OpenAsync();
                 
                 var sql = @"
-                    SELECT * FROM tree_nodes 
+                    SELECT 
+                        id as Id,
+                        name as Name,
+                        node_type as NodeType,
+                        parent_id as ParentId,
+                        canonical_path as CanonicalPath,
+                        display_path as DisplayPath,
+                        absolute_path as AbsolutePath,
+                        file_extension as FileExtension,
+                        file_size as FileSize,
+                        created_at as CreatedAt,
+                        modified_at as ModifiedAt,
+                        accessed_at as AccessedAt,
+                        quick_hash as QuickHash,
+                        full_hash as FullHash,
+                        hash_algorithm as HashAlgorithm,
+                        hash_calculated_at as HashCalculatedAt,
+                        is_expanded as IsExpanded,
+                        is_pinned as IsPinned,
+                        is_selected as IsSelected,
+                        sort_order as SortOrder,
+                        color_tag as ColorTag,
+                        icon_override as IconOverride,
+                        is_deleted as IsDeleted,
+                        deleted_at as DeletedAt,
+                        metadata_version as MetadataVersion,
+                        custom_properties as CustomProperties
+                    FROM tree_nodes 
                     WHERE node_type = 'Note' 
                     AND is_deleted = 0
                     AND name LIKE @SearchTerm 
