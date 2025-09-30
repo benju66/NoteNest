@@ -14,10 +14,12 @@ namespace NoteNest.UI.Converters
             {
                 bool isExpanded = values.Length > 0 && values[0] is bool b1 && b1;
                 bool isPinned = values.Length > 1 && values[1] is bool b2 && b2;
-                if (isPinned) return "\uE840"; // Pinned
-                return isExpanded ? "\uE838" : "\uE8B7"; // Open : Closed
+                
+                // 📌 MODERNIZED: Use Fluent UI icons as requested
+                if (isPinned) return "\uE840"; // Pin icon
+                return isExpanded ? "\uE838" : "\uE8B7"; // FolderOpenRegular : FolderRegular
             }
-            catch { return "\uE8B7"; }
+            catch { return "\uE8B7"; } // Default to FolderRegular
         }
 
         public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
@@ -32,11 +34,11 @@ namespace NoteNest.UI.Converters
         {
             try
             {
-                // Use a single generic document icon for all notes
-                return "\uE7C3";
+                // 📄 MODERNIZED: Use DocumentRegular as requested
+                return "\uE8A5"; // DocumentRegular - clean, modern document icon
             }
             catch { }
-            return "\uE7C3";
+            return "\uE8A5"; // Default to DocumentRegular
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
@@ -76,6 +78,46 @@ namespace NoteNest.UI.Converters
             }
             catch { }
             return Visibility.Visible; // Show by default on error
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    /// <summary>
+    /// 💡 NEW: Creates rich tooltips with metadata for tree items
+    /// </summary>
+    public class TreeItemTooltipConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            try
+            {
+                if (value is NoteNest.UI.ViewModels.Categories.CategoryViewModel category)
+                {
+                    // 📁 Category tooltip with metadata
+                    var childCount = category.Children.Count;
+                    var noteCount = category.Notes.Count;
+                    var totalItems = childCount + noteCount;
+                    
+                    return $"Folder\n" +
+                           $"Items: {totalItems} ({childCount} folders, {noteCount} notes)\n" +
+                           $"Path: {category.Path}";
+                }
+                else if (value is NoteNest.UI.ViewModels.Categories.NoteItemViewModel note)
+                {
+                    // 📄 Note tooltip with metadata  
+                    var modifiedText = note.UpdatedAt.ToString("MMM dd, yyyy HH:mm");
+                    return $"Note\n" +
+                           $"Modified: {modifiedText}\n" +
+                           $"Created: {note.CreatedAt.ToString("MMM dd, yyyy")}";
+                }
+            }
+            catch { }
+            
+            return null; // No tooltip for unknown types
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
