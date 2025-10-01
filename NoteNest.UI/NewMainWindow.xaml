@@ -122,11 +122,71 @@
                         <TreeView.Resources>
                             <!-- 🎨 MODERN: Enhanced templates with safe icons and tooltips -->
                             
+                            <!-- 📁 Category Context Menu -->
+                            <ContextMenu x:Key="CategoryContextMenu">
+                                <MenuItem Header="_New Note" 
+                                          Command="{Binding DataContext.NoteOperations.CreateNoteCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          CommandParameter="{Binding}">
+                                    <MenuItem.Icon>
+                                        <ContentControl Template="{StaticResource LucideFileText}"
+                                                        Width="12" Height="12"
+                                                        Foreground="#FF4A90E2"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="New _Category" 
+                                          Command="{Binding DataContext.CategoryOperations.CreateCategoryCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          CommandParameter="{Binding Id}">
+                                    <MenuItem.Icon>
+                                        <ContentControl Template="{StaticResource LucideFolder}"
+                                                        Width="12" Height="12"
+                                                        Foreground="#FF6B6B6B"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="_Rename..." 
+                                          Command="{Binding DataContext.CategoryOperations.RenameCategoryCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          CommandParameter="{Binding}"/>
+                                <MenuItem Header="_Delete" 
+                                          Command="{Binding DataContext.CategoryOperations.DeleteCategoryCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          CommandParameter="{Binding Id}"/>
+                            </ContextMenu>
+                            
+                            <!-- 📄 Note Context Menu -->
+                            <ContextMenu x:Key="NoteContextMenu">
+                                <MenuItem Header="_Open" 
+                                          Command="{Binding OpenCommand}">
+                                    <MenuItem.Icon>
+                                        <ContentControl Template="{StaticResource LucideFileText}"
+                                                        Width="12" Height="12"
+                                                        Foreground="#FF4A90E2"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="_Rename..." 
+                                          Command="{Binding DataContext.NoteOperations.RenameNoteCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          CommandParameter="{Binding}"/>
+                                <MenuItem Header="_Delete" 
+                                          Command="{Binding DataContext.NoteOperations.DeleteNoteCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          CommandParameter="{Binding Id}"/>
+                            </ContextMenu>
+                            
                             <!-- 📁 ROBUST: Category template with fixed-height Grid layout -->
                             <HierarchicalDataTemplate DataType="{x:Type categories:CategoryViewModel}" 
                                                       ItemsSource="{Binding TreeItems}">
                                 <!-- GRID ensures consistent heights and prevents clipping -->
-                                <Grid Height="26" ToolTip="{Binding Path}">
+                                <Grid Height="26" ContextMenu="{StaticResource CategoryContextMenu}">
+                                    <!-- Enhanced tooltip with breadcrumb path and metadata -->
+                                    <Grid.ToolTip>
+                                        <ToolTip>
+                                            <StackPanel>
+                                                <TextBlock Text="📁 Folder" FontWeight="Bold" Margin="0,0,0,4"/>
+                                                <TextBlock Text="{Binding BreadcrumbPath}" FontSize="11"/>
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="Gray">
+                                                    <Run Text="Items: "/><Run Text="{Binding Children.Count, Mode=OneWay}"/><Run Text=" folders, "/><Run Text="{Binding Notes.Count, Mode=OneWay}"/><Run Text=" notes"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
+                                    </Grid.ToolTip>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="20"/> <!-- Expander -->
                                         <ColumnDefinition Width="28"/> <!-- Icon container with padding -->
@@ -213,7 +273,8 @@
                                         Cursor="Hand"
                                         Margin="28,0,4,0"
                                         Padding="4,1"
-                                        CornerRadius="2">
+                                        CornerRadius="2"
+                                        ContextMenu="{StaticResource NoteContextMenu}">
                                     <Border.InputBindings>
                                         <MouseBinding MouseAction="LeftDoubleClick" 
                                                       Command="{Binding OpenCommand}"/>
@@ -221,12 +282,19 @@
                                                       Command="{Binding SelectCommand}"/>
                                     </Border.InputBindings>
                                     <Border.ToolTip>
-                                        <StackPanel>
-                                            <TextBlock Text="Note" FontWeight="Medium"/>
-                                            <TextBlock Text="{Binding Title}"/>
-                                            <TextBlock Text="{Binding UpdatedAt, StringFormat='Modified: {0:MMM dd, yyyy HH:mm}'}" 
-                                                       Foreground="Gray" FontSize="11"/>
-                                        </StackPanel>
+                                        <ToolTip>
+                                            <StackPanel>
+                                                <TextBlock Text="📄 Note" FontWeight="Bold" Margin="0,0,0,4"/>
+                                                <TextBlock Text="{Binding Title}" FontSize="11"/>
+                                                <TextBlock Text="{Binding CategoryPath}" FontSize="11" Foreground="Gray" Margin="0,2,0,0"/>
+                                                <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="Gray">
+                                                    <Run Text="Modified: "/><Run Text="{Binding UpdatedAt, StringFormat='{}{0:MMM dd, yyyy HH:mm}', Mode=OneWay}"/>
+                                                </TextBlock>
+                                                <TextBlock FontSize="11" Foreground="Gray">
+                                                    <Run Text="Created: "/><Run Text="{Binding CreatedAt, StringFormat='{}{0:MMM dd, yyyy}', Mode=OneWay}"/>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </ToolTip>
                                     </Border.ToolTip>
                                     
                                     <StackPanel Orientation="Horizontal">

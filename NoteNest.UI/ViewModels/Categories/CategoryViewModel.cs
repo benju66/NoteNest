@@ -52,6 +52,34 @@ namespace NoteNest.UI.ViewModels.Categories
         public string ParentId => _category.ParentId?.Value;
         public bool IsRoot => _category.ParentId == null;
         
+        /// <summary>
+        /// Formatted breadcrumb path for tooltips (e.g., "Notes > Projects > 25-117")
+        /// </summary>
+        public string BreadcrumbPath
+        {
+            get
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(Path)) return Name;
+                    
+                    // Get the relative path components from the notes root
+                    var parts = Path.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+                    
+                    // Find where "Notes" starts or use last 3-4 parts for reasonable display
+                    var notesIndex = Array.FindIndex(parts, p => p.Equals("Notes", StringComparison.OrdinalIgnoreCase));
+                    var startIndex = notesIndex >= 0 ? notesIndex : Math.Max(0, parts.Length - 4);
+                    
+                    var relevantParts = parts.Skip(startIndex).ToArray();
+                    return string.Join(" > ", relevantParts);
+                }
+                catch
+                {
+                    return Name;
+                }
+            }
+        }
+        
         public ObservableCollection<CategoryViewModel> Children { get; }
         public ObservableCollection<NoteItemViewModel> Notes { get; }
         
@@ -265,6 +293,34 @@ namespace NoteNest.UI.ViewModels.Categories
         public DateTime CreatedAt => _note.CreatedAt;
         public DateTime UpdatedAt => _note.UpdatedAt;
         public Note Note => _note; // Expose underlying note for workspace operations
+        
+        /// <summary>
+        /// Formatted category path for tooltips (e.g., "Notes > Projects > 25-117")
+        /// </summary>
+        public string CategoryPath
+        {
+            get
+            {
+                try
+                {
+                    if (string.IsNullOrEmpty(FilePath)) return string.Empty;
+                    
+                    var directoryPath = System.IO.Path.GetDirectoryName(FilePath);
+                    if (string.IsNullOrEmpty(directoryPath)) return string.Empty;
+                    
+                    var parts = directoryPath.Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+                    var notesIndex = Array.FindIndex(parts, p => p.Equals("Notes", StringComparison.OrdinalIgnoreCase));
+                    var startIndex = notesIndex >= 0 ? notesIndex : Math.Max(0, parts.Length - 4);
+                    
+                    var relevantParts = parts.Skip(startIndex).ToArray();
+                    return string.Join(" > ", relevantParts);
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+        }
 
         // Commands for UI interaction
         public ICommand OpenCommand { get; }
