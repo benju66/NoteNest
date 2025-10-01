@@ -112,6 +112,11 @@ namespace NoteNest.UI.ViewModels.Shell
             
             NoteOperations.NoteCreated += OnNoteCreated;
             NoteOperations.NoteDeleted += OnNoteDeleted;
+            NoteOperations.NoteRenamed += OnNoteRenamed;
+            
+            CategoryOperations.CategoryCreated += OnCategoryCreated;
+            CategoryOperations.CategoryDeleted += OnCategoryDeleted;
+            CategoryOperations.CategoryRenamed += OnCategoryRenamed;
             
             Workspace.TabSelected += OnTabSelected;
             Workspace.NoteOpened += OnNoteOpened;
@@ -140,7 +145,7 @@ namespace NoteNest.UI.ViewModels.Shell
             // This will be implemented when note creation flow is enhanced
         }
 
-        private void OnNoteDeleted(string noteId)
+        private async void OnNoteDeleted(string noteId)
         {
             // Close tab if note was open
             var openTab = Workspace.OpenTabs.FirstOrDefault(t => t.NoteId == noteId);
@@ -149,7 +154,47 @@ namespace NoteNest.UI.ViewModels.Shell
                 openTab.Dispose(); // Properly dispose RTF editor
                 Workspace.OpenTabs.Remove(openTab);
             }
+            
+            // Refresh tree to reflect deletion
+            await CategoryTree.RefreshAsync();
             StatusMessage = "Note deleted";
+        }
+        
+        private async void OnNoteRenamed(string noteId, string newTitle)
+        {
+            // Update tab title if note is open
+            var openTab = Workspace.OpenTabs.FirstOrDefault(t => t.NoteId == noteId);
+            if (openTab != null)
+            {
+                // TODO: Tab title updates will be handled when we implement proper Note model updates
+                // For now, the tab will show the old title until closed and reopened
+                // This is acceptable since the database and tree will show the correct name
+            }
+            
+            // Refresh tree to reflect renamed note
+            await CategoryTree.RefreshAsync();
+            StatusMessage = $"Note renamed to: {newTitle}";
+        }
+        
+        private async void OnCategoryCreated(string categoryPath)
+        {
+            // Refresh tree to show new category
+            await CategoryTree.RefreshAsync();
+            StatusMessage = "Category created";
+        }
+        
+        private async void OnCategoryDeleted(string categoryId)
+        {
+            // Refresh tree to reflect deletion
+            await CategoryTree.RefreshAsync();
+            StatusMessage = "Category deleted";
+        }
+        
+        private async void OnCategoryRenamed(string categoryId, string newName)
+        {
+            // Refresh tree to reflect renamed category
+            await CategoryTree.RefreshAsync();
+            StatusMessage = $"Category renamed to: {newName}";
         }
 
         private void OnTabSelected(NoteTabItem tab)

@@ -50,15 +50,18 @@ namespace NoteNest.UI.ViewModels.Categories
 
         private void InitializeCommands()
         {
-            CreateCategoryCommand = new AsyncRelayCommand<string>(ExecuteCreateCategory, CanCreateCategory);
-            DeleteCategoryCommand = new AsyncRelayCommand<string>(ExecuteDeleteCategory, CanDeleteCategory);
-            RenameCategoryCommand = new AsyncRelayCommand<(string categoryId, string newName)>(
-                async param => await ExecuteRenameCategory(param.categoryId, param.newName),
-                param => CanRenameCategory(param.categoryId));
+            // Commands now accept ViewModel objects from context menu
+            CreateCategoryCommand = new AsyncRelayCommand<object>(ExecuteCreateCategory, CanCreateCategory);
+            DeleteCategoryCommand = new AsyncRelayCommand<object>(ExecuteDeleteCategory, CanDeleteCategory);
+            RenameCategoryCommand = new AsyncRelayCommand<object>(ExecuteRenameCategory, CanRenameCategory);
         }
 
-        private async Task ExecuteCreateCategory(string parentCategoryId)
+        private async Task ExecuteCreateCategory(object parameter)
         {
+            // Extract CategoryViewModel from parameter (parent category)
+            var parentCategory = parameter as CategoryViewModel;
+            var parentCategoryId = parentCategory?.Id;
+            
             try
             {
                 IsProcessing = true;
@@ -77,8 +80,22 @@ namespace NoteNest.UI.ViewModels.Categories
                 }
 
                 // TODO: Implement CreateCategoryCommand when we add category CQRS operations
+                // For now, create the category directory directly
+                var parentPath = parentCategory?.Path ?? System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), 
+                    "MyNotes", "Notes");
+                var newCategoryPath = System.IO.Path.Combine(parentPath, categoryName);
+                
+                if (System.IO.Directory.Exists(newCategoryPath))
+                {
+                    StatusMessage = "A category with this name already exists.";
+                    _dialogService.ShowError("A category with this name already exists.", "Duplicate Category");
+                    return;
+                }
+                
+                System.IO.Directory.CreateDirectory(newCategoryPath);
                 StatusMessage = $"Created category: {categoryName}";
-                CategoryCreated?.Invoke("new-category-id");
+                CategoryCreated?.Invoke(newCategoryPath);
             }
             catch (Exception ex)
             {
@@ -91,15 +108,19 @@ namespace NoteNest.UI.ViewModels.Categories
             }
         }
 
-        private async Task ExecuteDeleteCategory(string categoryId)
+        private async Task ExecuteDeleteCategory(object parameter)
         {
+            // Extract CategoryViewModel from parameter
+            var category = parameter as CategoryViewModel;
+            var categoryId = category?.Id ?? parameter?.ToString();
+            
             if (string.IsNullOrEmpty(categoryId))
                 return;
 
             try
             {
                 var confirmed = await _dialogService.ShowConfirmationDialogAsync(
-                    "Are you sure you want to delete this category and all its contents? This action cannot be undone.",
+                    $"Are you sure you want to delete '{category?.Name ?? "this category"}' and all its contents? This action cannot be undone.",
                     "Confirm Delete");
 
                 if (!confirmed)
@@ -109,8 +130,17 @@ namespace NoteNest.UI.ViewModels.Categories
                 StatusMessage = "Deleting category...";
 
                 // TODO: Implement DeleteCategoryCommand when we add category CQRS operations
-                StatusMessage = "Category deleted successfully";
-                CategoryDeleted?.Invoke(categoryId);
+                // For now, delete the directory directly
+                if (category != null && System.IO.Directory.Exists(category.Path))
+                {
+                    System.IO.Directory.Delete(category.Path, recursive: true);
+                    StatusMessage = $"Deleted category: {category.Name}";
+                    CategoryDeleted?.Invoke(categoryId);
+                }
+                else
+                {
+                    StatusMessage = "Category not found.";
+                }
             }
             catch (Exception ex)
             {
@@ -123,9 +153,13 @@ namespace NoteNest.UI.ViewModels.Categories
             }
         }
 
-        private async Task ExecuteRenameCategory(string categoryId, string newName)
+        private async Task ExecuteRenameCategory(object parameter)
         {
-            if (string.IsNullOrEmpty(categoryId) || string.IsNullOrEmpty(newName))
+            // Extract CategoryViewModel from parameter
+            var category = parameter as CategoryViewModel;
+            var categoryId = category?.Id ?? parameter?.ToString();
+            
+            if (string.IsNullOrEmpty(categoryId) || category == null)
                 return;
 
             try
@@ -133,9 +167,37 @@ namespace NoteNest.UI.ViewModels.Categories
                 IsProcessing = true;
                 StatusMessage = "Renaming category...";
 
+                // Show dialog to get new name
+                var newName = await _dialogService.ShowInputDialogAsync(
+                    "Rename Category",
+                    "Enter new category name:",
+                    category.Name,
+                    text => string.IsNullOrWhiteSpace(text) ? "Category name cannot be empty." : null);
+
+                if (string.IsNullOrWhiteSpace(newName) || newName == category.Name)
+                {
+                    StatusMessage = "Rename cancelled.";
+                    return;
+                }
+
                 // TODO: Implement RenameCategoryCommand when we add category CQRS operations
-                StatusMessage = $"Renamed category to: {newName}";
-                CategoryRenamed?.Invoke(categoryId, newName);
+                // For now, rename the directory directly
+                if (System.IO.Directory.Exists(category.Path))
+                {
+                    var parentPath = System.IO.Path.GetDirectoryName(category.Path);
+                    var newPath = System.IO.Path.Combine(parentPath, newName);
+                    
+                    if (System.IO.Directory.Exists(newPath))
+                    {
+                        StatusMessage = "A category with this name already exists.";
+                        _dialogService.ShowError("A category with this name already exists.", "Duplicate Category");
+                        return;
+                    }
+                    
+                    System.IO.Directory.Move(category.Path, newPath);
+                    StatusMessage = $"Renamed category to: {newName}";
+                    CategoryRenamed?.Invoke(categoryId, newName);
+                }
             }
             catch (Exception ex)
             {
@@ -148,8 +210,20 @@ namespace NoteNest.UI.ViewModels.Categories
             }
         }
 
-        private bool CanCreateCategory(string parentCategoryId) => !IsProcessing;
-        private bool CanDeleteCategory(string categoryId) => !IsProcessing && !string.IsNullOrEmpty(categoryId);
-        private bool CanRenameCategory(string categoryId) => !IsProcessing && !string.IsNullOrEmpty(categoryId);
+        private bool CanCreateCategory(object parameter) => !IsProcessing;
+        
+        private bool CanDeleteCategory(object parameter)
+        {
+            var category = parameter as CategoryViewModel;
+            var categoryId = category?.Id ?? parameter?.ToString();
+            return !IsProcessing && !string.IsNullOrEmpty(categoryId);
+        }
+        
+        private bool CanRenameCategory(object parameter)
+        {
+            var category = parameter as CategoryViewModel;
+            var categoryId = category?.Id ?? parameter?.ToString();
+            return !IsProcessing && !string.IsNullOrEmpty(categoryId);
+        }
     }
 }

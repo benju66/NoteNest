@@ -62,19 +62,23 @@ namespace NoteNest.UI.ViewModels.Notes
 
         private void InitializeCommands()
         {
-            CreateNoteCommand = new AsyncRelayCommand(ExecuteCreateNote, CanCreateNote);
+            // Commands now accept ViewModel objects from context menu
+            CreateNoteCommand = new AsyncRelayCommand<object>(ExecuteCreateNote, CanCreateNote);
             SaveNoteCommand = new AsyncRelayCommand<string>(ExecuteSaveNote, CanSaveNote);
-            DeleteNoteCommand = new AsyncRelayCommand<string>(ExecuteDeleteNote, CanDeleteNote);
-            RenameNoteCommand = new AsyncRelayCommand<(string noteId, string newTitle)>(
-                async param => await ExecuteRenameNote(param.noteId, param.newTitle), 
-                param => CanRenameNote(param.noteId));
+            DeleteNoteCommand = new AsyncRelayCommand<object>(ExecuteDeleteNote, CanDeleteNote);
+            RenameNoteCommand = new AsyncRelayCommand<object>(ExecuteRenameNote, CanRenameNote);
         }
 
-        private async Task ExecuteCreateNote()
+        private async Task ExecuteCreateNote(object parameter)
         {
-            if (string.IsNullOrEmpty(SelectedCategoryId))
+            // Extract CategoryViewModel from parameter
+            var category = parameter as NoteNest.UI.ViewModels.Categories.CategoryViewModel;
+            var categoryId = category?.Id ?? SelectedCategoryId;
+            
+            if (string.IsNullOrEmpty(categoryId))
             {
                 StatusMessage = "Please select a category first.";
+                _dialogService.ShowInfo("Please select a category first.", "No Category Selected");
                 return;
             }
 
@@ -83,10 +87,23 @@ namespace NoteNest.UI.ViewModels.Notes
                 IsProcessing = true;
                 StatusMessage = "Creating note...";
 
+                // Show dialog to get note title
+                var noteTitle = await _dialogService.ShowInputDialogAsync(
+                    "New Note",
+                    "Enter note title:",
+                    $"Note {DateTime.Now:yyyy-MM-dd HH-mm}",
+                    text => string.IsNullOrWhiteSpace(text) ? "Note title cannot be empty." : null);
+
+                if (string.IsNullOrWhiteSpace(noteTitle))
+                {
+                    StatusMessage = "Note creation cancelled.";
+                    return;
+                }
+
                 var command = new CreateNoteCommand
                 {
-                    CategoryId = SelectedCategoryId,
-                    Title = $"New Note {DateTime.Now:yyyy-MM-dd HH-mm-ss}",
+                    CategoryId = categoryId,
+                    Title = noteTitle,
                     InitialContent = "",
                     OpenInEditor = true
                 };
@@ -96,7 +113,7 @@ namespace NoteNest.UI.ViewModels.Notes
                 if (result.IsFailure)
                 {
                     StatusMessage = $"Failed to create note: {result.Error}";
-                    _dialogService.ShowError(result.Error, "Delete Note Error");
+                    _dialogService.ShowError(result.Error, "Create Note Error");
                 }
                 else
                 {
@@ -154,15 +171,19 @@ namespace NoteNest.UI.ViewModels.Notes
             }
         }
 
-        private async Task ExecuteDeleteNote(string noteId)
+        private async Task ExecuteDeleteNote(object parameter)
         {
+            // Extract NoteItemViewModel from parameter
+            var note = parameter as NoteNest.UI.ViewModels.Categories.NoteItemViewModel;
+            var noteId = note?.Id ?? parameter?.ToString();
+            
             if (string.IsNullOrEmpty(noteId))
                 return;
 
             try
             {
                 var confirmed = await _dialogService.ShowConfirmationDialogAsync(
-                    "Are you sure you want to delete this note? This action cannot be undone.",
+                    $"Are you sure you want to delete '{note?.Title ?? "this note"}'? This action cannot be undone.",
                     "Confirm Delete");
 
                 if (!confirmed)
@@ -201,15 +222,32 @@ namespace NoteNest.UI.ViewModels.Notes
             }
         }
 
-        private async Task ExecuteRenameNote(string noteId, string newTitle)
+        private async Task ExecuteRenameNote(object parameter)
         {
-            if (string.IsNullOrEmpty(noteId) || string.IsNullOrEmpty(newTitle))
+            // Extract NoteItemViewModel from parameter
+            var note = parameter as NoteNest.UI.ViewModels.Categories.NoteItemViewModel;
+            var noteId = note?.Id ?? parameter?.ToString();
+            
+            if (string.IsNullOrEmpty(noteId))
                 return;
 
             try
             {
                 IsProcessing = true;
                 StatusMessage = "Renaming note...";
+
+                // Show dialog to get new title
+                var newTitle = await _dialogService.ShowInputDialogAsync(
+                    "Rename Note",
+                    "Enter new note title:",
+                    note?.Title ?? "",
+                    text => string.IsNullOrWhiteSpace(text) ? "Note title cannot be empty." : null);
+
+                if (string.IsNullOrWhiteSpace(newTitle) || newTitle == note?.Title)
+                {
+                    StatusMessage = "Rename cancelled.";
+                    return;
+                }
 
                 var command = new RenameNoteCommand
                 {
@@ -223,7 +261,7 @@ namespace NoteNest.UI.ViewModels.Notes
                 if (result.IsFailure)
                 {
                     StatusMessage = $"Failed to rename note: {result.Error}";
-                    _dialogService.ShowError(result.Error, "Delete Note Error");
+                    _dialogService.ShowError(result.Error, "Rename Note Error");
                 }
                 else
                 {
@@ -242,9 +280,27 @@ namespace NoteNest.UI.ViewModels.Notes
             }
         }
 
-        private bool CanCreateNote() => !IsProcessing && !string.IsNullOrEmpty(SelectedCategoryId);
+        private bool CanCreateNote(object parameter) 
+        {
+            var category = parameter as NoteNest.UI.ViewModels.Categories.CategoryViewModel;
+            var categoryId = category?.Id ?? SelectedCategoryId;
+            return !IsProcessing && !string.IsNullOrEmpty(categoryId);
+        }
+        
         private bool CanSaveNote(string noteId) => !IsProcessing && !string.IsNullOrEmpty(noteId);
-        private bool CanDeleteNote(string noteId) => !IsProcessing && !string.IsNullOrEmpty(noteId);
-        private bool CanRenameNote(string noteId) => !IsProcessing && !string.IsNullOrEmpty(noteId);
+        
+        private bool CanDeleteNote(object parameter) 
+        {
+            var note = parameter as NoteNest.UI.ViewModels.Categories.NoteItemViewModel;
+            var noteId = note?.Id ?? parameter?.ToString();
+            return !IsProcessing && !string.IsNullOrEmpty(noteId);
+        }
+        
+        private bool CanRenameNote(object parameter)
+        {
+            var note = parameter as NoteNest.UI.ViewModels.Categories.NoteItemViewModel;
+            var noteId = note?.Id ?? parameter?.ToString();
+            return !IsProcessing && !string.IsNullOrEmpty(noteId);
+        }
     }
 }
