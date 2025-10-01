@@ -33,21 +33,18 @@
         </Viewbox>
     </ControlTemplate>
     
-    <!-- 📂 FOLDER-OPEN - Expanded folder state with adjusted centering -->
+    <!-- 📂 FOLDER-OPEN - Proper Lucide folder-open icon -->
     <ControlTemplate x:Key="LucideFolderOpen">
         <Viewbox Stretch="Uniform" ClipToBounds="False">
-            <!-- Adjusted viewBox to better center the icon -->
             <Canvas Width="24" Height="24">
-                <!-- Add invisible rect to ensure full 24x24 space is used -->
-                <Rectangle Width="24" Height="24" Fill="Transparent"/>
-                <!-- Lucide "folder-open" icon -->
+                <!-- Proper Lucide folder-open icon with distinctive open appearance -->
                 <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
                       StrokeThickness="2"
                       StrokeLineJoin="Round"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
                       Fill="Transparent"
-                      Data="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6l2 3h8a2 2 0 0 1 2 2z"/>
+                      Data="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v2"/>
             </Canvas>
         </Viewbox>
     </ControlTemplate>
