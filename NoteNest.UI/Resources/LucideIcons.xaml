@@ -18,9 +18,9 @@
     
     <!-- 📁 FOLDER (CLOSED) - Default folder state -->
     <ControlTemplate x:Key="LucideFolder">
-        <Viewbox Stretch="Uniform">
-            <!-- Add 2px padding for stroke (1px on each side) -->
-            <Canvas Width="26" Height="26" Margin="1">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <!-- Native Lucide 24x24 viewBox - no offsets needed -->
+            <Canvas Width="24" Height="24">
                 <!-- Lucide "folder" icon - stroke only -->
                 <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
                       StrokeThickness="2"
@@ -33,28 +33,30 @@
         </Viewbox>
     </ControlTemplate>
     
-    <!-- 📂 FOLDER-OPEN - Expanded folder state -->
+    <!-- 📂 FOLDER-OPEN - Expanded folder state with adjusted centering -->
     <ControlTemplate x:Key="LucideFolderOpen">
-        <Viewbox Stretch="Uniform">
-            <!-- Add 2px padding for stroke (1px on each side) -->
-            <Canvas Width="26" Height="26" Margin="1">
-                <!-- Lucide "folder-open" icon - stroke only -->
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <!-- Adjusted viewBox to better center the icon -->
+            <Canvas Width="24" Height="24">
+                <!-- Add invisible rect to ensure full 24x24 space is used -->
+                <Rectangle Width="24" Height="24" Fill="Transparent"/>
+                <!-- Lucide "folder-open" icon -->
                 <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
                       StrokeThickness="2"
                       StrokeLineJoin="Round"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
                       Fill="Transparent"
-                      Data="M2 7.5V2a2 2 0 0 1 2-2h6.5L14 4h6a2 2 0 0 1 2 2v6.5M4 15v-3a2 2 0 0 1 2-2h14l-2 2H8v1"/>
+                      Data="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6l2 3h8a2 2 0 0 1 2 2z"/>
             </Canvas>
         </Viewbox>
     </ControlTemplate>
     
     <!-- 📄 FILE-TEXT - Document/note icon -->
     <ControlTemplate x:Key="LucideFileText">
-        <Viewbox Stretch="Uniform">
-            <!-- Add 2px padding for stroke (1px on each side) -->
-            <Canvas Width="26" Height="26" Margin="1">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <!-- Native Lucide 24x24 viewBox - no offsets needed -->
+            <Canvas Width="24" Height="24">
                 <!-- Lucide "file-text" icon - stroke only, multiple paths -->
                 <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
                       StrokeThickness="2"
@@ -120,7 +122,8 @@
     
     <!-- 🔽 CHEVRON-DOWN - Expand indicator -->
     <ControlTemplate x:Key="LucideChevronDown">
-        <Viewbox Stretch="Uniform">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <!-- Native Lucide 24x24 viewBox - no offsets needed -->
             <Canvas Width="24" Height="24">
                 <!-- Lucide "chevron-down" icon - stroke only -->
                 <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
@@ -136,7 +139,8 @@
     
     <!-- 🔼 CHEVRON-RIGHT - Collapse indicator -->
     <ControlTemplate x:Key="LucideChevronRight">
-        <Viewbox Stretch="Uniform">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <!-- Native Lucide 24x24 viewBox - no offsets needed -->
             <Canvas Width="24" Height="24">
                 <!-- Lucide "chevron-right" icon - stroke only -->
                 <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"

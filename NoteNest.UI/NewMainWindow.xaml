@@ -14,10 +14,10 @@
             </ResourceDictionary.MergedDictionaries>
             
             <!-- Converters -->
-            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-            <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
-            <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
-            <local:BoolToTextConverter x:Key="BoolToTextConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+        <local:BoolToTextConverter x:Key="BoolToTextConverter"/>
         </ResourceDictionary>
     </Window.Resources>
     <Grid>
@@ -83,14 +83,15 @@
                                                     <RowDefinition/>
                                                 </Grid.RowDefinitions>
                                                 
-                                                <!-- Content area with tighter spacing -->
-                                                <Border Grid.Row="0" 
-                                                        Background="{TemplateBinding Background}" 
-                                                        Padding="6,2"
-                                                        Margin="1,0">
-                                                    <ContentPresenter x:Name="PART_Header" 
-                                                                      ContentSource="Header"/>
-                                                </Border>
+                                <!-- Content area with consistent spacing -->
+                                <Border Grid.Row="0" 
+                                        Background="{TemplateBinding Background}" 
+                                        Padding="4,0"
+                                        Margin="0"
+                                        MinHeight="26">
+                                    <ContentPresenter x:Name="PART_Header" 
+                                                      ContentSource="Header"/>
+                                </Border>
                                                 
                                                 <!-- Children container with indentation -->
                                                 <ItemsPresenter x:Name="ItemsHost" 
@@ -121,27 +122,32 @@
                         <TreeView.Resources>
                             <!-- 🎨 MODERN: Enhanced templates with safe icons and tooltips -->
                             
-                            <!-- 📁 ENHANCED: Category template with modern Lucide icons -->
+                            <!-- 📁 ROBUST: Category template with fixed-height Grid layout -->
                             <HierarchicalDataTemplate DataType="{x:Type categories:CategoryViewModel}" 
                                                       ItemsSource="{Binding TreeItems}">
-                                <StackPanel Orientation="Horizontal" 
-                                            Margin="4,0"
-                                            ToolTip="{Binding Path}">
-                                    <!-- Custom expander button with Lucide chevron -->
-                                    <Button Command="{Binding ToggleExpandCommand}"
+                                <!-- GRID ensures consistent heights and prevents clipping -->
+                                <Grid Height="26" ToolTip="{Binding Path}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="20"/> <!-- Expander -->
+                                        <ColumnDefinition Width="28"/> <!-- Icon container with padding -->
+                                        <ColumnDefinition Width="*"/>  <!-- Name -->
+                                        <ColumnDefinition Width="Auto"/> <!-- Loading indicator -->
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Custom expander button -->
+                                    <Button Grid.Column="0"
+                                            Command="{Binding ToggleExpandCommand}"
                                             Background="Transparent" 
                                             BorderThickness="0"
-                                            Padding="2"
-                                            Width="16"
-                                            Height="16"
+                                            Padding="0"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Center"
                                             Visibility="{Binding HasPotentialContent, Converter={StaticResource BoolToVisibilityConverter}}">
                                         <ContentControl Width="12" Height="12" Foreground="#FF6B6B6B">
                                             <ContentControl.Style>
                                                 <Style TargetType="ContentControl">
-                                                    <!-- Default: Right chevron (collapsed) -->
                                                     <Setter Property="Template" Value="{StaticResource LucideChevronRight}"/>
                                                     <Style.Triggers>
-                                                        <!-- Expanded: Down chevron -->
                                                         <DataTrigger Binding="{Binding IsExpanded}" Value="True">
                                                             <Setter Property="Template" Value="{StaticResource LucideChevronDown}"/>
                                                         </DataTrigger>
@@ -151,44 +157,54 @@
                                         </ContentControl>
                                     </Button>
                                     
-                                    <!-- 🎨 LUCIDE SVG FOLDER ICON - Pre-compiled resource -->
-                                    <ContentControl Width="16" Height="16" 
-                                                    Margin="4,0,6,0" 
-                                                    VerticalAlignment="Center"
-                                                    Foreground="#FF6B6B6B">
-                                        <ContentControl.Style>
-                                            <Style TargetType="ContentControl">
-                                                <!-- Default: Closed folder -->
-                                                <Setter Property="Template" Value="{StaticResource LucideFolder}"/>
-                                                <Style.Triggers>
-                                                    <!-- Expanded: Open folder -->
-                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                                        <Setter Property="Template" Value="{StaticResource LucideFolderOpen}"/>
-                                                    </DataTrigger>
-                                                    <!-- Selected: Blue highlight -->
-                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                        <Setter Property="Foreground" Value="#FF1565C0"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </ContentControl.Style>
-                                    </ContentControl>
+                                    <!-- 🎨 ICON CONTAINER: Fixed size with internal centering -->
+                                    <Border Grid.Column="1" 
+                                            Width="24" Height="24"
+                                            Background="Transparent"
+                                            ClipToBounds="False"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Center">
+                                        <Grid>
+                                            <!-- Icon with absolute centering -->
+                                            <ContentControl HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Width="20" Height="20"
+                                                            Foreground="#FF6B6B6B">
+                                                <ContentControl.Style>
+                                                    <Style TargetType="ContentControl">
+                                                        <Setter Property="Template" Value="{StaticResource LucideFolder}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                <Setter Property="Template" Value="{StaticResource LucideFolderOpen}"/>
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                <Setter Property="Foreground" Value="#FF1565C0"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ContentControl.Style>
+                                            </ContentControl>
+                                        </Grid>
+                                    </Border>
                                     
-                                    <!-- Folder name with improved typography -->
-                                    <TextBlock Text="{Binding Name}" 
+                                    <!-- Folder name -->
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding Name}" 
                                                VerticalAlignment="Center"
+                                               Margin="4,0,0,0"
                                                FontWeight="Medium"
                                                FontSize="13"
                                                Foreground="#FF2D2D2D"/>
                                     
                                     <!-- Loading indicator -->
-                                    <TextBlock Text=" ●" 
+                                    <TextBlock Grid.Column="3"
+                                               Text=" ●" 
                                                Foreground="#FFFF8C00"
                                                FontSize="8"
-                                               Margin="6,0,0,0"
+                                               Margin="6,0,6,0"
                                                VerticalAlignment="Center"
                                                Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                                </StackPanel>
+                                </Grid>
                             </HierarchicalDataTemplate>
                             
                             <!-- 📄 ENHANCED: Note template with modern Lucide icons -->
@@ -196,7 +212,7 @@
                                 <Border Background="Transparent" 
                                         Cursor="Hand"
                                         Margin="28,0,4,0"
-                                        Padding="4,2"
+                                        Padding="4,1"
                                         CornerRadius="2">
                                     <Border.InputBindings>
                                         <MouseBinding MouseAction="LeftDoubleClick" 
