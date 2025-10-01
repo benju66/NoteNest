@@ -135,27 +135,28 @@
                                         </Button.Content>
                                     </Button>
                                     
-                                    <!-- Modern folder icon using Segoe MDL2 Assets -->
-                                    <TextBlock FontFamily="Segoe MDL2 Assets"
-                                               FontSize="16"
-                                               Margin="4,0,6,0" 
-                                               VerticalAlignment="Center"
-                                               Foreground="#FF6B6B6B">
-                                        <!-- Use direct Unicode based on expansion state -->
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Text" Value="&#xE8B7;"/> <!-- FolderRegular -->
+                                    <!-- 🎨 LUCIDE SVG FOLDER ICON - Modern vector geometry -->
+                                    <Path Data="{Binding FolderIconGeometry}"
+                                          Fill="#FF6B6B6B"
+                                          Width="16"
+                                          Height="16"
+                                          Margin="4,0,6,0" 
+                                          VerticalAlignment="Center"
+                                          Stretch="Uniform"
+                                          StrokeThickness="1.5"
+                                          Stroke="#FF6B6B6B">
+                                        <Path.Style>
+                                            <Style TargetType="Path">
+                                                <!-- Hover effects for better UX -->
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                                        <Setter Property="Text" Value="&#xE838;"/> <!-- FolderOpenRegular -->
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding IsPinned}" Value="True">
-                                                        <Setter Property="Text" Value="&#xE840;"/> <!-- PinnedFolder -->
+                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                        <Setter Property="Fill" Value="#FF1565C0"/>
+                                                        <Setter Property="Stroke" Value="#FF1565C0"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+                                        </Path.Style>
+                                    </Path>
                                     
                                     <!-- Folder name with improved typography -->
                                     <TextBlock Text="{Binding Name}" 
@@ -197,13 +198,16 @@
                                     </Border.ToolTip>
                                     
                                     <StackPanel Orientation="Horizontal">
-                                        <!-- Modern document icon using Segoe MDL2 Assets -->
-                                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                                   Text="&#xE8A5;" 
-                                                   FontSize="14"
-                                                   Margin="0,0,8,0" 
-                                                   VerticalAlignment="Center"
-                                                   Foreground="#FF4A90E2"/>
+                                        <!-- 🎨 LUCIDE SVG DOCUMENT ICON - Modern vector geometry -->
+                                        <Path Data="{Binding DocumentIconGeometry}"
+                                              Fill="#FF4A90E2"
+                                              Width="14"
+                                              Height="14"
+                                              Margin="0,0,8,0" 
+                                              VerticalAlignment="Center"
+                                              Stretch="Uniform"
+                                              StrokeThickness="1.5"
+                                              Stroke="#FF4A90E2"/>
                                         
                                         <!-- Note title with improved typography -->
                                         <TextBlock Text="{Binding Title}" 

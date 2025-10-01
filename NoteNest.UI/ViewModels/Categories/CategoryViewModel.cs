@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Windows.Media;
 using NoteNest.Domain.Categories;
 using NoteNest.UI.ViewModels.Common;
 using NoteNest.Application.Common.Interfaces;
@@ -12,6 +13,7 @@ using System.Collections.Generic;
 using NoteNest.Core.Commands;
 using System.Collections.Specialized;
 using System.IO;
+using NoteNest.UI.Interfaces;
 
 namespace NoteNest.UI.ViewModels.Categories
 {
@@ -20,15 +22,17 @@ namespace NoteNest.UI.ViewModels.Categories
         private readonly Category _category;
         private readonly INoteRepository _noteRepository;
         private readonly IAppLogger _logger;
+        private readonly IIconService _iconService;
         private bool _isExpanded;
         private bool _isLoading;
         private bool _notesLoaded;
 
-        public CategoryViewModel(Category category, INoteRepository noteRepository = null, IAppLogger logger = null)
+        public CategoryViewModel(Category category, INoteRepository noteRepository = null, IAppLogger logger = null, IIconService iconService = null)
         {
             _category = category ?? throw new ArgumentNullException(nameof(category));
             _noteRepository = noteRepository;
             _logger = logger;
+            _iconService = iconService;
             
             Children = new ObservableCollection<CategoryViewModel>();
             Notes = new ObservableCollection<NoteItemViewModel>();
@@ -98,6 +102,7 @@ namespace NoteNest.UI.ViewModels.Categories
                     OnPropertyChanged(nameof(ExpanderVisibility));
                     OnPropertyChanged(nameof(ExpanderIcon));
                     OnPropertyChanged(nameof(CategoryIcon));
+                    OnPropertyChanged(nameof(FolderIconGeometry)); // 🎨 Update Lucide geometry
                     
                     if (value && !_notesLoaded)
                     {
@@ -114,7 +119,14 @@ namespace NoteNest.UI.ViewModels.Categories
         }
 
         public string ExpanderVisibility => HasPotentialContent ? "Visible" : "Collapsed";
-        public string ExpanderIcon => IsExpanded ? "▼" : "▶";
+        
+        // 🎨 LUCIDE SVG ICONS - Modern geometry-based icons
+        public string ExpanderIcon => IsExpanded ? "▼" : "▶"; // Keep text expander for now
+        public Geometry FolderIconGeometry => _iconService?.GetTreeIconGeometry(
+            TreeIconType.Folder, 
+            IsExpanded ? TreeIconState.Expanded : TreeIconState.Default) ?? GetFallbackFolderGeometry();
+
+        // Legacy string property for backward compatibility (can be removed later)
         public string CategoryIcon => IsExpanded ? "[Open]" : "[Folder]";
 
         // Commands for tree interaction
@@ -170,7 +182,7 @@ namespace NoteNest.UI.ViewModels.Categories
                 Notes.Clear();
                 foreach (var note in notes)
                 {
-                    var noteViewModel = new NoteItemViewModel(note);
+                    var noteViewModel = new NoteItemViewModel(note, _iconService);
                     
                     // Wire up note events to bubble up to tree level
                     noteViewModel.OpenRequested += OnNoteOpenRequested;
@@ -244,16 +256,43 @@ namespace NoteNest.UI.ViewModels.Categories
         {
             NoteSelectionRequested?.Invoke(note);
         }
+
+        #region Icon Fallback Handling
+
+        /// <summary>
+        /// Provides simple fallback folder geometry when IconService is unavailable
+        /// </summary>
+        private Geometry GetFallbackFolderGeometry()
+        {
+            try
+            {
+                // Simple folder rectangle as fallback
+                var geometry = Geometry.Parse("M2 4h4l2 2h12v12H2V4z");
+                geometry.Freeze();
+                return geometry;
+            }
+            catch
+            {
+                // Ultra-simple rectangle if even fallback fails
+                var fallback = Geometry.Parse("M2 2h20v20H2V2z");
+                fallback.Freeze();
+                return fallback;
+            }
+        }
+
+        #endregion
     }
 
     // Enhanced ViewModel for notes within categories with interaction support
     public class NoteItemViewModel : ViewModelBase
     {
         private readonly Note _note;
+        private readonly IIconService _iconService;
 
-        public NoteItemViewModel(Note note)
+        public NoteItemViewModel(Note note, IIconService iconService = null)
         {
             _note = note ?? throw new ArgumentNullException(nameof(note));
+            _iconService = iconService;
             
             // Initialize commands
             OpenCommand = new RelayCommand(() => OnOpenRequested());
@@ -264,7 +303,15 @@ namespace NoteNest.UI.ViewModels.Categories
         public string Title => _note.Title;
         public string FilePath => _note.FilePath;
         public bool IsPinned => _note.IsPinned;
+        
+        // 🎨 LUCIDE SVG ICONS - Modern geometry-based icons
+        public Geometry DocumentIconGeometry => _iconService?.GetTreeIconGeometry(
+            IsPinned ? TreeIconType.Pin : TreeIconType.Document, 
+            IsPinned ? TreeIconState.Pinned : TreeIconState.Default) ?? GetFallbackDocumentGeometry();
+        
+        // Legacy string property for backward compatibility (can be removed later)  
         public string NoteIcon => IsPinned ? "[Pinned]" : "[Note]";
+        
         public DateTime CreatedAt => _note.CreatedAt;
         public DateTime UpdatedAt => _note.UpdatedAt;
         public Note Note => _note; // Expose underlying note for workspace operations
@@ -286,5 +333,30 @@ namespace NoteNest.UI.ViewModels.Categories
         {
             SelectionRequested?.Invoke(this);
         }
+
+        #region Icon Fallback Handling
+
+        /// <summary>
+        /// Provides simple fallback document geometry when IconService is unavailable
+        /// </summary>
+        private Geometry GetFallbackDocumentGeometry()
+        {
+            try
+            {
+                // Simple document rectangle as fallback
+                var geometry = Geometry.Parse("M4 2h12v20H4V2z M8 6h8 M8 10h8 M8 14h5");
+                geometry.Freeze();
+                return geometry;
+            }
+            catch
+            {
+                // Ultra-simple rectangle if even fallback fails
+                var fallback = Geometry.Parse("M2 2h16v20H2V2z");
+                fallback.Freeze();
+                return fallback;
+            }
+        }
+
+        #endregion
     }
 }

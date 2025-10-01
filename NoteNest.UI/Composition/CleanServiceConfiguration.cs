@@ -90,6 +90,9 @@ namespace NoteNest.UI.Composition
             // Legacy configuration service (for compatibility)
             services.AddSingleton<ConfigurationService>();
             
+            // 🎨 LUCIDE ICON SERVICE - Modern SVG icon management
+            services.AddSingleton<NoteNest.UI.Interfaces.IIconService, NoteNest.UI.Services.LucideIconService>();
+            
             return services;
         }
         
@@ -265,8 +268,13 @@ namespace NoteNest.UI.Composition
         /// </summary>
         private static IServiceCollection AddCleanViewModels(this IServiceCollection services)
         {
-            // Tree view (database-backed)
-            services.AddTransient<CategoryTreeViewModel>();
+            // Tree view (database-backed) 
+            services.AddTransient<CategoryTreeViewModel>(provider =>
+                new CategoryTreeViewModel(
+                    provider.GetRequiredService<ICategoryRepository>(),
+                    provider.GetRequiredService<INoteRepository>(),
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<NoteNest.UI.Interfaces.IIconService>()));
             
             // Search view (database-backed)
             services.AddTransient<SearchViewModel>(provider =>
