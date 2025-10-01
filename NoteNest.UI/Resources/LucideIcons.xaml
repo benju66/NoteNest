@@ -1,0 +1,181 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <!-- 
+    ═══════════════════════════════════════════════════════════════
+    LUCIDE ICON LIBRARY - Pre-compiled WPF Resources
+    ═══════════════════════════════════════════════════════════════
+    
+    Official Lucide Icons converted to WPF ControlTemplates
+    - Stroke-only rendering (no fill) for authentic outline style
+    - 24x24 coordinate system (Lucide standard)
+    - Proper viewbox scaling for any size
+    - Dynamic color binding via Foreground property
+    
+    Source: https://lucide.dev/icons/
+    ═══════════════════════════════════════════════════════════════
+    -->
+    
+    <!-- 📁 FOLDER (CLOSED) - Default folder state -->
+    <ControlTemplate x:Key="LucideFolder">
+        <Viewbox Stretch="Uniform">
+            <!-- Add 2px padding for stroke (1px on each side) -->
+            <Canvas Width="26" Height="26" Margin="1">
+                <!-- Lucide "folder" icon - stroke only -->
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📂 FOLDER-OPEN - Expanded folder state -->
+    <ControlTemplate x:Key="LucideFolderOpen">
+        <Viewbox Stretch="Uniform">
+            <!-- Add 2px padding for stroke (1px on each side) -->
+            <Canvas Width="26" Height="26" Margin="1">
+                <!-- Lucide "folder-open" icon - stroke only -->
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M2 7.5V2a2 2 0 0 1 2-2h6.5L14 4h6a2 2 0 0 1 2 2v6.5M4 15v-3a2 2 0 0 1 2-2h14l-2 2H8v1"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📄 FILE-TEXT - Document/note icon -->
+    <ControlTemplate x:Key="LucideFileText">
+        <Viewbox Stretch="Uniform">
+            <!-- Add 2px padding for stroke (1px on each side) -->
+            <Canvas Width="26" Height="26" Margin="1">
+                <!-- Lucide "file-text" icon - stroke only, multiple paths -->
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M14 2v4a2 2 0 0 0 2 2h4"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M10 9H8"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M16 13H8"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M16 17H8"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📌 PIN - Pinned item icon (future use) -->
+    <ControlTemplate x:Key="LucidePin">
+        <Viewbox Stretch="Uniform">
+            <Canvas Width="24" Height="24">
+                <!-- Lucide "pin" icon - stroke only -->
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 17v5"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🔽 CHEVRON-DOWN - Expand indicator -->
+    <ControlTemplate x:Key="LucideChevronDown">
+        <Viewbox Stretch="Uniform">
+            <Canvas Width="24" Height="24">
+                <!-- Lucide "chevron-down" icon - stroke only -->
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="m6 9 6 6 6-6"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🔼 CHEVRON-RIGHT - Collapse indicator -->
+    <ControlTemplate x:Key="LucideChevronRight">
+        <Viewbox Stretch="Uniform">
+            <Canvas Width="24" Height="24">
+                <!-- Lucide "chevron-right" icon - stroke only -->
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="m9 18 6-6-6-6"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!--
+    ═══════════════════════════════════════════════════════════════
+    USAGE IN XAML:
+    ═══════════════════════════════════════════════════════════════
+    
+    <ContentControl Template="{StaticResource LucideFolder}"
+                    Width="16" Height="16"
+                    Foreground="#FF6B6B6B"/>
+    
+    Or with DataTrigger for dynamic switching:
+    
+    <ContentControl Width="16" Height="16" Foreground="#FF6B6B6B">
+        <ContentControl.Style>
+            <Style TargetType="ContentControl">
+                <Setter Property="Template" Value="{StaticResource LucideFolder}"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                        <Setter Property="Template" Value="{StaticResource LucideFolderOpen}"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </ContentControl.Style>
+    </ContentControl>
+    
+    ═══════════════════════════════════════════════════════════════
+    -->
+    
+</ResourceDictionary>
+

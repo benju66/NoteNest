@@ -8,7 +8,6 @@ using NoteNest.Application.Common.Interfaces;
 using NoteNest.Domain.Categories;
 using NoteNest.UI.ViewModels.Common;
 using NoteNest.Core.Services.Logging;
-using NoteNest.UI.Interfaces;
 
 namespace NoteNest.UI.ViewModels.Categories
 {
@@ -17,20 +16,17 @@ namespace NoteNest.UI.ViewModels.Categories
         private readonly ICategoryRepository _categoryRepository;
         private readonly INoteRepository _noteRepository;
         private readonly IAppLogger _logger;
-        private readonly IIconService _iconService;
         private CategoryViewModel _selectedCategory;
         private bool _isLoading;
 
         public CategoryTreeViewModel(
             ICategoryRepository categoryRepository, 
             INoteRepository noteRepository,
-            IAppLogger logger,
-            IIconService iconService)
+            IAppLogger logger)
         {
             _categoryRepository = categoryRepository;
             _noteRepository = noteRepository;
             _logger = logger;
-            _iconService = iconService;
             
             Categories = new ObservableCollection<CategoryViewModel>();
             
@@ -142,7 +138,7 @@ namespace NoteNest.UI.ViewModels.Categories
             // Create CategoryViewModels for root categories with dependency injection
             foreach (var category in rootCategories)
             {
-                var categoryViewModel = new CategoryViewModel(category, _noteRepository, _logger, _iconService);
+                var categoryViewModel = new CategoryViewModel(category, _noteRepository, _logger);
                 
                 // Wire up note events to bubble up
                 categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
@@ -161,7 +157,7 @@ namespace NoteNest.UI.ViewModels.Categories
             
             foreach (var child in children)
             {
-                var childViewModel = new CategoryViewModel(child, _noteRepository, _logger, _iconService);
+                var childViewModel = new CategoryViewModel(child, _noteRepository, _logger);
                 
                 // Wire up note events for child categories too
                 childViewModel.NoteOpenRequested += OnNoteOpenRequested;
