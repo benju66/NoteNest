@@ -94,9 +94,9 @@
         </Viewbox>
     </ControlTemplate>
     
-    <!-- 📌 PIN - Pinned item icon (future use) -->
+    <!-- 📌 PIN - Pinned item icon -->
     <ControlTemplate x:Key="LucidePin">
-        <Viewbox Stretch="Uniform">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
             <Canvas Width="24" Height="24">
                 <!-- Lucide "pin" icon - stroke only -->
                 <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
@@ -105,14 +105,28 @@
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
                       Fill="Transparent"
-                      Data="M12 17v5"/>
+                      Data="M12 21v-7"/>
                 <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
                       StrokeThickness="2"
                       StrokeLineJoin="Round"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
                       Fill="Transparent"
-                      Data="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>
+                      Data="M9 4v2"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 4v2"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M7 9h10l-2 6H9L7 9z"/>
             </Canvas>
         </Viewbox>
     </ControlTemplate>
@@ -147,6 +161,1506 @@
                       StrokeEndLineCap="Round"
                       Fill="Transparent"
                       Data="m9 18 6-6-6-6"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ⭐ STAR - Favorite/starred item -->
+    <ControlTemplate x:Key="LucideStar">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🔍 SEARCH - Search functionality -->
+    <ControlTemplate x:Key="LucideSearch">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Ellipse Canvas.Left="3" Canvas.Top="3" Width="16" Height="16"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M21 21 16.65 16.65"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📄➕ FILE-PLUS - Create new file -->
+    <ControlTemplate x:Key="LucideFilePlus">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M14 2H6a2 2 0 0 0-2 2v16 a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M14 2 14 8 20 8"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 18 12 12"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 15 15 15"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📁➕ FOLDER-PLUS - Create new folder -->
+    <ControlTemplate x:Key="LucideFolderPlus">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M22 19a2 2 0 0 0 2-2V7 a2 2 0 0 0-2-2H12l-2-2H2 a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h20z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 11 12 17"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 14 15 14"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ⚙️ SETTINGS - Settings/preferences -->
+    <ControlTemplate x:Key="LucideSettings">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Ellipse Canvas.Left="9" Canvas.Top="9" Width="6" Height="6"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M19.4 15a1.65 1.65 0 0 0 .33 1.82 l.06.06a2 2 0 0 1-2.83 2.83 l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0 v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06 a2 2 0 0 1-2.83-2.83l.06-.06 a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3 a2 2 0 0 1 0-4h.09 a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06 a2 2 0 0 1 2.83-2.83l.06.06 a1.65 1.65 0 0 0 1.82.33 h.09a1.65 1.65 0 0 0 1-1.51V3 a2 2 0 0 1 4 0v.09 a1.65 1.65 0 0 0 1 1.51 h.09a1.65 1.65 0 0 0 1.82-.33 l.06-.06a2 2 0 0 1 2.83 2.83 l-.06.06a1.65 1.65 0 0 0-.33 1.82 v.09a1.65 1.65 0 0 0 1.51 1H21 a2 2 0 0 1 0 4h-.09 a1.65 1.65 0 0 0-1.51 1z"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ⋮ ELLIPSIS-VERTICAL - More options menu -->
+    <ControlTemplate x:Key="LucideEllipsisVertical">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Ellipse Canvas.Left="11" Canvas.Top="4" Width="2" Height="2"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+                <Ellipse Canvas.Left="11" Canvas.Top="11" Width="2" Height="2"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+                <Ellipse Canvas.Left="11" Canvas.Top="18" Width="2" Height="2"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ⬌ SQUARE-SPLIT-HORIZONTAL - Split panel horizontally -->
+    <ControlTemplate x:Key="LucideSquareSplitHorizontal">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 3 12 21"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- B BOLD - Bold text formatting -->
+    <ControlTemplate x:Key="LucideBold">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M6 4h8a4 4 0 0 1 0 8H6z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M6 12h9a4 4 0 0 1 0 8H6z"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🖍️ HIGHLIGHTER - Highlight text -->
+    <ControlTemplate x:Key="LucideHighlighter">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 11l-6 6v3h9l9-9a2.83 2.83 0 0 0-4-4L9 11z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M16 2l6 6"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- U UNDERLINE - Underline text formatting -->
+    <ControlTemplate x:Key="LucideUnderline">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M6 4v6a6 6 0 0 0 12 0V4"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 20 20 20"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- I ITALIC - Italic text formatting -->
+    <ControlTemplate x:Key="LucideItalic">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M19 4 10 4"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M14 20 5 20"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 4 9 20"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- • CIRCLE-SMALL - Small bullet point -->
+    <ControlTemplate x:Key="LucideCircleSmall">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Ellipse Canvas.Left="11" Canvas.Top="11" Width="2" Height="2"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🔢 LIST-ORDERED - Numbered list -->
+    <ControlTemplate x:Key="LucideListOrdered">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M10 6 21 6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M10 12 21 12"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M10 18 21 18"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 6h1v4"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 10h2"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 12h1v6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 18h2"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- →| ARROW-RIGHT-TO-LINE - Collapse to right -->
+    <ControlTemplate x:Key="LucideArrowRightToLine">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 12 21 12"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 6 21 12 15 18"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 6 3 18"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- |← ARROW-LEFT-TO-LINE - Collapse to left -->
+    <ControlTemplate x:Key="LucideArrowLeftToLine">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M21 12 3 12"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 18 3 12 9 6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M21 6 21 18"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ⏮️ STEP-BACK - Previous/skip backward -->
+    <ControlTemplate x:Key="LucideStepBack">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 19 2 12 9 5 9 19"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 5 h6 a1 1 0 0 1 1 1 v13 a1 1 0 0 1-1 1 H9"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ⏭️ STEP-FORWARD - Next/skip forward -->
+    <ControlTemplate x:Key="LucideStepForward">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 19 22 12 15 5 15 19"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 5 h6 a1 1 0 0 1 1 1 v13 a1 1 0 0 1-1 1 H9"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🔄 REFRESH-CW - Refresh/reload -->
+    <ControlTemplate x:Key="LucideRefreshCw">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M21 2v6h-6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 12a9 9 0 0 1 15-6.7l3 3"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 22v-6h6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M21 12a9 9 0 0 1-15 6.7l-3-3"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ↶ UNDO - Undo action -->
+    <ControlTemplate x:Key="LucideUndo">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 7v6h6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 13a9 9 0 1 0 9-9"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ↷ REDO - Redo action -->
+    <ControlTemplate x:Key="LucideRedo">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M21 7v6h-6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M21 13a9 9 0 1 1-9-9"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 💾 SAVE - Save file -->
+    <ControlTemplate x:Key="LucideSave">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M17 21 17 13 7 13 7 21"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M7 3 7 8 15 8"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🗑️ TRASH-2 - Delete/remove -->
+    <ControlTemplate x:Key="LucideTrash2">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 6 5 6 21 6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M10 11 10 17"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M14 11 14 17"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ✏️ PENCIL - Edit -->
+    <ControlTemplate x:Key="LucidePencil">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M17 3a2.83 2.83 0 0 1 4 4L7 21l-4 1 1-4L17 3z"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📋 COPY - Copy to clipboard -->
+    <ControlTemplate x:Key="LucideCopy">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 9 h13 a2 2 0 0 1 2 2 v11 a2 2 0 0 1-2 2 H9 a2 2 0 0 1-2-2 V11 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M5 15H4a2 2 0 0 1-2-2V4 a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📋 CLIPBOARD-PASTE - Paste from clipboard -->
+    <ControlTemplate x:Key="LucideClipboardPaste">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M8 2 h8 a1 1 0 0 1 1 1 v2 a1 1 0 0 1-1 1 H8 a1 1 0 0 1-1-1 V3 a1 1 0 0 1 1-1z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M8 4H5a2 2 0 0 0-2 2v14 a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6 a2 2 0 0 0-2-2h-3"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 11v6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 14h6"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🪟 APP-WINDOW - Application window -->
+    <ControlTemplate x:Key="LucideAppWindow">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M2 4 h20 a2 2 0 0 1 2 2 v14 a2 2 0 0 1-2 2 H2 a2 2 0 0 1-2-2 V6 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M10 4v16"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M2 8h20"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ➕ SQUARE-PLUS - Add item -->
+    <ControlTemplate x:Key="LucideSquarePlus">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 8 12 16"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M8 12 16 12"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ↗️ SQUARE-ARROW-UP-RIGHT - Open external -->
+    <ControlTemplate x:Key="LucideSquareArrowUpRight">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 15L15 9"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 15V9H9"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ⊗ CIRCLE-X - Close/error -->
+    <ControlTemplate x:Key="LucideCircleX">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Ellipse Canvas.Left="2" Canvas.Top="2" Width="20" Height="20"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 9 9 15"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 9 15 15"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ⤢ EXPAND - Expand/maximize -->
+    <ControlTemplate x:Key="LucideExpand">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 3h6v6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 21H3v-6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M21 3l-7 7"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 21l7-7"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ☑ SQUARE-CHECK - Checkbox checked -->
+    <ControlTemplate x:Key="LucideSquareCheck">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 12l2 2 4-4"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ☑ SQUARE-CHECK-BIG - Large checkbox checked -->
+    <ControlTemplate x:Key="LucideSquareCheckBig">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M2 2 h20 a2 2 0 0 1 2 2 v18 a2 2 0 0 1-2 2 H2 a2 2 0 0 1-2-2 V4 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M7 13 10 16 17 9"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🗂️ PANEL-LEFT - Left sidebar -->
+    <ControlTemplate x:Key="LucidePanelLeft">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 3 9 21"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🗂️◀ PANEL-LEFT-CLOSE - Close left sidebar -->
+    <ControlTemplate x:Key="LucidePanelLeftClose">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 3 9 21"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M16 15l-3-3 3-3"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🗂️▶ PANEL-LEFT-OPEN - Open left sidebar -->
+    <ControlTemplate x:Key="LucidePanelLeftOpen">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 3 9 21"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M14 15l3-3-3-3"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🗂️ PANEL-RIGHT - Right sidebar -->
+    <ControlTemplate x:Key="LucidePanelRight">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 3 15 21"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🗂️▶ PANEL-RIGHT-CLOSE - Close right sidebar -->
+    <ControlTemplate x:Key="LucidePanelRightClose">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 3 15 21"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M8 15l3-3-3-3"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🗂️◀ PANEL-RIGHT-OPEN - Open right sidebar -->
+    <ControlTemplate x:Key="LucidePanelRightOpen">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 3 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V5 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M15 3 15 21"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M10 9l-3 3 3 3"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🔖 BOOKMARK - Bookmark item -->
+    <ControlTemplate x:Key="LucideBookmark">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🔖➕ BOOKMARK-PLUS - Add bookmark -->
+    <ControlTemplate x:Key="LucideBookmarkPlus">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 7 12 13"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 10 15 10"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🔖✓ BOOKMARK-CHECK - Bookmarked/completed -->
+    <ControlTemplate x:Key="LucideBookmarkCheck">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 10l2 2 4-4"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📚 BOOK-MARKED - Book with bookmark -->
+    <ControlTemplate x:Key="LucideBookMarked">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 4.5A2.5 2.5 0 0 1 6.5 7H20"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 12.5A2.5 2.5 0 0 1 6.5 10H20"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M16 19V5a2 2 0 0 0-2-2H6.5"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🛡️⚠ SHIELD-ALERT - Security alert -->
+    <ControlTemplate x:Key="LucideShieldAlert">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 8 12 12"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 16 12 16"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🚫 BAN - Prohibited/blocked -->
+    <ControlTemplate x:Key="LucideBan">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Ellipse Canvas.Left="2" Canvas.Top="2" Width="20" Height="20"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4.93 4.93 19.07 19.07"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📌 PIN-OFF - Unpinned -->
+    <ControlTemplate x:Key="LucidePinOff">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M2 2 22 22"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 17v4"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M8.6 8.6l-5.6 5.6V17h8"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M16 2v2"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M20 6h-2"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 12l6-6"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 💾💾 SAVE-ALL - Save all files -->
+    <ControlTemplate x:Key="LucideSaveAll">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M2 2 h20 a2 2 0 0 1 2 2 v18 a2 2 0 0 1-2 2 H2 a2 2 0 0 1-2-2 V4 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M7 7h10v10H7z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M7 17v4h10v-4"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ☁️✓ CLOUD-CHECK - Saved to cloud -->
+    <ControlTemplate x:Key="LucideCloudCheck">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M19 18a4 4 0 0 0 0-8h-1.26 A8 8 0 1 0 4 16.3"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 14 11 16 15 12"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 💾⊗ SAVE-OFF - Unsaved/cannot save -->
+    <ControlTemplate x:Key="LucideSaveOff">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M2 2 22 22"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M19 21H5a2 2 0 0 1-2-2V5 a2 2 0 0 1 2-2h11l5 5v11 a2 2 0 0 1-2 2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M17 21V13H7v8"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ⊚✓ CIRCLE-CHECK - Success/completed -->
+    <ControlTemplate x:Key="LucideCircleCheck">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Ellipse Canvas.Left="2" Canvas.Top="2" Width="20" Height="20"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 12 12 15 16 10"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🛡️✓ BADGE-CHECK - Verified/badge -->
+    <ControlTemplate x:Key="LucideBadgeCheck">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9.5 6.5L12 3l2.5 3.5L19 7l-2 3 1 4-4 2-2-1-2 1-4-2 1-4-2-3z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M9 12 11 14 15 10"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- ✓ CHECK - Checkmark -->
+    <ControlTemplate x:Key="LucideCheck">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M20 6 9 17 4 12"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🕐 CLOCK - Time -->
+    <ControlTemplate x:Key="LucideClock">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Ellipse Canvas.Left="2" Canvas.Top="2" Width="20" Height="20"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 6 12 12 16 14"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 🕐⚠ CLOCK-ALERT - Time alert/reminder -->
+    <ControlTemplate x:Key="LucideClockAlert">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Ellipse Canvas.Left="2" Canvas.Top="2" Width="20" Height="20"
+                         Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                         StrokeThickness="2"
+                         Fill="Transparent"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 6 12 12 16 14"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 2 12 4"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 20 12 22"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📅 CALENDAR - Calendar/date -->
+    <ControlTemplate x:Key="LucideCalendar">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 4 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V6 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M16 2 16 6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M8 2 8 6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 10 21 10"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📓 NOTEBOOK - Notebook -->
+    <ControlTemplate x:Key="LucideNotebook">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M2 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14H4a2 2 0 0 1-2-2V6z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M16 2 16 22"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M8 2 8 22"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
+    <!-- 📅🔄 CALENDAR-SYNC - Calendar sync -->
+    <ControlTemplate x:Key="LucideCalendarSync">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 4 h18 a2 2 0 0 1 2 2 v16 a2 2 0 0 1-2 2 H3 a2 2 0 0 1-2-2 V6 a2 2 0 0 1 2-2z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M16 2 16 6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M8 2 8 6"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M3 10 21 10"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 16v2a2 2 0 0 0 2 2h2"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12 16v-2a2 2 0 0 0-2-2H8"/>
             </Canvas>
         </Viewbox>
     </ControlTemplate>
