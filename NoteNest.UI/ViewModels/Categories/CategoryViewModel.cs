@@ -19,15 +19,21 @@ namespace NoteNest.UI.ViewModels.Categories
     {
         private readonly Category _category;
         private readonly INoteRepository _noteRepository;
+        private readonly CategoryTreeViewModel _parentTree;
         private readonly IAppLogger _logger;
         private bool _isExpanded;
         private bool _isLoading;
         private bool _notesLoaded;
 
-        public CategoryViewModel(Category category, INoteRepository noteRepository = null, IAppLogger logger = null)
+        public CategoryViewModel(
+            Category category, 
+            INoteRepository noteRepository = null, 
+            CategoryTreeViewModel parentTree = null,
+            IAppLogger logger = null)
         {
             _category = category ?? throw new ArgumentNullException(nameof(category));
             _noteRepository = noteRepository;
+            _parentTree = parentTree;
             _logger = logger;
             
             Children = new ObservableCollection<CategoryViewModel>();
@@ -123,6 +129,9 @@ namespace NoteNest.UI.ViewModels.Categories
             {
                 if (SetProperty(ref _isExpanded, value))
                 {
+                    // Notify parent tree to persist state (debounced)
+                    _parentTree?.OnCategoryExpandedChanged(Id, value);
+                    
                     OnPropertyChanged(nameof(ExpanderVisibility));
                     OnPropertyChanged(nameof(ExpanderIcon));
                     

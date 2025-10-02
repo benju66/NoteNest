@@ -289,8 +289,13 @@ namespace NoteNest.UI.Composition
         /// </summary>
         private static IServiceCollection AddCleanViewModels(this IServiceCollection services)
         {
-            // Tree view (database-backed) - simplified with ResourceDictionary icons
-            services.AddTransient<CategoryTreeViewModel>();
+            // Tree view (database-backed) - with expanded state persistence
+            services.AddTransient<CategoryTreeViewModel>(provider =>
+                new CategoryTreeViewModel(
+                    provider.GetRequiredService<ICategoryRepository>(),
+                    provider.GetRequiredService<INoteRepository>(),
+                    provider.GetRequiredService<ITreeRepository>(),
+                    provider.GetRequiredService<IAppLogger>()));
             
             // Search view (database-backed)
             services.AddTransient<SearchViewModel>(provider =>

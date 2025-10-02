@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 using MediatR;
 using NoteNest.Application.Common.Interfaces;
 using NoteNest.Domain.Categories;
@@ -11,24 +12,41 @@ using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.ViewModels.Categories
 {
-    public class CategoryTreeViewModel : ViewModelBase
+    public class CategoryTreeViewModel : ViewModelBase, IDisposable
     {
         private readonly ICategoryRepository _categoryRepository;
         private readonly INoteRepository _noteRepository;
+        private readonly ITreeRepository _treeRepository;
         private readonly IAppLogger _logger;
         private CategoryViewModel _selectedCategory;
         private bool _isLoading;
+        
+        // Expanded state persistence with debouncing
+        private readonly Dictionary<string, bool> _pendingExpandedChanges = new();
+        private readonly object _expandedChangesLock = new object();
+        private DispatcherTimer _expandedStateTimer;
+        private bool _isLoadingFromDatabase = false;
+        private bool _disposed = false;
 
         public CategoryTreeViewModel(
             ICategoryRepository categoryRepository, 
             INoteRepository noteRepository,
+            ITreeRepository treeRepository,
             IAppLogger logger)
         {
             _categoryRepository = categoryRepository;
             _noteRepository = noteRepository;
+            _treeRepository = treeRepository;
             _logger = logger;
             
             Categories = new ObservableCollection<CategoryViewModel>();
+            
+            // Initialize debounce timer for expanded state persistence
+            _expandedStateTimer = new DispatcherTimer 
+            { 
+                Interval = TimeSpan.FromMilliseconds(500) 
+            };
+            _expandedStateTimer.Tick += OnExpandedStateTimer_Tick;
             
             _ = LoadCategoriesAsync();
         }
@@ -197,22 +215,35 @@ namespace NoteNest.UI.ViewModels.Categories
         
         private async Task ProcessLoadedCategories(IReadOnlyList<Domain.Categories.Category> allCategories, IReadOnlyList<Domain.Categories.Category> rootCategories)
         {
-            Categories.Clear();
+            _isLoadingFromDatabase = true;  // Prevent expand events during initial load
             
-            // Create CategoryViewModels for root categories with dependency injection
-            foreach (var category in rootCategories)
+            try
             {
-                var categoryViewModel = new CategoryViewModel(category, _noteRepository, _logger);
+                Categories.Clear();
                 
-                // Wire up note events to bubble up
-                categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
-                categoryViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
+                // Create CategoryViewModels for root categories with dependency injection
+                foreach (var category in rootCategories)
+                {
+                    var categoryViewModel = new CategoryViewModel(category, _noteRepository, this, _logger);
+                    
+                    // Wire up note events to bubble up
+                    categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
+                    categoryViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
+                    
+                    await LoadChildrenAsync(categoryViewModel, allCategories);
+                    Categories.Add(categoryViewModel);
+                    
+                    // ⭐ Load initial expanded state from database (after children loaded)
+                    // This doesn't trigger persistence because _isLoadingFromDatabase = true
+                    await LoadExpandedStateFromDatabase(categoryViewModel, category);
+                }
                 
-                await LoadChildrenAsync(categoryViewModel, allCategories);
-                Categories.Add(categoryViewModel);
+                _logger.Info($"Loaded {Categories.Count} root categories");
             }
-            
-            _logger.Info($"Loaded {Categories.Count} root categories");
+            finally
+            {
+                _isLoadingFromDatabase = false;  // Re-enable expand event handling
+            }
         }
         
         private async Task LoadChildrenAsync(CategoryViewModel parentViewModel, IReadOnlyList<Category> allCategories)
@@ -221,7 +252,7 @@ namespace NoteNest.UI.ViewModels.Categories
             
             foreach (var child in children)
             {
-                var childViewModel = new CategoryViewModel(child, _noteRepository, _logger);
+                var childViewModel = new CategoryViewModel(child, _noteRepository, this, _logger);
                 
                 // Wire up note events for child categories too
                 childViewModel.NoteOpenRequested += OnNoteOpenRequested;
@@ -229,6 +260,31 @@ namespace NoteNest.UI.ViewModels.Categories
                 
                 await LoadChildrenAsync(childViewModel, allCategories);
                 parentViewModel.Children.Add(childViewModel);
+                
+                // ⭐ Load expanded state for child
+                await LoadExpandedStateFromDatabase(childViewModel, child);
+            }
+        }
+        
+        private async Task LoadExpandedStateFromDatabase(CategoryViewModel viewModel, Category category)
+        {
+            try
+            {
+                // Get fresh node from database to read is_expanded
+                if (Guid.TryParse(category.Id.Value, out var guid))
+                {
+                    var node = await _treeRepository.GetNodeByIdAsync(guid);
+                    if (node != null && node.NodeType == Domain.Trees.TreeNodeType.Category)
+                    {
+                        // Set expanded state (won't trigger persistence because _isLoadingFromDatabase = true)
+                        viewModel.IsExpanded = node.IsExpanded;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to load expanded state for {category.Name}: {ex.Message}");
+                // Non-critical - defaults to collapsed
             }
         }
 
@@ -244,6 +300,88 @@ namespace NoteNest.UI.ViewModels.Categories
         private void OnNoteSelectionRequested(NoteItemViewModel note)
         {
             NoteSelected?.Invoke(note);
+        }
+
+        // =============================================================================
+        // EXPANDED STATE PERSISTENCE (Debounced)
+        // =============================================================================
+
+        /// <summary>
+        /// Called by CategoryViewModel when user expands/collapses a folder.
+        /// Queues the change for debounced batch persistence.
+        /// </summary>
+        public void OnCategoryExpandedChanged(string categoryId, bool isExpanded)
+        {
+            if (_isLoadingFromDatabase) return;  // Prevent circular updates during load
+            
+            lock (_expandedChangesLock)
+            {
+                _pendingExpandedChanges[categoryId] = isExpanded;
+            }
+            
+            // Restart debounce timer
+            _expandedStateTimer.Stop();
+            _expandedStateTimer.Start();
+        }
+
+        private async void OnExpandedStateTimer_Tick(object sender, EventArgs e)
+        {
+            _expandedStateTimer.Stop();
+            await FlushExpandedStateChanges();
+        }
+
+        private async Task FlushExpandedStateChanges()
+        {
+            Dictionary<string, bool> changesToFlush;
+            
+            lock (_expandedChangesLock)
+            {
+                if (_pendingExpandedChanges.Count == 0) return;
+                
+                changesToFlush = new Dictionary<string, bool>(_pendingExpandedChanges);
+                _pendingExpandedChanges.Clear();
+            }
+            
+            try
+            {
+                var guidChanges = changesToFlush
+                    .Where(kvp => Guid.TryParse(kvp.Key, out _))
+                    .ToDictionary(
+                        kvp => Guid.Parse(kvp.Key), 
+                        kvp => kvp.Value);
+                
+                if (guidChanges.Count > 0)
+                {
+                    await _treeRepository.BatchUpdateExpandedStatesAsync(guidChanges);
+                    _logger.Debug($"✅ Persisted expanded state for {guidChanges.Count} categories");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to persist expanded states");
+                // Non-critical - UI state already changed, DB is just cache
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            
+            try
+            {
+                // Immediately flush any pending changes on shutdown
+                _expandedStateTimer?.Stop();
+                FlushExpandedStateChanges().GetAwaiter().GetResult();
+                _logger.Debug("Flushed expanded state on dispose");
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Failed to flush expanded state on dispose: {ex.Message}");
+            }
+            finally
+            {
+                _disposed = true;
+            }
         }
     }
 }

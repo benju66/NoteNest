@@ -12,6 +12,11 @@ namespace NoteNest.Application.Common.Interfaces
     public interface ITreeRepository
     {
         /// <summary>
+        /// Get a single node by ID
+        /// </summary>
+        Task<TreeNode> GetNodeByIdAsync(Guid nodeId);
+        
+        /// <summary>
         /// Get all descendants of a node (children, grandchildren, etc.)
         /// </summary>
         Task<List<TreeNode>> GetNodeDescendantsAsync(Guid nodeId);
@@ -25,6 +30,11 @@ namespace NoteNest.Application.Common.Interfaces
         /// Soft-delete a node (sets is_deleted = 1)
         /// </summary>
         Task<bool> DeleteNodeAsync(Guid nodeId, bool softDelete = true);
+        
+        /// <summary>
+        /// Batch update expanded states for multiple nodes (optimized for UI state persistence)
+        /// </summary>
+        Task<bool> BatchUpdateExpandedStatesAsync(Dictionary<Guid, bool> expandedStates);
     }
 }
 
