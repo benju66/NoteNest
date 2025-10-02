@@ -54,18 +54,6 @@
                    </StackPanel>
                    
                   <Separator />
-                  <!-- 🔧 DIAGNOSTIC: Test Category Commands -->
-                  <Button Content="🧪 Test Create Category" 
-                          Command="{Binding CategoryOperations.CreateCategoryCommand}"
-                          CommandParameter="{Binding CategoryTree.SelectedCategory}"
-                          ToolTip="Test if CreateCategoryCommand works"
-                          Background="LightYellow"/>
-                  <Button Content="🧪 Test Rename Category" 
-                          Command="{Binding CategoryOperations.RenameCategoryCommand}"
-                          CommandParameter="{Binding CategoryTree.SelectedCategory}"
-                          ToolTip="Test if RenameCategoryCommand works"
-                          Background="LightYellow"/>
-                  <Separator />
                   <Button Content="Settings" Click="SettingsMenuItem_Click" ToolTip="Open application settings" />
               </ToolBar>
         
