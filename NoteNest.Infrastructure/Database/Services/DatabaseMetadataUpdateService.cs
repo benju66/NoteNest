@@ -10,7 +10,7 @@ using NoteNest.Domain.Trees;
 namespace NoteNest.Infrastructure.Database.Services
 {
     /// <summary>
-    /// PROTOTYPE: Event-driven service that synchronizes database metadata when notes are saved.
+    /// Event-driven service that synchronizes database metadata when notes are saved.
     /// Listens to ISaveManager.NoteSaved events and updates tree_nodes table.
     /// 
     /// Architecture:
@@ -18,6 +18,9 @@ namespace NoteNest.Infrastructure.Database.Services
     /// - This service (Infrastructure) listens and updates database
     /// - No circular dependency (Core doesn't know about Infrastructure)
     /// - File system remains source of truth, database is performance cache
+    /// 
+    /// Performance: 2-13ms per update (validated Oct 1, 2025)
+    /// Reliability: Graceful degradation if DB update fails (FileWatcher provides backup sync)
     /// </summary>
     public class DatabaseMetadataUpdateService : IHostedService, IDisposable
     {
@@ -38,36 +41,19 @@ namespace NoteNest.Infrastructure.Database.Services
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _logger.Info("═══════════════════════════════════════════════════════════════");
-            _logger.Info("🔄 DatabaseMetadataUpdateService PROTOTYPE starting...");
-            _logger.Info("   Purpose: Test Option A - Event-driven DB metadata sync");
-            _logger.Info($"   ISaveManager instance: {_saveManager.GetType().Name} @ {_saveManager.GetHashCode()}");
-            _logger.Info("   Subscribing to: ISaveManager.NoteSaved event");
-            _logger.Info("═══════════════════════════════════════════════════════════════");
+            _logger.Info("DatabaseMetadataUpdateService starting - Event-driven DB sync active");
             
             // Subscribe to save events
             _saveManager.NoteSaved += OnNoteSaved;
             
-            _logger.Info($"✅ DatabaseMetadataUpdateService subscribed to NoteSaved events");
-            _logger.Info("   Listening for: Manual saves, auto-saves, tab switch, tab close");
-            
-            // 🧪 TEST: Manually trigger to verify it works
-            _logger.Info("🧪 TESTING: Manually triggering OnNoteSaved to verify it works...");
-            OnNoteSaved(this, new NoteSavedEventArgs 
-            { 
-                NoteId = "test-note-id", 
-                FilePath = "C:\\test\\path.rtf", 
-                SavedAt = DateTime.UtcNow, 
-                WasAutoSave = false 
-            });
-            _logger.Info("🧪 TEST COMPLETE: Check logs above for test event handling");
+            _logger.Info("✅ Subscribed to save events - Database will stay synchronized with file changes");
             
             return Task.CompletedTask;
         }
 
         public Task StopAsync(CancellationToken cancellationToken)
         {
-            _logger.Info("🛑 DatabaseMetadataUpdateService stopping...");
+            _logger.Info("DatabaseMetadataUpdateService stopped");
             
             // Unsubscribe from events
             if (_saveManager != null)
@@ -93,44 +79,28 @@ namespace NoteNest.Infrastructure.Database.Services
 
             try
             {
-                _logger.Info("─────────────────────────────────────────────────────────────");
-                _logger.Info($"📝 SAVE EVENT RECEIVED:");
-                _logger.Info($"   File: {e.FilePath}");
-                _logger.Info($"   NoteId: {e.NoteId}");
-                _logger.Info($"   SavedAt: {e.SavedAt:yyyy-MM-dd HH:mm:ss.fff}");
-                _logger.Info($"   WasAutoSave: {e.WasAutoSave}");
-
-                // Step 1: Normalize path to canonical format (lowercase, keep backslashes)
-                // Database stores paths with backslashes, so we DON'T convert to forward slashes
+                // Normalize path to canonical format (lowercase, preserve backslashes)
                 var canonicalPath = e.FilePath.ToLowerInvariant();
-                _logger.Debug($"   Canonical path: {canonicalPath}");
                 
-                // Step 2: Get node from database
-                _logger.Debug($"🔍 Querying database for node...");
+                // Get node from database
                 var node = await _repository.GetNodeByPathAsync(canonicalPath);
                 
                 if (node == null)
                 {
-                    _logger.Warning($"⚠️ Node not found in DB (may be new external file): {e.FilePath}");
-                    _logger.Info("   FileWatcherService will sync it on next scan");
+                    _logger.Debug($"Node not found in DB for: {Path.GetFileName(e.FilePath)} - FileWatcher will sync it");
                     return; // Graceful degradation - file is saved, DB will sync later
                 }
-                
-                _logger.Info($"✅ Node found in DB: {node.Name} (ID: {node.Id})");
 
-                // Step 3: Get fresh file metadata
+                // Get fresh file metadata
                 if (!File.Exists(e.FilePath))
                 {
-                    _logger.Warning($"File doesn't exist after save (race condition?): {e.FilePath}");
+                    _logger.Warning($"File doesn't exist after save: {e.FilePath}");
                     return;
                 }
                 
                 var fileInfo = new FileInfo(e.FilePath);
-                _logger.Info($"📊 File metadata: Size={fileInfo.Length} bytes, Modified={fileInfo.LastWriteTimeUtc:yyyy-MM-dd HH:mm:ss}");
                 
-                // Step 4: Create updated node with new metadata
-                _logger.Debug("🔧 Creating updated TreeNode with fresh metadata...");
-                // TreeNode is immutable (proper domain model), so we create a new instance
+                // Create updated TreeNode with fresh metadata (TreeNode is immutable)
                 var updatedNode = TreeNode.CreateFromDatabase(
                     id: node.Id,
                     parentId: node.ParentId,
@@ -160,27 +130,16 @@ namespace NoteNest.Infrastructure.Database.Services
                     customProperties: node.CustomProperties
                 );
                 
-                // Step 5: Persist to database
-                _logger.Info($"💾 Updating database record...");
-                var updateStartTime = DateTime.Now;
+                // Persist to database
                 var success = await _repository.UpdateNodeAsync(updatedNode);
-                var updateDuration = (DateTime.Now - updateStartTime).TotalMilliseconds;
                 
                 if (success)
                 {
-                    _logger.Info($"✅ DATABASE UPDATE SUCCESS:");
-                    _logger.Info($"   Node: {node.Name}");
-                    _logger.Info($"   New Size: {fileInfo.Length} bytes");
-                    _logger.Info($"   New ModifiedAt: {e.SavedAt:yyyy-MM-dd HH:mm:ss.fff}");
-                    _logger.Info($"   Update Duration: {updateDuration:F2}ms");
-                    _logger.Info("─────────────────────────────────────────────────────────────");
+                    _logger.Debug($"DB metadata updated: {node.Name} ({fileInfo.Length} bytes)");
                 }
                 else
                 {
-                    _logger.Warning($"⚠️ DATABASE UPDATE FAILED:");
-                    _logger.Warning($"   UpdateNodeAsync() returned false for: {node.Name}");
-                    _logger.Warning($"   Duration: {updateDuration:F2}ms");
-                    _logger.Warning("─────────────────────────────────────────────────────────────");
+                    _logger.Warning($"Failed to update DB metadata for: {node.Name}");
                 }
             }
             catch (UnauthorizedAccessException ex)

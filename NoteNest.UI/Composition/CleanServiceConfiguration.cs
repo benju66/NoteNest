@@ -143,6 +143,17 @@ namespace NoteNest.UI.Composition
             // Auto-start services for database initialization
             services.AddHostedService<TreeNodeInitializationService>();
             
+            // File system watcher for backup sync (catches external file changes)
+            services.AddSingleton<NoteNest.Infrastructure.Database.Services.DatabaseFileWatcherService>(provider =>
+                new NoteNest.Infrastructure.Database.Services.DatabaseFileWatcherService(
+                    provider.GetRequiredService<ITreeDatabaseRepository>(),
+                    provider.GetRequiredService<IMemoryCache>(),
+                    provider.GetRequiredService<IAppLogger>(),
+                    notesRootPath));
+            
+            services.AddHostedService(provider => 
+                provider.GetRequiredService<NoteNest.Infrastructure.Database.Services.DatabaseFileWatcherService>());
+            
             return services;
         }
         
