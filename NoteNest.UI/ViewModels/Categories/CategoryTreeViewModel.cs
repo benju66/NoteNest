@@ -62,7 +62,71 @@ namespace NoteNest.UI.ViewModels.Categories
 
         public async Task RefreshAsync()
         {
+            // Save expanded state and selection before refresh
+            var expandedIds = new HashSet<string>();
+            SaveExpandedState(Categories, expandedIds);
+            var selectedId = SelectedCategory?.Id;
+            
             await LoadCategoriesAsync();
+            
+            // Restore expanded state after refresh
+            RestoreExpandedState(Categories, expandedIds);
+            
+            // Restore selection
+            if (!string.IsNullOrEmpty(selectedId))
+            {
+                var categoryToSelect = FindCategoryById(Categories, selectedId);
+                if (categoryToSelect != null)
+                {
+                    SelectedCategory = categoryToSelect;
+                }
+            }
+        }
+        
+        private void SaveExpandedState(ObservableCollection<CategoryViewModel> categories, HashSet<string> expandedIds)
+        {
+            foreach (var category in categories)
+            {
+                if (category.IsExpanded)
+                {
+                    expandedIds.Add(category.Id);
+                }
+                
+                if (category.Children.Any())
+                {
+                    SaveExpandedState(category.Children, expandedIds);
+                }
+            }
+        }
+        
+        private void RestoreExpandedState(ObservableCollection<CategoryViewModel> categories, HashSet<string> expandedIds)
+        {
+            foreach (var category in categories)
+            {
+                if (expandedIds.Contains(category.Id))
+                {
+                    category.IsExpanded = true;
+                }
+                
+                if (category.Children.Any())
+                {
+                    RestoreExpandedState(category.Children, expandedIds);
+                }
+            }
+        }
+        
+        private CategoryViewModel FindCategoryById(ObservableCollection<CategoryViewModel> categories, string id)
+        {
+            foreach (var category in categories)
+            {
+                if (category.Id == id)
+                    return category;
+                
+                var found = FindCategoryById(category.Children, id);
+                if (found != null)
+                    return found;
+            }
+            return null;
         }
 
         public void SelectNote(NoteItemViewModel note)
