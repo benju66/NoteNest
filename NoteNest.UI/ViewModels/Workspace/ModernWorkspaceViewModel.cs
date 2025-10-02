@@ -157,6 +157,18 @@ namespace NoteNest.UI.ViewModels.Workspace
                     };
                 }
 
+                // 🔧 CRITICAL FIX: Register note with SaveManager BEFORE creating tab
+                // This populates _noteFilePaths dictionary so SaveNoteAsync() can find the file
+                var registeredNoteId = await _saveManager.OpenNoteAsync(noteModel.FilePath);
+                _logger.Info($"📝 Note registered with SaveManager: {registeredNoteId}");
+                
+                // 🔧 FIX ID MISMATCH: Use SaveManager's ID (hash-based) instead of database GUID
+                // SaveManager uses: note_{hash} (e.g., "note_CA6B2403")
+                // Database uses: GUID (e.g., "3ef46289-098f-4904-bab8-b3bd4df68dd8")
+                // We MUST use SaveManager's ID for the save flow to work
+                noteModel.Id = registeredNoteId;
+                _logger.Info($"   NoteModel.Id updated to match SaveManager ID: {registeredNoteId}");
+                
                 // Create sophisticated NoteTabItem with RTF editor (correct parameter order)
                 var noteTabItem = new NoteTabItem(noteModel, _saveManager);
                 

@@ -119,6 +119,13 @@ namespace NoteNest.Core.Services
 
                             // 6. CRITICAL FIX: Fire NoteSaved event for ALL save types (including auto-save)
                             var filePath = _noteFilePaths.TryGetValue(noteId, out var path) ? path : "";
+                            
+                            // 🧪 DIAGNOSTIC: Verify event firing
+                            System.Diagnostics.Debug.WriteLine($"🔔 [SaveRTFContentAsync] About to fire NoteSaved event:");
+                            System.Diagnostics.Debug.WriteLine($"   NoteId: {noteId}");
+                            System.Diagnostics.Debug.WriteLine($"   FilePath: {filePath}");
+                            System.Diagnostics.Debug.WriteLine($"   Subscribers: {NoteSaved?.GetInvocationList()?.Length ?? 0}");
+                            
                             NoteSaved?.Invoke(this, new NoteSavedEventArgs
                             {
                                 NoteId = noteId,
@@ -126,6 +133,8 @@ namespace NoteNest.Core.Services
                                 SavedAt = DateTime.UtcNow,
                                 WasAutoSave = (saveType == SaveType.AutoSave)
                             });
+                            
+                            System.Diagnostics.Debug.WriteLine($"✅ [SaveRTFContentAsync] NoteSaved event fired");
 
                             // 7. Silent auto-save: Only show status for manual saves
                             if (saveType != SaveType.AutoSave)
@@ -704,14 +713,19 @@ namespace NoteNest.Core.Services
                     _lastSavedContents[noteId] = content;
                     _dirtyNotes[noteId] = false;
                     
-                    // Fire events
-                    NoteSaved?.Invoke(this, new NoteSavedEventArgs
+                    // 🧪 DIAGNOSTIC: Log event firing
+                    var eventArgs = new NoteSavedEventArgs
                     {
                         NoteId = noteId,
                         FilePath = filePath,
                         SavedAt = DateTime.UtcNow,
                         WasAutoSave = false
-                    });
+                    };
+                    
+                    System.Diagnostics.Debug.WriteLine($"🔔 [RTFIntegratedSaveEngine] FIRING NoteSaved event: File={filePath}, Subscribers={NoteSaved?.GetInvocationList()?.Length ?? 0}");
+                    
+                    // Fire events
+                    NoteSaved?.Invoke(this, eventArgs);
                     
                     SaveCompleted?.Invoke(this, new SaveProgressEventArgs
                     {

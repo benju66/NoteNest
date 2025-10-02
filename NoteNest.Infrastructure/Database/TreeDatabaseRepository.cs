@@ -249,7 +249,7 @@ namespace NoteNest.Infrastructure.Database
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
                 
-                // Use the recursive CTE view for efficient tree loading  
+                // Use the recursive CTE view for efficient tree loading
                 var sql = @"
                     SELECT 
                         id as Id,

@@ -161,6 +161,9 @@ namespace NoteNest.UI.Composition
                 return new NoteNest.Core.Services.RTFIntegratedSaveEngine(notesRootPath, statusNotifier);
             });
             
+            // 🧪 PROTOTYPE: Database metadata sync service (MUST be registered AFTER ISaveManager)
+            services.AddHostedService<NoteNest.Infrastructure.Database.Services.DatabaseMetadataUpdateService>();
+            
             // Tab Factory for workspace
             services.AddSingleton<ITabFactory>(provider =>
                 new NoteNest.UI.Services.UITabFactory(provider.GetRequiredService<ISaveManager>()));

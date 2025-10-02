@@ -6,6 +6,14 @@
         xmlns:converters="clr-namespace:NoteNest.UI.Converters"
         xmlns:controls="clr-namespace:NoteNest.UI.Controls"
         Title="NoteNest - New Architecture" Height="600" Width="1000">
+    <Window.InputBindings>
+        <!-- 🎹 KEYBOARD SHORTCUTS -->
+        <KeyBinding Key="S" Modifiers="Control" 
+                    Command="{Binding Workspace.SaveTabCommand}" 
+                    CommandParameter="{Binding Workspace.SelectedTab}"/>
+        <KeyBinding Key="S" Modifiers="Control+Shift" 
+                    Command="{Binding Workspace.SaveAllTabsCommand}"/>
+    </Window.InputBindings>
     <Window.Resources>
         <!-- 🎨 LUCIDE ICON LIBRARY - Pre-compiled resources -->
         <ResourceDictionary>
