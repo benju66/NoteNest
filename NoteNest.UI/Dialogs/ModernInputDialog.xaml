@@ -87,8 +87,7 @@
                  Padding="12,8"
                  FontSize="13"
                  KeyDown="InputTextBox_KeyDown"
-                 TextChanged="InputTextBox_TextChanged"
-                 Style="{StaticResource DefaultTextBoxStyle}"/>
+                 TextChanged="InputTextBox_TextChanged"/>
         
         <!-- Real-time validation feedback -->
         <TextBlock Grid.Row="2" 

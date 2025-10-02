@@ -13,7 +13,9 @@ using NoteNest.Application.Notes.Commands.CreateNote;
 using NoteNest.Application.Common.Interfaces;
 using NoteNest.Infrastructure.EventBus;
 using NoteNest.Infrastructure.Database;
+using NoteNest.Infrastructure.Database.Adapters;
 using NoteNest.Infrastructure.Database.Services;
+using NoteNest.Infrastructure.Services;
 using NoteNest.UI.ViewModels.Shell;
 using NoteNest.UI.ViewModels.Categories;
 using NoteNest.UI.ViewModels.Notes;
@@ -139,6 +141,14 @@ namespace NoteNest.UI.Composition
                     provider.GetRequiredService<ITreeDatabaseRepository>(),
                     provider.GetRequiredService<IAppLogger>(),
                     provider.GetRequiredService<IMemoryCache>()));
+            
+            // Tree repository for category operations (descendants, bulk updates)
+            services.AddScoped<ITreeRepository>(provider =>
+                new TreeRepositoryAdapter(provider.GetRequiredService<ITreeDatabaseRepository>()));
+            
+            // File service for category and note file operations (CRITICAL for CQRS handlers)
+            services.AddScoped<IFileService>(provider =>
+                new NoteNest.Infrastructure.Services.FileService(provider.GetRequiredService<IAppLogger>()));
             
             // Auto-start services for database initialization
             services.AddHostedService<TreeNodeInitializationService>();

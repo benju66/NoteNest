@@ -53,9 +53,21 @@
                                                    ResultSelected="SmartSearch_ResultSelected"/>
                    </StackPanel>
                    
-                   <Separator />
-                   <Button Content="Settings" Click="SettingsMenuItem_Click" ToolTip="Open application settings" />
-               </ToolBar>
+                  <Separator />
+                  <!-- 🔧 DIAGNOSTIC: Test Category Commands -->
+                  <Button Content="🧪 Test Create Category" 
+                          Command="{Binding CategoryOperations.CreateCategoryCommand}"
+                          CommandParameter="{Binding CategoryTree.SelectedCategory}"
+                          ToolTip="Test if CreateCategoryCommand works"
+                          Background="LightYellow"/>
+                  <Button Content="🧪 Test Rename Category" 
+                          Command="{Binding CategoryOperations.RenameCategoryCommand}"
+                          CommandParameter="{Binding CategoryTree.SelectedCategory}"
+                          ToolTip="Test if RenameCategoryCommand works"
+                          Background="LightYellow"/>
+                  <Separator />
+                  <Button Content="Settings" Click="SettingsMenuItem_Click" ToolTip="Open application settings" />
+              </ToolBar>
         
         <!-- Main Content -->
         <Grid Grid.Row="1">
@@ -76,6 +88,7 @@
                     <!-- Enhanced TreeView with interaction support -->
                     <TreeView Grid.Row="0" 
                               ItemsSource="{Binding CategoryTree.Categories}"
+                              Tag="{Binding}"
                               SelectedItemChanged="CategoryTree_SelectedItemChanged"
                               MouseDoubleClick="TreeView_MouseDoubleClick"
                               PreviewKeyDown="TreeView_PreviewKeyDown">
@@ -130,10 +143,10 @@
                         <TreeView.Resources>
                             <!-- 🎨 MODERN: Enhanced templates with safe icons and tooltips -->
                             
-                            <!-- 📁 Category Context Menu -->
+                            <!-- 📁 Category Context Menu (PlacementTarget binding for proper DataContext) -->
                             <ContextMenu x:Key="CategoryContextMenu">
                                 <MenuItem Header="_New Note" 
-                                          Command="{Binding DataContext.NoteOperations.CreateNoteCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          Command="{Binding PlacementTarget.Tag.NoteOperations.CreateNoteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}">
                                     <MenuItem.Icon>
                                         <ContentControl Template="{StaticResource LucideFileText}"
@@ -142,7 +155,7 @@
                                     </MenuItem.Icon>
                                 </MenuItem>
                                 <MenuItem Header="New _Category" 
-                                          Command="{Binding DataContext.CategoryOperations.CreateCategoryCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          Command="{Binding PlacementTarget.Tag.CategoryOperations.CreateCategoryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}">
                                     <MenuItem.Icon>
                                         <ContentControl Template="{StaticResource LucideFolder}"
@@ -152,10 +165,10 @@
                                 </MenuItem>
                                 <Separator/>
                                 <MenuItem Header="_Rename..." 
-                                          Command="{Binding DataContext.CategoryOperations.RenameCategoryCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          Command="{Binding PlacementTarget.Tag.CategoryOperations.RenameCategoryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"/>
                                 <MenuItem Header="_Delete" 
-                                          Command="{Binding DataContext.CategoryOperations.DeleteCategoryCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          Command="{Binding PlacementTarget.Tag.CategoryOperations.DeleteCategoryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"/>
                             </ContextMenu>
                             
@@ -182,7 +195,9 @@
                             <HierarchicalDataTemplate DataType="{x:Type categories:CategoryViewModel}" 
                                                       ItemsSource="{Binding TreeItems}">
                                 <!-- GRID ensures consistent heights and prevents clipping -->
-                                <Grid Height="26" ContextMenu="{StaticResource CategoryContextMenu}">
+                                <Grid Height="26" 
+                                      Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                      ContextMenu="{StaticResource CategoryContextMenu}">
                                     <!-- Enhanced tooltip with breadcrumb path and metadata -->
                                     <Grid.ToolTip>
                                         <ToolTip>

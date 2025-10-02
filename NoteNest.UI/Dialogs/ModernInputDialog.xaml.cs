@@ -20,17 +20,18 @@ namespace NoteNest.UI.Dialogs
         {
             InitializeComponent();
             
-            Title = title;
-            PromptLabel.Text = prompt;
-            InputTextBox.Text = defaultValue;
-            SelectAllOnFocus = selectAllOnFocus;
-            
-            // Initialize validation timer for real-time feedback
+            // Initialize validation timer FIRST (before setting Text property which triggers TextChanged)
             _validationTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(300) // Debounce validation
             };
             _validationTimer.Tick += ValidationTimer_Tick;
+            
+            // Now safe to set properties that trigger events
+            Title = title;
+            PromptLabel.Text = prompt;
+            InputTextBox.Text = defaultValue;
+            SelectAllOnFocus = selectAllOnFocus;
             
             // Set up initial focus and selection
             Loaded += OnLoaded;
@@ -70,7 +71,8 @@ namespace NoteNest.UI.Dialogs
 
         private void InputTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
-            if (ShowRealTimeValidation && !_isValidating)
+            // Safety check: timer might not be initialized yet if called during constructor
+            if (ShowRealTimeValidation && !_isValidating && _validationTimer != null)
             {
                 // Reset validation timer for debounced real-time validation
                 _validationTimer.Stop();

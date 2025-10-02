@@ -1,0 +1,50 @@
+
+[22:44:38.249] Constructor START
+[22:44:38.250] Constructor COMPLETE ✅
+[22:44:45.029] ExecuteRenameCategory CALLED!
+[22:44:45.029] Category: Test, Id: 9f3f0d15-b838-40c9-b15a-011689ad92a6
+[22:44:45.030] Showing dialog...
+[22:44:45.040] ❌ EXCEPTION: NullReferenceException: Object reference not set to an instance of an object.
+   at NoteNest.UI.Dialogs.ModernInputDialog.InputTextBox_TextChanged(Object sender, TextChangedEventArgs e) in C:\NoteNest\NoteNest.UI\Dialogs\ModernInputDialog.xaml.cs:line 76
+   at System.Windows.RoutedEventArgs.InvokeHandler(Delegate handler, Object target)
+   at System.Windows.EventRoute.InvokeHandlersImpl(Object source, RoutedEventArgs args, Boolean reRaised)
+   at System.Windows.UIElement.RaiseEventImpl(DependencyObject sender, RoutedEventArgs args)
+   at System.Windows.Controls.Primitives.TextBoxBase.OnTextContainerChanged(Object sender, TextContainerChangedEventArgs e)
+   at System.Windows.Documents.TextContainer.EndChange(Boolean skipEvents)
+   at System.Windows.Documents.TextRangeBase.EndChange(ITextRange thisRange, Boolean disableScroll, Boolean skipEvents)
+   at System.Windows.Documents.TextRange.ChangeBlock.System.IDisposable.Dispose()
+   at System.Windows.Controls.TextBox.OnTextPropertyChanged(String oldText, String newText)
+   at System.Windows.FrameworkElement.OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+   at System.Windows.Controls.TextBox.OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+   at System.Windows.DependencyObject.NotifyPropertyChange(DependencyPropertyChangedEventArgs args)
+   at System.Windows.DependencyObject.UpdateEffectiveValue(EntryIndex entryIndex, DependencyProperty dp, PropertyMetadata metadata, EffectiveValueEntry oldEntry, EffectiveValueEntry& newEntry, Boolean coerceWithDeferredReference, Boolean coerceWithCurrentValue, OperationType operationType)
+   at System.Windows.DependencyObject.SetValueCommon(DependencyProperty dp, Object value, PropertyMetadata metadata, Boolean coerceWithDeferredReference, Boolean coerceWithCurrentValue, OperationType operationType, Boolean isInternal)
+   at System.Windows.DependencyObject.SetValue(DependencyProperty dp, Object value)
+   at NoteNest.UI.Dialogs.ModernInputDialog..ctor(String title, String prompt, String defaultValue, Boolean selectAllOnFocus) in C:\NoteNest\NoteNest.UI\Dialogs\ModernInputDialog.xaml.cs:line 25
+   at NoteNest.UI.Services.DialogService.ShowInputDialogCore(String title, String prompt, String defaultValue, Func`2 validationFunction) in C:\NoteNest\NoteNest.UI\Services\DialogService.cs:line 40
+   at NoteNest.UI.Services.DialogService.ShowInputDialogAsync(String title, String prompt, String defaultValue, Func`2 validationFunction) in C:\NoteNest\NoteNest.UI\Services\DialogService.cs:line 26
+   at NoteNest.UI.ViewModels.Categories.CategoryOperationsViewModel.ExecuteRenameCategory(Object parameter) in C:\NoteNest\NoteNest.UI\ViewModels\Categories\CategoryOperationsViewModel.cs:line 215
+
+[22:47:02.322] Constructor START
+[22:47:02.323] Constructor COMPLETE ✅
+[22:47:15.120] ExecuteRenameCategory CALLED!
+[22:47:15.121] Category: Test, Id: 9f3f0d15-b838-40c9-b15a-011689ad92a6
+[22:47:15.121] Showing dialog...
+[22:47:21.344] Dialog returned: 12345
+[22:47:21.344] Creating command...
+[22:47:21.344] Sending to MediatR...
+[22:47:21.386] MediatR returned - IsFailure: False
+[22:47:21.386] ✅ Success - 0 descendants
+
+[22:47:36.939] Constructor START
+[22:47:36.940] Constructor COMPLETE ✅
+[22:47:47.325] ExecuteRenameCategory CALLED!
+[22:47:47.325] Category: Other, Id: 087240f3-d72f-4338-a0fc-29672534a8bb
+[22:47:47.326] Showing dialog...
+[22:47:52.741] Dialog returned: NULL
+
+[22:48:40.127] Constructor START
+[22:48:40.127] Constructor COMPLETE ✅
+
+[22:53:19.360] Constructor START
+[22:53:19.361] Constructor COMPLETE ✅

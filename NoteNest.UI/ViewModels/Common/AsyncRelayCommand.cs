@@ -72,7 +72,29 @@ namespace NoteNest.UI.ViewModels.Common
 
         public bool CanExecute(object parameter)
         {
-            return !_isExecuting && (_canExecute?.Invoke((T)parameter) ?? true);
+            try
+            {
+                if (_isExecuting) return false;
+                
+                if (_canExecute == null) return true;
+                
+                // Safe cast with null handling
+                if (parameter is T typedParam)
+                {
+                    return _canExecute.Invoke(typedParam);
+                }
+                else if (parameter == null && default(T) == null)
+                {
+                    return _canExecute.Invoke((T)parameter);
+                }
+                
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[AsyncRelayCommand] CanExecute exception: {ex.Message}");
+                return false;
+            }
         }
 
         public async void Execute(object parameter)
@@ -85,7 +107,13 @@ namespace NoteNest.UI.ViewModels.Common
 
             try
             {
-                await _execute((T)parameter);
+                T typedParam = parameter is T t ? t : (T)parameter;
+                await _execute(typedParam);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[AsyncRelayCommand] Execute exception: {ex.Message}\n{ex.StackTrace}");
+                throw;
             }
             finally
             {

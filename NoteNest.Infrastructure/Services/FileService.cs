@@ -111,6 +111,71 @@ namespace NoteNest.Infrastructure.Services
             }
         }
 
+        // Directory operations for category management
+        
+        public async Task<bool> DirectoryExistsAsync(string path)
+        {
+            return Directory.Exists(path);
+        }
+
+        public async Task CreateDirectoryAsync(string path)
+        {
+            try
+            {
+                if (!Directory.Exists(path))
+                {
+                    Directory.CreateDirectory(path);
+                    _logger.Debug($"Created directory: {path}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to create directory {path}");
+                throw;
+            }
+        }
+
+        public async Task DeleteDirectoryAsync(string path, bool recursive = false)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive);
+                    _logger.Debug($"Deleted directory: {path} (recursive: {recursive})");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to delete directory {path}");
+                throw;
+            }
+        }
+
+        public async Task MoveDirectoryAsync(string oldPath, string newPath)
+        {
+            try
+            {
+                if (Directory.Exists(oldPath))
+                {
+                    // Ensure parent directory exists
+                    var parentDir = Path.GetDirectoryName(newPath);
+                    if (!string.IsNullOrEmpty(parentDir) && !Directory.Exists(parentDir))
+                    {
+                        Directory.CreateDirectory(parentDir);
+                    }
+
+                    Directory.Move(oldPath, newPath);
+                    _logger.Debug($"Moved directory: {oldPath} -> {newPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to move directory {oldPath} -> {newPath}");
+                throw;
+            }
+        }
+
         private string SanitizeFileName(string fileName)
         {
             // Remove invalid characters
