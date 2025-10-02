@@ -12,7 +12,7 @@ namespace NoteNest.UI.Controls
 
 		private void SettingsButton_Click(object sender, RoutedEventArgs e)
 		{
-			var win = Window.GetWindow(this) as MainWindow;
+			var win = Window.GetWindow(this) as NewMainWindow;
 			win?.OpenSettings();
 		}
 	}

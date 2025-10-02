@@ -366,15 +366,10 @@ namespace NoteNest.UI.Controls
         private void TabControl_GotFocus(object sender, RoutedEventArgs e)
         {
             // Notify workspace that this pane is now active
-            if (Pane != null)
+            if (Pane != null && _workspaceService != null)
             {
-                var mainWindow = System.Windows.Application.Current.MainWindow;
-                var panel = FindNoteNestPanel(mainWindow);
-                if (panel != null)
-                {
-                    var splitWorkspace = panel.FindName("SplitWorkspace") as SplitWorkspace;
-                    splitWorkspace?.SetActivePane(Pane);
-                }
+                _workspaceService.SetActivePane(Pane);
+                System.Diagnostics.Debug.WriteLine($"[SplitPaneView] Pane activated: {Pane.Id}");
             }
         }
 
@@ -509,7 +504,7 @@ namespace NoteNest.UI.Controls
                 else
                 {
                     try { _logger?.Info($"Renamed note from '{currentName}' to '{newName}'"); } catch { }
-                    try { NotifyTreeOfRename(tab.Note); } catch { }
+                    // Tree update now handled by CQRS/MediatR events in new architecture
                 }
             }
             catch (Exception ex) { try { _logger?.Error(ex, "Failed to rename tab"); } catch { } }
@@ -849,53 +844,6 @@ namespace NoteNest.UI.Controls
             Pane.SelectedTab = tab;
             PaneTabControl.SelectedItem = tab;
             // Content loading handled by TabControl_SelectionChanged event
-        }
-
-        private NoteNestPanel? FindNoteNestPanel(DependencyObject? obj)
-        {
-            if (obj == null) return null;
-            if (obj is NoteNestPanel panel) return panel;
-            // Guard: only traverse visuals
-            if (obj is not Visual && obj is not System.Windows.Media.Media3D.Visual3D)
-                return null;
-            int childCount = VisualTreeHelper.GetChildrenCount(obj);
-            for (int i = 0; i < childCount; i++)
-            {
-                var child = VisualTreeHelper.GetChild(obj, i);
-                var result = FindNoteNestPanel(child);
-                if (result != null) return result;
-            }
-            return null;
-        }
-        
-        private void NotifyTreeOfRename(NoteModel renamedNote)
-        {
-            if (renamedNote == null) return;
-            var mainWindow = System.Windows.Application.Current?.MainWindow as MainWindow;
-            if (mainWindow?.DataContext is not MainViewModel vm) return;
-            foreach (var category in vm.Categories)
-            {
-                var item = FindNoteInTree(category, renamedNote.Id);
-                if (item != null)
-                {
-                    item.OnPropertyChanged(nameof(NoteTreeItem.Title));
-                    item.OnPropertyChanged(nameof(NoteTreeItem.FilePath));
-                    break;
-                }
-            }
-        }
-
-        private NoteTreeItem? FindNoteInTree(CategoryTreeItem category, string noteId)
-        {
-            if (category == null || string.IsNullOrEmpty(noteId)) return null;
-            var found = category.Notes.FirstOrDefault(n => n.Model?.Id == noteId);
-            if (found != null) return found;
-            foreach (var sub in category.SubCategories)
-            {
-                var r = FindNoteInTree(sub, noteId);
-                if (r != null) return r;
-            }
-            return null;
         }
 
         /// <summary>

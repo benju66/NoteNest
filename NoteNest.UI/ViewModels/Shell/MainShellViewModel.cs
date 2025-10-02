@@ -28,8 +28,8 @@ namespace NoteNest.UI.ViewModels.Shell
             CategoryTreeViewModel categoryTree,
             NoteOperationsViewModel noteOperations,
             CategoryOperationsViewModel categoryOperations,
-            ModernWorkspaceViewModel workspace,
-            SearchViewModel search) // RESTORED FOR DIAGNOSTIC TESTING
+            WorkspaceViewModel workspace,
+            SearchViewModel search)
         {
             _mediator = mediator;
             _dialogService = dialogService;
@@ -40,7 +40,7 @@ namespace NoteNest.UI.ViewModels.Shell
             NoteOperations = noteOperations;
             CategoryOperations = categoryOperations;
             Workspace = workspace;
-            Search = search; // RESTORED FOR DIAGNOSTIC TESTING
+            Search = search;
             
             InitializeCommands();
             SubscribeToEvents();
@@ -50,8 +50,8 @@ namespace NoteNest.UI.ViewModels.Shell
         public CategoryTreeViewModel CategoryTree { get; }
         public NoteOperationsViewModel NoteOperations { get; }
         public CategoryOperationsViewModel CategoryOperations { get; }
-        public ModernWorkspaceViewModel Workspace { get; }
-        public SearchViewModel Search { get; } // RESTORED FOR DIAGNOSTIC TESTING
+        public WorkspaceViewModel Workspace { get; }
+        public SearchViewModel Search { get; }
 
         // Expose selected category from CategoryTree
         public CategoryViewModel SelectedCategory => CategoryTree.SelectedCategory;
@@ -198,7 +198,7 @@ namespace NoteNest.UI.ViewModels.Shell
             StatusMessage = $"Category renamed to: {newName}";
         }
 
-        private void OnTabSelected(NoteTabItem tab)
+        private void OnTabSelected(TabViewModel tab)
         {
             StatusMessage = tab != null ? $"Editing: {tab.Title}" : "No note selected";
         }

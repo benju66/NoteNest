@@ -87,7 +87,7 @@ namespace NoteNest.UI.Services
                 _logger?.Debug($"RefreshPinnedItemsAsync completed: Found {pinnedNotesFound} pinned notes, {pinnedCategoriesFound} pinned categories");
                 _logger?.Debug($"Previous counts: {originalPinnedNotesCount} pinned notes, {originalPinnedCategoriesCount} pinned categories");
                 
-                _notifyPropertyChanged(nameof(MainViewModel.HasPinnedItems));
+                // Note: Property change notification removed - pinned items not yet integrated with new architecture
             }
             catch (Exception ex)
             {
