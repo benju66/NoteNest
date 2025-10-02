@@ -166,9 +166,10 @@ namespace NoteNest.UI.ViewModels.Shell
             var openTab = Workspace.OpenTabs.FirstOrDefault(t => t.NoteId == noteId);
             if (openTab != null)
             {
-                // TODO: Tab title updates will be handled when we implement proper Note model updates
-                // For now, the tab will show the old title until closed and reopened
-                // This is acceptable since the database and tree will show the correct name
+                // Update the underlying NoteModel title (triggers INotifyPropertyChanged automatically)
+                openTab.Note.Title = newTitle;
+                
+                _logger.Info($"Updated open tab title to: {newTitle}");
             }
             
             // Refresh tree to reflect renamed note

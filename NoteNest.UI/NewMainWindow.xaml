@@ -172,7 +172,7 @@
                                           CommandParameter="{Binding}"/>
                             </ContextMenu>
                             
-                            <!-- 📄 Note Context Menu -->
+                            <!-- 📄 Note Context Menu (PlacementTarget binding for proper DataContext) -->
                             <ContextMenu x:Key="NoteContextMenu">
                                 <MenuItem Header="_Open" 
                                           Command="{Binding OpenCommand}">
@@ -184,10 +184,10 @@
                                 </MenuItem>
                                 <Separator/>
                                 <MenuItem Header="_Rename..." 
-                                          Command="{Binding DataContext.NoteOperations.RenameNoteCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          Command="{Binding PlacementTarget.Tag.NoteOperations.RenameNoteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"/>
                                 <MenuItem Header="_Delete" 
-                                          Command="{Binding DataContext.NoteOperations.DeleteNoteCommand, RelativeSource={RelativeSource AncestorType=TreeView}}"
+                                          Command="{Binding PlacementTarget.Tag.NoteOperations.DeleteNoteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"/>
                             </ContextMenu>
                             
@@ -297,6 +297,7 @@
                                         Margin="28,0,4,0"
                                         Padding="4,1"
                                         CornerRadius="2"
+                                        Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}"
                                         ContextMenu="{StaticResource NoteContextMenu}">
                                     <Border.InputBindings>
                                         <MouseBinding MouseAction="LeftDoubleClick" 
