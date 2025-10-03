@@ -88,15 +88,9 @@ namespace NoteNest.UI.Controls.Editor.RTF
 
         private void SplitVerticalButton_Click(object sender, RoutedEventArgs e)
         {
-            ExecuteFormattingCommand(() =>
-            {
-                // Find the SplitWorkspace and execute split command
-                var splitWorkspace = FindSplitWorkspace();
-                if (splitWorkspace != null)
-                {
-                    NoteNest.UI.Controls.SplitWorkspace.SplitVerticalCommand.Execute(null, splitWorkspace);
-                }
-            });
+            // Split command moved to main toolbar (Ctrl+\ in NewMainWindow)
+            // This button is deprecated - split functionality is now in WorkspaceViewModel
+            System.Diagnostics.Debug.WriteLine("[RTFToolbar] Split command deprecated - use main toolbar split button");
         }
 
         private void BoldButton_Click(object sender, RoutedEventArgs e)
@@ -179,49 +173,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
         /// <summary>
         /// Find the SplitWorkspace parent for split commands
         /// </summary>
-        private SplitWorkspace FindSplitWorkspace()
-        {
-            var parent = this.Parent;
-            while (parent != null)
-            {
-                if (parent is SplitWorkspace splitWorkspace)
-                    return splitWorkspace;
-                    
-                if (parent is FrameworkElement fe)
-                    parent = fe.Parent;
-                else if (parent is FrameworkContentElement fce)
-                    parent = fce.Parent;
-                else
-                    break;
-            }
-            
-            // Alternative: Search in MainWindow
-            var mainWindow = System.Windows.Application.Current.MainWindow;
-            if (mainWindow != null)
-            {
-                return FindVisualChild<SplitWorkspace>(mainWindow);
-            }
-            
-            return null;
-        }
-
-        /// <summary>
-        /// Find visual child helper
-        /// </summary>
-        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-        {
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-            {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                if (child is T result)
-                    return result;
-                    
-                var found = FindVisualChild<T>(child);
-                if (found != null)
-                    return found;
-            }
-            return null;
-        }
+        // Split workspace helper methods removed - functionality moved to WorkspaceViewModel
 
         /// <summary>
         /// Update toggle button state based on formatting

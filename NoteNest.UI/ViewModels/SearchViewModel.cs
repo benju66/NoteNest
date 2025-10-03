@@ -5,7 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Threading;
-using NoteNest.Core.Interfaces.Services;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Commands;
@@ -17,7 +16,6 @@ namespace NoteNest.UI.ViewModels
     public class SearchViewModel : ViewModelBase, IDisposable
     {
         private readonly NoteNest.UI.Interfaces.ISearchService _searchService;
-        private readonly IWorkspaceService _workspaceService;
         private readonly NoteService _noteService;
         private readonly IAppLogger _logger;
         private DispatcherTimer _debounceTimer;
@@ -100,6 +98,7 @@ namespace NoteNest.UI.ViewModels
 
         // Events
         public event EventHandler<SearchResultSelectedEventArgs>? ResultSelected;
+        public event EventHandler<string>? NoteOpenRequested; // Request to open note by file path
 
         // Commands
         public ICommand SearchCommand { get; private set; }
@@ -113,12 +112,10 @@ namespace NoteNest.UI.ViewModels
 
         public SearchViewModel(
             NoteNest.UI.Interfaces.ISearchService searchService,
-            IWorkspaceService workspaceService,
             NoteService noteService,
             IAppLogger logger)
         {
             _searchService = searchService ?? throw new ArgumentNullException(nameof(searchService));
-            _workspaceService = workspaceService ?? throw new ArgumentNullException(nameof(workspaceService));
             _noteService = noteService ?? throw new ArgumentNullException(nameof(noteService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
@@ -352,19 +349,14 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
-                // Load the note
-                var note = await _noteService.LoadNoteAsync(result.FilePath);
-                if (note != null)
-                {
-                    // Open in workspace
-                    await _workspaceService.OpenNoteAsync(note);
-                    
-                    // Clear search after successful open
-                    ClearSearch();
-                    ShowDropdown = false;
-                    
-                    _logger.Info($"Opened note from search: {result.Title}");
-                }
+                // Request note opening (MainShellViewModel will handle)
+                NoteOpenRequested?.Invoke(this, result.FilePath);
+                
+                // Clear search after selection
+                ClearSearch();
+                ShowDropdown = false;
+                
+                _logger.Info($"Requested note open from search: {result.Title}");
             }
             catch (Exception ex)
             {

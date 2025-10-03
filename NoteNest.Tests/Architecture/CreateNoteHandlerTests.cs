@@ -9,6 +9,7 @@ using NoteNest.Application.Notes.Commands.CreateNote;
 using NoteNest.Domain.Categories;
 using NoteNest.Domain.Common;
 using NoteNest.Domain.Notes;
+using NoteNest.Domain.Notes.Events;
 
 namespace NoteNest.Tests.Architecture
 {
@@ -48,13 +49,11 @@ namespace NoteNest.Tests.Architecture
                 InitialContent = "Test content"
             };
             
-            var category = new Category 
-            { 
-                Id = categoryId, 
-                Name = "Test Category", 
-                Path = @"C:\Test\Category",
-                ParentId = null 
-            };
+            var category = new Category(
+                categoryId, 
+                "Test Category", 
+                @"C:\Test\Category",
+                null);
 
             _categoryRepository.Setup(x => x.GetByIdAsync(categoryId))
                 .ReturnsAsync(category);
@@ -112,13 +111,11 @@ namespace NoteNest.Tests.Architecture
                 Title = "Existing Note" 
             };
             
-            var category = new Category 
-            { 
-                Id = categoryId, 
-                Name = "Test Category", 
-                Path = @"C:\Test\Category",
-                ParentId = null 
-            };
+            var category = new Category(
+                categoryId, 
+                "Test Category", 
+                @"C:\Test\Category",
+                null);
 
             _categoryRepository.Setup(x => x.GetByIdAsync(categoryId))
                 .ReturnsAsync(category);

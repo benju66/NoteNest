@@ -185,10 +185,6 @@ namespace NoteNest.UI.Composition
             // 🧪 PROTOTYPE: Database metadata sync service (MUST be registered AFTER ISaveManager)
             services.AddHostedService<NoteNest.Infrastructure.Database.Services.DatabaseMetadataUpdateService>();
             
-            // Tab Factory for workspace
-            services.AddSingleton<ITabFactory>(provider =>
-                new NoteNest.UI.Services.UITabFactory(provider.GetRequiredService<ISaveManager>()));
-            
             // Workspace Persistence Service (Milestone 2A - Tab Persistence)
             services.AddSingleton<IWorkspacePersistenceService, WorkspacePersistenceService>();
             
@@ -309,7 +305,6 @@ namespace NoteNest.UI.Composition
             services.AddTransient<SearchViewModel>(provider =>
                 new SearchViewModel(
                     provider.GetRequiredService<NoteNest.UI.Interfaces.ISearchService>(),
-                    provider.GetRequiredService<IWorkspaceService>(),
                     provider.GetRequiredService<NoteService>(),
                     provider.GetRequiredService<IAppLogger>()));
             
@@ -372,16 +367,7 @@ namespace NoteNest.UI.Composition
                     provider.GetRequiredService<ContentCache>(),
                     provider.GetRequiredService<ISaveManager>()));
             
-            // Workspace Service
-            services.AddSingleton<IWorkspaceService>(provider =>
-                new NoteNest.Core.Services.Implementation.WorkspaceService(
-                    provider.GetRequiredService<ContentCache>(),
-                    provider.GetRequiredService<NoteService>(),
-                    provider.GetRequiredService<IServiceErrorHandler>(),
-                    provider.GetRequiredService<IAppLogger>(),
-                    provider.GetRequiredService<INoteOperationsService>(),
-                    provider.GetRequiredService<ISaveManager>(),
-                    provider.GetRequiredService<ITabFactory>()));
+            // OLD: IWorkspaceService removed - functionality now in WorkspaceViewModel
             
             return services;
         }

@@ -123,6 +123,7 @@ namespace NoteNest.UI.ViewModels.Shell
             
             // Wire up search events
             Search.ResultSelected += OnSearchResultSelected; // RESTORED FOR DIAGNOSTIC TESTING
+            Search.NoteOpenRequested += OnSearchNoteOpenRequested;
         }
 
         private void OnCategorySelected(CategoryViewModel category)
@@ -206,6 +207,39 @@ namespace NoteNest.UI.ViewModels.Shell
         private void OnNoteOpened(string noteId)
         {
             StatusMessage = "Note opened in editor";
+        }
+        
+        private async void OnSearchNoteOpenRequested(object sender, string filePath)
+        {
+            try
+            {
+                IsLoading = true;
+                StatusMessage = $"Opening note from search...";
+                
+                // Load note from file path
+                // For now, create a minimal domain Note object with file path
+                var note = new NoteNest.Domain.Notes.Note(
+                    NoteNest.Domain.Categories.CategoryId.Create(), // Temporary category
+                    System.IO.Path.GetFileNameWithoutExtension(filePath)
+                );
+                // Set file path using reflection or constructor
+                note.GetType().GetProperty("FilePath")?.SetValue(note, filePath);
+                
+                // Open in workspace
+                await Workspace.OpenNoteAsync(note);
+                
+                StatusMessage = "Note opened from search";
+                _logger.Info($"Opened note from search: {filePath}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to open note from search: {filePath}");
+                StatusMessage = "Failed to open note";
+            }
+            finally
+            {
+                IsLoading = false;
+            }
         }
 
         // RESTORED FOR DIAGNOSTIC TESTING
