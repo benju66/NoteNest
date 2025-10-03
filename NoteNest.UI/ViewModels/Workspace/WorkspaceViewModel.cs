@@ -85,11 +85,13 @@ namespace NoteNest.UI.ViewModels.Workspace
         // Convenience properties
         public ObservableCollection<TabViewModel> OpenTabs => ActivePane?.Tabs ?? new ObservableCollection<TabViewModel>();
         public bool HasOpenTabs => ActivePane?.HasTabs ?? false;
+        public bool CanSplit => Panes.Count < 2;
         
         // Commands
         public ICommand SaveTabCommand { get; private set; }
         public ICommand SaveAllTabsCommand { get; private set; }
         public ICommand CloseTabCommand { get; private set; }
+        public ICommand SplitVerticalCommand { get; private set; }
         
         // Events for coordination
         public event Action<TabViewModel> TabSelected;
@@ -118,6 +120,7 @@ namespace NoteNest.UI.ViewModels.Workspace
             SaveTabCommand = new AsyncRelayCommand<TabViewModel>(ExecuteSaveTab, CanSaveTab);
             SaveAllTabsCommand = new AsyncRelayCommand(ExecuteSaveAllTabs, CanSaveAllTabs);
             CloseTabCommand = new AsyncRelayCommand<TabViewModel>(ExecuteCloseTab);
+            SplitVerticalCommand = new NoteNest.Core.Commands.RelayCommand(ExecuteSplitVertical, () => CanSplit);
         }
         
         /// <summary>
@@ -326,6 +329,23 @@ namespace NoteNest.UI.ViewModels.Workspace
                 var pane = FindPaneContainingTab(tab);
                 pane?.RemoveTab(tab);
                 
+                // Auto-close empty pane if we have more than one pane
+                if (pane != null && pane.Tabs.Count == 0 && Panes.Count > 1)
+                {
+                    Panes.Remove(pane);
+                    
+                    // Switch to remaining pane
+                    if (ActivePane == pane)
+                    {
+                        ActivePane = Panes.FirstOrDefault();
+                    }
+                    
+                    // Update CanSplit
+                    OnPropertyChanged(nameof(CanSplit));
+                    
+                    _logger.Info($"[WorkspaceViewModel] Closed empty pane - Remaining: {Panes.Count}");
+                }
+                
                 TabClosed?.Invoke(tab);
                 StatusMessage = $"Closed {tab.Title}";
                 
@@ -361,6 +381,36 @@ namespace NoteNest.UI.ViewModels.Workspace
         {
             return Panes.FirstOrDefault(p => p.Tabs.Contains(tab));
         }
+        
+        #region Milestone 2A: Split View Commands
+        
+        /// <summary>
+        /// Split the workspace vertically (side-by-side panes)
+        /// </summary>
+        private void ExecuteSplitVertical()
+        {
+            if (Panes.Count >= 2)
+            {
+                _logger.Info("[WorkspaceViewModel] Already split - max 2 panes");
+                StatusMessage = "Already split";
+                return;
+            }
+            
+            // Create new pane
+            var newPane = new PaneViewModel();
+            Panes.Add(newPane);
+            ActivePane = newPane;
+            
+            // Update CanSplit property
+            OnPropertyChanged(nameof(CanSplit));
+            
+            _logger.Info($"[WorkspaceViewModel] Split vertical - Total panes: {Panes.Count}");
+            StatusMessage = "Editor split";
+            
+            System.Diagnostics.Debug.WriteLine($"[WorkspaceViewModel] Split created - Pane IDs: {string.Join(", ", Panes.Select(p => p.Id))}");
+        }
+        
+        #endregion
     }
 }
 

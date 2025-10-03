@@ -14,6 +14,10 @@
                     CommandParameter="{Binding Workspace.SelectedTab}"/>
         <KeyBinding Key="S" Modifiers="Control+Shift" 
                     Command="{Binding Workspace.SaveAllTabsCommand}"/>
+        
+        <!-- 🆕 MILESTONE 2A: Split View Shortcut -->
+        <KeyBinding Key="OemBackslash" Modifiers="Control" 
+                    Command="{Binding Workspace.SplitVerticalCommand}"/>
     </Window.InputBindings>
     <Window.Resources>
         <!-- 🎨 LUCIDE ICON LIBRARY - Pre-compiled resources -->
@@ -42,6 +46,14 @@
                    <Button Content="Save" Command="{Binding Workspace.SaveTabCommand}" 
                            CommandParameter="{Binding Workspace.SelectedTab}" />
                    <Button Content="Save All" Command="{Binding Workspace.SaveAllTabsCommand}" />
+                   <Separator />
+                   
+                   <!-- 🆕 MILESTONE 2A: Split View Button -->
+                   <Button Content="⫿ Split Editor" 
+                           Command="{Binding Workspace.SplitVerticalCommand}"
+                           ToolTip="Split editor vertically (Ctrl+\)"
+                           IsEnabled="{Binding Workspace.CanSplit}"/>
+                   
                    <Separator />
                    <Button Content="Refresh" Command="{Binding RefreshCommand}" />
                    <Separator />
@@ -340,87 +352,10 @@
             
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
             
-            <!-- Workspace Area - NEW IMPLEMENTATION -->
+            <!-- Workspace Area - MILESTONE 2A: Split View Support -->
             <GroupBox Grid.Column="2" Header="Workspace">
-                <Grid>
-                    <!-- 🆕 MILESTONE 1: Modern TabControl with Close Buttons -->
-                    <TabControl ItemsSource="{Binding Workspace.OpenTabs}" 
-                               SelectedItem="{Binding Workspace.SelectedTab}"
-                               HorizontalAlignment="Stretch"
-                               VerticalAlignment="Stretch">
-                        <TabControl.ItemTemplate>
-                            <DataTemplate>
-                                <!-- Professional tab header with close button -->
-                                <Grid MaxWidth="200" ToolTip="{Binding Note.FilePath}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>       <!-- Title -->
-                                        <ColumnDefinition Width="Auto"/>    <!-- Dirty indicator -->
-                                        <ColumnDefinition Width="24"/>      <!-- Close button -->
-                                    </Grid.ColumnDefinitions>
-                                    
-                                    <!-- Title with ellipsis truncation -->
-                                    <TextBlock Grid.Column="0" 
-                                               Text="{Binding Title}"
-                                               TextTrimming="CharacterEllipsis"
-                                               Margin="8,4,4,4"
-                                               VerticalAlignment="Center"/>
-                                    
-                                    <!-- Dirty indicator -->
-                                    <TextBlock Grid.Column="1" 
-                                               Text="·" 
-                                               Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibilityConverter}}"
-                                               Foreground="#FFE57A"
-                                               FontWeight="Bold"
-                                               FontSize="16"
-                                               Margin="2,4"
-                                               VerticalAlignment="Center"/>
-                                    
-                                    <!-- Close button -->
-                                    <Button Grid.Column="2"
-                                            Content="×"
-                                            Command="{Binding DataContext.Workspace.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}"
-                                            Width="20" Height="20"
-                                            Margin="2,2"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            FontSize="14"
-                                            FontWeight="Bold"
-                                            ToolTip="Close tab (Ctrl+W)">
-                                        <Button.Style>
-                                            <Style TargetType="Button">
-                                                <Setter Property="Foreground" Value="#888"/>
-                                                <Setter Property="Cursor" Value="Hand"/>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Foreground" Value="#FFF"/>
-                                                        <Setter Property="Background" Value="#40FF0000"/>
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
-                                </Grid>
-                            </DataTemplate>
-                        </TabControl.ItemTemplate>
-                        <TabControl.ContentTemplate>
-                            <DataTemplate>
-                                <!-- 🆕 NEW: TabContentView hosts the RTF editor -->
-                                <workspace:TabContentView DataContext="{Binding}"
-                                                         HorizontalAlignment="Stretch"
-                                                         VerticalAlignment="Stretch"/>
-                            </DataTemplate>
-                        </TabControl.ContentTemplate>
-                    </TabControl>
-                    
-                    <!-- Placeholder when no tabs -->
-                    <TextBlock Text="No notes open. Select a category and click 'New Note' to get started." 
-                              HorizontalAlignment="Center" 
-                              VerticalAlignment="Center" 
-                              Foreground="Gray"
-                              Visibility="{Binding Workspace.OpenTabs.Count, Converter={StaticResource CountToVisibilityConverter}}"
-                              IsHitTestVisible="False"/>
-                </Grid>
+                <!-- 🆕 Dynamic pane container: Shows 1 or 2 panes based on Workspace.Panes -->
+                <workspace:WorkspacePaneContainer DataContext="{Binding Workspace}"/>
             </GroupBox>
         </Grid>
         
