@@ -402,6 +402,47 @@ namespace NoteNest.UI.ViewModels.Workspace
             return Panes.FirstOrDefault(p => p.Tabs.Contains(tab));
         }
         
+        /// <summary>
+        /// Move a tab from one pane to another (used for cross-pane drag & drop)
+        /// Part of Milestone 2B: Drag & Drop - Phase 2
+        /// </summary>
+        public void MoveTabBetweenPanes(TabViewModel tab, PaneViewModel sourcePaneVm, PaneViewModel targetPaneVm, int insertIndex)
+        {
+            if (tab == null || sourcePaneVm == null || targetPaneVm == null)
+            {
+                _logger.Warning("[WorkspaceViewModel] MoveTabBetweenPanes: null parameter");
+                return;
+            }
+            
+            // Same pane - just reorder (already handled by TabDragHandler)
+            if (sourcePaneVm == targetPaneVm)
+                return;
+            
+            try
+            {
+                // Remove from source pane
+                sourcePaneVm.RemoveTab(tab);
+                
+                // Add to target pane at specific index
+                targetPaneVm.InsertTab(insertIndex, tab);
+                
+                // Set as active tab in target pane
+                targetPaneVm.SelectedTab = tab;
+                
+                // Make target pane active
+                ActivePane = targetPaneVm;
+                
+                _logger.Info($"[WorkspaceViewModel] Moved tab '{tab.Title}' between panes (index: {insertIndex})");
+                
+                // Auto-save workspace state
+                _ = SaveStateAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to move tab '{tab.Title}' between panes");
+            }
+        }
+        
         #region Milestone 2A: Split View Commands
         
         /// <summary>

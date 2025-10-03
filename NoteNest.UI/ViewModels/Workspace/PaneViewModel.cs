@@ -79,6 +79,27 @@ namespace NoteNest.UI.ViewModels.Workspace
         }
         
         /// <summary>
+        /// Insert tab at specific index (used for drag & drop)
+        /// Part of Milestone 2B: Drag & Drop
+        /// </summary>
+        public void InsertTab(int index, TabViewModel tab, bool select = true)
+        {
+            if (tab == null || Tabs.Contains(tab)) return;
+            
+            // Clamp index to valid range
+            index = Math.Max(0, Math.Min(index, Tabs.Count));
+            
+            Tabs.Insert(index, tab);
+            
+            if (select)
+            {
+                SelectedTab = tab;
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[PaneViewModel] Inserted tab: {tab.Title} at index {index} (Total: {Tabs.Count})");
+        }
+        
+        /// <summary>
         /// Remove tab and handle selection
         /// </summary>
         public void RemoveTab(TabViewModel tab)

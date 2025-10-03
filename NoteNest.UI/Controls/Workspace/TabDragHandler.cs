@@ -8,8 +8,8 @@ using NoteNest.UI.ViewModels.Workspace;
 namespace NoteNest.UI.Controls.Workspace
 {
     /// <summary>
-    /// Handles all drag & drop logic for tab reordering
-    /// Part of Milestone 2B: Drag & Drop - Phase 1 (same pane reordering)
+    /// Handles all drag & drop logic for tab reordering (same pane and cross-pane)
+    /// Part of Milestone 2B: Drag & Drop - Phases 1 & 2
     /// </summary>
     public class TabDragHandler : IDisposable
     {
@@ -22,6 +22,10 @@ namespace NoteNest.UI.Controls.Workspace
         private TabDragAdorner _dragAdorner;
         private InsertionIndicatorAdorner _insertionAdorner;
         private AdornerLayer _adornerLayer;
+        
+        // Phase 2: Cross-pane drag tracking
+        private TabControl _currentTargetTabControl;
+        private PaneView _currentTargetPaneView;
         
         public TabDragHandler(TabControl tabControl, PaneView paneView)
         {
@@ -69,7 +73,9 @@ namespace NoteNest.UI.Controls.Workspace
             if (_isDragging)
             {
                 // Update adorner positions during drag
-                UpdateDragVisuals(e.GetPosition(_tabControl));
+                // Use screen coordinates for cross-pane detection
+                var screenPosition = _tabControl.PointToScreen(e.GetPosition(_tabControl));
+                UpdateDragVisuals(screenPosition);
                 return;
             }
             
@@ -92,8 +98,17 @@ namespace NoteNest.UI.Controls.Workspace
             _isDragging = true;
             System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Starting drag: {_draggedTab.Title}");
             
-            // Get adorner layer
-            _adornerLayer = AdornerLayer.GetAdornerLayer(_tabControl);
+            // CRITICAL FIX: Get adorner layer from WINDOW, not TabControl
+            // This allows adorners to draw over BOTH panes during cross-pane drag
+            var mainWindow = Window.GetWindow(_paneView);
+            if (mainWindow == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[TabDragHandler] ERROR: No window found!");
+                CancelDrag();
+                return;
+            }
+            
+            _adornerLayer = AdornerLayer.GetAdornerLayer(mainWindow.Content as UIElement);
             if (_adornerLayer == null)
             {
                 System.Diagnostics.Debug.WriteLine("[TabDragHandler] ERROR: No adorner layer found!");
@@ -101,13 +116,15 @@ namespace NoteNest.UI.Controls.Workspace
                 return;
             }
             
-            // Create drag adorner (ghost image)
-            _dragAdorner = new TabDragAdorner(_tabControl, _draggedTabItem);
+            // Create drag adorner (ghost image) - using window-level layer
+            _dragAdorner = new TabDragAdorner(mainWindow.Content as UIElement, _draggedTabItem);
             _adornerLayer.Add(_dragAdorner);
             
-            // Create insertion indicator
-            _insertionAdorner = new InsertionIndicatorAdorner(_tabControl);
+            // Create insertion indicator - using window-level layer
+            _insertionAdorner = new InsertionIndicatorAdorner(mainWindow.Content as UIElement);
             _adornerLayer.Add(_insertionAdorner);
+            
+            System.Diagnostics.Debug.WriteLine("[TabDragHandler] Adorners created on window-level layer for cross-pane support");
             
             // Dim the original tab
             _draggedTabItem.Opacity = 0.5;
@@ -129,8 +146,9 @@ namespace NoteNest.UI.Controls.Workspace
                 return;
             }
             
-            // Complete the drop
-            CompleteDrag(e.GetPosition(_tabControl));
+            // Complete the drop using screen coordinates
+            var screenPosition = _tabControl.PointToScreen(e.GetPosition(_tabControl));
+            CompleteDrag(screenPosition);
         }
         
         private void OnDragOver(object sender, DragEventArgs e)
@@ -156,57 +174,164 @@ namespace NoteNest.UI.Controls.Workspace
             }
         }
         
-        private void UpdateDragVisuals(Point position)
+        private void UpdateDragVisuals(Point screenPosition)
         {
             if (!_isDragging)
                 return;
             
-            // Update ghost image position
-            _dragAdorner?.UpdatePosition(position);
+            // Get window for coordinate conversions
+            var mainWindow = Window.GetWindow(_paneView);
+            if (mainWindow == null)
+                return;
             
-            // Calculate insertion index
-            int insertionIndex = TabHitTestHelper.CalculateInsertionIndex(_tabControl, position, _draggedTab);
+            // Convert screen position to window coordinates for adorner updates
+            var windowPosition = mainWindow.PointFromScreen(screenPosition);
             
-            // Update insertion indicator
-            var insertionBounds = TabHitTestHelper.GetInsertionPointBounds(_tabControl, insertionIndex);
-            _insertionAdorner?.UpdateInsertionPoint(insertionBounds);
+            // Update ghost image position (window coordinates)
+            _dragAdorner?.UpdatePosition(windowPosition);
             
-            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Drag position: {position.X:F0}, Insertion index: {insertionIndex}");
+            // Phase 2: Detect which pane we're over using screen coordinates
+            var targetPaneView = FindPaneViewAtPoint(screenPosition);
+            var targetTabControl = targetPaneView?.TabControlElement;
+            
+            // Update tracked target (for cross-pane drops)
+            _currentTargetTabControl = targetTabControl ?? _tabControl;
+            _currentTargetPaneView = targetPaneView ?? _paneView;
+            
+            // Convert screen position to target TabControl's coordinates
+            var targetTabControlPosition = _currentTargetTabControl.PointFromScreen(screenPosition);
+            
+            // Calculate insertion index in the target TabControl
+            int insertionIndex = TabHitTestHelper.CalculateInsertionIndex(_currentTargetTabControl, targetTabControlPosition, _draggedTab);
+            
+            // Get insertion bounds in target TabControl coordinates
+            var insertionBounds = TabHitTestHelper.GetInsertionPointBounds(_currentTargetTabControl, insertionIndex);
+            
+            // Convert insertion bounds to window coordinates for adorner
+            var insertionBoundsInWindow = new Rect(
+                _currentTargetTabControl.TranslatePoint(insertionBounds.TopLeft, mainWindow),
+                _currentTargetTabControl.TranslatePoint(insertionBounds.BottomRight, mainWindow)
+            );
+            
+            // Update insertion indicator with window coordinates
+            _insertionAdorner?.UpdateInsertionPoint(insertionBoundsInWindow);
+            
+            var isCrossPaneDrag = _currentTargetPaneView != _paneView;
+            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Drag - Screen: ({screenPosition.X:F0}, {screenPosition.Y:F0}), Window: ({windowPosition.X:F0}, {windowPosition.Y:F0}), Insertion index: {insertionIndex}, Cross-pane: {isCrossPaneDrag}");
         }
         
-        private void CompleteDrag(Point dropPosition)
+        /// <summary>
+        /// Find which PaneView the mouse is currently over (Phase 2: Cross-pane support)
+        /// </summary>
+        private PaneView FindPaneViewAtPoint(Point screenPosition)
+        {
+            try
+            {
+                // Get the workspace container
+                var workspace = FindWorkspaceViewModel();
+                if (workspace == null || workspace.Panes.Count <= 1)
+                    return _paneView; // Only one pane, stay in current
+                
+                // Try to find PaneView under cursor using hit-testing
+                var mainWindow = Window.GetWindow(_paneView);
+                if (mainWindow == null)
+                    return _paneView;
+                
+                // Convert to window coordinates
+                var windowPoint = mainWindow.PointFromScreen(screenPosition);
+                
+                // Hit-test to find element under cursor
+                var hitElement = mainWindow.InputHitTest(windowPoint) as DependencyObject;
+                
+                // Walk up visual tree to find PaneView
+                return TabHitTestHelper.FindAncestor<PaneView>(hitElement) ?? _paneView;
+            }
+            catch
+            {
+                return _paneView; // Fallback to current pane on error
+            }
+        }
+        
+        private WorkspaceViewModel FindWorkspaceViewModel()
+        {
+            // Walk up the visual tree to find WorkspaceViewModel
+            var current = _paneView as FrameworkElement;
+            while (current != null)
+            {
+                if (current.DataContext is WorkspaceViewModel workspace)
+                    return workspace;
+                
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current) as FrameworkElement;
+            }
+            
+            // Fallback: Check Window.DataContext
+            var window = Window.GetWindow(_paneView);
+            if (window?.DataContext is NoteNest.UI.ViewModels.Shell.MainShellViewModel shell)
+            {
+                return shell.Workspace;
+            }
+            
+            return null;
+        }
+        
+        private void CompleteDrag(Point screenDropPosition)
         {
             if (!_isDragging)
                 return;
             
-            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Completing drag at position: {dropPosition}");
+            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Completing drag at screen position: {screenDropPosition}");
             
             try
             {
-                // Calculate where to insert
-                int insertionIndex = TabHitTestHelper.CalculateInsertionIndex(_tabControl, dropPosition, _draggedTab);
-                int currentIndex = (_paneView.DataContext as PaneViewModel)?.Tabs.IndexOf(_draggedTab) ?? -1;
+                var sourcePaneVm = _paneView.DataContext as PaneViewModel;
+                var targetPaneVm = _currentTargetPaneView?.DataContext as PaneViewModel;
                 
-                System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Current index: {currentIndex}, Target index: {insertionIndex}");
-                
-                // Only move if position changed
-                if (currentIndex != -1 && currentIndex != insertionIndex && insertionIndex >= 0)
+                if (sourcePaneVm == null || targetPaneVm == null || _draggedTab == null)
                 {
-                    var paneVm = _paneView.DataContext as PaneViewModel;
-                    if (paneVm != null)
+                    System.Diagnostics.Debug.WriteLine("[TabDragHandler] Missing ViewModels, aborting drop");
+                    return;
+                }
+                
+                // Convert screen position to target TabControl's coordinates
+                var targetTabControlPosition = _currentTargetTabControl.PointFromScreen(screenDropPosition);
+                
+                // Calculate insertion index in target pane
+                int insertionIndex = TabHitTestHelper.CalculateInsertionIndex(_currentTargetTabControl, targetTabControlPosition, _draggedTab);
+                
+                // Phase 2: Cross-pane drag
+                if (sourcePaneVm != targetPaneVm)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Cross-pane drag detected - moving tab '{_draggedTab.Title}' to other pane at index {insertionIndex}");
+                    
+                    var workspace = FindWorkspaceViewModel();
+                    if (workspace != null)
+                    {
+                        workspace.MoveTabBetweenPanes(_draggedTab, sourcePaneVm, targetPaneVm, insertionIndex);
+                        System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Cross-pane move completed");
+                    }
+                }
+                // Phase 1: Same-pane reorder
+                else
+                {
+                    int currentIndex = sourcePaneVm.Tabs.IndexOf(_draggedTab);
+                    
+                    System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Same-pane reorder: Current index: {currentIndex}, Target index: {insertionIndex}");
+                    
+                    // Only move if position changed
+                    if (currentIndex != -1 && currentIndex != insertionIndex && insertionIndex >= 0)
                     {
                         // Remove from current position
-                        paneVm.Tabs.RemoveAt(currentIndex);
+                        sourcePaneVm.Tabs.RemoveAt(currentIndex);
                         
                         // Adjust insertion index if needed
                         if (insertionIndex > currentIndex)
                             insertionIndex--;
                         
                         // Insert at new position
-                        paneVm.Tabs.Insert(Math.Min(insertionIndex, paneVm.Tabs.Count), _draggedTab);
+                        sourcePaneVm.Tabs.Insert(Math.Min(insertionIndex, sourcePaneVm.Tabs.Count), _draggedTab);
                         
                         // Keep it selected
-                        paneVm.SelectedTab = _draggedTab;
+                        sourcePaneVm.SelectedTab = _draggedTab;
                         
                         System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Tab moved from {currentIndex} to {insertionIndex}");
                     }
