@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using NoteNest.UI.ViewModels.Workspace;
@@ -7,9 +8,12 @@ namespace NoteNest.UI.Controls.Workspace
     /// <summary>
     /// Individual pane view that displays tabs
     /// Part of Milestone 2A: Split View
+    /// Enhanced in Milestone 2B: Drag & Drop
     /// </summary>
-    public partial class PaneView : UserControl
+    public partial class PaneView : UserControl, IDisposable
     {
+        private TabDragHandler _dragHandler;
+        
         public static readonly DependencyProperty ShowPaneCloseButtonProperty =
             DependencyProperty.Register("ShowPaneCloseButton", typeof(bool), typeof(PaneView), new PropertyMetadata(false));
         
@@ -22,7 +26,11 @@ namespace NoteNest.UI.Controls.Workspace
         public PaneView()
         {
             InitializeComponent();
-            System.Diagnostics.Debug.WriteLine("[PaneView] Initialized");
+            
+            // Initialize drag & drop handler (Milestone 2B)
+            _dragHandler = new TabDragHandler(TabControlElement, this);
+            
+            System.Diagnostics.Debug.WriteLine("[PaneView] Initialized with drag & drop support");
         }
         
         /// <summary>
@@ -92,6 +100,12 @@ namespace NoteNest.UI.Controls.Workspace
             }
             
             return null;
+        }
+        
+        public void Dispose()
+        {
+            _dragHandler?.Dispose();
+            _dragHandler = null;
         }
     }
 }

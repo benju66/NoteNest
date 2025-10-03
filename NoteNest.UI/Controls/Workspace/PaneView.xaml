@@ -30,7 +30,7 @@
         </Border.Style>
         <Grid>
             <!-- Professional TabControl with close buttons -->
-            <TabControl 
+            <TabControl x:Name="TabControlElement"
                        ItemsSource="{Binding Tabs}" 
                        SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
                        HorizontalAlignment="Stretch"
