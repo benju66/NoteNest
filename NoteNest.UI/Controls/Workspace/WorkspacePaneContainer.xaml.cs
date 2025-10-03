@@ -81,7 +81,11 @@ namespace NoteNest.UI.Controls.Workspace
             else if (panes.Count == 1)
             {
                 // Single pane - no split
-                var paneView = new PaneView { DataContext = panes[0] };
+                var paneView = new PaneView 
+                { 
+                    DataContext = panes[0],
+                    ShowPaneCloseButton = false // No close button for single pane
+                };
                 ContainerGrid.Children.Add(paneView);
                 System.Diagnostics.Debug.WriteLine($"[WorkspacePaneContainer] Single pane layout");
             }
@@ -97,7 +101,11 @@ namespace NoteNest.UI.Controls.Workspace
                 ContainerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 
                 // Create first pane
-                var paneView1 = new PaneView { DataContext = panes[0] };
+                var paneView1 = new PaneView 
+                { 
+                    DataContext = panes[0],
+                    ShowPaneCloseButton = true // Show close button in split view
+                };
                 Grid.SetColumn(paneView1, 0);
                 ContainerGrid.Children.Add(paneView1);
                 
@@ -114,7 +122,11 @@ namespace NoteNest.UI.Controls.Workspace
                 ContainerGrid.Children.Add(_splitter);
                 
                 // Create second pane
-                var paneView2 = new PaneView { DataContext = panes[1] };
+                var paneView2 = new PaneView 
+                { 
+                    DataContext = panes[1],
+                    ShowPaneCloseButton = true // Show close button in split view
+                };
                 Grid.SetColumn(paneView2, 2);
                 ContainerGrid.Children.Add(paneView2);
                 

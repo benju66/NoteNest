@@ -92,6 +92,8 @@ namespace NoteNest.UI.ViewModels.Workspace
         public ICommand SaveAllTabsCommand { get; private set; }
         public ICommand CloseTabCommand { get; private set; }
         public ICommand SplitVerticalCommand { get; private set; }
+        public ICommand SwitchToPaneCommand { get; private set; }
+        public ICommand ClosePaneCommand { get; private set; }
         
         // Events for coordination
         public event Action<TabViewModel> TabSelected;
@@ -121,6 +123,8 @@ namespace NoteNest.UI.ViewModels.Workspace
             SaveAllTabsCommand = new AsyncRelayCommand(ExecuteSaveAllTabs, CanSaveAllTabs);
             CloseTabCommand = new AsyncRelayCommand<TabViewModel>(ExecuteCloseTab);
             SplitVerticalCommand = new NoteNest.Core.Commands.RelayCommand(ExecuteSplitVertical, () => CanSplit);
+            SwitchToPaneCommand = new NoteNest.Core.Commands.RelayCommand<object>(ExecuteSwitchToPane);
+            ClosePaneCommand = new NoteNest.Core.Commands.RelayCommand(ExecuteClosePane, () => Panes.Count > 1);
         }
         
         /// <summary>
@@ -255,7 +259,8 @@ namespace NoteNest.UI.ViewModels.Workspace
         
         private async Task ExecuteSaveAllTabs()
         {
-            var dirtyTabs = ActivePane.Tabs.Where(t => t.IsDirty).ToList();
+            // FIXED: Save tabs from ALL panes, not just active pane
+            var dirtyTabs = Panes.SelectMany(p => p.Tabs).Where(t => t.IsDirty).ToList();
             if (!dirtyTabs.Any())
             {
                 StatusMessage = "No changes to save";
@@ -408,6 +413,59 @@ namespace NoteNest.UI.ViewModels.Workspace
             StatusMessage = "Editor split";
             
             System.Diagnostics.Debug.WriteLine($"[WorkspaceViewModel] Split created - Pane IDs: {string.Join(", ", Panes.Select(p => p.Id))}");
+        }
+        
+        /// <summary>
+        /// Switch to a specific pane by index (Ctrl+1, Ctrl+2)
+        /// </summary>
+        private void ExecuteSwitchToPane(object parameter)
+        {
+            if (parameter is int index || (parameter is string str && int.TryParse(str, out index)))
+            {
+                if (index >= 0 && index < Panes.Count)
+                {
+                    ActivePane = Panes[index];
+                    _logger.Debug($"[WorkspaceViewModel] Switched to pane {index + 1}");
+                    StatusMessage = $"Switched to pane {index + 1}";
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Close the active pane (merge back to single pane)
+        /// </summary>
+        private void ExecuteClosePane()
+        {
+            if (Panes.Count <= 1)
+            {
+                StatusMessage = "Only one pane open";
+                return;
+            }
+            
+            var paneToClose = ActivePane;
+            var remainingPane = Panes.FirstOrDefault(p => p != paneToClose);
+            
+            if (paneToClose != null && remainingPane != null)
+            {
+                // Move all tabs from closing pane to remaining pane
+                var tabsToMove = paneToClose.Tabs.ToList();
+                foreach (var tab in tabsToMove)
+                {
+                    paneToClose.RemoveTab(tab);
+                    remainingPane.AddTab(tab, select: false);
+                }
+                
+                // Remove the pane
+                Panes.Remove(paneToClose);
+                ActivePane = remainingPane;
+                
+                OnPropertyChanged(nameof(CanSplit));
+                
+                _logger.Info($"[WorkspaceViewModel] Closed pane - Moved {tabsToMove.Count} tabs to remaining pane");
+                StatusMessage = $"Pane closed - {tabsToMove.Count} tab(s) moved";
+                
+                System.Diagnostics.Debug.WriteLine($"[WorkspaceViewModel] Pane closed - Now {Panes.Count} pane(s)");
+            }
         }
         
         #endregion

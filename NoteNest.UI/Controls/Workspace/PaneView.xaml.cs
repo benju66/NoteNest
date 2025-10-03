@@ -10,6 +10,15 @@ namespace NoteNest.UI.Controls.Workspace
     /// </summary>
     public partial class PaneView : UserControl
     {
+        public static readonly DependencyProperty ShowPaneCloseButtonProperty =
+            DependencyProperty.Register("ShowPaneCloseButton", typeof(bool), typeof(PaneView), new PropertyMetadata(false));
+        
+        public bool ShowPaneCloseButton
+        {
+            get => (bool)GetValue(ShowPaneCloseButtonProperty);
+            set => SetValue(ShowPaneCloseButtonProperty, value);
+        }
+        
         public PaneView()
         {
             InitializeComponent();
@@ -51,6 +60,15 @@ namespace NoteNest.UI.Controls.Workspace
                 {
                     workspace.CloseTabCommand.Execute(tab);
                 }
+            }
+        }
+        
+        private void ClosePane_Click(object sender, RoutedEventArgs e)
+        {
+            var workspace = FindWorkspaceViewModel();
+            if (workspace?.ClosePaneCommand?.CanExecute(null) == true)
+            {
+                workspace.ClosePaneCommand.Execute(null);
             }
         }
         
