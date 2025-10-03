@@ -63,7 +63,7 @@
                                        Margin="2,4"
                                        VerticalAlignment="Center"/>
                             
-                            <!-- Close button with LucideCircleX icon -->
+                            <!-- Close button with LucideCircleX icon (shows on tab hover) -->
                             <Button Grid.Column="2"
                                     Click="CloseTab_Click"
                                     Tag="{Binding}"
@@ -71,7 +71,8 @@
                                     Margin="2,2"
                                     Background="Transparent"
                                     BorderThickness="0"
-                                    ToolTip="Close tab (Ctrl+W)">
+                                    ToolTip="Close tab (Ctrl+W)"
+                                    x:Name="TabCloseButton">
                                 <ContentControl Template="{StaticResource LucideCircleX}" 
                                               Width="14" Height="14"
                                               Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
@@ -79,7 +80,14 @@
                                     <Style TargetType="Button">
                                         <Setter Property="Foreground" Value="#888"/>
                                         <Setter Property="Cursor" Value="Hand"/>
+                                        <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
+                                            <!-- Show close button when hovering over entire tab (TabItem) -->
+                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=IsMouseOver}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                            
+                                            <!-- Red highlight when hovering over button itself -->
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter Property="Foreground" Value="#FFF"/>
                                                 <Setter Property="Background" Value="#40FF0000"/>
