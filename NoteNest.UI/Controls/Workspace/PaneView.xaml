@@ -29,42 +29,8 @@
             </Style>
         </Border.Style>
         <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/> <!-- Pane header with close button -->
-                <RowDefinition Height="*"/>    <!-- Tab content -->
-            </Grid.RowDefinitions>
-            
-            <!-- Pane Header (only visible when 2 panes exist) -->
-            <Grid Grid.Row="0" 
-                  Height="24" 
-                  Background="#F5F5F5"
-                  Visibility="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=ShowPaneCloseButton, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Button HorizontalAlignment="Right" 
-                        VerticalAlignment="Center"
-                        Width="20" Height="20"
-                        Margin="2"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        ToolTip="Close this pane"
-                        Click="ClosePane_Click">
-                    <ContentControl Template="{StaticResource LucideCircleX}" 
-                                  Width="14" Height="14"
-                                  Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Cursor" Value="Hand"/>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#E0E0E0"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
-            </Grid>
-            
             <!-- Professional TabControl with close buttons -->
-            <TabControl Grid.Row="1" 
+            <TabControl 
                        ItemsSource="{Binding Tabs}" 
                        SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
                        HorizontalAlignment="Stretch"
@@ -150,6 +116,45 @@
                     </Binding>
                 </TextBlock.Visibility>
             </TextBlock>
+            
+            <!-- Floating close button (only when pane is empty and in split view) -->
+            <Button HorizontalAlignment="Right" 
+                    VerticalAlignment="Top"
+                    Width="24" Height="24"
+                    Margin="8"
+                    Background="#F0F0F0"
+                    BorderThickness="1"
+                    BorderBrush="#D0D0D0"
+                    ToolTip="Close this empty pane"
+                    Click="ClosePane_Click"
+                    Panel.ZIndex="100">
+                <ContentControl Template="{StaticResource LucideCircleX}" 
+                              Width="14" Height="14"
+                              Foreground="#666"/>
+                <Button.Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="Opacity" Value="0.7"/>
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        
+                        <!-- Only show when: split view AND no tabs -->
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=UserControl}, Path=ShowPaneCloseButton}" Value="True"/>
+                                    <Condition Binding="{Binding Tabs.Count}" Value="0"/>
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </MultiDataTrigger>
+                            
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="1"/>
+                                <Setter Property="Background" Value="#E0E0E0"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
         </Grid>
     </Border>
 </UserControl>
