@@ -25,6 +25,10 @@ namespace NoteNest.UI.ViewModels.Workspace
         private bool _isLoading;
         private string _statusMessage;
         
+        // Persistence debouncing (prevent race conditions during rapid operations)
+        private bool _isSaving;
+        private bool _savePending;
+        
         public ObservableCollection<PaneViewModel> Panes { get; }
         
         public PaneViewModel ActivePane
@@ -423,6 +427,7 @@ namespace NoteNest.UI.ViewModels.Workspace
         /// <summary>
         /// Move a tab from one pane to another (used for cross-pane drag & drop)
         /// Part of Milestone 2B: Drag & Drop - Phase 2
+        /// CRITICAL: Uses Dispatcher to prevent WPF reentrancy issues during rapid operations
         /// </summary>
         public void MoveTabBetweenPanes(TabViewModel tab, PaneViewModel sourcePaneVm, PaneViewModel targetPaneVm, int insertIndex)
         {
@@ -436,29 +441,42 @@ namespace NoteNest.UI.ViewModels.Workspace
             if (sourcePaneVm == targetPaneVm)
                 return;
             
-            try
+            // CRITICAL FIX: Queue collection modifications via Dispatcher to prevent WPF reentrancy crashes
+            // This ensures each move completes its UI update before the next one starts
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
             {
-                // CRITICAL: Remove WITHOUT disposing (tab stays alive for target pane)
-                sourcePaneVm.RemoveTabWithoutDispose(tab);
-                
-                // Add to target pane at specific index
-                targetPaneVm.InsertTab(insertIndex, tab);
-                
-                // Set as active tab in target pane
-                targetPaneVm.SelectedTab = tab;
-                
-                // Make target pane active
-                ActivePane = targetPaneVm;
-                
-                _logger.Info($"[WorkspaceViewModel] Moved tab '{tab.Title}' between panes (index: {insertIndex})");
-                
-                // Auto-save workspace state
-                _ = SaveStateAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Failed to move tab '{tab.Title}' between panes");
-            }
+                try
+                {
+                    // Validate tab still exists in source pane (might have been moved by another operation)
+                    if (!sourcePaneVm.Tabs.Contains(tab))
+                    {
+                        _logger.Warning($"[WorkspaceViewModel] Tab '{tab.Title}' no longer in source pane, skipping move");
+                        return;
+                    }
+                    
+                    // CRITICAL: Remove WITHOUT disposing (tab stays alive for target pane)
+                    sourcePaneVm.RemoveTabWithoutDispose(tab);
+                    
+                    // Add to target pane at specific index (clamped to valid range)
+                    int safeIndex = Math.Min(insertIndex, targetPaneVm.Tabs.Count);
+                    targetPaneVm.InsertTab(safeIndex, tab);
+                    
+                    // Set as active tab in target pane
+                    targetPaneVm.SelectedTab = tab;
+                    
+                    // Make target pane active
+                    ActivePane = targetPaneVm;
+                    
+                    _logger.Info($"[WorkspaceViewModel] Moved tab '{tab.Title}' between panes (index: {safeIndex})");
+                    
+                    // Auto-save workspace state
+                    _ = SaveStateAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"Failed to move tab '{tab.Title}' between panes");
+                }
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
         
         #region Milestone 2A: Split View Commands
@@ -713,42 +731,70 @@ namespace NoteNest.UI.ViewModels.Workspace
         /// <summary>
         /// Save current workspace state (tabs and panes) to disk
         /// Called automatically on tab/pane changes and app exit
+        /// Uses debouncing to prevent race conditions during rapid operations
         /// </summary>
         public async Task SaveStateAsync()
         {
+            // Debouncing: If already saving, mark as pending and return
+            if (_isSaving)
+            {
+                _savePending = true;
+                return;
+            }
+            
+            _isSaving = true;
+            
             try
             {
-                var state = new WorkspaceState
+                // Loop to handle pending saves that occurred during save
+                do
                 {
-                    PaneCount = Panes.Count,
-                    ActivePaneIndex = Math.Max(0, Panes.IndexOf(ActivePane))
-                };
-                
-                // Capture state of each pane
-                foreach (var pane in Panes)
-                {
-                    var paneState = new PaneState
+                    _savePending = false;
+                    
+                    // CRITICAL: Take snapshot of collections BEFORE enumerating
+                    // This prevents "Collection was modified" exceptions during rapid operations
+                    var panesSnapshot = Panes.ToList();
+                    var activePaneSnapshot = ActivePane;
+                    
+                    var state = new WorkspaceState
                     {
-                        Tabs = pane.Tabs.Select(t => new TabState
-                        {
-                            TabId = t.TabId,
-                            FilePath = t.Note.FilePath,
-                            Title = t.Title
-                        }).ToList(),
-                        ActiveTabId = pane.SelectedTab?.TabId
+                        PaneCount = panesSnapshot.Count,
+                        ActivePaneIndex = Math.Max(0, panesSnapshot.IndexOf(activePaneSnapshot))
                     };
                     
-                    state.Panes.Add(paneState);
+                    // Capture state of each pane (using snapshot)
+                    foreach (var pane in panesSnapshot)
+                    {
+                        var tabsSnapshot = pane.Tabs.ToList(); // Snapshot tabs too
+                        
+                        var paneState = new PaneState
+                        {
+                            Tabs = tabsSnapshot.Select(t => new TabState
+                            {
+                                TabId = t.TabId,
+                                FilePath = t.Note.FilePath,
+                                Title = t.Title
+                            }).ToList(),
+                            ActiveTabId = pane.SelectedTab?.TabId
+                        };
+                        
+                        state.Panes.Add(paneState);
+                    }
+                    
+                    await _workspacePersistence.SaveAsync(state);
+                    
+                    _logger.Debug($"[WorkspaceViewModel] Saved workspace state: {state.Panes.Sum(p => p.Tabs.Count)} total tabs");
                 }
-                
-                await _workspacePersistence.SaveAsync(state);
-                
-                _logger.Debug($"[WorkspaceViewModel] Saved workspace state: {state.Panes.Sum(p => p.Tabs.Count)} total tabs");
+                while (_savePending); // If another save was requested during save, do it now
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "[WorkspaceViewModel] Failed to save workspace state");
                 // Don't throw - save failures shouldn't crash the app
+            }
+            finally
+            {
+                _isSaving = false;
             }
         }
         
