@@ -8,6 +8,7 @@ using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Notes;
 using NoteNest.UI.ViewModels.Common;
+using System.Collections.Generic;
 
 namespace NoteNest.UI.ViewModels.Workspace
 {
@@ -19,6 +20,7 @@ namespace NoteNest.UI.ViewModels.Workspace
     {
         private readonly ISaveManager _saveManager;
         private readonly IAppLogger _logger;
+        private readonly IWorkspacePersistenceService _workspacePersistence;
         private PaneViewModel _activePane;
         private bool _isLoading;
         private string _statusMessage;
@@ -100,10 +102,14 @@ namespace NoteNest.UI.ViewModels.Workspace
         public event Action<TabViewModel> TabClosed;
         public event Action<string> NoteOpened;
         
-        public WorkspaceViewModel(ISaveManager saveManager, IAppLogger logger)
+        public WorkspaceViewModel(
+            ISaveManager saveManager, 
+            IAppLogger logger,
+            IWorkspacePersistenceService workspacePersistence)
         {
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _workspacePersistence = workspacePersistence ?? throw new ArgumentNullException(nameof(workspacePersistence));
             
             Panes = new ObservableCollection<PaneViewModel>();
             
@@ -113,6 +119,9 @@ namespace NoteNest.UI.ViewModels.Workspace
             ActivePane = initialPane;
             
             InitializeCommands();
+            
+            // Hook up auto-save triggers
+            Panes.CollectionChanged += (s, e) => _ = SaveStateAsync();
             
             _logger.Info("[WorkspaceViewModel] Initialized with single pane");
         }
@@ -219,6 +228,9 @@ namespace NoteNest.UI.ViewModels.Workspace
                 NoteOpened?.Invoke(domainNote.Id.Value);
                 
                 _logger.Info($"Tab opened: {noteModel.Title} (ID: {noteId})");
+                
+                // Auto-save workspace state
+                _ = SaveStateAsync();
             }
             catch (Exception ex)
             {
@@ -355,6 +367,9 @@ namespace NoteNest.UI.ViewModels.Workspace
                 StatusMessage = $"Closed {tab.Title}";
                 
                 _logger.Info($"Tab closed: {tab.Title}");
+                
+                // Auto-save workspace state
+                _ = SaveStateAsync();
             }
             catch (Exception ex)
             {
@@ -465,6 +480,147 @@ namespace NoteNest.UI.ViewModels.Workspace
                 StatusMessage = $"Pane closed - {tabsToMove.Count} tab(s) moved";
                 
                 System.Diagnostics.Debug.WriteLine($"[WorkspaceViewModel] Pane closed - Now {Panes.Count} pane(s)");
+            }
+        }
+        
+        #endregion
+        
+        #region Workspace Persistence (Milestone 2A Completion)
+        
+        /// <summary>
+        /// Save current workspace state (tabs and panes) to disk
+        /// Called automatically on tab/pane changes and app exit
+        /// </summary>
+        public async Task SaveStateAsync()
+        {
+            try
+            {
+                var state = new WorkspaceState
+                {
+                    PaneCount = Panes.Count,
+                    ActivePaneIndex = Math.Max(0, Panes.IndexOf(ActivePane))
+                };
+                
+                // Capture state of each pane
+                foreach (var pane in Panes)
+                {
+                    var paneState = new PaneState
+                    {
+                        Tabs = pane.Tabs.Select(t => new TabState
+                        {
+                            TabId = t.TabId,
+                            FilePath = t.Note.FilePath,
+                            Title = t.Title
+                        }).ToList(),
+                        ActiveTabId = pane.SelectedTab?.TabId
+                    };
+                    
+                    state.Panes.Add(paneState);
+                }
+                
+                await _workspacePersistence.SaveAsync(state);
+                
+                _logger.Debug($"[WorkspaceViewModel] Saved workspace state: {state.Panes.Sum(p => p.Tabs.Count)} total tabs");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[WorkspaceViewModel] Failed to save workspace state");
+                // Don't throw - save failures shouldn't crash the app
+            }
+        }
+        
+        /// <summary>
+        /// Restore workspace state (tabs and panes) from disk
+        /// Called during app startup
+        /// </summary>
+        public async Task RestoreStateAsync()
+        {
+            try
+            {
+                var state = await _workspacePersistence.LoadAsync();
+                if (state == null)
+                {
+                    _logger.Info("[WorkspaceViewModel] No saved state to restore");
+                    return;
+                }
+                
+                _logger.Info($"[WorkspaceViewModel] Restoring workspace: {state.PaneCount} pane(s), " +
+                           $"{state.Panes.Sum(p => p.Tabs.Count)} total tabs");
+                
+                // Create second pane if needed
+                if (state.PaneCount == 2 && Panes.Count == 1)
+                {
+                    ExecuteSplitVertical();
+                    _logger.Debug("[WorkspaceViewModel] Created second pane for split view");
+                }
+                
+                // Restore tabs to each pane
+                for (int paneIndex = 0; paneIndex < state.Panes.Count && paneIndex < Panes.Count; paneIndex++)
+                {
+                    var paneState = state.Panes[paneIndex];
+                    var targetPane = Panes[paneIndex];
+                    
+                    // Temporarily set as active pane for OpenNoteAsync
+                    var previousActivePane = ActivePane;
+                    ActivePane = targetPane;
+                    
+                    foreach (var tabState in paneState.Tabs)
+                    {
+                        try
+                        {
+                            // Check if file still exists
+                            if (!System.IO.File.Exists(tabState.FilePath))
+                            {
+                                _logger.Warning($"[WorkspaceViewModel] Skipping missing file: {tabState.FilePath}");
+                                continue;
+                            }
+                            
+                            // Create minimal Note domain object for opening
+                            // Note: OpenNoteAsync will load content from file, we just need basic metadata
+                            var domainNote = Note.CreateForOpening(
+                                tabState.Title,
+                                tabState.FilePath
+                            );
+                            
+                            // Open note (this will create tab in active pane)
+                            await OpenNoteAsync(domainNote);
+                            
+                            _logger.Debug($"[WorkspaceViewModel] Restored tab: {tabState.Title}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error(ex, $"[WorkspaceViewModel] Failed to restore tab: {tabState.FilePath}");
+                            // Continue with other tabs
+                        }
+                    }
+                    
+                    // Restore selected tab in this pane
+                    if (!string.IsNullOrEmpty(paneState.ActiveTabId))
+                    {
+                        var tabToSelect = targetPane.Tabs.FirstOrDefault(t => t.TabId == paneState.ActiveTabId);
+                        if (tabToSelect != null)
+                        {
+                            targetPane.SelectedTab = tabToSelect;
+                        }
+                    }
+                    
+                    // Restore previous active pane (will set correct one below)
+                    ActivePane = previousActivePane;
+                }
+                
+                // Restore active pane
+                if (state.ActivePaneIndex >= 0 && state.ActivePaneIndex < Panes.Count)
+                {
+                    ActivePane = Panes[state.ActivePaneIndex];
+                }
+                
+                _logger.Info($"[WorkspaceViewModel] Workspace restored: {Panes.Sum(p => p.Tabs.Count)} tabs opened");
+                StatusMessage = $"Restored {Panes.Sum(p => p.Tabs.Count)} tabs";
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[WorkspaceViewModel] Failed to restore workspace state");
+                // Don't throw - restoration failures shouldn't prevent app startup
             }
         }
         

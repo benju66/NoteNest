@@ -63,6 +63,10 @@ namespace NoteNest.UI
                 var mainWindow = _host.Services.GetRequiredService<NoteNest.UI.ViewModels.Shell.MainShellViewModel>();
                 _logger.Info($"✅ MainShellViewModel created - CategoryTree.Categories count: {mainWindow.CategoryTree.Categories.Count}");
                 
+                // Restore workspace state BEFORE showing window
+                await mainWindow.Workspace.RestoreStateAsync();
+                _logger.Info("✅ Workspace state restored");
+                
                 var realMainWindow = new NoteNest.UI.NewMainWindow();
                 realMainWindow.DataContext = mainWindow;
                 realMainWindow.Show();
@@ -105,6 +109,22 @@ namespace NoteNest.UI
         protected override void OnExit(ExitEventArgs e)
         {
             _logger?.Info("Minimal app shutting down...");
+            
+            // Save workspace state before exit
+            try
+            {
+                if (MainWindow?.DataContext is NoteNest.UI.ViewModels.Shell.MainShellViewModel mainShell)
+                {
+                    // Synchronous save (OnExit can't be async)
+                    mainShell.Workspace.SaveStateAsync().GetAwaiter().GetResult();
+                    _logger?.Info("✅ Workspace state saved on exit");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Failed to save workspace state on exit");
+            }
+            
             _host?.Dispose();
             base.OnExit(e);
         }

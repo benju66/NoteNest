@@ -27,6 +27,25 @@ namespace NoteNest.Domain.Notes
 
             AddDomainEvent(new NoteCreatedEvent(Id, CategoryId, Title));
         }
+        
+        /// <summary>
+        /// Factory method for creating a Note for opening in editor (workspace restoration)
+        /// Used when we only have title and file path, not full domain data
+        /// </summary>
+        public static Note CreateForOpening(string title, string filePath)
+        {
+            var note = new Note
+            {
+                Id = NoteId.Create(),
+                CategoryId = CategoryId.Create(), // Placeholder - will be loaded from database if needed
+                Title = title ?? throw new ArgumentNullException(nameof(title)),
+                Content = string.Empty, // Content loaded from file by workspace
+                FilePath = filePath ?? throw new ArgumentNullException(nameof(filePath)),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            return note;
+        }
 
         public Result Rename(string newTitle)
         {

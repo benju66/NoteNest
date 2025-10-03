@@ -189,12 +189,16 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<ITabFactory>(provider =>
                 new NoteNest.UI.Services.UITabFactory(provider.GetRequiredService<ISaveManager>()));
             
+            // Workspace Persistence Service (Milestone 2A - Tab Persistence)
+            services.AddSingleton<IWorkspacePersistenceService, WorkspacePersistenceService>();
+            
             // NEW: Clean Workspace ViewModel (Milestone 1 - Core Tab System)
             // Replaces ModernWorkspaceViewModel with better MVVM separation
             services.AddTransient<NoteNest.UI.ViewModels.Workspace.WorkspaceViewModel>(provider =>
                 new NoteNest.UI.ViewModels.Workspace.WorkspaceViewModel(
                     provider.GetRequiredService<ISaveManager>(),
-                    provider.GetRequiredService<IAppLogger>()));
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<IWorkspacePersistenceService>()));
             
             return services;
         }
