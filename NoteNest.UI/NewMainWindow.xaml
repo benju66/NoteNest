@@ -27,6 +27,12 @@
         <KeyBinding Key="D2" Modifiers="Control" 
                     Command="{Binding Workspace.SwitchToPaneCommand}" 
                     CommandParameter="1"/>
+        
+        <!-- ✨ TIER 1: Tab Cycling (Browser/IDE standard) -->
+        <KeyBinding Key="Tab" Modifiers="Control" 
+                    Command="{Binding Workspace.NextTabCommand}"/>
+        <KeyBinding Key="Tab" Modifiers="Control+Shift" 
+                    Command="{Binding Workspace.PreviousTabCommand}"/>
     </Window.InputBindings>
     <Window.Resources>
         <!-- 🎨 LUCIDE ICON LIBRARY - Pre-compiled resources -->

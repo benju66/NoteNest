@@ -74,6 +74,27 @@ namespace NoteNest.UI.Controls.Workspace
             }
         }
         
+        /// <summary>
+        /// Handle middle-click to close tab (Tier 1 Feature)
+        /// Industry standard behavior from browsers and IDEs
+        /// </summary>
+        private void TabHeader_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            // Middle mouse button closes tab
+            if (e.MiddleButton == System.Windows.Input.MouseButtonState.Pressed)
+            {
+                if (sender is FrameworkElement element && element.Tag is TabViewModel tab)
+                {
+                    var workspace = FindWorkspaceViewModel();
+                    if (workspace?.CloseTabCommand?.CanExecute(tab) == true)
+                    {
+                        workspace.CloseTabCommand.Execute(tab);
+                        e.Handled = true; // Prevent other actions
+                    }
+                }
+            }
+        }
+        
         private void ClosePane_Click(object sender, RoutedEventArgs e)
         {
             var workspace = FindWorkspaceViewModel();
@@ -104,6 +125,55 @@ namespace NoteNest.UI.Controls.Workspace
             
             return null;
         }
+        
+        #region Tier 1 Features: Context Menu Handlers
+        
+        private void ContextMenu_CloseTab_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabViewModel tab)
+            {
+                var workspace = FindWorkspaceViewModel();
+                if (workspace?.CloseTabCommand?.CanExecute(tab) == true)
+                {
+                    workspace.CloseTabCommand.Execute(tab);
+                }
+            }
+        }
+        
+        private void ContextMenu_CloseOtherTabs_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabViewModel tab)
+            {
+                var workspace = FindWorkspaceViewModel();
+                if (workspace?.CloseOtherTabsCommand?.CanExecute(tab) == true)
+                {
+                    workspace.CloseOtherTabsCommand.Execute(tab);
+                }
+            }
+        }
+        
+        private void ContextMenu_CloseAllTabs_Click(object sender, RoutedEventArgs e)
+        {
+            var workspace = FindWorkspaceViewModel();
+            if (workspace?.CloseAllTabsCommand?.CanExecute(null) == true)
+            {
+                workspace.CloseAllTabsCommand.Execute(null);
+            }
+        }
+        
+        private void ContextMenu_MoveToOtherPane_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuItem menuItem && menuItem.Tag is TabViewModel tab)
+            {
+                var workspace = FindWorkspaceViewModel();
+                if (workspace?.MoveToOtherPaneCommand?.CanExecute(tab) == true)
+                {
+                    workspace.MoveToOtherPaneCommand.Execute(tab);
+                }
+            }
+        }
+        
+        #endregion
         
         public void Dispose()
         {

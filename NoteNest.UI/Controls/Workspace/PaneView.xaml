@@ -39,7 +39,26 @@
                 <TabControl.ItemTemplate>
                     <DataTemplate>
                         <!-- Professional tab header with close button (from Milestone 1) -->
-                        <Grid MaxWidth="200" ToolTip="{Binding Note.FilePath}">
+                        <!-- Tier 1 Features: Middle-click support + Context menu -->
+                        <Grid MaxWidth="200" ToolTip="{Binding Note.FilePath}" 
+                              PreviewMouseDown="TabHeader_PreviewMouseDown"
+                              Tag="{Binding}">
+                            <Grid.ContextMenu>
+                                <ContextMenu x:Name="TabContextMenu">
+                                    <MenuItem Header="Close Tab" 
+                                              Click="ContextMenu_CloseTab_Click"
+                                              Tag="{Binding}"/>
+                                    <MenuItem Header="Close Other Tabs" 
+                                              Click="ContextMenu_CloseOtherTabs_Click"
+                                              Tag="{Binding}"/>
+                                    <MenuItem Header="Close All Tabs" 
+                                              Click="ContextMenu_CloseAllTabs_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="Move to Other Pane" 
+                                              Click="ContextMenu_MoveToOtherPane_Click"
+                                              Tag="{Binding}"/>
+                                </ContextMenu>
+                            </Grid.ContextMenu>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>       <!-- Title -->
                                 <ColumnDefinition Width="Auto"/>    <!-- Dirty indicator -->

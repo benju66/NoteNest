@@ -97,6 +97,15 @@ namespace NoteNest.UI.ViewModels.Workspace
         public ICommand SwitchToPaneCommand { get; private set; }
         public ICommand ClosePaneCommand { get; private set; }
         
+        // Tier 1 Features: Tab cycling
+        public ICommand NextTabCommand { get; private set; }
+        public ICommand PreviousTabCommand { get; private set; }
+        
+        // Tier 1 Features: Context menu commands
+        public ICommand CloseAllTabsCommand { get; private set; }
+        public ICommand CloseOtherTabsCommand { get; private set; }
+        public ICommand MoveToOtherPaneCommand { get; private set; }
+        
         // Events for coordination
         public event Action<TabViewModel> TabSelected;
         public event Action<TabViewModel> TabClosed;
@@ -134,6 +143,15 @@ namespace NoteNest.UI.ViewModels.Workspace
             SplitVerticalCommand = new NoteNest.Core.Commands.RelayCommand(ExecuteSplitVertical, () => CanSplit);
             SwitchToPaneCommand = new NoteNest.Core.Commands.RelayCommand<object>(ExecuteSwitchToPane);
             ClosePaneCommand = new NoteNest.Core.Commands.RelayCommand(ExecuteClosePane, () => Panes.Count > 1);
+            
+            // Tier 1 Features: Tab cycling commands
+            NextTabCommand = new NoteNest.Core.Commands.RelayCommand(ExecuteNextTab, () => HasOpenTabs);
+            PreviousTabCommand = new NoteNest.Core.Commands.RelayCommand(ExecutePreviousTab, () => HasOpenTabs);
+            
+            // Tier 1 Features: Context menu commands
+            CloseAllTabsCommand = new AsyncRelayCommand(ExecuteCloseAllTabs, () => HasOpenTabs);
+            CloseOtherTabsCommand = new AsyncRelayCommand<TabViewModel>(ExecuteCloseOtherTabs);
+            MoveToOtherPaneCommand = new NoteNest.Core.Commands.RelayCommand<TabViewModel>(ExecuteMoveToOtherPane);
         }
         
         /// <summary>
@@ -420,8 +438,8 @@ namespace NoteNest.UI.ViewModels.Workspace
             
             try
             {
-                // Remove from source pane
-                sourcePaneVm.RemoveTab(tab);
+                // CRITICAL: Remove WITHOUT disposing (tab stays alive for target pane)
+                sourcePaneVm.RemoveTabWithoutDispose(tab);
                 
                 // Add to target pane at specific index
                 targetPaneVm.InsertTab(insertIndex, tab);
@@ -521,6 +539,170 @@ namespace NoteNest.UI.ViewModels.Workspace
                 StatusMessage = $"Pane closed - {tabsToMove.Count} tab(s) moved";
                 
                 System.Diagnostics.Debug.WriteLine($"[WorkspaceViewModel] Pane closed - Now {Panes.Count} pane(s)");
+            }
+        }
+        
+        #endregion
+        
+        #region Tier 1 Features: Tab Cycling Commands
+        
+        /// <summary>
+        /// Cycle to next tab (Ctrl+Tab)
+        /// Browser/IDE standard behavior
+        /// </summary>
+        private void ExecuteNextTab()
+        {
+            if (ActivePane == null || !ActivePane.HasTabs)
+                return;
+            
+            var tabs = ActivePane.Tabs;
+            var currentIndex = tabs.IndexOf(ActivePane.SelectedTab);
+            
+            if (currentIndex == -1)
+            {
+                // No selection, select first tab
+                ActivePane.SelectedTab = tabs.First();
+            }
+            else
+            {
+                // Move to next tab (wrap around to first)
+                var nextIndex = (currentIndex + 1) % tabs.Count;
+                ActivePane.SelectedTab = tabs[nextIndex];
+            }
+            
+            _logger.Debug($"[WorkspaceViewModel] Cycled to next tab: {ActivePane.SelectedTab?.Title}");
+        }
+        
+        /// <summary>
+        /// Cycle to previous tab (Ctrl+Shift+Tab)
+        /// Browser/IDE standard behavior
+        /// </summary>
+        private void ExecutePreviousTab()
+        {
+            if (ActivePane == null || !ActivePane.HasTabs)
+                return;
+            
+            var tabs = ActivePane.Tabs;
+            var currentIndex = tabs.IndexOf(ActivePane.SelectedTab);
+            
+            if (currentIndex == -1)
+            {
+                // No selection, select last tab
+                ActivePane.SelectedTab = tabs.Last();
+            }
+            else
+            {
+                // Move to previous tab (wrap around to last)
+                var prevIndex = currentIndex == 0 ? tabs.Count - 1 : currentIndex - 1;
+                ActivePane.SelectedTab = tabs[prevIndex];
+            }
+            
+            _logger.Debug($"[WorkspaceViewModel] Cycled to previous tab: {ActivePane.SelectedTab?.Title}");
+        }
+        
+        #endregion
+        
+        #region Tier 1 Features: Context Menu Commands
+        
+        /// <summary>
+        /// Close all tabs in the active pane
+        /// </summary>
+        private async Task ExecuteCloseAllTabs()
+        {
+            if (ActivePane == null || !ActivePane.HasTabs)
+                return;
+            
+            try
+            {
+                var tabsToClose = ActivePane.Tabs.ToList(); // Copy to avoid collection modification
+                var count = tabsToClose.Count;
+                
+                foreach (var tab in tabsToClose)
+                {
+                    await ExecuteCloseTab(tab);
+                }
+                
+                _logger.Info($"[WorkspaceViewModel] Closed all {count} tabs");
+                StatusMessage = $"Closed {count} tab(s)";
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to close all tabs");
+                StatusMessage = "Error closing tabs";
+            }
+        }
+        
+        /// <summary>
+        /// Close all tabs except the specified one
+        /// </summary>
+        private async Task ExecuteCloseOtherTabs(TabViewModel keepTab)
+        {
+            if (keepTab == null || ActivePane == null)
+                return;
+            
+            try
+            {
+                var tabsToClose = ActivePane.Tabs.Where(t => t != keepTab).ToList();
+                var count = tabsToClose.Count;
+                
+                if (count == 0)
+                {
+                    StatusMessage = "No other tabs to close";
+                    return;
+                }
+                
+                foreach (var tab in tabsToClose)
+                {
+                    await ExecuteCloseTab(tab);
+                }
+                
+                _logger.Info($"[WorkspaceViewModel] Closed {count} other tabs, kept '{keepTab.Title}'");
+                StatusMessage = $"Closed {count} other tab(s)";
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to close other tabs");
+                StatusMessage = "Error closing tabs";
+            }
+        }
+        
+        /// <summary>
+        /// Move tab to the other pane (smart: auto-splits if needed)
+        /// </summary>
+        private void ExecuteMoveToOtherPane(TabViewModel tab)
+        {
+            if (tab == null)
+                return;
+            
+            try
+            {
+                // If only 1 pane, split first
+                if (Panes.Count == 1)
+                {
+                    ExecuteSplitVertical();
+                    _logger.Info("[WorkspaceViewModel] Auto-split workspace for 'Move to Other Pane'");
+                }
+                
+                // Find source and target panes
+                var sourcePaneVm = FindPaneContainingTab(tab);
+                var targetPaneVm = Panes.FirstOrDefault(p => p != sourcePaneVm);
+                
+                if (sourcePaneVm == null || targetPaneVm == null)
+                {
+                    _logger.Warning("[WorkspaceViewModel] Could not find source or target pane");
+                    return;
+                }
+                
+                // Move tab to target pane (append to end)
+                MoveTabBetweenPanes(tab, sourcePaneVm, targetPaneVm, targetPaneVm.Tabs.Count);
+                
+                _logger.Info($"[WorkspaceViewModel] Moved tab '{tab.Title}' to other pane");
+                StatusMessage = $"Moved '{tab.Title}' to other pane";
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to move tab '{tab?.Title}' to other pane");
+                StatusMessage = "Error moving tab";
             }
         }
         

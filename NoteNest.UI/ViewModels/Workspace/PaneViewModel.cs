@@ -124,6 +124,31 @@ namespace NoteNest.UI.ViewModels.Workspace
         }
         
         /// <summary>
+        /// Remove tab WITHOUT disposing (used for move operations between panes)
+        /// The tab remains alive and functional in the target pane
+        /// Part of Tier 1 Features: Bug fix for cross-pane moves
+        /// </summary>
+        public void RemoveTabWithoutDispose(TabViewModel tab)
+        {
+            if (tab == null || !Tabs.Contains(tab)) return;
+            
+            var index = Tabs.IndexOf(tab);
+            Tabs.Remove(tab);
+            
+            // Select adjacent tab if the removed tab was selected
+            if (SelectedTab == tab && Tabs.Count > 0)
+            {
+                // Select previous tab, or first tab if we removed the first one
+                var newIndex = Math.Max(0, index - 1);
+                SelectedTab = Tabs[newIndex];
+            }
+            
+            // NOTE: Do NOT dispose - tab is being moved, not closed
+            
+            System.Diagnostics.Debug.WriteLine($"[PaneViewModel] Removed tab for move: {tab.Title} (Remaining: {Tabs.Count})");
+        }
+        
+        /// <summary>
         /// Find tab by TabId
         /// </summary>
         public TabViewModel FindTabById(string tabId)
