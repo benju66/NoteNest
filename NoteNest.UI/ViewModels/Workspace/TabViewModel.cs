@@ -56,6 +56,9 @@ namespace NoteNest.UI.ViewModels.Workspace
                 // Update SaveManager (includes WAL protection automatically)
                 _saveManager.UpdateContent(TabId, rtfContent);
                 
+                System.Diagnostics.Debug.WriteLine($"[TabViewModel] Content changed for {Title}: {rtfContent?.Length ?? 0} chars");
+                System.Diagnostics.Debug.WriteLine($"[TabViewModel] TabId: {TabId}, IsDirty: true");
+                
                 // Update UI state
                 IsDirty = true;
                 _lastChangeTime = DateTime.Now;
@@ -162,12 +165,18 @@ namespace NoteNest.UI.ViewModels.Workspace
                 IsSaving = true;
                 OnPropertyChanged(nameof(IsSaving));
                 
-                await _saveManager.SaveNoteAsync(TabId);
-                System.Diagnostics.Debug.WriteLine($"[TabViewModel] Manual save: {Title}");
+                System.Diagnostics.Debug.WriteLine($"[TabViewModel] Manual save STARTING: {Title}, TabId: {TabId}");
+                System.Diagnostics.Debug.WriteLine($"[TabViewModel] Content in SaveManager: {_saveManager.GetContent(TabId)?.Length ?? 0} chars");
+                System.Diagnostics.Debug.WriteLine($"[TabViewModel] File path: {_saveManager.GetFilePath(TabId)}");
+                
+                var result = await _saveManager.SaveNoteAsync(TabId);
+                
+                System.Diagnostics.Debug.WriteLine($"[TabViewModel] Manual save RESULT: {result} for {Title}");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[TabViewModel] Save error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[TabViewModel] Stack trace: {ex.StackTrace}");
                 throw;
             }
             finally

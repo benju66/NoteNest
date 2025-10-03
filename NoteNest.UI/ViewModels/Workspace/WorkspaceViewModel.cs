@@ -32,16 +32,26 @@ namespace NoteNest.UI.ViewModels.Workspace
             {
                 if (_activePane != value)
                 {
+                    // Unsubscribe from old pane
                     if (_activePane != null)
+                    {
                         _activePane.IsActive = false;
+                        _activePane.PropertyChanged -= OnActivePanePropertyChanged;
+                    }
                     
                     _activePane = value;
                     
+                    // Subscribe to new pane
                     if (_activePane != null)
+                    {
                         _activePane.IsActive = true;
+                        _activePane.PropertyChanged += OnActivePanePropertyChanged;
+                    }
                     
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(SelectedTab));
+                    OnPropertyChanged(nameof(OpenTabs));
+                    OnPropertyChanged(nameof(HasOpenTabs));
                 }
             }
         }
@@ -111,6 +121,25 @@ namespace NoteNest.UI.ViewModels.Workspace
         }
         
         /// <summary>
+        /// Handle property changes from the active pane to propagate to UI
+        /// </summary>
+        private void OnActivePanePropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            // Propagate important property changes from pane to workspace
+            if (e.PropertyName == nameof(PaneViewModel.SelectedTab))
+            {
+                OnPropertyChanged(nameof(SelectedTab));
+                TabSelected?.Invoke(SelectedTab);
+                System.Diagnostics.Debug.WriteLine($"[WorkspaceViewModel] Tab selected: {SelectedTab?.Title ?? "null"}");
+            }
+            else if (e.PropertyName == nameof(PaneViewModel.Tabs) || e.PropertyName == nameof(PaneViewModel.HasTabs))
+            {
+                OnPropertyChanged(nameof(OpenTabs));
+                OnPropertyChanged(nameof(HasOpenTabs));
+            }
+        }
+        
+        /// <summary>
         /// Open a note in the active pane
         /// </summary>
         public async Task OpenNoteAsync(Note domainNote)
@@ -134,15 +163,17 @@ namespace NoteNest.UI.ViewModels.Workspace
                     return;
                 }
                 
-                // Load content from file
-                string noteContent = domainNote.Content ?? "";
-                if (string.IsNullOrEmpty(noteContent) && !string.IsNullOrEmpty(domainNote.FilePath))
+                // CRITICAL FIX: Always load content from file, not from database
+                // Database Content field is metadata only - actual content is in the file
+                string noteContent = "";
+                if (!string.IsNullOrEmpty(domainNote.FilePath) && System.IO.File.Exists(domainNote.FilePath))
                 {
-                    if (System.IO.File.Exists(domainNote.FilePath))
-                    {
-                        noteContent = await System.IO.File.ReadAllTextAsync(domainNote.FilePath);
-                        _logger.Debug($"Loaded content from file: {domainNote.FilePath} ({noteContent.Length} chars)");
-                    }
+                    noteContent = await System.IO.File.ReadAllTextAsync(domainNote.FilePath);
+                    _logger.Debug($"Loaded content from file: {domainNote.FilePath} ({noteContent.Length} chars)");
+                }
+                else
+                {
+                    _logger.Warning($"File not found for note: {domainNote.Title} at {domainNote.FilePath}");
                 }
                 
                 // Convert to NoteModel

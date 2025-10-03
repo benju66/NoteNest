@@ -348,8 +348,13 @@ namespace NoteNest.Core.Services
 
             try
             {
+                System.Diagnostics.Debug.WriteLine($"[AtomicSaveAsync] Writing to temp file: {tempContent}");
+                System.Diagnostics.Debug.WriteLine($"[AtomicSaveAsync] Content length: {rtfContent?.Length ?? 0} chars");
+                
                 // 1. Write both files to temp location
                 await File.WriteAllTextAsync(tempContent, rtfContent ?? string.Empty);
+                
+                System.Diagnostics.Debug.WriteLine($"[AtomicSaveAsync] Temp file written successfully");
                 
                 var metadata = new NoteMetadata
                 {
@@ -364,8 +369,13 @@ namespace NoteNest.Core.Services
                     new JsonSerializerOptions { WriteIndented = true });
                 await File.WriteAllTextAsync(tempMeta, metaJson);
 
+                System.Diagnostics.Debug.WriteLine($"[AtomicSaveAsync] Moving temp file to final location: {contentFile}");
+                
                 // 2. Atomic move both files (as atomic as possible on Windows)
                 File.Move(tempContent, contentFile, true);
+                
+                System.Diagnostics.Debug.WriteLine($"[AtomicSaveAsync] Content file moved successfully!");
+                System.Diagnostics.Debug.WriteLine($"[AtomicSaveAsync] File exists check: {File.Exists(contentFile)}");
                 
                 try
                 {
@@ -688,17 +698,33 @@ namespace NoteNest.Core.Services
         public async Task<bool> SaveNoteAsync(string noteId)
         {
             if (string.IsNullOrEmpty(noteId))
+            {
+                System.Diagnostics.Debug.WriteLine("[RTFIntegratedSaveEngine] SaveNoteAsync called with empty noteId");
                 return false;
+            }
 
             var content = _noteContents.TryGetValue(noteId, out var noteContent) ? noteContent : "";
             var filePath = _noteFilePaths.TryGetValue(noteId, out var notePath) ? notePath : "";
             
+            System.Diagnostics.Debug.WriteLine($"[RTFIntegratedSaveEngine] SaveNoteAsync called:");
+            System.Diagnostics.Debug.WriteLine($"  - NoteId: {noteId}");
+            System.Diagnostics.Debug.WriteLine($"  - Content length: {content.Length} chars");
+            System.Diagnostics.Debug.WriteLine($"  - File path: {filePath}");
+            
             if (string.IsNullOrEmpty(filePath))
+            {
+                System.Diagnostics.Debug.WriteLine("[RTFIntegratedSaveEngine] ERROR: No file path for noteId!");
                 return false;
+            }
 
             try
             {
-                var result = await SaveRTFContentAsync(noteId, content, Path.GetFileNameWithoutExtension(filePath), SaveType.Manual);
+                var title = Path.GetFileNameWithoutExtension(filePath);
+                System.Diagnostics.Debug.WriteLine($"[RTFIntegratedSaveEngine] Calling SaveRTFContentAsync with title: {title}");
+                
+                var result = await SaveRTFContentAsync(noteId, content, title, SaveType.Manual);
+                
+                System.Diagnostics.Debug.WriteLine($"[RTFIntegratedSaveEngine] SaveRTFContentAsync result: Success={result.Success}, Error={result.Error}");
                 
                 if (result.Success)
                 {
@@ -716,12 +742,16 @@ namespace NoteNest.Core.Services
                         Timestamp = DateTime.UtcNow,
                         Priority = SavePriority.UserSave
                     });
+                    
+                    System.Diagnostics.Debug.WriteLine($"[RTFIntegratedSaveEngine] File should be written to: {filePath}");
                 }
                 
                 return result.Success;
             }
             catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[RTFIntegratedSaveEngine] SaveNoteAsync exception: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[RTFIntegratedSaveEngine] Stack trace: {ex.StackTrace}");
                 _statusNotifier.ShowStatus($"Save failed: {ex.Message}", StatusType.Error);
                 return false;
             }
