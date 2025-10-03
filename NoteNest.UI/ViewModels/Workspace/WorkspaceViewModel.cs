@@ -29,6 +29,10 @@ namespace NoteNest.UI.ViewModels.Workspace
         private bool _isSaving;
         private bool _savePending;
         
+        // Move operation throttling (prevent WPF reentrancy crashes)
+        private bool _isMoveInProgress;
+        private readonly object _moveLock = new object();
+        
         public ObservableCollection<PaneViewModel> Panes { get; }
         
         public PaneViewModel ActivePane
@@ -155,7 +159,7 @@ namespace NoteNest.UI.ViewModels.Workspace
             // Tier 1 Features: Context menu commands
             CloseAllTabsCommand = new AsyncRelayCommand(ExecuteCloseAllTabs, () => HasOpenTabs);
             CloseOtherTabsCommand = new AsyncRelayCommand<TabViewModel>(ExecuteCloseOtherTabs);
-            MoveToOtherPaneCommand = new NoteNest.Core.Commands.RelayCommand<TabViewModel>(ExecuteMoveToOtherPane);
+            MoveToOtherPaneCommand = new NoteNest.Core.Commands.RelayCommand<TabViewModel>(ExecuteMoveToOtherPane, CanMoveToOtherPane);
         }
         
         /// <summary>
@@ -441,42 +445,50 @@ namespace NoteNest.UI.ViewModels.Workspace
             if (sourcePaneVm == targetPaneVm)
                 return;
             
-            // CRITICAL FIX: Queue collection modifications via Dispatcher to prevent WPF reentrancy crashes
-            // This ensures each move completes its UI update before the next one starts
-            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            try
             {
-                try
+                // Validate tab still exists in source pane
+                if (!sourcePaneVm.Tabs.Contains(tab))
                 {
-                    // Validate tab still exists in source pane (might have been moved by another operation)
-                    if (!sourcePaneVm.Tabs.Contains(tab))
-                    {
-                        _logger.Warning($"[WorkspaceViewModel] Tab '{tab.Title}' no longer in source pane, skipping move");
-                        return;
-                    }
-                    
-                    // CRITICAL: Remove WITHOUT disposing (tab stays alive for target pane)
-                    sourcePaneVm.RemoveTabWithoutDispose(tab);
-                    
-                    // Add to target pane at specific index (clamped to valid range)
-                    int safeIndex = Math.Min(insertIndex, targetPaneVm.Tabs.Count);
-                    targetPaneVm.InsertTab(safeIndex, tab);
-                    
-                    // Set as active tab in target pane
-                    targetPaneVm.SelectedTab = tab;
-                    
-                    // Make target pane active
-                    ActivePane = targetPaneVm;
-                    
-                    _logger.Info($"[WorkspaceViewModel] Moved tab '{tab.Title}' between panes (index: {safeIndex})");
-                    
-                    // Auto-save workspace state
-                    _ = SaveStateAsync();
+                    _logger.Warning($"[WorkspaceViewModel] Tab '{tab.Title}' no longer in source pane, skipping move");
+                    return;
                 }
-                catch (Exception ex)
+                
+                // CRITICAL FIX v3: Direct modification (simplest, most reliable)
+                // Context menu commands already run on UI thread, no Dispatcher needed
+                // BeginInvoke was causing async timing issues leading to crashes
+                
+                // STEP 1: Remove from source (WITHOUT disposing)
+                sourcePaneVm.RemoveTabWithoutDispose(tab);
+                
+                // STEP 2: Add to target pane at specific index
+                int safeIndex = Math.Min(insertIndex, targetPaneVm.Tabs.Count);
+                targetPaneVm.InsertTab(safeIndex, tab);
+                
+                // STEP 3: Update selection and active pane
+                targetPaneVm.SelectedTab = tab;
+                ActivePane = targetPaneVm;
+                
+                _logger.Info($"[WorkspaceViewModel] Moved tab '{tab.Title}' between panes (index: {safeIndex})");
+                
+                // STEP 4: Save workspace state (async, fire-and-forget)
+                _ = SaveStateAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to move tab '{tab.Title}' between panes");
+            }
+            finally
+            {
+                // Release throttle lock
+                lock (_moveLock)
                 {
-                    _logger.Error(ex, $"Failed to move tab '{tab.Title}' between panes");
+                    _isMoveInProgress = false;
                 }
-            }), System.Windows.Threading.DispatcherPriority.Background);
+                
+                // Notify command can execute changed (re-enable context menu)
+                (MoveToOtherPaneCommand as NoteNest.Core.Commands.RelayCommand<TabViewModel>)?.RaiseCanExecuteChanged();
+            }
         }
         
         #region Milestone 2A: Split View Commands
@@ -686,11 +698,23 @@ namespace NoteNest.UI.ViewModels.Workspace
         
         /// <summary>
         /// Move tab to the other pane (smart: auto-splits if needed)
+        /// CRITICAL: Uses throttling to prevent WPF crashes during rapid operations
         /// </summary>
         private void ExecuteMoveToOtherPane(TabViewModel tab)
         {
             if (tab == null)
                 return;
+            
+            // CRITICAL: Prevent overlapping move operations (causes WPF crashes)
+            lock (_moveLock)
+            {
+                if (_isMoveInProgress)
+                {
+                    _logger.Debug($"[WorkspaceViewModel] Move already in progress, skipping for '{tab.Title}'");
+                    return;
+                }
+                _isMoveInProgress = true;
+            }
             
             try
             {
@@ -722,6 +746,14 @@ namespace NoteNest.UI.ViewModels.Workspace
                 _logger.Error(ex, $"Failed to move tab '{tab?.Title}' to other pane");
                 StatusMessage = "Error moving tab";
             }
+        }
+        
+        /// <summary>
+        /// Check if a tab can be moved to other pane (not during another move operation)
+        /// </summary>
+        private bool CanMoveToOtherPane(TabViewModel tab)
+        {
+            return tab != null && !_isMoveInProgress;
         }
         
         #endregion
