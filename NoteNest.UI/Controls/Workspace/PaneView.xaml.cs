@@ -16,14 +16,25 @@ namespace NoteNest.UI.Controls.Workspace
             System.Diagnostics.Debug.WriteLine("[PaneView] Initialized");
         }
         
+        /// <summary>
+        /// Activate pane when user clicks anywhere in it
+        /// </summary>
+        private void Border_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            ActivateThisPane();
+        }
+        
         private void TabControl_GotFocus(object sender, RoutedEventArgs e)
         {
-            // Notify parent workspace that this pane is now active
+            ActivateThisPane();
+        }
+        
+        private void ActivateThisPane()
+        {
             if (DataContext is PaneViewModel paneVm)
             {
-                // Find the WorkspaceViewModel in the visual tree
                 var workspace = FindWorkspaceViewModel();
-                if (workspace != null)
+                if (workspace != null && workspace.ActivePane != paneVm)
                 {
                     workspace.ActivePane = paneVm;
                     System.Diagnostics.Debug.WriteLine($"[PaneView] Pane activated: {paneVm.Id}");

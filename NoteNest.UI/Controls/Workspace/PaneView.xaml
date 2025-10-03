@@ -9,7 +9,20 @@
         <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
     </UserControl.Resources>
     
-    <Border BorderThickness="2" BorderBrush="{Binding IsActive, Converter={StaticResource ActivePaneBorderConverter}}">
+    <Border BorderThickness="2" 
+            BorderBrush="{Binding IsActive, Converter={StaticResource ActivePaneBorderConverter}}"
+            Background="Transparent"
+            PreviewMouseDown="Border_PreviewMouseDown">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Style.Triggers>
+                    <!-- Subtle highlight on hover to show pane is clickable -->
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#08000000"/> <!-- Very subtle gray -->
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
         <Grid>
             <!-- Professional TabControl with close buttons -->
             <TabControl ItemsSource="{Binding Tabs}" 
