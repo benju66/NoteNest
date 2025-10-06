@@ -2,124 +2,72 @@ using System;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
-using ModernWpf.Controls;
 using NoteNest.Core.Interfaces;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.Services
 {
+	/// <summary>
+	/// User notification service using standard WPF MessageBox
+	/// Migrated from ModernWPF to standard WPF dialogs
+	/// </summary>
 	public class UserNotificationService : IUserNotificationService
 	{
-		private readonly IAppLogger? _logger;
+		private readonly Window? _mainWindow;
 		private readonly Dispatcher _dispatcher;
-		private Window? _mainWindow;
+		private readonly IAppLogger? _logger;
 
 		public UserNotificationService(Window? mainWindow = null, IAppLogger? logger = null)
 		{
-			_logger = logger ?? AppLogger.Instance;
-                     _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+			_dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+			_logger = logger;
 			_mainWindow = mainWindow;
 		}
 
 		public async Task ShowErrorAsync(string message, Exception? exception = null)
 		{
 			_logger?.Error(exception, message);
-			if (_dispatcher.CheckAccess())
+			await _dispatcher.InvokeAsync(() =>
 			{
-				await ShowDialogCoreAsync(() => new ContentDialog
-				{
-					Title = "Error",
-					Content = exception != null ? $"{message}\n\nDetails: {exception.Message}" : message,
-					CloseButtonText = "OK",
-					DefaultButton = ContentDialogButton.Close
-				});
-				return;
-			}
-			await _dispatcher.InvokeAsync(async () =>
-			{
-				await ShowDialogCoreAsync(() => new ContentDialog
-				{
-					Title = "Error",
-					Content = exception != null ? $"{message}\n\nDetails: {exception.Message}" : message,
-					CloseButtonText = "OK",
-					DefaultButton = ContentDialogButton.Close
-				});
+				var content = exception != null ? $"{message}\n\nDetails: {exception.Message}" : message;
+				var owner = GetSafeOwner();
+				MessageBox.Show(owner, content, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
 			});
 		}
 
 		public async Task ShowWarningAsync(string message)
 		{
-			if (_dispatcher.CheckAccess())
+			await _dispatcher.InvokeAsync(() =>
 			{
-				await ShowDialogCoreAsync(() => new ContentDialog
-				{
-					Title = "Warning",
-					Content = message,
-					CloseButtonText = "OK",
-					DefaultButton = ContentDialogButton.Close
-				});
-				return;
-			}
-			await _dispatcher.InvokeAsync(async () =>
-			{
-				await ShowDialogCoreAsync(() => new ContentDialog
-				{
-					Title = "Warning",
-					Content = message,
-					CloseButtonText = "OK",
-					DefaultButton = ContentDialogButton.Close
-				});
+				var owner = GetSafeOwner();
+				MessageBox.Show(owner, message, "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
 			});
 		}
 
 		public async Task ShowInfoAsync(string message)
 		{
-			if (_dispatcher.CheckAccess())
+			await _dispatcher.InvokeAsync(() =>
 			{
-				await ShowDialogCoreAsync(() => new ContentDialog
-				{
-					Title = "Information",
-					Content = message,
-					CloseButtonText = "OK",
-					DefaultButton = ContentDialogButton.Close
-				});
-				return;
-			}
-			await _dispatcher.InvokeAsync(async () =>
-			{
-				await ShowDialogCoreAsync(() => new ContentDialog
-				{
-					Title = "Information",
-					Content = message,
-					CloseButtonText = "OK",
-					DefaultButton = ContentDialogButton.Close
-				});
+				var owner = GetSafeOwner();
+				MessageBox.Show(owner, message, "Information", MessageBoxButton.OK, MessageBoxImage.Information);
 			});
 		}
 
 		public async Task<bool> ShowConfirmationAsync(string message, string title = "Confirm")
 		{
-			if (_dispatcher.CheckAccess())
+			var result = false;
+			await _dispatcher.InvokeAsync(() =>
 			{
-				var r = await ShowDialogCoreAsync(() => new ContentDialog
-				{
-					Title = title,
-					Content = message,
-					PrimaryButtonText = "Yes",
-					CloseButtonText = "No",
-					DefaultButton = ContentDialogButton.Primary
-				});
-				return r == ContentDialogResult.Primary;
-			}
-			var result = await (await _dispatcher.InvokeAsync(() => ShowDialogCoreAsync(() => new ContentDialog
-			{
-				Title = title,
-				Content = message,
-				PrimaryButtonText = "Yes",
-				CloseButtonText = "No",
-				DefaultButton = ContentDialogButton.Primary
-			}))); 
-			return result == ContentDialogResult.Primary;
+				var owner = GetSafeOwner();
+				var messageBoxResult = MessageBox.Show(owner, message, title, MessageBoxButton.YesNo, MessageBoxImage.Question);
+				result = messageBoxResult == MessageBoxResult.Yes;
+			});
+			return result;
+		}
+
+		public async Task<bool> AskYesNoAsync(string title, string message)
+		{
+			return await ShowConfirmationAsync(message, title);
 		}
 
 		public void ShowToast(string message, NotificationType type = NotificationType.Info)
@@ -133,29 +81,11 @@ namespace NoteNest.UI.Services
 			};
 		}
 
-		private async Task<ContentDialogResult> ShowDialogCoreAsync(Func<ContentDialog> createDialog)
-		{
-			var owner = GetSafeOwner();
-			if (owner == null) return ContentDialogResult.None;
-			var dialog = createDialog();
-			dialog.Owner = owner;
-			try
-			{
-				return await dialog.ShowAsync();
-			}
-			catch
-			{
-				return ContentDialogResult.None;
-			}
-		}
-
 		private Window? GetSafeOwner()
 		{
 			if (!_dispatcher.CheckAccess()) return null;
-                    var owner = _mainWindow ?? System.Windows.Application.Current?.MainWindow;
+            var owner = _mainWindow ?? System.Windows.Application.Current?.MainWindow;
 			return (owner != null && owner.IsLoaded && owner.IsVisible) ? owner : null;
 		}
 	}
 }
-
-

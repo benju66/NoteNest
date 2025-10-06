@@ -137,7 +137,16 @@ namespace NoteNest.UI.Controls.Workspace
                 if (current is T ancestor)
                     return ancestor;
                 
-                current = VisualTreeHelper.GetParent(current);
+                // Safety check: Only walk visual tree, skip document elements
+                try
+                {
+                    current = VisualTreeHelper.GetParent(current);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Hit a non-visual element (Paragraph, Run, etc.) - stop traversal
+                    return null;
+                }
             }
             return null;
         }

@@ -30,21 +30,7 @@ namespace NoteNest.UI.Windows
         {
             InitializeComponent();
             
-            // Apply modern theme resources
-            this.Resources.MergedDictionaries.Add(new ModernWpf.ThemeResources());
-            this.Resources.MergedDictionaries.Add(new ModernWpf.Controls.XamlControlsResources());
-            
-            // Match main window theme
-            try
-            {
-                var mainWindow = System.Windows.Application.Current?.MainWindow;
-                if (mainWindow != null)
-                {
-                    var currentTheme = ModernWpf.ThemeManager.GetRequestedTheme(mainWindow);
-                    ModernWpf.ThemeManager.SetRequestedTheme(this, currentTheme);
-                }
-            }
-            catch { }
+            // Theme resources now loaded from App.xaml automatically
 
             // Set up auto-refresh timer
             _refreshTimer = new DispatcherTimer

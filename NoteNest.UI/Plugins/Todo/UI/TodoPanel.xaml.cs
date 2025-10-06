@@ -280,13 +280,14 @@ namespace NoteNest.UI.Plugins.Todo.UI
 				};
 				try
 				{
-					var result = await dialog.ShowAsync();
-					if (result == ModernWpf.Controls.ContentDialogResult.Primary)
+					// Show as modal dialog
+					bool? result = dialog.ShowDialog();
+					if (result == true && dialog.DialogResult)
 					{
 						// Pull updated values back from dialog
-						task.Text = ((dynamic)dialog.DataContext).Text;
-						task.Category = ((dynamic)dialog.DataContext).Category;
-						task.Priority = ((dynamic)dialog.DataContext).Priority;
+						task.Text = dialog.TaskTitle;
+						// Note: Full task editing not yet implemented, just title/description for now
+						task.Notes = dialog.TaskDescription;
 						task.DueDate = ((dynamic)dialog.DataContext).DueDate;
 						task.Notes = ((dynamic)dialog.DataContext).Notes;
 						await _todoService.UpdateTaskAsync(task);

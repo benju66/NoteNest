@@ -16,14 +16,14 @@
     
     <Border BorderThickness="2" 
             BorderBrush="{Binding IsActive, Converter={StaticResource ActivePaneBorderConverter}}"
-            Background="Transparent"
+            Background="{DynamicResource AppBackgroundBrush}"
             PreviewMouseDown="Border_PreviewMouseDown">
         <Border.Style>
             <Style TargetType="Border">
                 <Style.Triggers>
                     <!-- Subtle highlight on hover to show pane is clickable -->
                     <Trigger Property="IsMouseOver" Value="True">
-                        <Setter Property="Background" Value="#08000000"/> <!-- Very subtle gray -->
+                        <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
                     </Trigger>
                 </Style.Triggers>
             </Style>
@@ -35,6 +35,9 @@
                        SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
                        HorizontalAlignment="Stretch"
                        VerticalAlignment="Stretch"
+                       Background="{DynamicResource AppBackgroundBrush}"
+                       Foreground="{DynamicResource AppTextPrimaryBrush}"
+                       BorderThickness="0"
                        GotFocus="TabControl_GotFocus">
                 <TabControl.ItemTemplate>
                     <DataTemplate>
@@ -76,7 +79,7 @@
                             <TextBlock Grid.Column="1" 
                                        Text="·" 
                                        Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibilityConverter}}"
-                                       Foreground="#FFE57A"
+                                       Foreground="{DynamicResource AppWarningBrush}"
                                        FontWeight="Bold"
                                        FontSize="16"
                                        Margin="2,4"
@@ -97,7 +100,7 @@
                                               Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
                                 <Button.Style>
                                     <Style TargetType="Button">
-                                        <Setter Property="Foreground" Value="#888"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
                                         <Setter Property="Cursor" Value="Hand"/>
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
@@ -108,8 +111,8 @@
                                             
                                             <!-- Red highlight when hovering over button itself -->
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Foreground" Value="#FFF"/>
-                                                <Setter Property="Background" Value="#40FF0000"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource AppTextOnAccentBrush}"/>
+                                                <Setter Property="Background" Value="{DynamicResource AppErrorBrush}"/>
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
@@ -118,6 +121,29 @@
                         </Grid>
                     </DataTemplate>
                 </TabControl.ItemTemplate>
+                
+                <!-- Tab Item Style - Theme-aware active/inactive tab colors -->
+                <TabControl.ItemContainerStyle>
+                    <Style TargetType="TabItem">
+                        <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Style.Triggers>
+                            <!-- Active tab -->
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+                            </Trigger>
+                            <!-- Hover state -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </TabControl.ItemContainerStyle>
+                
                 <TabControl.ContentTemplate>
                     <DataTemplate>
                         <!-- TabContentView hosts the RTF editor -->
@@ -132,9 +158,10 @@
             <TextBlock Text="No tabs in this pane" 
                       HorizontalAlignment="Center" 
                       VerticalAlignment="Center" 
-                      Foreground="Gray"
+                      Foreground="{DynamicResource AppTextSecondaryBrush}"
                       FontStyle="Italic"
-                      IsHitTestVisible="False">
+                      IsHitTestVisible="False"
+                      Background="{DynamicResource AppBackgroundBrush}">
                 <TextBlock.Visibility>
                     <Binding Path="Tabs.Count">
                         <Binding.Converter>
@@ -149,15 +176,15 @@
                     VerticalAlignment="Top"
                     Width="24" Height="24"
                     Margin="8"
-                    Background="#F0F0F0"
+                    Background="{DynamicResource AppSurfaceHighlightBrush}"
                     BorderThickness="1"
-                    BorderBrush="#D0D0D0"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
                     ToolTip="Close this empty pane"
                     Click="ClosePane_Click"
                     Panel.ZIndex="100">
                 <ContentControl Template="{StaticResource LucideCircleX}" 
                               Width="14" Height="14"
-                              Foreground="#666"/>
+                              Foreground="{DynamicResource AppTextSecondaryBrush}"/>
                 <Button.Style>
                     <Style TargetType="Button">
                         <Setter Property="Cursor" Value="Hand"/>
@@ -176,7 +203,7 @@
                             
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter Property="Opacity" Value="1"/>
-                                <Setter Property="Background" Value="#E0E0E0"/>
+                                <Setter Property="Background" Value="{DynamicResource AppSurfacePressedBrush}"/>
                             </Trigger>
                         </Style.Triggers>
                     </Style>

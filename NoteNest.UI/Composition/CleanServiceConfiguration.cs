@@ -324,6 +324,9 @@ namespace NoteNest.UI.Composition
                 return new UserNotificationService(System.Windows.Application.Current?.MainWindow, logger);
             });
             
+            // Theme Service - NEW for full Solarized theming
+            services.AddSingleton<IThemeService, ThemeService>();
+            
             return services;
         }
         

@@ -48,6 +48,11 @@ namespace NoteNest.UI
                 _logger = _host.Services.GetRequiredService<IAppLogger>();
                 _logger.Info("🎉 Full NoteNest app started successfully!");
 
+                // Initialize theme system FIRST (before creating UI)
+                var themeService = _host.Services.GetRequiredService<NoteNest.UI.Services.IThemeService>();
+                await themeService.InitializeAsync();
+                _logger.Info($"✅ Theme system initialized: {themeService.CurrentTheme}");
+
                 // DIAGNOSTIC: Test CategoryTreeViewModel creation manually
                 try
                 {

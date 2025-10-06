@@ -3,7 +3,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:ui="http://schemas.modernwpf.com/2019"
              xmlns:conv="clr-namespace:NoteNest.UI.Plugins.Todo.UI.Converters"
              xmlns:local="clr-namespace:NoteNest.UI.Plugins.Todo.UI"
              mc:Ignorable="d"
@@ -132,9 +131,34 @@
 
             <TextBox x:Name="QuickAddTextBox"
                      Grid.Column="0"
-                     ui:ControlHelper.PlaceholderText="Add a task..."
                      Margin="8"
-                     KeyDown="QuickAdd_KeyDown"/>
+                     KeyDown="QuickAdd_KeyDown">
+                <TextBox.Style>
+                    <Style TargetType="TextBox">
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TextBox">
+                                    <Grid>
+                                        <TextBlock Text="Add a task..." Opacity="0.5" VerticalAlignment="Center" Margin="4,0,0,0" IsHitTestVisible="False">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Text.Length, RelativeSource={RelativeSource TemplatedParent}}" Value="0">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <ScrollViewer x:Name="PART_ContentHost" Focusable="false" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </TextBox.Style>
+            </TextBox>
 
             <Button Grid.Column="1"
                     Content="+"

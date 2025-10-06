@@ -1,0 +1,50 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <!-- 
+    ═══════════════════════════════════════════════════════════════
+    LIGHT THEME - Standard Light Mode
+    ═══════════════════════════════════════════════════════════════
+    Clean, professional light theme similar to VS Code Light+
+    ═══════════════════════════════════════════════════════════════
+    -->
+    
+    <!-- Merge base theme structure -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ThemeBase.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+    
+    <!-- PRIMARY COLORS -->
+    <Color x:Key="AppBackground">#FFFFFFFF</Color>
+    <Color x:Key="AppSurface">#FFF7F7F7</Color>
+    <Color x:Key="AppSurfaceHighlight">#FFF0F0F0</Color>
+    <Color x:Key="AppSurfacePressed">#FFE0E0E0</Color>
+    
+    <!-- ACCENT -->
+    <Color x:Key="AppAccent">#FF0078D4</Color>
+    <Color x:Key="AppAccentLight">#FF409EFF</Color>
+    <Color x:Key="AppAccentDark">#FF005A9E</Color>
+    
+    <!-- TEXT -->
+    <Color x:Key="AppTextPrimary">#FF1E1E1E</Color>
+    <Color x:Key="AppTextSecondary">#FF666666</Color>
+    <Color x:Key="AppTextDisabled">#FF999999</Color>
+    <Color x:Key="AppTextOnAccent">#FFFFFFFF</Color>
+    
+    <!-- BORDERS -->
+    <Color x:Key="AppBorder">#FFD0D0D0</Color>
+    <Color x:Key="AppBorderHover">#FFB0B0B0</Color>
+    <Color x:Key="AppDivider">#FFE0E0E0</Color>
+    
+    <!-- STATUS -->
+    <Color x:Key="AppSuccess">#FF28A745</Color>
+    <Color x:Key="AppWarning">#FFFFC107</Color>
+    <Color x:Key="AppError">#FFDC3545</Color>
+    <Color x:Key="AppInfo">#FF17A2B8</Color>
+    
+    <!-- EDITOR -->
+    <Color x:Key="AppEditorBackground">#FFFFFFFF</Color>
+    <Color x:Key="AppEditorSelection">#400078D4</Color>
+    <Color x:Key="AppEditorCaret">#FF000000</Color>
+    
+</ResourceDictionary>

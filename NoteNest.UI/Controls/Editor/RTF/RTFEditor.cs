@@ -29,6 +29,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
         private string _originalContent = string.Empty;
         private bool _disposed = false;
         private NoteModel _currentNote;
+        private bool _themeInitialized = false;
         
         // Smart list behavior state
         private DateTime _lastEnterTime = DateTime.MinValue;
@@ -48,6 +49,7 @@ namespace NoteNest.UI.Controls.Editor.RTF
         public RTFEditor(EditorSettings settings)
         {
             InitializeMemoryManagement(settings);
+            InitializeTheming();
             InitializeFeatures();
             InitializeKeyboardShortcuts();
             WireUpEvents();
@@ -86,6 +88,115 @@ namespace NoteNest.UI.Controls.Editor.RTF
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[RTFEditor] Feature initialization failed: {ex.Message}");
+            }
+        }
+        
+        private void InitializeTheming()
+        {
+            try
+            {
+                // Subscribe to loaded event to apply theme after control is fully initialized
+                Loaded += OnEditorLoaded;
+                
+                // Subscribe to theme changes
+                try
+                {
+                    var app = (App)System.Windows.Application.Current;
+                    var themeService = app.ServiceProvider?.GetService(typeof(NoteNest.UI.Services.IThemeService)) as NoteNest.UI.Services.IThemeService;
+                    if (themeService != null)
+                    {
+                        themeService.ThemeChanged += OnThemeChanged;
+                        System.Diagnostics.Debug.WriteLine("[RTFEditor] Subscribed to theme changes");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[RTFEditor] Could not subscribe to theme changes: {ex.Message}");
+                }
+                
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Theming initialized");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Theming initialization failed: {ex.Message}");
+            }
+        }
+        
+        private void OnEditorLoaded(object sender, System.Windows.RoutedEventArgs e)
+        {
+            if (!_themeInitialized)
+            {
+                ApplyCurrentTheme();
+                _themeInitialized = true;
+            }
+        }
+        
+        private void OnThemeChanged(object sender, NoteNest.UI.Services.ThemeType newTheme)
+        {
+            System.Diagnostics.Debug.WriteLine($"[RTFEditor] Theme change detected: {newTheme}");
+            ApplyCurrentTheme();
+        }
+        
+        private void ApplyCurrentTheme()
+        {
+            try
+            {
+                // Get theme colors from DynamicResource
+                var app = System.Windows.Application.Current;
+                if (app == null) return;
+                
+                // Find the AppTextPrimaryBrush and AppBackgroundBrush from resources
+                var textBrush = app.TryFindResource("AppTextPrimaryBrush") as System.Windows.Media.SolidColorBrush;
+                var backgroundBrush = app.TryFindResource("AppBackgroundBrush") as System.Windows.Media.SolidColorBrush;
+                
+                if (textBrush != null)
+                {
+                    // Set foreground for the control AND the document
+                    Foreground = textBrush;
+                    if (Document != null)
+                    {
+                        Document.Foreground = textBrush;
+                        
+                        // Clear any inline foreground colors from existing content
+                        // This ensures theme colors apply to all text
+                        ClearInlineFormatting();
+                    }
+                }
+                
+                if (backgroundBrush != null)
+                {
+                    Background = backgroundBrush;
+                    if (Document != null)
+                    {
+                        Document.Background = backgroundBrush;
+                    }
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Theme applied - Foreground: {textBrush?.Color}, Background: {backgroundBrush?.Color}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Theme application failed: {ex.Message}");
+            }
+        }
+        
+        private void ClearInlineFormatting()
+        {
+            try
+            {
+                if (Document == null) return;
+                
+                // Clear foreground from all text elements to allow document-level theme to apply
+                var textRange = new System.Windows.Documents.TextRange(Document.ContentStart, Document.ContentEnd);
+                
+                // Only clear foreground - preserve bold, italic, etc.
+                textRange.ApplyPropertyValue(System.Windows.Documents.TextElement.ForegroundProperty, System.Windows.DependencyProperty.UnsetValue);
+                
+                System.Diagnostics.Debug.WriteLine("[RTFEditor] Cleared inline foreground formatting for theming");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Clear formatting failed: {ex.Message}");
             }
         }
         

@@ -1,169 +1,84 @@
 using System;
 using System.Windows;
-using ModernWpf.Controls;
-using NoteNest.UI.ViewModels;
-using NoteNest.Core.Services;
-using NoteNest.Core.Events;
+using System.Windows.Controls;
 using NoteNest.UI.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace NoteNest.UI.Windows
 {
+    /// <summary>
+    /// Simplified Settings Window - migrated from ModernWPF
+    /// Note: This is a temporary simplified version during the ModernWPF removal
+    /// Will be rebuilt with full settings in future updates
+    /// </summary>
     public partial class SettingsWindow : Window
     {
-        private SettingsViewModel _viewModel;
-
-        public SettingsWindow(Core.Services.ConfigurationService configService)
+        public SettingsWindow()
         {
             InitializeComponent();
-            _viewModel = new SettingsViewModel(configService);
-            DataContext = _viewModel;
+            LoadCurrentSettings();
         }
 
-        private void NavigationView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
-        {
-            if (args.SelectedItem is NavigationViewItem item)
-            {
-                // Hide all pages
-                GeneralSettings.Visibility = Visibility.Collapsed;
-                AppearanceSettings.Visibility = Visibility.Collapsed;
-                ActivityBarSettings.Visibility = Visibility.Collapsed;
-                EditorSettings.Visibility = Visibility.Collapsed;
-                FilesSettings.Visibility = Visibility.Collapsed;
-                StorageSettings.Visibility = Visibility.Collapsed;
-                FeaturesSettings.Visibility = Visibility.Collapsed;
-                AdvancedSettings.Visibility = Visibility.Collapsed;
-
-                // Show selected page
-                switch (item.Tag?.ToString())
-                {
-                    case "General":
-                        GeneralSettings.Visibility = Visibility.Visible;
-                        break;
-                    case "Appearance":
-                        AppearanceSettings.Visibility = Visibility.Visible;
-                        break;
-                    case "ActivityBar":
-                        ActivityBarSettings.Visibility = Visibility.Visible;
-                        break;
-                    case "Editor":
-                        EditorSettings.Visibility = Visibility.Visible;
-                        break;
-                    case "Files":
-                        FilesSettings.Visibility = Visibility.Visible;
-                        break;
-                    case "Storage":
-                        StorageSettings.Visibility = Visibility.Visible;
-                        break;
-                    case "Features":
-                        FeaturesSettings.Visibility = Visibility.Visible;
-                        break;
-                    case "Advanced":
-                        AdvancedSettings.Visibility = Visibility.Visible;
-                        break;
-                }
-            }
-        }
-
-        private async void OK_Click(object sender, RoutedEventArgs e)
+        private void LoadCurrentSettings()
         {
             try
             {
-                await _viewModel.CommitSettings();
-                // Small polish: broadcast settings changed so open editors apply spell check/format immediately
-                try
+                // Load current theme setting
+                var app = (App)System.Windows.Application.Current;
+                var themeService = app.ServiceProvider?.GetService<IThemeService>();
+                if (themeService != null)
                 {
-                    var bus = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(NoteNest.Core.Services.IEventBus)) as NoteNest.Core.Services.IEventBus;
-                    if (bus != null)
+                    var currentTheme = themeService.CurrentTheme.ToString();
+                    foreach (ComboBoxItem item in ThemeComboBox.Items)
                     {
-                        await bus.PublishAsync(new AppSettingsChangedEvent());
+                        if (item.Tag?.ToString() == currentTheme)
+                        {
+                            ThemeComboBox.SelectedItem = item;
+                            break;
+                        }
                     }
-                }
-                catch { }
-                DialogResult = true;
-                Close();
-            }
-            catch (Exception)
-            {
-                // Optionally show an error; keep window open if save failed
-            }
-        }
-
-        private void Cancel_Click(object sender, RoutedEventArgs e)
-        {
-            DialogResult = false;
-            Close();
-        }
-
-        private async void MigrateNotes_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var storageService = new Core.Services.StorageLocationService();
-                var currentPath = _viewModel.GetCurrentSavedPath();
-                var newPath = _viewModel.GetSelectedDestinationPath();
-
-                var dlg = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
-
-                if (string.IsNullOrEmpty(currentPath) || string.IsNullOrEmpty(newPath))
-                {
-                    dlg?.ShowError("Invalid path configuration. Please check your settings.", "Error");
-                    return;
-                }
-
-                string Normalize(string p) => string.IsNullOrWhiteSpace(p) ? string.Empty : System.IO.Path.GetFullPath(p).TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
-                if (string.Equals(Normalize(currentPath), Normalize(newPath), StringComparison.OrdinalIgnoreCase))
-                {
-                    dlg?.ShowInfo("Source and destination are the same. Please select a different storage location first.", "No Change Required");
-                    return;
-                }
-
-                var ok = await dlg!.ShowConfirmationDialogAsync(
-                    $"This will move all your notes from:\n\n{currentPath}\n\nTo:\n\n{newPath}\n\nDo you want to continue?",
-                    "Confirm Migration");
-                if (!ok)
-                    return;
-
-                var migrationWindow = new MigrationWindow(currentPath, newPath)
-                {
-                    Owner = this
-                };
-
-                if (migrationWindow.ShowDialog() == true && migrationWindow.MigrationSuccessful)
-                {
-                    // Update paths
-                    _viewModel.Settings.DefaultNotePath = newPath;
-                    _viewModel.Settings.MetadataPath = System.IO.Path.Combine(newPath, ".metadata");
-
-                    // Update storage mode based on destination
-                    var oneDrivePath = storageService.GetOneDrivePath();
-                    if (!string.IsNullOrEmpty(oneDrivePath) &&
-                        newPath.StartsWith(oneDrivePath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        _viewModel.Settings.StorageMode = Core.Models.StorageMode.OneDrive;
-                    }
-                    else if (newPath.EndsWith("Documents\\NoteNest", StringComparison.OrdinalIgnoreCase) ||
-                             newPath.EndsWith("Documents/NoteNest", StringComparison.OrdinalIgnoreCase))
-                    {
-                        _viewModel.Settings.StorageMode = Core.Models.StorageMode.Local;
-                    }
-                    else
-                    {
-                        _viewModel.Settings.StorageMode = Core.Models.StorageMode.Custom;
-                        _viewModel.Settings.CustomNotesPath = newPath;
-                    }
-
-                    // Save everything
-                    await _viewModel.CommitSettings();
-                    _viewModel.RefreshStorageProperties();
-
-                    dlg?.ShowInfo("Migration completed successfully!\n\nPlease restart NoteNest for the changes to take full effect.", "Migration Complete");
                 }
             }
             catch (Exception ex)
             {
-                var dlg = (System.Windows.Application.Current as App)?.ServiceProvider?.GetService(typeof(IDialogService)) as IDialogService;
-                dlg?.ShowError($"An error occurred: {ex.Message}", "Error");
+                System.Diagnostics.Debug.WriteLine($"[SettingsWindow] Failed to load settings: {ex.Message}");
             }
+        }
+
+        private async void ThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.AddedItems.Count == 0) return;
+            
+            try
+            {
+                var selectedItem = e.AddedItems[0] as ComboBoxItem;
+                var themeTag = selectedItem?.Tag?.ToString();
+                
+                if (!string.IsNullOrEmpty(themeTag) && Enum.TryParse<ThemeType>(themeTag, out var theme))
+                {
+                    var app = (App)System.Windows.Application.Current;
+                    var themeService = app.ServiceProvider?.GetService<IThemeService>();
+                    if (themeService != null)
+                    {
+                        await themeService.SetThemeAsync(theme);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SettingsWindow] Theme change failed: {ex.Message}");
+            }
+        }
+
+        // Legacy method for compatibility
+        private void NavigationView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // No longer needed - simplified settings window
+        }
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
         }
     }
 }

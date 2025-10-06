@@ -2,6 +2,18 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
-        <!-- Clean, minimal resources -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Theme will be loaded dynamically by ThemeService -->
+                <!-- Default to Light theme until ThemeService initializes -->
+                <ResourceDictionary Source="Resources/Themes/LightTheme.xaml"/>
+                
+                <!-- Modern Thin Scrollbars - VS Code style -->
+                <ResourceDictionary Source="Resources/ModernScrollBarStyle.xaml"/>
+                
+                <!-- Icons - Always loaded -->
+                <ResourceDictionary Source="Resources/LucideIcons.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

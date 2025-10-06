@@ -1,89 +1,138 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Media;
-using ModernWpf;
+using System.Windows;
 using NoteNest.Core.Services;
+using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.Services
 {
-    public enum AppTheme
+    /// <summary>
+    /// NEW: Custom theme service implementation
+    /// Replaces ModernWPF-based theming with full Solarized support
+    /// Clean Architecture - dependency injection ready
+    /// </summary>
+    public class ThemeService : IThemeService
     {
-        Light,
-        Dark,
-        System
-    }
-
-    public static class ThemeService
-    {
-        private static ConfigurationService _configurationService;
-
-        public static void Initialize()
+        private readonly ConfigurationService _configService;
+        private readonly IAppLogger _logger;
+        private ThemeType _currentTheme;
+        
+        public ThemeType CurrentTheme => _currentTheme;
+        public event EventHandler<ThemeType> ThemeChanged;
+        
+        public ThemeService(ConfigurationService configService, IAppLogger logger)
         {
-            _configurationService = new ConfigurationService();
-
-            // Apply quickly using current in-memory settings (defaults on first run)
-            ApplyTheme(GetSavedTheme());
-
-            // Load settings in background, then re-apply theme from loaded config on UI context
-            _ = _configurationService
-                .LoadSettingsAsync()
-                .ContinueWith(t =>
-                {
-                    try { ApplyTheme(GetSavedTheme()); } catch { /* ignore */ }
-                }, TaskScheduler.FromCurrentSynchronizationContext());
+            _configService = configService ?? throw new ArgumentNullException(nameof(configService));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
-
-        public static AppTheme GetSavedTheme()
+        
+        /// <summary>
+        /// Initialize theme system - loads saved theme preference
+        /// </summary>
+        public async Task InitializeAsync()
         {
-            var themeString = _configurationService != null ? _configurationService.Settings?.Theme : null;
-            if (!string.IsNullOrWhiteSpace(themeString) && Enum.TryParse<AppTheme>(themeString, true, out var theme))
-            {
-                return theme;
-            }
-            return AppTheme.System;
-        }
-
-        public static void SetTheme(AppTheme theme)
-        {
-            ApplyTheme(theme);
-            SaveTheme(theme);
-        }
-
-        private static void ApplyTheme(AppTheme theme)
-        {
-            var themeManager = ThemeManager.Current;
-
-            switch (theme)
-            {
-                case AppTheme.Light:
-                    themeManager.ApplicationTheme = ApplicationTheme.Light;
-                    break;
-                case AppTheme.Dark:
-                    themeManager.ApplicationTheme = ApplicationTheme.Dark;
-                    break;
-                case AppTheme.System:
-                    themeManager.ApplicationTheme = null; // Use system theme
-                    break;
-            }
-        }
-
-        private static void SaveTheme(AppTheme theme)
-        {
-            if (_configurationService == null) return;
             try
             {
-                _configurationService.Settings.Theme = theme.ToString();
-                _configurationService.RequestSaveDebounced();
+                _logger.Info("[ThemeService] Initializing theme system...");
+                
+                // Load saved theme from settings
+                await _configService.LoadSettingsAsync();
+                var savedTheme = _configService.Settings?.Theme;
+                
+                if (!string.IsNullOrEmpty(savedTheme) && Enum.TryParse<ThemeType>(savedTheme, out var theme))
+                {
+                    _logger.Info($"[ThemeService] Restoring saved theme: {theme}");
+                    await SetThemeAsync(theme);
+                }
+                else
+                {
+                    _logger.Info("[ThemeService] No saved theme found, using Light theme");
+                    await SetThemeAsync(ThemeType.Light);
+                }
+                
+                _logger.Info($"[ThemeService] Theme system initialized successfully - Active: {_currentTheme}");
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore save errors for theme change
+                _logger.Error(ex, "[ThemeService] Failed to initialize theme system");
+                // Fallback to Light theme
+                await SetThemeAsync(ThemeType.Light);
             }
         }
-
-        public static Color GetAccentColor()
+        
+        /// <summary>
+        /// Change the active theme dynamically
+        /// </summary>
+        public Task<bool> SetThemeAsync(ThemeType theme)
         {
-            return ThemeManager.Current.ActualAccentColor;
+            try
+            {
+                _logger.Info($"[ThemeService] Switching theme to: {theme}");
+                
+                _currentTheme = theme;
+                
+                var app = System.Windows.Application.Current;
+                if (app == null)
+                {
+                    _logger.Warning("[ThemeService] Application.Current is null, cannot apply theme");
+                    return Task.FromResult(false);
+                }
+                
+                // Remove existing theme dictionaries
+                var themeDicts = app.Resources.MergedDictionaries
+                    .Where(d => d.Source?.OriginalString?.Contains("/Themes/") == true)
+                    .ToList();
+                    
+                foreach (var dict in themeDicts)
+                {
+                    app.Resources.MergedDictionaries.Remove(dict);
+                }
+                
+                // Determine theme URI
+                var themeUri = GetThemeUri(theme);
+                
+                // Load new theme
+                var themeDict = new ResourceDictionary { Source = themeUri };
+                app.Resources.MergedDictionaries.Add(themeDict);
+                
+                _logger.Info($"[ThemeService] Theme loaded: {themeUri.OriginalString}");
+                
+                // Save to settings
+                _configService.Settings.Theme = theme.ToString();
+                _configService.RequestSaveDebounced();
+                
+                // Raise event
+                ThemeChanged?.Invoke(this, theme);
+                
+                return Task.FromResult(true);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[ThemeService] Failed to set theme: {theme}");
+                return Task.FromResult(false);
+            }
+        }
+        
+        private Uri GetThemeUri(ThemeType theme)
+        {
+            // Handle System theme by detecting OS preference
+            if (theme == ThemeType.System)
+            {
+                // TODO: Detect Windows theme preference
+                // For now, default to Light
+                theme = ThemeType.Light;
+                _logger.Info("[ThemeService] System theme detected, using Light (OS detection TODO)");
+            }
+            
+            return theme switch
+            {
+                ThemeType.Light => new Uri("pack://application:,,,/Resources/Themes/LightTheme.xaml"),
+                ThemeType.Dark => new Uri("pack://application:,,,/Resources/Themes/DarkTheme.xaml"),
+                ThemeType.SolarizedLight => new Uri("pack://application:,,,/Resources/Themes/SolarizedLightTheme.xaml"),
+                ThemeType.SolarizedDark => new Uri("pack://application:,,,/Resources/Themes/SolarizedDarkTheme.xaml"),
+                _ => new Uri("pack://application:,,,/Resources/Themes/LightTheme.xaml")
+            };
         }
     }
 }

@@ -10,6 +10,7 @@ using NoteNest.Core.Services;
 using NoteNest.UI.ViewModels.Categories;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.ViewModels.Shell;
+using NoteNest.UI.Services;
 
 namespace NoteNest.UI
 {
@@ -18,6 +19,31 @@ namespace NoteNest.UI
         public NewMainWindow()
         {
             InitializeComponent();
+            Loaded += OnWindowLoaded;
+        }
+        
+        private void OnWindowLoaded(object sender, RoutedEventArgs e)
+        {
+            // Set theme selector to current theme
+            try
+            {
+                var app = (App)System.Windows.Application.Current;
+                var themeService = app.ServiceProvider?.GetService<IThemeService>();
+                if (themeService != null)
+                {
+                    // Select the current theme in the dropdown
+                    var currentTheme = themeService.CurrentTheme.ToString();
+                    foreach (ComboBoxItem item in ThemeSelector.Items)
+                    {
+                        if (item.Tag?.ToString() == currentTheme)
+                        {
+                            ThemeSelector.SelectedItem = item;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { /* Ignore errors setting initial theme */ }
         }
 
         private void CategoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -55,14 +81,14 @@ namespace NoteNest.UI
                 
                 if (configService == null)
                 {
-                    // Fallback - create a basic config service
-                    var fileSystem = new NoteNest.Core.Services.DefaultFileSystemProvider();
-                    configService = new ConfigurationService(fileSystem);
-                }
-                
-                var settingsWindow = new SettingsWindow(configService);
-                settingsWindow.Owner = this;
-                settingsWindow.ShowDialog();
+                // Fallback - create a basic config service
+                var fileSystem = new NoteNest.Core.Services.DefaultFileSystemProvider();
+                configService = new ConfigurationService(fileSystem);
+            }
+            
+            var settingsWindow = new SettingsWindow();
+            settingsWindow.Owner = this;
+            settingsWindow.ShowDialog();
             }
             catch (Exception ex)
             {
@@ -111,6 +137,45 @@ namespace NoteNest.UI
                     _ = category.ToggleExpandAsync();
                     e.Handled = true;
                 }
+            }
+        }
+
+        // =============================================================================
+        // THEME SWITCHER HANDLER
+        // =============================================================================
+        
+        private async void ThemeSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (e.AddedItems.Count == 0) return;
+            
+            try
+            {
+                var selectedItem = e.AddedItems[0] as ComboBoxItem;
+                var themeTag = selectedItem?.Tag?.ToString();
+                
+                if (string.IsNullOrEmpty(themeTag)) return;
+                
+                if (Enum.TryParse<ThemeType>(themeTag, out var theme))
+                {
+                    var app = (App)System.Windows.Application.Current;
+                    var themeService = app.ServiceProvider?.GetService<IThemeService>();
+                    
+                    if (themeService != null)
+                    {
+                        await themeService.SetThemeAsync(theme);
+                        
+                        // Update status message if we have a ViewModel
+                        if (DataContext is MainShellViewModel viewModel)
+                        {
+                            viewModel.StatusMessage = $"Theme changed to: {selectedItem.Content}";
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to change theme: {ex.Message}", "Theme Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 

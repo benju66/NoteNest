@@ -1,0 +1,75 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <!-- 
+    ═══════════════════════════════════════════════════════════════
+    SOLARIZED DARK THEME
+    ═══════════════════════════════════════════════════════════════
+    Official Solarized Dark color palette by Ethan Schoonover
+    Base colors: base03 (background), base02 (surface), base0 (text)
+    Accent: blue (#268BD2)
+    ═══════════════════════════════════════════════════════════════
+    -->
+    
+    <!-- Merge base theme structure -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ThemeBase.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+    
+    <!-- SOLARIZED DARK BASE COLORS (inverted from light) -->
+    <!-- Base03-00: Background tones -->
+    <Color x:Key="SolarBase03">#FF002B36</Color>    <!-- Darkest background -->
+    <Color x:Key="SolarBase02">#FF073642</Color>    <!-- Dark surface -->
+    <Color x:Key="SolarBase01">#FF586E75</Color>    <!-- Optional emphasized content -->
+    <Color x:Key="SolarBase00">#FF657B83</Color>    <!-- Body text -->
+    
+    <!-- Base0-3: Foreground tones -->
+    <Color x:Key="SolarBase0">#FF839496</Color>     <!-- Secondary text -->
+    <Color x:Key="SolarBase1">#FF93A1A1</Color>     <!-- Primary text -->
+    <Color x:Key="SolarBase2">#FFEEE8D5</Color>     <!-- Light backgrounds (unused in dark) -->
+    <Color x:Key="SolarBase3">#FFFDF6E3</Color>     <!-- Lightest (unused in dark) -->
+    
+    <!-- SOLARIZED ACCENT COLORS (same as light) -->
+    <Color x:Key="SolarYellow">#FFB58900</Color>
+    <Color x:Key="SolarOrange">#FFCB4B16</Color>
+    <Color x:Key="SolarRed">#FFDC322F</Color>
+    <Color x:Key="SolarMagenta">#FFD33682</Color>
+    <Color x:Key="SolarViolet">#FF6C71C4</Color>
+    <Color x:Key="SolarBlue">#FF268BD2</Color>       <!-- PRIMARY ACCENT -->
+    <Color x:Key="SolarCyan">#FF2AA198</Color>
+    <Color x:Key="SolarGreen">#FF859900</Color>
+    
+    <!-- PRIMARY COLORS mapped to Solarized Dark -->
+    <Color x:Key="AppBackground">#FF002B36</Color>           <!-- base03 -->
+    <Color x:Key="AppSurface">#FF073642</Color>              <!-- base02 -->
+    <Color x:Key="AppSurfaceHighlight">#FF0E4A59</Color>     <!-- Lighter base02 -->
+    <Color x:Key="AppSurfacePressed">#FF165E70</Color>       <!-- Even lighter for pressed -->
+    
+    <!-- ACCENT -->
+    <Color x:Key="AppAccent">#FF268BD2</Color>               <!-- Solarized blue -->
+    <Color x:Key="AppAccentLight">#FF2AA198</Color>          <!-- Cyan for highlights -->
+    <Color x:Key="AppAccentDark">#FF0F6FAB</Color>           <!-- Darker blue -->
+    
+    <!-- TEXT -->
+    <Color x:Key="AppTextPrimary">#FF93A1A1</Color>          <!-- base1 -->
+    <Color x:Key="AppTextSecondary">#FF839496</Color>        <!-- base0 -->
+    <Color x:Key="AppTextDisabled">#FF586E75</Color>         <!-- base01 -->
+    <Color x:Key="AppTextOnAccent">#FFFDF6E3</Color>         <!-- base3 -->
+    
+    <!-- BORDERS -->
+    <Color x:Key="AppBorder">#FF586E75</Color>               <!-- base01 -->
+    <Color x:Key="AppBorderHover">#FF657B83</Color>          <!-- base00 -->
+    <Color x:Key="AppDivider">#FF0E4A59</Color>              <!-- Subtle divider -->
+    
+    <!-- STATUS -->
+    <Color x:Key="AppSuccess">#FF859900</Color>              <!-- Solarized green -->
+    <Color x:Key="AppWarning">#FFB58900</Color>              <!-- Solarized yellow -->
+    <Color x:Key="AppError">#FFDC322F</Color>                <!-- Solarized red -->
+    <Color x:Key="AppInfo">#FF268BD2</Color>                 <!-- Solarized blue -->
+    
+    <!-- EDITOR -->
+    <Color x:Key="AppEditorBackground">#FF002B36</Color>     <!-- base03 -->
+    <Color x:Key="AppEditorSelection">#40268BD2</Color>      <!-- Transparent blue -->
+    <Color x:Key="AppEditorCaret">#FF93A1A1</Color>          <!-- base1 -->
+    
+</ResourceDictionary>
