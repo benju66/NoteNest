@@ -19,6 +19,8 @@ namespace NoteNest.UI.ViewModels.Categories
         private readonly ITreeRepository _treeRepository;
         private readonly IAppLogger _logger;
         private CategoryViewModel _selectedCategory;
+        private NoteItemViewModel _selectedNote;
+        private object _selectedItem;
         private bool _isLoading;
         
         // Expanded state persistence with debouncing
@@ -56,14 +58,65 @@ namespace NoteNest.UI.ViewModels.Categories
         // Alias for XAML binding compatibility
         public ObservableCollection<CategoryViewModel> RootCategories => Categories;
 
+        /// <summary>
+        /// Currently selected item in the TreeView (can be CategoryViewModel or NoteItemViewModel)
+        /// </summary>
+        public object SelectedItem
+        {
+            get => _selectedItem;
+            set
+            {
+                if (SetProperty(ref _selectedItem, value))
+                {
+                    // Update typed properties based on selection
+                    if (value is CategoryViewModel category)
+                    {
+                        SelectedCategory = category;
+                        SelectedNote = null;
+                    }
+                    else if (value is NoteItemViewModel note)
+                    {
+                        SelectedNote = note;
+                        SelectedCategory = null;
+                    }
+                    else
+                    {
+                        SelectedCategory = null;
+                        SelectedNote = null;
+                    }
+                    
+                    // Fire unified selection event
+                    SelectionChanged?.Invoke(value);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Currently selected category (null if a note is selected)
+        /// </summary>
         public CategoryViewModel SelectedCategory
         {
             get => _selectedCategory;
-            set
+            private set
             {
                 if (SetProperty(ref _selectedCategory, value))
                 {
                     CategorySelected?.Invoke(value);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Currently selected note (null if a category is selected)
+        /// </summary>
+        public NoteItemViewModel SelectedNote
+        {
+            get => _selectedNote;
+            private set
+            {
+                if (SetProperty(ref _selectedNote, value))
+                {
+                    NoteSelected?.Invoke(value);
                 }
             }
         }
@@ -74,6 +127,8 @@ namespace NoteNest.UI.ViewModels.Categories
             set => SetProperty(ref _isLoading, value);
         }
 
+        // Selection events
+        public event Action<object> SelectionChanged;
         public event Action<CategoryViewModel> CategorySelected;
         public event Action<NoteItemViewModel> NoteSelected;
         public event Action<NoteItemViewModel> NoteOpenRequested;
@@ -83,7 +138,10 @@ namespace NoteNest.UI.ViewModels.Categories
             // Save expanded state and selection before refresh
             var expandedIds = new HashSet<string>();
             SaveExpandedState(Categories, expandedIds);
-            var selectedId = SelectedCategory?.Id;
+            
+            // Save current selection (could be category or note)
+            var selectedItemId = SelectedNote?.Id ?? SelectedCategory?.Id;
+            var isNoteSelected = SelectedNote != null;
             
             // ✨ CRITICAL FIX: Force cache invalidation BEFORE loading
             // This ensures deleted items are actually removed from the tree
@@ -109,13 +167,26 @@ namespace NoteNest.UI.ViewModels.Categories
             // Restore expanded state after refresh
             RestoreExpandedState(Categories, expandedIds);
             
-            // Restore selection
-            if (!string.IsNullOrEmpty(selectedId))
+            // Restore selection (handle both categories and notes)
+            if (!string.IsNullOrEmpty(selectedItemId))
             {
-                var categoryToSelect = FindCategoryById(Categories, selectedId);
-                if (categoryToSelect != null)
+                if (isNoteSelected)
                 {
-                    SelectedCategory = categoryToSelect;
+                    // Find and restore note selection
+                    var note = FindNoteById(Categories, selectedItemId);
+                    if (note != null)
+                    {
+                        SelectedItem = note;
+                    }
+                }
+                else
+                {
+                    // Find and restore category selection
+                    var category = FindCategoryById(Categories, selectedItemId);
+                    if (category != null)
+                    {
+                        SelectedItem = category;
+                    }
                 }
             }
         }
@@ -160,6 +231,23 @@ namespace NoteNest.UI.ViewModels.Categories
                     return category;
                 
                 var found = FindCategoryById(category.Children, id);
+                if (found != null)
+                    return found;
+            }
+            return null;
+        }
+        
+        private NoteItemViewModel FindNoteById(ObservableCollection<CategoryViewModel> categories, string id)
+        {
+            foreach (var category in categories)
+            {
+                // Search in this category's notes
+                var note = category.Notes.FirstOrDefault(n => n.Id == id);
+                if (note != null)
+                    return note;
+                
+                // Recursively search in child categories
+                var found = FindNoteById(category.Children, id);
                 if (found != null)
                     return found;
             }
@@ -341,7 +429,8 @@ namespace NoteNest.UI.ViewModels.Categories
 
         private void OnNoteSelectionRequested(NoteItemViewModel note)
         {
-            NoteSelected?.Invoke(note);
+            // Update the unified selection
+            SelectedItem = note;
         }
 
         // =============================================================================

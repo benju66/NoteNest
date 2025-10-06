@@ -76,9 +76,10 @@ namespace NoteNest.UI
 
         private void CategoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            if (DataContext is NoteNest.UI.ViewModels.Shell.MainShellViewModel viewModel && e.NewValue is NoteNest.UI.ViewModels.Categories.CategoryViewModel category)
+            if (DataContext is NoteNest.UI.ViewModels.Shell.MainShellViewModel viewModel)
             {
-                viewModel.CategoryTree.SelectedCategory = category;
+                // Update the unified SelectedItem property (handles both categories and notes)
+                viewModel.CategoryTree.SelectedItem = e.NewValue;
             }
         }
         

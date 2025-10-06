@@ -32,6 +32,14 @@
                     Command="{Binding Workspace.CloseTabCommand}" 
                     CommandParameter="{Binding Workspace.SelectedTab}"/>
         
+        <!-- 🎯 SELECTION-BASED SHORTCUTS -->
+        <KeyBinding Key="Delete" 
+                    Command="{Binding DeleteSelectedCommand}"/>
+        <KeyBinding Key="F2" 
+                    Command="{Binding RenameSelectedCommand}"/>
+        <KeyBinding Key="F5" 
+                    Command="{Binding RefreshCommand}"/>
+        
         <!-- 🆕 MILESTONE 2A: Split View Shortcuts -->
         <KeyBinding Key="OemBackslash" Modifiers="Control" 
                     Command="{Binding Workspace.SplitVerticalCommand}"/>
@@ -56,10 +64,10 @@
             </ResourceDictionary.MergedDictionaries>
             
             <!-- Converters -->
-            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-            <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
-            <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
-            <local:BoolToTextConverter x:Key="BoolToTextConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+        <local:BoolToTextConverter x:Key="BoolToTextConverter"/>
             
             <!-- ═══════════════════════════════════════════════════════════════ -->
             <!-- TITLE BAR BUTTON STYLES                                        -->
@@ -302,7 +310,7 @@
                                 <ComboBoxItem Content="Solarized Light" Tag="SolarizedLight"/>
                                 <ComboBoxItem Content="Solarized Dark" Tag="SolarizedDark"/>
                             </ComboBox>
-                        </StackPanel>
+                   </StackPanel>
                     </Border>
                 </Popup>
                 
@@ -387,11 +395,20 @@
                                                     <RowDefinition/>
                                                 </Grid.RowDefinitions>
                                                 
+                                                <!-- Selection indicator bar -->
+                                                <Rectangle x:Name="SelectionBar"
+                                                           Grid.Row="0"
+                                                           Width="3"
+                                                           HorizontalAlignment="Left"
+                                                           Fill="{DynamicResource AppAccentBrush}"
+                                                           Visibility="Collapsed"/>
+                                                
                                 <!-- Content area with consistent spacing -->
-                                <Border Grid.Row="0" 
+                                                <Border x:Name="ContentBorder"
+                                                        Grid.Row="0" 
                                         Background="{TemplateBinding Background}" 
                                         Padding="4,0"
-                                        Margin="0"
+                                                        Margin="3,0,0,0"
                                         MinHeight="26">
                                     <ContentPresenter x:Name="PART_Header" 
                                                       ContentSource="Header"/>
@@ -403,18 +420,38 @@
                                                                 Margin="20,0,0,0"/>
                                             </Grid>
                                             
-                                            <!-- Simple triggers (no null property issues) -->
+                                            <!-- Enhanced triggers with selection indicator -->
                                             <ControlTemplate.Triggers>
                                                 <Trigger Property="IsExpanded" Value="False">
                                                     <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
                                                 </Trigger>
+                                                
+                                                <!-- Selected state with accent bar -->
                                                 <Trigger Property="IsSelected" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource AppAccentLightBrush}"/>
+                                                    <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible"/>
+                                                    <Setter TargetName="ContentBorder" Property="Background" 
+                                                            Value="{DynamicResource AppAccentLightBrush}"/>
                                                     <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
                                                 </Trigger>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
-                                                </Trigger>
+                                                
+                                                <!-- Selected but not focused (dimmer) -->
+                                                <MultiTrigger>
+                                                    <MultiTrigger.Conditions>
+                                                        <Condition Property="IsSelected" Value="True"/>
+                                                        <Condition Property="IsSelectionActive" Value="False"/>
+                                                    </MultiTrigger.Conditions>
+                                                    <Setter TargetName="ContentBorder" Property="Opacity" Value="0.7"/>
+                                                </MultiTrigger>
+                                                
+                                                <!-- Hover state (only when not selected) -->
+                                                <MultiTrigger>
+                                                    <MultiTrigger.Conditions>
+                                                        <Condition Property="IsMouseOver" Value="True"/>
+                                                        <Condition Property="IsSelected" Value="False"/>
+                                                    </MultiTrigger.Conditions>
+                                                    <Setter TargetName="ContentBorder" Property="Background" 
+                                                            Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                                                </MultiTrigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Setter.Value>

@@ -76,10 +76,16 @@ namespace NoteNest.UI.ViewModels.Shell
         public ICommand SaveNoteCommand => Workspace.SaveTabCommand;
         public ICommand SaveAllCommand => Workspace.SaveAllTabsCommand;
         public ICommand RefreshCommand { get; private set; }
+        
+        // Selection-based commands
+        public ICommand DeleteSelectedCommand { get; private set; }
+        public ICommand RenameSelectedCommand { get; private set; }
 
         private void InitializeCommands()
         {
             RefreshCommand = new AsyncRelayCommand(ExecuteRefresh);
+            DeleteSelectedCommand = new AsyncRelayCommand(DeleteSelectedAsync);
+            RenameSelectedCommand = new AsyncRelayCommand(RenameSelectedAsync);
         }
 
         private async Task ExecuteRefresh()
@@ -101,6 +107,48 @@ namespace NoteNest.UI.ViewModels.Shell
             {
                 IsLoading = false;
             }
+        }
+        
+        private async Task DeleteSelectedAsync()
+        {
+            if (CategoryTree.SelectedNote != null)
+            {
+                // Delete the selected note using the command
+                if (NoteOperations.DeleteNoteCommand.CanExecute(CategoryTree.SelectedNote))
+                {
+                    NoteOperations.DeleteNoteCommand.Execute(CategoryTree.SelectedNote);
+                }
+            }
+            else if (CategoryTree.SelectedCategory != null && !CategoryTree.SelectedCategory.IsRoot)
+            {
+                // Delete the selected category using the command
+                if (CategoryOperations.DeleteCategoryCommand.CanExecute(CategoryTree.SelectedCategory))
+                {
+                    CategoryOperations.DeleteCategoryCommand.Execute(CategoryTree.SelectedCategory);
+                }
+            }
+            await Task.CompletedTask; // Keep method async for consistency
+        }
+        
+        private async Task RenameSelectedAsync()
+        {
+            if (CategoryTree.SelectedNote != null)
+            {
+                // Rename the selected note using the command
+                if (NoteOperations.RenameNoteCommand.CanExecute(CategoryTree.SelectedNote))
+                {
+                    NoteOperations.RenameNoteCommand.Execute(CategoryTree.SelectedNote);
+                }
+            }
+            else if (CategoryTree.SelectedCategory != null && !CategoryTree.SelectedCategory.IsRoot)
+            {
+                // Rename the selected category using the command
+                if (CategoryOperations.RenameCategoryCommand.CanExecute(CategoryTree.SelectedCategory))
+                {
+                    CategoryOperations.RenameCategoryCommand.Execute(CategoryTree.SelectedCategory);
+                }
+            }
+            await Task.CompletedTask; // Keep method async for consistency
         }
 
         private void SubscribeToEvents()
