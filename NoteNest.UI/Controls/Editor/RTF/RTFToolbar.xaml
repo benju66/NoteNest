@@ -99,17 +99,9 @@
                     Style="{StaticResource ModernToolbarButtonStyle}"
                     ToolTip="Split View Vertically (Ctrl+\)"
                     Click="SplitVerticalButton_Click">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" 
-                               Text="&#xE784;" 
-                               FontSize="16"
-                               VerticalAlignment="Center"
+                <ContentControl Template="{StaticResource LucideSquareSplitHorizontal}"
+                               Width="18" Height="18"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                    <TextBlock Text="Split" 
-                               Margin="6,0,0,0" 
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                </StackPanel>
             </Button>
             
             <Separator Margin="6,0" Background="{DynamicResource AppBorderBrush}"/>
@@ -119,51 +111,27 @@
                           Style="{StaticResource ModernToggleButtonStyle}"
                           ToolTip="Bold (Ctrl+B)"
                           Click="BoldButton_Click">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" 
-                               Text="&#xE8DD;" 
-                               FontSize="16"
-                               VerticalAlignment="Center"
+                <ContentControl Template="{StaticResource LucideBold}"
+                               Width="18" Height="18"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                    <TextBlock Text="Bold" 
-                               Margin="6,0,0,0" 
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                </StackPanel>
             </ToggleButton>
             
             <ToggleButton Name="ItalicButton"
                           Style="{StaticResource ModernToggleButtonStyle}"
                           ToolTip="Italic (Ctrl+I)"
                           Click="ItalicButton_Click">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" 
-                               Text="&#xE8DB;" 
-                               FontSize="16"
-                               VerticalAlignment="Center"
+                <ContentControl Template="{StaticResource LucideItalic}"
+                               Width="18" Height="18"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                    <TextBlock Text="Italic" 
-                               Margin="6,0,0,0" 
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                </StackPanel>
             </ToggleButton>
             
             <ToggleButton Name="UnderlineButton"
                           Style="{StaticResource ModernToggleButtonStyle}"
                           ToolTip="Underline (Ctrl+U)"
                           Click="UnderlineButton_Click">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" 
-                               Text="&#xE8DC;" 
-                               FontSize="16"
-                               VerticalAlignment="Center"
+                <ContentControl Template="{StaticResource LucideUnderline}"
+                               Width="18" Height="18"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                    <TextBlock Text="Underline" 
-                               Margin="6,0,0,0" 
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                </StackPanel>
             </ToggleButton>
             
             <Separator Margin="6,0" Background="{DynamicResource AppBorderBrush}"/>
@@ -171,27 +139,19 @@
             <!-- Highlight Group -->
             <Button Name="HighlightButton"
                     Style="{StaticResource ModernToolbarButtonStyle}"
-                    ToolTip="Cycle Highlight (Ctrl+H)"
+                    ToolTip="Highlight (Ctrl+H)"
                     Click="HighlightButton_Click">
-                <StackPanel Orientation="Horizontal">
-                    <Border Background="{Binding HighlightColor, RelativeSource={RelativeSource AncestorType=UserControl}}" 
-                            Width="16" Height="16" 
-                            CornerRadius="2"
-                            BorderBrush="{DynamicResource SystemControlForegroundBaseHighBrush}"
-                            BorderThickness="1"
-                            VerticalAlignment="Center">
-                        <TextBlock FontFamily="Segoe MDL2 Assets" 
-                                   Text="&#xE7E6;" 
-                                   FontSize="10"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
+                <Grid>
+                    <!-- Highlight Color Indicator Bar (bottom of icon) -->
+                    <Rectangle Fill="{Binding HighlightColor, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              Height="3"
+                              VerticalAlignment="Bottom"
+                              Margin="0,0,0,-2"/>
+                    <!-- Highlighter Icon -->
+                    <ContentControl Template="{StaticResource LucideHighlighter}"
+                                   Width="18" Height="18"
                                    Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                    </Border>
-                    <TextBlock Text="Highlight" 
-                               Margin="6,0,0,0" 
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                </StackPanel>
+                </Grid>
             </Button>
             
             <Separator Margin="6,0" Background="{DynamicResource AppBorderBrush}"/>
@@ -201,34 +161,18 @@
                           Style="{StaticResource ModernToggleButtonStyle}"
                           ToolTip="Bullet List (Ctrl+.)"
                           Click="BulletListButton_Click">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" 
-                               Text="&#xE8FD;" 
-                               FontSize="16"
-                               VerticalAlignment="Center"
+                <ContentControl Template="{StaticResource LucideList}"
+                               Width="18" Height="18"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                    <TextBlock Text="Bullets" 
-                               Margin="6,0,0,0" 
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                </StackPanel>
             </ToggleButton>
             
             <ToggleButton Name="NumberedListButton"
                           Style="{StaticResource ModernToggleButtonStyle}"
                           ToolTip="Numbered List"
                           Click="NumberedListButton_Click">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" 
-                               Text="&#xE8BE;" 
-                               FontSize="16"
-                               VerticalAlignment="Center"
+                <ContentControl Template="{StaticResource LucideListOrdered}"
+                               Width="18" Height="18"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                    <TextBlock Text="Numbers" 
-                               Margin="6,0,0,0" 
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                </StackPanel>
             </ToggleButton>
             
             <Separator Margin="6,0" Background="{DynamicResource AppBorderBrush}"/>
@@ -238,17 +182,9 @@
                     Style="{StaticResource ModernToolbarButtonStyle}"
                     ToolTip="Increase Indent"
                     Click="IndentButton_Click">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" 
-                               Text="&#xE291;" 
-                               FontSize="16"
-                               VerticalAlignment="Center"
+                <ContentControl Template="{StaticResource LucideArrowRightToLine}"
+                               Width="18" Height="18"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                    <TextBlock Text="Indent" 
-                               Margin="6,0,0,0" 
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                </StackPanel>
             </Button>
             
             <Button Name="OutdentButton"
