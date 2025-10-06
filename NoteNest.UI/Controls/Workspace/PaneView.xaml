@@ -122,25 +122,55 @@
                     </DataTemplate>
                 </TabControl.ItemTemplate>
                 
-                <!-- Tab Item Style - Theme-aware active/inactive tab colors -->
+                <!-- Tab Item Style - Modern VS Code Style with Bottom Underline -->
                 <TabControl.ItemContainerStyle>
                     <Style TargetType="TabItem">
                         <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
                         <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
                         <Setter Property="BorderThickness" Value="0"/>
                         <Setter Property="Padding" Value="0"/>
-                        <Setter Property="Margin" Value="0"/>
-                        <Style.Triggers>
-                            <!-- Active tab -->
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
-                                <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
-                            </Trigger>
-                            <!-- Hover state -->
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
-                            </Trigger>
-                        </Style.Triggers>
+                        <Setter Property="Margin" Value="0,0,1,0"/>
+                        <Setter Property="Opacity" Value="0.85"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TabItem">
+                                    <Grid>
+                                        <Border x:Name="TabBorder"
+                                               Background="{TemplateBinding Background}"
+                                               BorderThickness="0,0,0,2"
+                                               BorderBrush="Transparent"
+                                               CornerRadius="4,4,0,0"
+                                               Padding="4,6,4,4"
+                                               Margin="0">
+                                            <!-- This properly renders the ItemTemplate content (Grid with Title, Dirty indicator, Close button) -->
+                                            <ContentPresenter x:Name="ContentSite"
+                                                            ContentSource="Header"
+                                                            HorizontalAlignment="Stretch"
+                                                            VerticalAlignment="Center"
+                                                            RecognizesAccessKey="True"/>
+                                        </Border>
+                                    </Grid>
+                                    <ControlTemplate.Triggers>
+                                        <!-- Active tab -->
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+                                            <Setter Property="Opacity" Value="1.0"/>
+                                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
+                                        </Trigger>
+                                        <!-- Hover state (not selected) -->
+                                        <MultiTrigger>
+                                            <MultiTrigger.Conditions>
+                                                <Condition Property="IsMouseOver" Value="True"/>
+                                                <Condition Property="IsSelected" Value="False"/>
+                                            </MultiTrigger.Conditions>
+                                            <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                                            <Setter Property="Opacity" Value="0.95"/>
+                                        </MultiTrigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
                     </Style>
                 </TabControl.ItemContainerStyle>
                 
