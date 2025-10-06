@@ -707,24 +707,6 @@
                                    VerticalAlignment="Center"/>
                     </StackPanel>
                     
-                    <!-- Word count -->
-                    <TextBlock Foreground="{DynamicResource AppTextSecondaryBrush}" 
-                               FontSize="11"
-                               VerticalAlignment="Center"
-                               Margin="0,0,10,0">
-                        <Run Text="{Binding WordCount, Mode=OneWay}"/>
-                        <Run Text="words"/>
-                    </TextBlock>
-                    
-                    <!-- Character count -->
-                    <TextBlock Foreground="{DynamicResource AppTextSecondaryBrush}" 
-                               FontSize="11"
-                               VerticalAlignment="Center"
-                               Margin="0,0,10,0">
-                        <Run Text="{Binding CharacterCount, Mode=OneWay}"/>
-                        <Run Text="chars"/>
-                    </TextBlock>
-                    
                     <!-- App status -->
                     <TextBlock Text="{Binding IsLoading, Converter={StaticResource BoolToTextConverter}}" 
                                Foreground="{DynamicResource AppTextSecondaryBrush}" 

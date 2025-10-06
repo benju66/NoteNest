@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -12,7 +11,6 @@ using NoteNest.UI.ViewModels.Workspace;
 using NoteNest.UI.Services;
 using System.Linq;
 using NoteNest.Core.Services.Logging;
-using NoteNest.UI.Controls.Editor.RTF;
 
 namespace NoteNest.UI.ViewModels.Shell
 {
@@ -26,11 +24,7 @@ namespace NoteNest.UI.ViewModels.Shell
         
         // Status bar enhancements
         private bool _showSaveIndicator;
-        private int _wordCount;
-        private int _characterCount;
         private DispatcherTimer _saveIndicatorTimer;
-        private DispatcherTimer _statsUpdateTimer;
-        private TabViewModel _currentTab;
 
         public MainShellViewModel(
             IMediator mediator,
@@ -83,23 +77,11 @@ namespace NoteNest.UI.ViewModels.Shell
             set => SetProperty(ref _statusMessage, value);
         }
         
-        // Status bar enhancements - save indicator and document stats
+        // Status bar enhancements - save indicator
         public bool ShowSaveIndicator
         {
             get => _showSaveIndicator;
             set => SetProperty(ref _showSaveIndicator, value);
-        }
-        
-        public int WordCount
-        {
-            get => _wordCount;
-            set => SetProperty(ref _wordCount, value);
-        }
-        
-        public int CharacterCount
-        {
-            get => _characterCount;
-            set => SetProperty(ref _characterCount, value);
         }
 
         // Commands are now delegated to focused ViewModels
@@ -131,18 +113,6 @@ namespace NoteNest.UI.ViewModels.Shell
             {
                 _saveIndicatorTimer.Stop();
                 ShowSaveIndicator = false;
-            };
-            
-            // Stats update timer - debounces document stats calculation (500ms)
-            _statsUpdateTimer = new DispatcherTimer 
-            { 
-                Interval = TimeSpan.FromMilliseconds(500),
-                IsEnabled = false
-            };
-            _statsUpdateTimer.Tick += (s, e) =>
-            {
-                _statsUpdateTimer.Stop();
-                UpdateDocumentStats();
             };
         }
 
@@ -207,48 +177,6 @@ namespace NoteNest.UI.ViewModels.Shell
                 }
             }
             await Task.CompletedTask; // Keep method async for consistency
-        }
-        
-        private void UpdateDocumentStats()
-        {
-            var tab = Workspace?.SelectedTab;
-            if (tab == null)
-            {
-                WordCount = 0;
-                CharacterCount = 0;
-                return;
-            }
-            
-            try
-            {
-                // Get RTF content from the tab
-                var rtfContent = tab.GetContentToLoad();
-                if (string.IsNullOrEmpty(rtfContent))
-                {
-                    WordCount = 0;
-                    CharacterCount = 0;
-                    return;
-                }
-                
-                // Extract plain text for stats calculation
-                var plainText = RTFOperations.ExtractPlainText(rtfContent);
-                
-                // Calculate word count
-                var words = plainText.Split(new[] { ' ', '\n', '\r', '\t' }, 
-                                           StringSplitOptions.RemoveEmptyEntries);
-                WordCount = words.Length;
-                
-                // Calculate character count
-                CharacterCount = plainText.Length;
-                
-                _logger.Debug($"Document stats updated: {WordCount} words, {CharacterCount} chars");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to update document stats");
-                WordCount = 0;
-                CharacterCount = 0;
-            }
         }
 
         private void SubscribeToEvents()
@@ -360,33 +288,7 @@ namespace NoteNest.UI.ViewModels.Shell
 
         private void OnTabSelected(TabViewModel tab)
         {
-            // Unsubscribe from old tab's PropertyChanged
-            if (_currentTab != null)
-            {
-                _currentTab.PropertyChanged -= OnCurrentTabPropertyChanged;
-            }
-            
-            // Update reference and subscribe to new tab
-            _currentTab = tab;
-            if (_currentTab != null)
-            {
-                _currentTab.PropertyChanged += OnCurrentTabPropertyChanged;
-            }
-            
             StatusMessage = tab != null ? $"Editing: {tab.Title}" : "No note selected";
-            
-            // Update document stats immediately when tab changes
-            UpdateDocumentStats();
-        }
-        
-        private void OnCurrentTabPropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            // When IsDirty changes, debounce stats update (user is typing)
-            if (e.PropertyName == nameof(TabViewModel.IsDirty))
-            {
-                _statsUpdateTimer?.Stop();
-                _statsUpdateTimer?.Start();
-            }
         }
 
         private void OnNoteOpened(string noteId)
@@ -521,24 +423,11 @@ namespace NoteNest.UI.ViewModels.Shell
         {
             try
             {
-                // Clean up timers
+                // Clean up save indicator timer
                 if (_saveIndicatorTimer != null)
                 {
                     _saveIndicatorTimer.Stop();
                     _saveIndicatorTimer = null;
-                }
-                
-                if (_statsUpdateTimer != null)
-                {
-                    _statsUpdateTimer.Stop();
-                    _statsUpdateTimer = null;
-                }
-                
-                // Unsubscribe from current tab
-                if (_currentTab != null)
-                {
-                    _currentTab.PropertyChanged -= OnCurrentTabPropertyChanged;
-                    _currentTab = null;
                 }
                 
                 // Dispose ViewModels that implement IDisposable
