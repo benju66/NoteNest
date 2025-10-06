@@ -7,6 +7,8 @@ using NoteNest.UI.Services;
 using NoteNest.Application.Categories.Commands.CreateCategory;
 using NoteNest.Application.Categories.Commands.DeleteCategory;
 using NoteNest.Application.Categories.Commands.RenameCategory;
+using NoteNest.Application.Categories.Commands.MoveCategory;
+using NoteNest.Application.Notes.Commands.MoveNote;
 
 namespace NoteNest.UI.ViewModels.Categories
 {
@@ -45,11 +47,15 @@ namespace NoteNest.UI.ViewModels.Categories
         public ICommand CreateCategoryCommand { get; private set; }
         public ICommand DeleteCategoryCommand { get; private set; }
         public ICommand RenameCategoryCommand { get; private set; }
+        public ICommand MoveCategoryCommand { get; private set; }
+        public ICommand MoveNoteCommand { get; private set; }
 
         // Events for UI coordination
         public event Action<string> CategoryCreated;
         public event Action<string> CategoryDeleted;
         public event Action<string, string> CategoryRenamed;
+        public event Action<string, string> CategoryMoved; // (categoryId, newParentId)
+        public event Action<string, string> NoteMoved; // (noteId, newCategoryId)
 
         private void InitializeCommands()
         {
@@ -57,6 +63,8 @@ namespace NoteNest.UI.ViewModels.Categories
             CreateCategoryCommand = new AsyncRelayCommand<object>(ExecuteCreateCategory, CanCreateCategory);
             DeleteCategoryCommand = new AsyncRelayCommand<object>(ExecuteDeleteCategory, CanDeleteCategory);
             RenameCategoryCommand = new AsyncRelayCommand<object>(ExecuteRenameCategory, CanRenameCategory);
+            MoveCategoryCommand = new AsyncRelayCommand<object>(ExecuteMoveCategory, CanMoveCategory);
+            MoveNoteCommand = new AsyncRelayCommand<object>(ExecuteMoveNote, CanMoveNote);
         }
 
         private async Task ExecuteCreateCategory(object parameter)
@@ -238,5 +246,102 @@ namespace NoteNest.UI.ViewModels.Categories
             var categoryId = category?.Id ?? parameter?.ToString();
             return !IsProcessing && !string.IsNullOrEmpty(categoryId);
         }
+
+        /// <summary>
+        /// Executes category move operation.
+        /// Parameter should be tuple: (CategoryViewModel source, CategoryViewModel target)
+        /// </summary>
+        private async Task ExecuteMoveCategory(object parameter)
+        {
+            // Extract source and target from parameter (tuple)
+            if (parameter is not (CategoryViewModel sourceCategory, CategoryViewModel targetCategory))
+                return;
+
+            try
+            {
+                IsProcessing = true;
+                StatusMessage = $"Moving category '{sourceCategory.Name}'...";
+
+                // Use MediatR CQRS command
+                var command = new MoveCategoryCommand
+                {
+                    CategoryId = sourceCategory.Id,
+                    NewParentId = targetCategory?.Id // null = move to root
+                };
+
+                var result = await _mediator.Send(command);
+                
+                if (result.IsFailure)
+                {
+                    StatusMessage = $"Failed to move category: {result.Error}";
+                    _dialogService.ShowError(result.Error, "Move Category Error");
+                }
+                else
+                {
+                    var targetName = targetCategory?.Name ?? "root";
+                    StatusMessage = $"Moved '{sourceCategory.Name}' to '{targetName}' ({result.Value.AffectedDescendantCount} descendants)";
+                    CategoryMoved?.Invoke(sourceCategory.Id, targetCategory?.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error moving category: {ex.Message}";
+                _dialogService.ShowError(ex.Message, "Error");
+            }
+            finally
+            {
+                IsProcessing = false;
+            }
+        }
+
+        /// <summary>
+        /// Executes note move operation.
+        /// Parameter should be tuple: (NoteItemViewModel note, CategoryViewModel targetCategory)
+        /// </summary>
+        private async Task ExecuteMoveNote(object parameter)
+        {
+            // Extract note and target category from parameter (tuple)
+            if (parameter is not (NoteItemViewModel note, CategoryViewModel targetCategory))
+                return;
+
+            try
+            {
+                IsProcessing = true;
+                StatusMessage = $"Moving note '{note.Title}'...";
+
+                // Use MediatR CQRS command
+                var command = new MoveNoteCommand
+                {
+                    NoteId = note.Id,
+                    TargetCategoryId = targetCategory.Id
+                };
+
+                var result = await _mediator.Send(command);
+                
+                if (result.IsFailure)
+                {
+                    StatusMessage = $"Failed to move note: {result.Error}";
+                    _dialogService.ShowError(result.Error, "Move Note Error");
+                }
+                else
+                {
+                    StatusMessage = $"Moved '{note.Title}' to '{targetCategory.Name}'";
+                    NoteMoved?.Invoke(note.Id, targetCategory.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error moving note: {ex.Message}";
+                _dialogService.ShowError(ex.Message, "Error");
+            }
+            finally
+            {
+                IsProcessing = false;
+            }
+        }
+
+        private bool CanMoveCategory(object parameter) => !IsProcessing;
+        
+        private bool CanMoveNote(object parameter) => !IsProcessing;
     }
 }

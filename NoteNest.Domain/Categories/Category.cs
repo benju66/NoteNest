@@ -43,5 +43,17 @@ namespace NoteNest.Domain.Categories
             Path = newPath;
             return Result.Ok();
         }
+
+        /// <summary>
+        /// Moves category to a new parent in the tree hierarchy.
+        /// Used by drag & drop and move operations.
+        /// Note: Physical folder path does NOT change (matches rename behavior).
+        /// </summary>
+        public Result Move(CategoryId? newParentId)
+        {
+            // Allow moving to root (newParentId = null)
+            ParentId = newParentId;
+            return Result.Ok();
+        }
     }
 }

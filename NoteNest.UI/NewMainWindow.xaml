@@ -370,10 +370,12 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     
-                    <!-- Enhanced TreeView with interaction support + VIRTUALIZATION for performance -->
-                    <TreeView Grid.Row="0" 
+                    <!-- Enhanced TreeView with interaction support + VIRTUALIZATION for performance + DRAG & DROP -->
+                    <TreeView x:Name="CategoryTreeView"
+                              Grid.Row="0" 
                               ItemsSource="{Binding CategoryTree.Categories}"
                               Tag="{Binding}"
+                              Loaded="OnTreeViewLoaded"
                               SelectedItemChanged="CategoryTree_SelectedItemChanged"
                               MouseDoubleClick="TreeView_MouseDoubleClick"
                               PreviewKeyDown="TreeView_PreviewKeyDown"

@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using MediatR;
 using NoteNest.Application.Common.Interfaces;
 using NoteNest.Domain.Categories;
 using NoteNest.UI.ViewModels.Common;
+using NoteNest.UI.Controls;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.ViewModels.Categories
@@ -29,6 +31,9 @@ namespace NoteNest.UI.ViewModels.Categories
         private DispatcherTimer _expandedStateTimer;
         private bool _isLoadingFromDatabase = false;
         private bool _disposed = false;
+        
+        // Drag & drop support
+        private TreeViewDragHandler _dragHandler;
 
         public CategoryTreeViewModel(
             ICategoryRepository categoryRepository, 
@@ -516,16 +521,143 @@ namespace NoteNest.UI.ViewModels.Categories
                 // Properly dispose timer
                 _expandedStateTimer = null;
                 
-                _logger.Debug("Flushed expanded state and disposed timer on dispose");
+                // Dispose drag handler
+                _dragHandler?.Dispose();
+                _dragHandler = null;
+                
+                _logger.Debug("Flushed expanded state and disposed resources");
             }
             catch (Exception ex)
             {
-                _logger.Warning($"Failed to flush expanded state on dispose: {ex.Message}");
+                _logger.Warning($"Failed to dispose resources: {ex.Message}");
             }
             finally
             {
                 _disposed = true;
             }
+        }
+
+        // =============================================================================
+        // DRAG & DROP SUPPORT
+        // =============================================================================
+
+        /// <summary>
+        /// Enables drag & drop for the tree view.
+        /// Should be called from code-behind when TreeView is loaded.
+        /// </summary>
+        public void EnableDragDrop(TreeView treeView, CategoryOperationsViewModel categoryOperations)
+        {
+            if (treeView == null || categoryOperations == null)
+                return;
+
+            // Create drag handler with validation and drop callbacks
+            _dragHandler = new TreeViewDragHandler(
+                treeView,
+                canDropCallback: (source, target) => CanDrop(source, target),
+                dropCallback: async (source, target) => await OnDrop(source, target, categoryOperations)
+            );
+
+            _logger.Info("Drag & drop enabled for tree view");
+        }
+
+        /// <summary>
+        /// Validates whether a drop operation is allowed.
+        /// </summary>
+        private bool CanDrop(object source, object target)
+        {
+            // Can't drop on self
+            if (source == target)
+                return false;
+
+            // CASE 1: Moving a note to a category
+            if (source is NoteItemViewModel && target is CategoryViewModel)
+                return true;
+
+            // CASE 2: Moving a category to another category
+            if (source is CategoryViewModel sourceCategory && target is CategoryViewModel targetCategory)
+            {
+                // Can't drop into own descendant (circular reference check)
+                if (IsDescendant(targetCategory, sourceCategory))
+                    return false;
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Executes the drop operation.
+        /// </summary>
+        private async Task OnDrop(object source, object target, CategoryOperationsViewModel categoryOperations)
+        {
+            try
+            {
+                if (source is NoteItemViewModel note && target is CategoryViewModel targetCategory)
+                {
+                    // Move note to category
+                    categoryOperations.MoveNoteCommand.Execute((note, targetCategory));
+                }
+                else if (source is CategoryViewModel sourceCategory && target is CategoryViewModel targetCat)
+                {
+                    // Move category to new parent
+                    categoryOperations.MoveCategoryCommand.Execute((sourceCategory, targetCat));
+                }
+                
+                // Give UI time to update
+                await Task.Delay(10);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to execute drop operation");
+            }
+        }
+
+        /// <summary>
+        /// Checks if a category is a descendant of another category.
+        /// Prevents circular reference moves.
+        /// </summary>
+        private bool IsDescendant(CategoryViewModel potential, CategoryViewModel ancestor)
+        {
+            var current = potential;
+            var visited = new HashSet<string>();
+
+            while (current != null)
+            {
+                if (current.Id == ancestor.Id)
+                    return true;
+
+                // Safety check: prevent infinite loops
+                if (!visited.Add(current.Id))
+                    break;
+
+                // Find parent
+                current = FindCategoryById(current.ParentId);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Finds a category by ID in the tree.
+        /// </summary>
+        private CategoryViewModel FindCategoryById(string categoryId)
+        {
+            if (string.IsNullOrEmpty(categoryId))
+                return null;
+
+            var queue = new Queue<CategoryViewModel>(Categories);
+            while (queue.Count > 0)
+            {
+                var category = queue.Dequeue();
+                if (category.Id == categoryId)
+                    return category;
+
+                foreach (var child in category.Children)
+                    queue.Enqueue(child);
+            }
+
+            return null;
         }
     }
 }

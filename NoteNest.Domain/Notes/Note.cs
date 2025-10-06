@@ -85,6 +85,27 @@ namespace NoteNest.Domain.Notes
             return Result.Ok();
         }
 
+        /// <summary>
+        /// Moves note to a new category and updates file path atomically.
+        /// Used by drag & drop and move operations.
+        /// </summary>
+        public Result Move(CategoryId newCategoryId, string newFilePath)
+        {
+            if (newCategoryId == null)
+                return Result.Fail("Category cannot be null");
+            
+            if (string.IsNullOrWhiteSpace(newFilePath))
+                return Result.Fail("File path cannot be empty");
+
+            var oldCategoryId = CategoryId;
+            CategoryId = newCategoryId;
+            FilePath = newFilePath;
+            UpdatedAt = DateTime.UtcNow;
+
+            AddDomainEvent(new NoteMovedEvent(Id, oldCategoryId, newCategoryId));
+            return Result.Ok();
+        }
+
         public void SetFilePath(string filePath)
         {
             FilePath = filePath;

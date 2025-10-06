@@ -49,6 +49,16 @@ namespace NoteNest.UI
             }
             catch { /* Ignore errors setting initial theme */ }
         }
+
+        private void OnTreeViewLoaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.TreeView treeView && 
+                DataContext is MainShellViewModel shell)
+            {
+                shell.CategoryTree.EnableDragDrop(treeView, shell.CategoryOperations);
+                System.Diagnostics.Debug.WriteLine("[MainWindow] ✅ Drag & drop enabled for category tree view");
+            }
+        }
         
         private void OnWindowStateChanged(object sender, EventArgs e)
         {
