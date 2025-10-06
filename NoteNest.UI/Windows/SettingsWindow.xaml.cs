@@ -7,8 +7,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace NoteNest.UI.Windows
 {
     /// <summary>
-    /// Simplified Settings Window - migrated from ModernWPF
-    /// Note: This is a temporary simplified version during the ModernWPF removal
+    /// Simplified Settings Window
+    /// Note: Theme setting moved to More menu in title bar
     /// Will be rebuilt with full settings in future updates
     /// </summary>
     public partial class SettingsWindow : Window
@@ -23,50 +23,12 @@ namespace NoteNest.UI.Windows
         {
             try
             {
-                // Load current theme setting
-                var app = (App)System.Windows.Application.Current;
-                var themeService = app.ServiceProvider?.GetService<IThemeService>();
-                if (themeService != null)
-                {
-                    var currentTheme = themeService.CurrentTheme.ToString();
-                    foreach (ComboBoxItem item in ThemeComboBox.Items)
-                    {
-                        if (item.Tag?.ToString() == currentTheme)
-                        {
-                            ThemeComboBox.SelectedItem = item;
-                            break;
-                        }
-                    }
-                }
+                // Load any saved settings here
+                // Theme is now controlled from the More menu in title bar
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[SettingsWindow] Failed to load settings: {ex.Message}");
-            }
-        }
-
-        private async void ThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (e.AddedItems.Count == 0) return;
-            
-            try
-            {
-                var selectedItem = e.AddedItems[0] as ComboBoxItem;
-                var themeTag = selectedItem?.Tag?.ToString();
-                
-                if (!string.IsNullOrEmpty(themeTag) && Enum.TryParse<ThemeType>(themeTag, out var theme))
-                {
-                    var app = (App)System.Windows.Application.Current;
-                    var themeService = app.ServiceProvider?.GetService<IThemeService>();
-                    if (themeService != null)
-                    {
-                        await themeService.SetThemeAsync(theme);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[SettingsWindow] Theme change failed: {ex.Message}");
             }
         }
 

@@ -25,33 +25,14 @@
         <!-- Settings Content -->
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <!-- Theme Section -->
-                <TextBlock Text="Appearance" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                <Border Background="{DynamicResource AppSurfaceBrush}" 
-                       BorderBrush="{DynamicResource AppBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                       Padding="15"
-                       Margin="0,0,0,20">
-                            <StackPanel>
-                        <TextBlock Text="Theme" Margin="0,0,0,8"/>
-                        <ComboBox x:Name="ThemeComboBox" 
-                                 SelectionChanged="ThemeComboBox_SelectionChanged"
-                                 SelectedIndex="0">
-                            <ComboBoxItem Content="Light" Tag="Light"/>
-                            <ComboBoxItem Content="Dark" Tag="Dark"/>
-                            <ComboBoxItem Content="Solarized Light" Tag="SolarizedLight"/>
-                            <ComboBoxItem Content="Solarized Dark" Tag="SolarizedDark"/>
-                        </ComboBox>
-                            </StackPanel>
-                        </Border>
-                        
+                <!-- Theme moved to More menu in title bar -->
+                
                 <!-- General Section -->
                 <TextBlock Text="General" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
                 <Border Background="{DynamicResource AppSurfaceBrush}" 
                        BorderBrush="{DynamicResource AppBorderBrush}"
-                       BorderThickness="1"
-                                CornerRadius="4" 
+                                BorderThickness="1"
+                                CornerRadius="4"
                        Padding="15"
                        Margin="0,0,0,20">
                             <StackPanel>
