@@ -537,8 +537,8 @@ namespace NoteNest.Core.Services.Search
 
             try
             {
-                // Use clean configuration instead of static PathService
-                var notesPath = Path.Combine(_storageOptions.NotesPath, "Notes");
+                // Use clean configuration - NotesPath already includes the full path
+                var notesPath = _storageOptions.NotesPath;
                 
                 if (!Directory.Exists(notesPath))
                 {

@@ -492,10 +492,6 @@
             "Microsoft.Xaml.Behaviors.Wpf": {
               "target": "Package",
               "version": "[1.1.122, )"
-            },
-            "ModernWpfUI": {
-              "target": "Package",
-              "version": "[0.9.6, )"
             }
           },
           "imports": [

@@ -138,13 +138,32 @@
                 
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/> <!-- Error panel -->
+                        <RowDefinition Height="*"/>    <!-- Results list -->
+                        <RowDefinition Height="Auto"/> <!-- Status bar -->
                     </Grid.RowDefinitions>
+                    
+                    <!-- Error Message Panel -->
+                    <Border Grid.Row="0" 
+                           Background="#FFFFE0E0" 
+                           Padding="12,8"
+                           BorderBrush="#FFCC0000"
+                           BorderThickness="0,0,0,1"
+                           Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="⚠️ " 
+                                      FontSize="14" 
+                                      Foreground="#FFCC0000"
+                                      Margin="0,0,8,0"/>
+                            <TextBlock Text="{Binding ErrorMessage}" 
+                                      Foreground="#FFCC0000"
+                                      TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
                     
                     <!-- Results List -->
                     <ListBox x:Name="ResultsList"
-                            Grid.Row="0"
+                            Grid.Row="1"
                       ItemsSource="{Binding SearchResults}"
                             SelectedItem="{Binding SelectedResult, Mode=TwoWay}"
                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -253,7 +272,7 @@
                     </ListBox>
                     
                     <!-- Status bar -->
-                    <Border Grid.Row="1" 
+                    <Border Grid.Row="2" 
                            Background="{DynamicResource AppSurfaceHighlightBrush}"
                            Padding="8,4"
                            Visibility="{Binding HasResults, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -263,7 +282,7 @@
                     </Border>
                     
                     <!-- No results message -->
-                    <TextBlock Grid.Row="0"
+                    <TextBlock Grid.Row="1"
                               Text="No results found"
                               HorizontalAlignment="Center"
                               VerticalAlignment="Center"

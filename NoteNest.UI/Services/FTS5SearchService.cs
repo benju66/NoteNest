@@ -29,6 +29,7 @@ namespace NoteNest.UI.Services
         private readonly ISearchOptions _searchOptions;
         private readonly IStorageOptions _storageOptions;
         private readonly CancellationTokenSource _cancellationTokenSource;
+        private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
 
         private bool _isInitialized = false;
 
@@ -60,11 +61,18 @@ namespace NoteNest.UI.Services
 
         public async Task InitializeAsync()
         {
+            // Quick check without lock (fast path)
             if (_isInitialized)
                 return;
 
+            // Thread-safe initialization with lock
+            await _initLock.WaitAsync();
             try
             {
+                // Double-check after acquiring lock
+                if (_isInitialized)
+                    return;
+
                 // Use clean configuration - no complex path resolution needed
                 var databasePath = _searchOptions.DatabasePath;
                 
@@ -102,6 +110,10 @@ namespace NoteNest.UI.Services
             {
                 _logger?.Error(ex, "Failed to initialize FTS5 Search Service");
                 throw;
+            }
+            finally
+            {
+                _initLock.Release();
             }
         }
 
@@ -497,6 +509,9 @@ namespace NoteNest.UI.Services
                 
                 // Dispose cancellation token source
                 _cancellationTokenSource?.Dispose();
+                
+                // Dispose initialization lock
+                _initLock?.Dispose();
             }
             catch (Exception ex)
             {

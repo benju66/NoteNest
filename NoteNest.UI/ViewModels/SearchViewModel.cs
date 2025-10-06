@@ -27,6 +27,7 @@ namespace NoteNest.UI.ViewModels
         private bool _showDropdown;
         private string _statusText = "Type to search...";
         private SearchResultViewModel? _selectedResult;
+        private string _errorMessage = string.Empty;
         
         // Collections
         private ObservableCollection<SearchResultViewModel> _searchResults;
@@ -95,6 +96,15 @@ namespace NoteNest.UI.ViewModels
             get => _selectedResult;
             set => SetProperty(ref _selectedResult, value);
         }
+
+        // Error handling properties
+        public string ErrorMessage
+        {
+            get => _errorMessage;
+            set => SetProperty(ref _errorMessage, value);
+        }
+
+        public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
         // Events
         public event EventHandler<SearchResultSelectedEventArgs>? ResultSelected;
@@ -182,6 +192,43 @@ namespace NoteNest.UI.ViewModels
             
             try
             {
+                // 🔍 CHECK IF INDEX IS READY FIRST
+                if (!_searchService.IsIndexReady)
+                {
+                    _logger.Info("Search attempted but index not ready yet");
+                    
+                    // Check if we're actively indexing
+                    if (_searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
+                    {
+                        if (fts5Service.IsIndexing())
+                        {
+                            var progress = fts5Service.GetIndexingProgress();
+                            if (progress != null)
+                            {
+                                StatusText = $"Building index: {progress.Processed}/{progress.Total} files ({progress.PercentComplete:F0}%)";
+                                _logger.Debug($"Index building: {progress.Processed}/{progress.Total} ({progress.PercentComplete:F1}%)");
+                            }
+                            else
+                            {
+                                StatusText = "Building search index...";
+                            }
+                        }
+                        else
+                        {
+                            StatusText = "Search index is initializing...";
+                        }
+                    }
+                    else
+                    {
+                        StatusText = "Search not ready yet...";
+                    }
+                    
+                    IsSearching = false;
+                    HasResults = false;
+                    ShowDropdown = false;
+                    return;
+                }
+
                 // === COMPREHENSIVE SEARCH DIAGNOSTICS ===
                 _logger.Debug($"=== SEARCH DEBUG START ===");
                 _logger.Debug($"Timestamp: {DateTime.Now:HH:mm:ss.fff}");
@@ -190,11 +237,11 @@ namespace NoteNest.UI.ViewModels
                 _logger.Debug($"IsIndexReady: {_searchService.IsIndexReady}");
 
                 // Check index status if possible
-                if (_searchService is NoteNest.UI.Services.FTS5SearchService fts5Service)
+                if (_searchService is NoteNest.UI.Services.FTS5SearchService searchServiceImpl)
                 {
                     try
                     {
-                        var docCount = await fts5Service.GetIndexedDocumentCountAsync();
+                        var docCount = await searchServiceImpl.GetIndexedDocumentCountAsync();
                         _logger.Debug($"Indexed Documents: {docCount}");
                     }
                     catch (Exception ex)
@@ -304,6 +351,7 @@ namespace NoteNest.UI.ViewModels
                 _logger.Debug($"Exception Type: {ex.GetType().FullName}");
                 _logger.Debug($"Stack Trace: {ex.StackTrace}");
                 StatusText = "Search failed";
+                ErrorMessage = "Search temporarily unavailable. Please try again.";
                 HasResults = false;
                 ShowDropdown = false;
             }
@@ -323,6 +371,7 @@ namespace NoteNest.UI.ViewModels
             StatusText = "Type to search...";
             IsSearching = false;
             SearchQuery = string.Empty;  // Clear the search box too
+            ErrorMessage = string.Empty;  // Clear error state
         }
 
         // Navigate through results with arrow keys

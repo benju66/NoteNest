@@ -50,5 +50,41 @@ namespace NoteNest.UI.Interfaces
         /// Rebuild the search index
         /// </summary>
         Task RebuildIndexAsync();
+
+        /// <summary>
+        /// Handle note file creation event
+        /// </summary>
+        /// <param name="filePath">Path to the created note file</param>
+        Task HandleNoteCreatedAsync(string filePath);
+
+        /// <summary>
+        /// Handle note file update event
+        /// </summary>
+        /// <param name="filePath">Path to the updated note file</param>
+        Task HandleNoteUpdatedAsync(string filePath);
+
+        /// <summary>
+        /// Handle note file deletion event
+        /// </summary>
+        /// <param name="filePath">Path to the deleted note file</param>
+        Task HandleNoteDeletedAsync(string filePath);
+
+        /// <summary>
+        /// Get the number of indexed documents
+        /// </summary>
+        /// <returns>Number of documents in the search index</returns>
+        Task<int> GetIndexedDocumentCountAsync();
+
+        /// <summary>
+        /// Check if the index is currently being built
+        /// </summary>
+        /// <returns>True if indexing is in progress</returns>
+        bool IsIndexing();
+
+        /// <summary>
+        /// Get the current indexing progress
+        /// </summary>
+        /// <returns>Progress information or null if not indexing</returns>
+        NoteNest.Core.Models.Search.IndexingProgress GetIndexingProgress();
     }
 }

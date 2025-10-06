@@ -185,6 +185,9 @@ namespace NoteNest.UI.Composition
             // 🧪 PROTOTYPE: Database metadata sync service (MUST be registered AFTER ISaveManager)
             services.AddHostedService<NoteNest.Infrastructure.Database.Services.DatabaseMetadataUpdateService>();
             
+            // 🔍 Search index sync service - keeps search index updated when notes are saved
+            services.AddHostedService<NoteNest.UI.Services.SearchIndexSyncService>();
+            
             // Workspace Persistence Service (Milestone 2A - Tab Persistence)
             services.AddSingleton<IWorkspacePersistenceService, WorkspacePersistenceService>();
             

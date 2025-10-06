@@ -53,6 +53,34 @@ namespace NoteNest.UI
                 await themeService.InitializeAsync();
                 _logger.Info($"✅ Theme system initialized: {themeService.CurrentTheme}");
 
+                // 🔍 Initialize search service at startup
+                try
+                {
+                    var searchService = _host.Services.GetRequiredService<NoteNest.UI.Interfaces.ISearchService>();
+                    
+                    // Initialize the search service and database
+                    await searchService.InitializeAsync();
+                    
+                    // Get indexed document count for diagnostics
+                    var docCount = await searchService.GetIndexedDocumentCountAsync();
+                    _logger.Info($"🔍 Search service initialized - Indexed documents: {docCount}");
+                    
+                    // Check if index is empty and log warning
+                    if (docCount == 0)
+                    {
+                        _logger.Warning("⚠️ Search index is empty - background indexing started. First search may take a moment.");
+                    }
+                    else
+                    {
+                        _logger.Info($"✅ Search ready with {docCount} documents");
+                    }
+                }
+                catch (Exception searchEx)
+                {
+                    _logger.Error(searchEx, "❌ Failed to initialize search service - search functionality may not work");
+                    // Don't fail startup if search initialization fails - degrade gracefully
+                }
+
                 // DIAGNOSTIC: Test CategoryTreeViewModel creation manually
                 try
                 {
@@ -123,6 +151,10 @@ namespace NoteNest.UI
                     // Synchronous save (OnExit can't be async)
                     mainShell.Workspace.SaveStateAsync().GetAwaiter().GetResult();
                     _logger?.Info("✅ Workspace state saved on exit");
+                    
+                    // Dispose resources
+                    mainShell.Dispose();
+                    _logger?.Info("✅ Resources cleaned up on exit");
                 }
             }
             catch (Exception ex)

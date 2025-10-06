@@ -13,7 +13,7 @@ using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.ViewModels.Shell
 {
-    public class MainShellViewModel : ViewModelBase
+    public class MainShellViewModel : ViewModelBase, IDisposable
     {
         private readonly IMediator _mediator;
         private readonly IDialogService _dialogService;
@@ -373,6 +373,26 @@ namespace NoteNest.UI.ViewModels.Shell
             finally
             {
                 IsLoading = false;
+            }
+        }
+
+        // =============================================================================
+        // RESOURCE CLEANUP - Prevent Memory Leaks
+        // =============================================================================
+        
+        public void Dispose()
+        {
+            try
+            {
+                // Dispose ViewModels that implement IDisposable
+                (Search as IDisposable)?.Dispose();
+                (Workspace as IDisposable)?.Dispose();
+                
+                _logger?.Debug("MainShellViewModel disposed successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Error disposing MainShellViewModel");
             }
         }
     }
