@@ -8,12 +8,14 @@ namespace NoteNest.UI.ViewModels.Common
     {
         private readonly Func<Task> _execute;
         private readonly Func<bool> _canExecute;
+        private readonly Action<Exception>? _onError;
         private bool _isExecuting;
 
-        public AsyncRelayCommand(Func<Task> execute, Func<bool> canExecute = null)
+        public AsyncRelayCommand(Func<Task> execute, Func<bool> canExecute = null, Action<Exception>? onError = null)
         {
             _execute = execute ?? throw new ArgumentNullException(nameof(execute));
             _canExecute = canExecute;
+            _onError = onError;
         }
 
         public event EventHandler CanExecuteChanged
@@ -39,6 +41,17 @@ namespace NoteNest.UI.ViewModels.Common
             {
                 await _execute();
             }
+            catch (Exception ex)
+            {
+                // Log to debug output for diagnostics
+                System.Diagnostics.Debug.WriteLine($"[AsyncRelayCommand] Execute exception: {ex.Message}\n{ex.StackTrace}");
+                
+                // Invoke optional error handler (allows ViewModel to show UI feedback)
+                _onError?.Invoke(ex);
+                
+                // DO NOT RETHROW - prevents application crash from async void
+                // ViewModels should handle errors in their command methods
+            }
             finally
             {
                 _isExecuting = false;
@@ -56,12 +69,14 @@ namespace NoteNest.UI.ViewModels.Common
     {
         private readonly Func<T, Task> _execute;
         private readonly Func<T, bool> _canExecute;
+        private readonly Action<Exception>? _onError;
         private bool _isExecuting;
 
-        public AsyncRelayCommand(Func<T, Task> execute, Func<T, bool> canExecute = null)
+        public AsyncRelayCommand(Func<T, Task> execute, Func<T, bool> canExecute = null, Action<Exception>? onError = null)
         {
             _execute = execute ?? throw new ArgumentNullException(nameof(execute));
             _canExecute = canExecute;
+            _onError = onError;
         }
 
         public event EventHandler CanExecuteChanged
@@ -112,8 +127,14 @@ namespace NoteNest.UI.ViewModels.Common
             }
             catch (Exception ex)
             {
+                // Log to debug output for diagnostics
                 System.Diagnostics.Debug.WriteLine($"[AsyncRelayCommand] Execute exception: {ex.Message}\n{ex.StackTrace}");
-                throw;
+                
+                // Invoke optional error handler (allows ViewModel to show UI feedback)
+                _onError?.Invoke(ex);
+                
+                // DO NOT RETHROW - prevents application crash from async void
+                // ViewModels should handle errors in their command methods
             }
             finally
             {

@@ -419,10 +419,52 @@ namespace NoteNest.UI.ViewModels.Shell
         // RESOURCE CLEANUP - Prevent Memory Leaks
         // =============================================================================
         
+        private bool _disposed = false;
+        
         public void Dispose()
         {
+            if (_disposed) return; // Prevent double-disposal
+            
             try
             {
+                // Unsubscribe from CategoryTree events
+                if (CategoryTree != null)
+                {
+                    CategoryTree.CategorySelected -= OnCategorySelected;
+                    CategoryTree.NoteSelected -= OnNoteSelected;
+                    CategoryTree.NoteOpenRequested -= OnNoteOpenRequested;
+                }
+                
+                // Unsubscribe from NoteOperations events
+                if (NoteOperations != null)
+                {
+                    NoteOperations.NoteCreated -= OnNoteCreated;
+                    NoteOperations.NoteDeleted -= OnNoteDeleted;
+                    NoteOperations.NoteRenamed -= OnNoteRenamed;
+                }
+                
+                // Unsubscribe from CategoryOperations events
+                if (CategoryOperations != null)
+                {
+                    CategoryOperations.CategoryCreated -= OnCategoryCreated;
+                    CategoryOperations.CategoryDeleted -= OnCategoryDeleted;
+                    CategoryOperations.CategoryRenamed -= OnCategoryRenamed;
+                }
+                
+                // Unsubscribe from Workspace events
+                if (Workspace != null)
+                {
+                    Workspace.TabSelected -= OnTabSelected;
+                    Workspace.NoteOpened -= OnNoteOpened;
+                }
+                
+                // Unsubscribe from Search events
+                if (Search != null)
+                {
+                    Search.ResultSelected -= OnSearchResultSelected;
+                    Search.NoteOpenRequested -= OnSearchNoteOpenRequested;
+                }
+                
                 // Clean up save indicator timer
                 if (_saveIndicatorTimer != null)
                 {
@@ -430,11 +472,12 @@ namespace NoteNest.UI.ViewModels.Shell
                     _saveIndicatorTimer = null;
                 }
                 
-                // Dispose ViewModels that implement IDisposable
+                // Dispose child ViewModels that implement IDisposable
                 (Search as IDisposable)?.Dispose();
                 (Workspace as IDisposable)?.Dispose();
                 
-                _logger?.Debug("MainShellViewModel disposed successfully");
+                _disposed = true;
+                _logger?.Debug("MainShellViewModel disposed successfully - all events unsubscribed");
             }
             catch (Exception ex)
             {

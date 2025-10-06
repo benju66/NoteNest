@@ -40,28 +40,56 @@ namespace NoteNest.Core.Services.Search
             if (IsInitialized && _databasePath == databasePath)
                 return; // Already initialized with same path
 
+            SqliteConnection? newConnection = null;
+            
             try
             {
-                // Close existing connection if different path
-                if (IsInitialized && _databasePath != databasePath)
-                {
-                    await _connection!.CloseAsync();
-                    _connection.Dispose();
-                    _connection = null;
-                }
-
-                _databasePath = databasePath;
-
-                // Initialize database schema
+                // Initialize database schema FIRST (doesn't need connection)
                 await DatabaseConfig.InitializeDatabaseAsync(databasePath, _logger);
 
-                // Create and configure connection
-                _connection = await DatabaseConfig.CreateConnectionAsync(databasePath);
-
+                // Create and test connection
+                newConnection = await DatabaseConfig.CreateConnectionAsync(databasePath);
+                
+                // Verify connection is usable with a simple test query
+                using var testCommand = newConnection.CreateCommand();
+                testCommand.CommandText = "SELECT 1";
+                await testCommand.ExecuteScalarAsync();
+                
+                // Only now dispose old connection and swap
+                if (_connection != null)
+                {
+                    try
+                    {
+                        await _connection.CloseAsync();
+                        _connection.Dispose();
+                    }
+                    catch (Exception disposeEx)
+                    {
+                        _logger?.Warning($"Error disposing old connection: {disposeEx.Message}");
+                    }
+                }
+                
+                _connection = newConnection;
+                _databasePath = databasePath; // Set AFTER successful initialization
+                
                 _logger?.Info($"FTS5 repository initialized: {databasePath}");
             }
             catch (Exception ex)
             {
+                // Clean up failed connection attempt
+                if (newConnection != null)
+                {
+                    try
+                    {
+                        newConnection.Dispose();
+                    }
+                    catch
+                    {
+                        // Ignore disposal errors during cleanup
+                    }
+                }
+                
+                // Don't update state on failure
                 _logger?.Error(ex, $"Failed to initialize FTS5 repository: {databasePath}");
                 throw;
             }
@@ -645,10 +673,24 @@ namespace NoteNest.Core.Services.Search
 
         #region Private Helper Methods
 
+        private bool IsConnectionHealthy()
+        {
+            try
+            {
+                return _connection != null && 
+                       _connection.State == System.Data.ConnectionState.Open;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private void ThrowIfNotInitialized()
         {
-            if (!IsInitialized)
-                throw new InvalidOperationException("Repository is not initialized. Call InitializeAsync first.");
+            if (!IsConnectionHealthy())
+                throw new InvalidOperationException(
+                    "Repository connection is not available. Call InitializeAsync first or check for connection issues.");
         }
 
         private string BuildSearchQuery(SearchOptions options)
