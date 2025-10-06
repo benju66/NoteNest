@@ -54,8 +54,8 @@ namespace NoteNest.UI.ViewModels.Categories
         public event Action<string> CategoryCreated;
         public event Action<string> CategoryDeleted;
         public event Action<string, string> CategoryRenamed;
-        public event Action<string, string> CategoryMoved; // (categoryId, newParentId)
-        public event Action<string, string> NoteMoved; // (noteId, newCategoryId)
+        public event Action<string, string, string> CategoryMoved; // (categoryId, oldParentId, newParentId)
+        public event Action<string, string, string> NoteMoved; // (noteId, sourceCategoryId, targetCategoryId)
 
         private void InitializeCommands()
         {
@@ -262,6 +262,9 @@ namespace NoteNest.UI.ViewModels.Categories
                 IsProcessing = true;
                 StatusMessage = $"Moving category '{sourceCategory.Name}'...";
 
+                // Capture old parent ID before move
+                var oldParentId = sourceCategory.ParentId;
+
                 // Use MediatR CQRS command
                 var command = new MoveCategoryCommand
                 {
@@ -280,7 +283,7 @@ namespace NoteNest.UI.ViewModels.Categories
                 {
                     var targetName = targetCategory?.Name ?? "root";
                     StatusMessage = $"Moved '{sourceCategory.Name}' to '{targetName}' ({result.Value.AffectedDescendantCount} descendants)";
-                    CategoryMoved?.Invoke(sourceCategory.Id, targetCategory?.Id);
+                    CategoryMoved?.Invoke(sourceCategory.Id, oldParentId, targetCategory?.Id);
                 }
             }
             catch (Exception ex)
@@ -309,7 +312,7 @@ namespace NoteNest.UI.ViewModels.Categories
                 IsProcessing = true;
                 StatusMessage = $"Moving note '{note.Title}'...";
 
-                // Use MediatR CQRS command
+                // Capture source category ID before move (from result)
                 var command = new MoveNoteCommand
                 {
                     NoteId = note.Id,
@@ -326,7 +329,8 @@ namespace NoteNest.UI.ViewModels.Categories
                 else
                 {
                     StatusMessage = $"Moved '{note.Title}' to '{targetCategory.Name}'";
-                    NoteMoved?.Invoke(note.Id, targetCategory.Id);
+                    // Use result data which includes old and new category IDs
+                    NoteMoved?.Invoke(note.Id, result.Value.OldCategoryId, result.Value.NewCategoryId);
                 }
             }
             catch (Exception ex)

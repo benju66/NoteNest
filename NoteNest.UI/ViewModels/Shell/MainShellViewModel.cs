@@ -193,6 +193,8 @@ namespace NoteNest.UI.ViewModels.Shell
             CategoryOperations.CategoryCreated += OnCategoryCreated;
             CategoryOperations.CategoryDeleted += OnCategoryDeleted;
             CategoryOperations.CategoryRenamed += OnCategoryRenamed;
+            CategoryOperations.CategoryMoved += OnCategoryMoved;
+            CategoryOperations.NoteMoved += OnNoteMoved;
             
             Workspace.TabSelected += OnTabSelected;
             Workspace.NoteOpened += OnNoteOpened;
@@ -284,6 +286,22 @@ namespace NoteNest.UI.ViewModels.Shell
             // Refresh tree to reflect renamed category
             await CategoryTree.RefreshAsync();
             StatusMessage = $"Category renamed to: {newName}";
+        }
+        
+        private async void OnCategoryMoved(string categoryId, string oldParentId, string newParentId)
+        {
+            // Use incremental update - no full refresh, no flickering!
+            await CategoryTree.MoveCategoryInTreeAsync(categoryId, oldParentId, newParentId);
+            
+            var targetName = string.IsNullOrEmpty(newParentId) ? "root" : "new parent";
+            StatusMessage = $"Category moved to: {targetName}";
+        }
+        
+        private async void OnNoteMoved(string noteId, string sourceCategoryId, string targetCategoryId)
+        {
+            // Use incremental update - no full refresh, no flickering!
+            await CategoryTree.MoveNoteInTreeAsync(noteId, sourceCategoryId, targetCategoryId);
+            StatusMessage = "Note moved successfully";
         }
 
         private void OnTabSelected(TabViewModel tab)
@@ -449,6 +467,8 @@ namespace NoteNest.UI.ViewModels.Shell
                     CategoryOperations.CategoryCreated -= OnCategoryCreated;
                     CategoryOperations.CategoryDeleted -= OnCategoryDeleted;
                     CategoryOperations.CategoryRenamed -= OnCategoryRenamed;
+                    CategoryOperations.CategoryMoved -= OnCategoryMoved;
+                    CategoryOperations.NoteMoved -= OnNoteMoved;
                 }
                 
                 // Unsubscribe from Workspace events

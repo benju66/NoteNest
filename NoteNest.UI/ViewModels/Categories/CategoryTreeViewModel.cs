@@ -559,6 +559,127 @@ namespace NoteNest.UI.ViewModels.Categories
 
             _logger.Info("Drag & drop enabled for tree view");
         }
+        
+        /// <summary>
+        /// Moves a note to a different category in the tree WITHOUT full refresh.
+        /// Provides smooth UX with no flickering.
+        /// </summary>
+        public async Task MoveNoteInTreeAsync(string noteId, string sourceCategoryId, string targetCategoryId)
+        {
+            try
+            {
+                // Find source category
+                var sourceCategory = FindCategoryById(sourceCategoryId);
+                if (sourceCategory == null)
+                {
+                    _logger.Warning($"Source category not found: {sourceCategoryId}");
+                    await RefreshAsync(); // Fallback to full refresh
+                    return;
+                }
+                
+                // Find target category
+                var targetCategory = FindCategoryById(targetCategoryId);
+                if (targetCategory == null)
+                {
+                    _logger.Warning($"Target category not found: {targetCategoryId}");
+                    await RefreshAsync(); // Fallback to full refresh
+                    return;
+                }
+                
+                // Find the note in source category
+                var noteViewModel = sourceCategory.Notes.FirstOrDefault(n => n.Id == noteId);
+                if (noteViewModel == null)
+                {
+                    _logger.Warning($"Note not found in source category: {noteId}");
+                    await RefreshAsync(); // Fallback to full refresh
+                    return;
+                }
+                
+                // Remove from source (triggers UI update via ObservableCollection)
+                sourceCategory.Notes.Remove(noteViewModel);
+                
+                // Ensure target category has loaded its notes
+                if (!targetCategory.IsExpanded)
+                {
+                    await targetCategory.ExpandAsync();
+                }
+                else if (targetCategory.Notes.Count == 0)
+                {
+                    await targetCategory.RefreshNotesAsync();
+                }
+                
+                // Reload notes in target to get the moved note from database
+                await targetCategory.RefreshNotesAsync();
+                
+                _logger.Info($"Moved note {noteId} from {sourceCategoryId} to {targetCategoryId} in tree");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to move note in tree");
+                await RefreshAsync(); // Fallback to full refresh on error
+            }
+        }
+        
+        /// <summary>
+        /// Moves a category to a new parent in the tree WITHOUT full refresh.
+        /// Provides smooth UX with no flickering.
+        /// </summary>
+        public async Task MoveCategoryInTreeAsync(string categoryId, string oldParentId, string newParentId)
+        {
+            try
+            {
+                // Find the category to move
+                var categoryToMove = FindCategoryById(categoryId);
+                if (categoryToMove == null)
+                {
+                    _logger.Warning($"Category to move not found: {categoryId}");
+                    await RefreshAsync(); // Fallback to full refresh
+                    return;
+                }
+                
+                // Find old parent (or root)
+                CategoryViewModel oldParent = string.IsNullOrEmpty(oldParentId) 
+                    ? null 
+                    : FindCategoryById(oldParentId);
+                
+                // Find new parent (or root)
+                CategoryViewModel newParent = string.IsNullOrEmpty(newParentId) 
+                    ? null 
+                    : FindCategoryById(newParentId);
+                
+                // Remove from old location
+                if (oldParent != null)
+                {
+                    oldParent.Children.Remove(categoryToMove);
+                }
+                else
+                {
+                    Categories.Remove(categoryToMove);
+                }
+                
+                // Add to new location
+                if (newParent != null)
+                {
+                    // Ensure parent is expanded to show the moved category
+                    if (!newParent.IsExpanded)
+                    {
+                        await newParent.ExpandAsync();
+                    }
+                    newParent.Children.Add(categoryToMove);
+                }
+                else
+                {
+                    Categories.Add(categoryToMove);
+                }
+                
+                _logger.Info($"Moved category {categoryId} from {oldParentId ?? "root"} to {newParentId ?? "root"} in tree");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to move category in tree");
+                await RefreshAsync(); // Fallback to full refresh on error
+            }
+        }
 
         /// <summary>
         /// Validates whether a drop operation is allowed.
