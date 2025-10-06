@@ -27,6 +27,27 @@ namespace NoteNest.UI
         private void OnWindowLoaded(object sender, RoutedEventArgs e)
         {
             UpdateMaximizeRestoreIcon();
+            
+            // Set theme selector to current theme
+            try
+            {
+                var app = (App)System.Windows.Application.Current;
+                var themeService = app.ServiceProvider?.GetService<IThemeService>();
+                if (themeService != null)
+                {
+                    // Select the current theme in the dropdown
+                    var currentTheme = themeService.CurrentTheme.ToString();
+                    foreach (ComboBoxItem item in ThemeSelector.Items)
+                    {
+                        if (item.Tag?.ToString() == currentTheme)
+                        {
+                            ThemeSelector.SelectedItem = item;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { /* Ignore errors setting initial theme */ }
         }
         
         private void OnWindowStateChanged(object sender, EventArgs e)
@@ -94,8 +115,61 @@ namespace NoteNest.UI
         
         private void MoreMenuButton_Click(object sender, RoutedEventArgs e)
         {
-            // TODO: Show More menu popup in Phase 3
-            MessageBox.Show("More menu coming in Phase 3!", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            MoreMenuPopup.IsOpen = !MoreMenuPopup.IsOpen;
+        }
+        
+        // =============================================================================
+        // MORE MENU ITEM HANDLERS
+        // =============================================================================
+        
+        private void NewNote_Click(object sender, RoutedEventArgs e)
+        {
+            MoreMenuPopup.IsOpen = false;
+            var viewModel = DataContext as MainShellViewModel;
+            if (viewModel?.NoteOperations?.CreateNoteCommand?.CanExecute(null) == true)
+            {
+                viewModel.NoteOperations.CreateNoteCommand.Execute(null);
+            }
+        }
+        
+        private void Save_Click(object sender, RoutedEventArgs e)
+        {
+            MoreMenuPopup.IsOpen = false;
+            var viewModel = DataContext as MainShellViewModel;
+            if (viewModel?.Workspace?.SaveTabCommand?.CanExecute(viewModel.Workspace.SelectedTab) == true)
+            {
+                viewModel.Workspace.SaveTabCommand.Execute(viewModel.Workspace.SelectedTab);
+            }
+        }
+        
+        private void SaveAll_Click(object sender, RoutedEventArgs e)
+        {
+            MoreMenuPopup.IsOpen = false;
+            var viewModel = DataContext as MainShellViewModel;
+            if (viewModel?.Workspace?.SaveAllTabsCommand?.CanExecute(null) == true)
+            {
+                viewModel.Workspace.SaveAllTabsCommand.Execute(null);
+            }
+        }
+        
+        private void SplitEditor_Click(object sender, RoutedEventArgs e)
+        {
+            MoreMenuPopup.IsOpen = false;
+            var viewModel = DataContext as MainShellViewModel;
+            if (viewModel?.Workspace?.SplitVerticalCommand?.CanExecute(null) == true)
+            {
+                viewModel.Workspace.SplitVerticalCommand.Execute(null);
+            }
+        }
+        
+        private void Refresh_Click(object sender, RoutedEventArgs e)
+        {
+            MoreMenuPopup.IsOpen = false;
+            var viewModel = DataContext as MainShellViewModel;
+            if (viewModel?.RefreshCommand?.CanExecute(null) == true)
+            {
+                viewModel.RefreshCommand.Execute(null);
+            }
         }
         
         private void DatabaseHealthMenuItem_Click(object sender, RoutedEventArgs e)
@@ -203,6 +277,9 @@ namespace NoteNest.UI
                         {
                             viewModel.StatusMessage = $"Theme changed to: {selectedItem.Content}";
                         }
+                        
+                        // Close the More menu popup after theme selection
+                        MoreMenuPopup.IsOpen = false;
                     }
                 }
             }

@@ -106,6 +106,35 @@
                     </Trigger>
                 </Style.Triggers>
             </Style>
+            
+            <!-- Menu Item Button Style (for dropdown items) -->
+            <Style x:Key="MenuItemButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="8,6"/>
+                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                   BorderThickness="0"
+                                   Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource AppSurfacePressedBrush}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
     <Grid>
@@ -169,6 +198,113 @@
                                    Width="16" Height="16"
                                    Foreground="{DynamicResource AppTextPrimaryBrush}"/>
                 </Button>
+                
+                <!-- More Menu Popup -->
+                <Popup x:Name="MoreMenuPopup"
+                       PlacementTarget="{Binding ElementName=MoreMenuButton}"
+                       Placement="Bottom"
+                       StaysOpen="False"
+                       AllowsTransparency="True"
+                       PopupAnimation="Fade">
+                    <Border Background="{DynamicResource AppSurfaceBrush}"
+                           BorderBrush="{DynamicResource AppBorderBrush}"
+                           BorderThickness="1"
+                           Padding="4"
+                           MinWidth="200">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="8" ShadowDepth="2" Opacity="0.3"/>
+                        </Border.Effect>
+                        <StackPanel>
+                            <!-- New Note -->
+                            <Button Click="NewNote_Click"
+                                   Style="{StaticResource MenuItemButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ContentControl Template="{StaticResource LucideFilePlus}"
+                                                   Width="16" Height="16"
+                                                   Margin="0,0,8,0"/>
+                                    <TextBlock Text="New Note"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <Separator Margin="4,2"/>
+                            
+                            <!-- Save -->
+                            <Button Click="Save_Click"
+                                   Style="{StaticResource MenuItemButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ContentControl Template="{StaticResource LucideSave}"
+                                                   Width="16" Height="16"
+                                                   Margin="0,0,8,0"/>
+                                    <TextBlock Text="Save"/>
+                                    <TextBlock Text="Ctrl+S" 
+                                              Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                              FontSize="11"
+                                              Margin="16,0,0,0"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- Save All -->
+                            <Button Click="SaveAll_Click"
+                                   Style="{StaticResource MenuItemButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ContentControl Template="{StaticResource LucideSaveAll}"
+                                                   Width="16" Height="16"
+                                                   Margin="0,0,8,0"/>
+                                    <TextBlock Text="Save All"/>
+                                    <TextBlock Text="Ctrl+Shift+S" 
+                                              Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                              FontSize="11"
+                                              Margin="16,0,0,0"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <Separator Margin="4,2"/>
+                            
+                            <!-- Split Editor -->
+                            <Button Click="SplitEditor_Click"
+                                   Style="{StaticResource MenuItemButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ContentControl Template="{StaticResource LucideSquareSplitHorizontal}"
+                                                   Width="16" Height="16"
+                                                   Margin="0,0,8,0"/>
+                                    <TextBlock Text="Split Editor"/>
+                                    <TextBlock Text="Ctrl+\" 
+                                              Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                              FontSize="11"
+                                              Margin="16,0,0,0"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <!-- Refresh -->
+                            <Button Click="Refresh_Click"
+                                   Style="{StaticResource MenuItemButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ContentControl Template="{StaticResource LucideRefreshCw}"
+                                                   Width="16" Height="16"
+                                                   Margin="0,0,8,0"/>
+                                    <TextBlock Text="Refresh"/>
+                                </StackPanel>
+                            </Button>
+                            
+                            <Separator Margin="4,2"/>
+                            
+                            <!-- Theme Selector -->
+                            <TextBlock Text="Theme" 
+                                      FontWeight="SemiBold"
+                                      FontSize="11"
+                                      Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                      Margin="8,4,0,2"/>
+                            <ComboBox x:Name="ThemeSelector" 
+                                     Margin="8,0"
+                                     SelectionChanged="ThemeSelector_SelectionChanged">
+                                <ComboBoxItem Content="Light" Tag="Light"/>
+                                <ComboBoxItem Content="Dark" Tag="Dark"/>
+                                <ComboBoxItem Content="Solarized Light" Tag="SolarizedLight"/>
+                                <ComboBoxItem Content="Solarized Dark" Tag="SolarizedDark"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </Border>
+                </Popup>
                 
                 <!-- Window Control Buttons -->
                 <Button x:Name="MinimizeButton"
