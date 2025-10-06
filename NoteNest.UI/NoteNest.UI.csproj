@@ -32,10 +32,4 @@
     <PackageReference Include="Microsoft.VisualBasic" Version="10.3.0" />
   </ItemGroup>
 
-  <!-- Exclude DEBUG-only MemoryDashboardWindow from Release builds -->
-  <ItemGroup Condition="'$(Configuration)' == 'Release'">
-    <Page Remove="Windows\MemoryDashboardWindow.xaml" />
-    <Compile Remove="Windows\MemoryDashboardWindow.xaml.cs" />
-  </ItemGroup>
-
 </Project>
