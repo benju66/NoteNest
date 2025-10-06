@@ -24,6 +24,9 @@ namespace NoteNest.UI.Controls.Workspace
             // Connect toolbar to editor
             Toolbar.TargetEditor = Editor;
             
+            // Wire up toolbar Split button to workspace command
+            Toolbar.SplitRequested += OnSplitRequested;
+            
             // Listen for DataContext changes
             DataContextChanged += OnDataContextChanged;
             
@@ -31,6 +34,26 @@ namespace NoteNest.UI.Controls.Workspace
             Unloaded += OnUnloaded;
             
             System.Diagnostics.Debug.WriteLine("[TabContentView] Initialized");
+        }
+        
+        private void OnSplitRequested(object sender, EventArgs e)
+        {
+            // Find the MainShellViewModel by walking up the visual tree
+            try
+            {
+                var window = Window.GetWindow(this);
+                if (window?.DataContext is NoteNest.UI.ViewModels.Shell.MainShellViewModel shellViewModel)
+                {
+                    if (shellViewModel.Workspace?.SplitVerticalCommand?.CanExecute(null) == true)
+                    {
+                        shellViewModel.Workspace.SplitVerticalCommand.Execute(null);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[TabContentView] Split command failed: {ex.Message}");
+            }
         }
         
         private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -119,6 +142,7 @@ namespace NoteNest.UI.Controls.Workspace
             try
             {
                 Editor.TextChanged -= OnEditorTextChanged;
+                Toolbar.SplitRequested -= OnSplitRequested;
                 
                 if (_viewModel != null)
                 {

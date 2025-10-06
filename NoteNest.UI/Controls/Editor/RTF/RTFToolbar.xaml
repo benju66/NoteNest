@@ -191,17 +191,9 @@
                     Style="{StaticResource ModernToolbarButtonStyle}"
                     ToolTip="Decrease Indent"
                     Click="OutdentButton_Click">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" 
-                               Text="&#xE290;" 
-                               FontSize="16"
-                               VerticalAlignment="Center"
+                <ContentControl Template="{StaticResource LucideArrowLeftToLine}"
+                               Width="18" Height="18"
                                Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                    <TextBlock Text="Outdent" 
-                               Margin="6,0,0,0" 
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource AppTextPrimaryBrush}"/>
-                </StackPanel>
             </Button>
             
         </StackPanel>

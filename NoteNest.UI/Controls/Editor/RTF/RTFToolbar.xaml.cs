@@ -40,6 +40,9 @@ namespace NoteNest.UI.Controls.Editor.RTF
             get => (Brush)GetValue(HighlightColorProperty);
             set => SetValue(HighlightColorProperty, value);
         }
+        
+        // Event for Split button - let parent handle it
+        public event EventHandler SplitRequested;
 
         public RTFToolbar()
         {
@@ -88,9 +91,8 @@ namespace NoteNest.UI.Controls.Editor.RTF
 
         private void SplitVerticalButton_Click(object sender, RoutedEventArgs e)
         {
-            // Split command moved to main toolbar (Ctrl+\ in NewMainWindow)
-            // This button is deprecated - split functionality is now in WorkspaceViewModel
-            System.Diagnostics.Debug.WriteLine("[RTFToolbar] Split command deprecated - use main toolbar split button");
+            // Raise event for parent to handle (connects to Workspace.SplitVerticalCommand)
+            SplitRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void BoldButton_Click(object sender, RoutedEventArgs e)
