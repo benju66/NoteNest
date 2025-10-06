@@ -102,7 +102,8 @@ namespace NoteNest.UI.ViewModels.Categories
             
             // ✨ FIX FOR NOTE DELETION: Refresh notes in expanded categories
             // This ensures deleted notes are removed from the UI
-            RefreshNotesInExpandedCategories(Categories);
+            // Must happen BEFORE restoring expanded state to avoid double loading
+            await RefreshNotesInExpandedCategoriesAsync(Categories);
             _logger.Debug("Refreshed notes in expanded categories");
             
             // Restore expanded state after refresh
@@ -169,21 +170,21 @@ namespace NoteNest.UI.ViewModels.Categories
         /// Refreshes notes in all expanded categories to ensure deleted notes are removed from UI
         /// This is necessary because CategoryViewModel caches notes and doesn't automatically refresh
         /// </summary>
-        private void RefreshNotesInExpandedCategories(ObservableCollection<CategoryViewModel> categories)
+        private async Task RefreshNotesInExpandedCategoriesAsync(ObservableCollection<CategoryViewModel> categories)
         {
             foreach (var category in categories)
             {
                 // Only refresh notes for expanded categories (performance optimization)
                 if (category.IsExpanded)
                 {
-                    category.RefreshNotes(); // This clears cached notes and reloads if expanded
+                    await category.RefreshNotesAsync(); // This clears cached notes and reloads if expanded
                     _logger.Debug($"Refreshed notes for expanded category: {category.Name}");
                 }
                 
                 // Recursively refresh child categories
                 if (category.Children.Any())
                 {
-                    RefreshNotesInExpandedCategories(category.Children);
+                    await RefreshNotesInExpandedCategoriesAsync(category.Children);
                 }
             }
         }

@@ -233,14 +233,14 @@ namespace NoteNest.UI.ViewModels.Categories
             }
         }
 
-        public void RefreshNotes()
+        public async Task RefreshNotesAsync()
         {
             _notesLoaded = false;
             Notes.Clear();
             UpdateTreeItems();
             if (IsExpanded)
             {
-                _ = LoadNotesAsync();
+                await LoadNotesAsync();
             }
         }
 

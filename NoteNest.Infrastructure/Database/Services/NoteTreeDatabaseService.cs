@@ -300,11 +300,27 @@ namespace NoteNest.Infrastructure.Database.Services
                     return Result.Fail($"Invalid NoteId format: {id.Value}");
                 }
 
+                // Get the note first to find its category (for cache invalidation)
+                var treeNode = await _treeRepository.GetNodeByIdAsync(guid);
+                if (treeNode == null || treeNode.NodeType != TreeNodeType.Note)
+                {
+                    return Result.Fail($"Note not found: {id.Value}");
+                }
+
                 var success = await _treeRepository.DeleteNodeAsync(guid, softDelete: true);
                 
                 if (success)
                 {
                     InvalidateCacheForNote(id);
+                    
+                    // ✨ CRITICAL FIX: Also invalidate category cache so deleted notes disappear from UI
+                    if (treeNode.ParentId.HasValue)
+                    {
+                        var categoryId = CategoryId.From(treeNode.ParentId.Value.ToString());
+                        InvalidateCacheForCategory(categoryId);
+                        _logger.Debug($"Invalidated cache for category: {categoryId.Value}");
+                    }
+                    
                     _logger.Info($"Deleted note from database: {id.Value}");
                     return Result.Ok();
                 }
