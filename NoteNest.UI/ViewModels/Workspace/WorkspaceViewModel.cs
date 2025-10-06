@@ -118,6 +118,7 @@ namespace NoteNest.UI.ViewModels.Workspace
         public event Action<TabViewModel> TabSelected;
         public event Action<TabViewModel> TabClosed;
         public event Action<string> NoteOpened;
+        public event Action<string, bool> NoteSaved; // NoteId, WasAutoSave
         
         public WorkspaceViewModel(
             ISaveManager saveManager, 
@@ -137,10 +138,20 @@ namespace NoteNest.UI.ViewModels.Workspace
             
             InitializeCommands();
             
+            // Subscribe to SaveManager's NoteSaved event and bubble it up
+            _saveManager.NoteSaved += OnSaveManagerNoteSaved;
+            
             // Hook up auto-save triggers
             Panes.CollectionChanged += (s, e) => _ = SaveStateAsync();
             
             _logger.Info("[WorkspaceViewModel] Initialized with single pane");
+        }
+        
+        private void OnSaveManagerNoteSaved(object sender, NoteNest.Core.Services.NoteSavedEventArgs e)
+        {
+            // Bubble up the NoteSaved event for status bar updates
+            NoteSaved?.Invoke(e.NoteId, e.WasAutoSave);
+            _logger.Debug($"Note saved event bubbled: {e.NoteId}, AutoSave={e.WasAutoSave}");
         }
         
         private void InitializeCommands()

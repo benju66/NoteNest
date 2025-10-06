@@ -692,11 +692,44 @@
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
                 <StackPanel Orientation="Horizontal">
+                    <!-- Save indicator - shows for 3 seconds after save -->
+                    <StackPanel Orientation="Horizontal" 
+                                Visibility="{Binding ShowSaveIndicator, Converter={StaticResource BoolToVisibilityConverter}}"
+                                Margin="0,0,10,0">
+                        <ContentControl Template="{StaticResource LucideFolderCheck}"
+                                        Width="14" Height="14"
+                                        Foreground="#22C55E"
+                                        ToolTip="Saved"
+                                        Margin="0,0,4,0"/>
+                        <TextBlock Text="Saved" 
+                                   Foreground="#22C55E" 
+                                   FontSize="11"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    
+                    <!-- Word count -->
+                    <TextBlock Foreground="{DynamicResource AppTextSecondaryBrush}" 
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0">
+                        <Run Text="{Binding WordCount, Mode=OneWay}"/>
+                        <Run Text="words"/>
+                    </TextBlock>
+                    
+                    <!-- Character count -->
+                    <TextBlock Foreground="{DynamicResource AppTextSecondaryBrush}" 
+                               FontSize="11"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0">
+                        <Run Text="{Binding CharacterCount, Mode=OneWay}"/>
+                        <Run Text="chars"/>
+                    </TextBlock>
+                    
+                    <!-- App status -->
                     <TextBlock Text="{Binding IsLoading, Converter={StaticResource BoolToTextConverter}}" 
-                               Margin="0,0,10,0"/>
-                    <TextBlock Text="{Binding CategoryTree.Categories.Count, StringFormat='Categories: {0}'}"
                                Foreground="{DynamicResource AppTextSecondaryBrush}" 
-                               FontSize="11"/>
+                               FontSize="11"
+                               VerticalAlignment="Center"/>
                 </StackPanel>
             </StatusBarItem>
         </StatusBar>
