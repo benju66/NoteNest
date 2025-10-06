@@ -458,7 +458,16 @@ namespace NoteNest.UI.ViewModels.Categories
         private async void OnExpandedStateTimer_Tick(object sender, EventArgs e)
         {
             _expandedStateTimer.Stop();
-            await FlushExpandedStateChanges();
+            
+            try
+            {
+                await FlushExpandedStateChanges();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to flush expanded state changes");
+                // Non-critical failure - expanded state will be persisted on next change or dispose
+            }
         }
 
         private async Task FlushExpandedStateChanges()

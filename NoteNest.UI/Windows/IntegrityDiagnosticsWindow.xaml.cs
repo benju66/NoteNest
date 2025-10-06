@@ -1,8 +1,10 @@
+using System;
 using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Windows;
 using NoteNest.UI.Services;
 using Microsoft.Win32;
+using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.Windows
 {
@@ -28,45 +30,72 @@ namespace NoteNest.UI.Windows
 
 		private async void Relink_Click(object sender, RoutedEventArgs e)
 		{
-			if (IssuesList?.SelectedItem is IntegrityIssue issue && issue.Task != null)
+			try
 			{
-				var dlg = new OpenFileDialog
+				if (IssuesList?.SelectedItem is IntegrityIssue issue && issue.Task != null)
 				{
-					Filter = "Notes (*.md;*.txt)|*.md;*.txt|All files (*.*)|*.*"
-				};
-				if (dlg.ShowDialog(this) == true)
-				{
-					issue.Task.LinkedNoteFilePath = dlg.FileName;
-					// Persist via service update
-					await _checker.ClearLinkAsync(issue.Task); // Clear first
-					issue.Task.LinkedNoteId = issue.Task.LinkedNoteId; // keep id
-					// Re-add path by updating task
-                     var sp = (System.Windows.Application.Current as App)?.ServiceProvider;
-					var todos = sp?.GetService(typeof(NoteNest.UI.Plugins.Todo.Services.ITodoService)) as NoteNest.UI.Plugins.Todo.Services.ITodoService;
-					if (todos != null)
+					var dlg = new OpenFileDialog
 					{
-						await todos.UpdateTaskAsync(issue.Task);
+						Filter = "Notes (*.md;*.txt)|*.md;*.txt|All files (*.*)|*.*"
+					};
+					if (dlg.ShowDialog(this) == true)
+					{
+						issue.Task.LinkedNoteFilePath = dlg.FileName;
+						// Persist via service update
+						await _checker.ClearLinkAsync(issue.Task); // Clear first
+						issue.Task.LinkedNoteId = issue.Task.LinkedNoteId; // keep id
+						// Re-add path by updating task
+	                    var sp = (System.Windows.Application.Current as App)?.ServiceProvider;
+						var todos = sp?.GetService(typeof(NoteNest.UI.Plugins.Todo.Services.ITodoService)) as NoteNest.UI.Plugins.Todo.Services.ITodoService;
+						if (todos != null)
+						{
+							await todos.UpdateTaskAsync(issue.Task);
+						}
+						await LoadAsync();
 					}
-					await LoadAsync();
 				}
+			}
+			catch (Exception ex)
+			{
+				AppLogger.Instance.Error(ex, "Failed to relink task");
+				MessageBox.Show(this, $"Failed to relink task: {ex.Message}", "Error", 
+					MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
 
 		private async void Clear_Click(object sender, RoutedEventArgs e)
 		{
-			if (IssuesList?.SelectedItem is IntegrityIssue issue && issue.Task != null)
+			try
 			{
-				await _checker.ClearLinkAsync(issue.Task);
-				await LoadAsync();
+				if (IssuesList?.SelectedItem is IntegrityIssue issue && issue.Task != null)
+				{
+					await _checker.ClearLinkAsync(issue.Task);
+					await LoadAsync();
+				}
+			}
+			catch (Exception ex)
+			{
+				AppLogger.Instance.Error(ex, "Failed to clear task link");
+				MessageBox.Show(this, $"Failed to clear link: {ex.Message}", "Error", 
+					MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
 
 		private async void Ignore_Click(object sender, RoutedEventArgs e)
 		{
-			if (IssuesList?.SelectedItem is IntegrityIssue issue && issue.Task != null)
+			try
 			{
-				await _checker.IgnoreTaskAsync(issue.Task.Id);
-				await LoadAsync();
+				if (IssuesList?.SelectedItem is IntegrityIssue issue && issue.Task != null)
+				{
+					await _checker.IgnoreTaskAsync(issue.Task.Id);
+					await LoadAsync();
+				}
+			}
+			catch (Exception ex)
+			{
+				AppLogger.Instance.Error(ex, "Failed to ignore task");
+				MessageBox.Show(this, $"Failed to ignore task: {ex.Message}", "Error", 
+					MessageBoxButton.OK, MessageBoxImage.Error);
 			}
 		}
 	}

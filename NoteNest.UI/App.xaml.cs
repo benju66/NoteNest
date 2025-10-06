@@ -109,7 +109,11 @@ namespace NoteNest.UI
                                      $"Message: {ex.Message}\n" +
                                      $"StackTrace: {ex.StackTrace}\n" +
                                      $"InnerException: {ex.InnerException?.Message}\n";
-                    System.IO.File.WriteAllText(@"C:\Users\Burness\AppData\Local\NoteNest\STARTUP_ERROR.txt", errorDetails);
+                    var appDataPath = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "NoteNest");
+                    System.IO.Directory.CreateDirectory(appDataPath);
+                    System.IO.File.WriteAllText(System.IO.Path.Combine(appDataPath, "STARTUP_ERROR.txt"), errorDetails);
                 } 
                 catch { /* ignore errors */ }
                 

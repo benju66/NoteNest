@@ -176,7 +176,17 @@ namespace NoteNest.UI.ViewModels
         private async void OnDebounceTimerTick(object? sender, EventArgs e)
         {
             _debounceTimer.Stop();
-            await PerformSearchAsync();
+            
+            try
+            {
+                await PerformSearchAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Search timer tick failed");
+                StatusText = "Search failed";
+                IsSearching = false;
+            }
         }
 
         private async Task PerformSearchAsync()

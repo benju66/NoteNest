@@ -136,37 +136,46 @@ namespace NoteNest.UI.Services
         /// </summary>
         private async void OnExternalChangeDetected(object sender, ExternalChangeEventArgs e)
         {
-            // Run on UI thread
-            await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
+            try
             {
-                var result = MessageBox.Show(
-                    $"The file '{Path.GetFileName(e.FilePath)}' has been modified externally.\n\n" +
-                    "Do you want to reload it?\n\n" +
-                    "Yes = Reload from disk (lose local changes)\n" +
-                    "No = Keep local version (overwrite on next save)",
-                    "External Change Detected",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-                
-                if (result == MessageBoxResult.Yes)
+                // Run on UI thread
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
-                    var saveManager = _serviceProvider.GetService<ISaveManager>();
-                    await saveManager.ResolveExternalChangeAsync(e.NoteId, ConflictResolution.KeepExternal);
+                    var result = MessageBox.Show(
+                        $"The file '{Path.GetFileName(e.FilePath)}' has been modified externally.\n\n" +
+                        "Do you want to reload it?\n\n" +
+                        "Yes = Reload from disk (lose local changes)\n" +
+                        "No = Keep local version (overwrite on next save)",
+                        "External Change Detected",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
                     
-                    // Refresh UI
-                    var workspace = _getWorkspaceService();
-                    var tab = workspace.FindTabByPath(e.FilePath);
-                    if (tab != null)
+                    if (result == MessageBoxResult.Yes)
                     {
-                        tab.Content = saveManager.GetContent(e.NoteId);
+                        var saveManager = _serviceProvider.GetService<ISaveManager>();
+                        await saveManager.ResolveExternalChangeAsync(e.NoteId, ConflictResolution.KeepExternal);
+                        
+                        // Refresh UI
+                        var workspace = _getWorkspaceService();
+                        var tab = workspace.FindTabByPath(e.FilePath);
+                        if (tab != null)
+                        {
+                            tab.Content = saveManager.GetContent(e.NoteId);
+                        }
                     }
-                }
-                else
-                {
-                    var saveManager = _serviceProvider.GetService<ISaveManager>();
-                    await saveManager.ResolveExternalChangeAsync(e.NoteId, ConflictResolution.KeepLocal);
-                }
-            });
+                    else
+                    {
+                        var saveManager = _serviceProvider.GetService<ISaveManager>();
+                        await saveManager.ResolveExternalChangeAsync(e.NoteId, ConflictResolution.KeepLocal);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to handle external change for: {e.FilePath}");
+                MessageBox.Show($"Failed to handle external file change: {ex.Message}", "Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         #endregion
