@@ -11,6 +11,42 @@
             <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
             <converters:ActivePaneBorderConverter x:Key="ActivePaneBorderConverter"/>
             <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+            
+            <!-- Tab Scroll Button Style - Modern, minimal buttons for tab navigation -->
+            <Style x:Key="TabScrollButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="24"/>
+                <Setter Property="Height" Value="32"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                   BorderThickness="0"
+                                   CornerRadius="2">
+                                <ContentPresenter HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource AppSurfacePressedBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Opacity" Value="0.3"/>
+                        <Setter Property="Cursor" Value="Arrow"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
     
@@ -39,6 +75,67 @@
                        Foreground="{DynamicResource AppTextPrimaryBrush}"
                        BorderThickness="0"
                        GotFocus="TabControl_GotFocus">
+                
+                <!-- Custom Template with Scroll Buttons -->
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/> <!-- Tab strip with nav buttons -->
+                                <RowDefinition Height="*"/>    <!-- Content -->
+                            </Grid.RowDefinitions>
+                            
+                            <!-- Tab Strip with Navigation Buttons -->
+                            <Grid Grid.Row="0" Background="{DynamicResource AppSurfaceBrush}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/> <!-- Left scroll button -->
+                                    <ColumnDefinition Width="*"/>    <!-- Scrollable tabs -->
+                                    <ColumnDefinition Width="Auto"/> <!-- Right scroll button -->
+                                </Grid.ColumnDefinitions>
+                                
+                                <!-- Step Back Button (Left) -->
+                                <Button x:Name="PART_ScrollLeftButton"
+                                       Grid.Column="0"
+                                       Style="{StaticResource TabScrollButtonStyle}"
+                                       ToolTip="Scroll tabs left"
+                                       Visibility="Collapsed"
+                                       Click="ScrollLeftButton_Click">
+                                    <ContentControl Template="{StaticResource LucideStepBack}"
+                                                   Width="14" Height="14"
+                                                   Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
+                                </Button>
+                                
+                                <!-- Scrollable Tab Panel -->
+                                <ScrollViewer x:Name="PART_TabScrollViewer"
+                                             Grid.Column="1"
+                                             HorizontalScrollBarVisibility="Hidden"
+                                             VerticalScrollBarVisibility="Disabled"
+                                             Background="Transparent">
+                                    <TabPanel IsItemsHost="True" Background="Transparent"/>
+                                </ScrollViewer>
+                                
+                                <!-- Step Forward Button (Right) -->
+                                <Button x:Name="PART_ScrollRightButton"
+                                       Grid.Column="2"
+                                       Style="{StaticResource TabScrollButtonStyle}"
+                                       ToolTip="Scroll tabs right"
+                                       Visibility="Collapsed"
+                                       Click="ScrollRightButton_Click">
+                                    <ContentControl Template="{StaticResource LucideStepForward}"
+                                                   Width="14" Height="14"
+                                                   Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
+                                </Button>
+                            </Grid>
+                            
+                            <!-- Content Area -->
+                            <ContentPresenter Grid.Row="1"
+                                             ContentSource="SelectedContent"
+                                             HorizontalAlignment="Stretch"
+                                             VerticalAlignment="Stretch"/>
+                        </Grid>
+                    </ControlTemplate>
+                </TabControl.Template>
+                
                 <TabControl.ItemTemplate>
                     <DataTemplate>
                         <!-- Professional tab header with close button (from Milestone 1) -->
