@@ -14,5 +14,6 @@ namespace NoteNest.Application.Notes.Commands.DeleteNote
         public bool Success { get; set; }
         public string DeletedNoteTitle { get; set; }
         public string DeletedFilePath { get; set; }
+        public string Warning { get; set; } // For file deletion failures
     }
 }

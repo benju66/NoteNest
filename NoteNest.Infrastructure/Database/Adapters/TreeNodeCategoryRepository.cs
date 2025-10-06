@@ -170,6 +170,15 @@ namespace NoteNest.Infrastructure.Database.Adapters
                 return false;
             }
         }
+        
+        /// <summary>
+        /// No-op for adapter (no cache at this layer - cache is in CategoryTreeDatabaseService)
+        /// </summary>
+        public Task InvalidateCacheAsync()
+        {
+            // This adapter doesn't maintain cache - no-op
+            return Task.CompletedTask;
+        }
 
         // =============================================================================
         // PRIVATE CONVERSION METHODS

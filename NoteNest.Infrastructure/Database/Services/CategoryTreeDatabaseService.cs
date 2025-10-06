@@ -335,6 +335,16 @@ namespace NoteNest.Infrastructure.Database.Services
             }
         }
 
+        /// <summary>
+        /// Public async method to force cache invalidation (implements ICategoryRepository)
+        /// Used by UI to ensure fresh data after operations
+        /// </summary>
+        public Task InvalidateCacheAsync()
+        {
+            InvalidateCache();
+            return Task.CompletedTask;
+        }
+        
         private void InvalidateCache()
         {
             _cache.Remove(TREE_CACHE_KEY);

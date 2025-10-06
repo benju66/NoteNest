@@ -362,7 +362,7 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     
-                    <!-- Enhanced TreeView with interaction support -->
+                    <!-- Enhanced TreeView with interaction support + VIRTUALIZATION for performance -->
                     <TreeView Grid.Row="0" 
                               ItemsSource="{Binding CategoryTree.Categories}"
                               Tag="{Binding}"
@@ -371,7 +371,10 @@
                               PreviewKeyDown="TreeView_PreviewKeyDown"
                               Background="{DynamicResource AppBackgroundBrush}"
                               Foreground="{DynamicResource AppTextPrimaryBrush}"
-                              BorderBrush="{DynamicResource AppBorderBrush}">
+                              BorderBrush="{DynamicResource AppBorderBrush}"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="True">
                         <TreeView.ItemContainerStyle>
                             <Style TargetType="TreeViewItem">
                                 <!-- 🚫 HIDE NATIVE EXPANDERS: Use custom template to hide default toggle button -->

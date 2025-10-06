@@ -14,5 +14,11 @@ namespace NoteNest.Application.Common.Interfaces
         Task<Result> UpdateAsync(Category category);
         Task<Result> DeleteAsync(CategoryId id);
         Task<bool> ExistsAsync(CategoryId id);
+        
+        /// <summary>
+        /// Forces cache invalidation to ensure fresh data on next load.
+        /// Used after operations that modify the tree structure (create, update, delete).
+        /// </summary>
+        Task InvalidateCacheAsync();
     }
 }

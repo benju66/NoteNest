@@ -101,7 +101,7 @@
                                        Visibility="Collapsed"
                                        Click="ScrollLeftButton_Click">
                                     <ContentControl Template="{StaticResource LucideStepBack}"
-                                                   Width="14" Height="14"
+                                                   Width="16" Height="16"
                                                    Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
                                 </Button>
                                 
@@ -122,7 +122,7 @@
                                        Visibility="Collapsed"
                                        Click="ScrollRightButton_Click">
                                     <ContentControl Template="{StaticResource LucideStepForward}"
-                                                   Width="14" Height="14"
+                                                   Width="16" Height="16"
                                                    Foreground="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
                                 </Button>
                             </Grid>
@@ -172,15 +172,25 @@
                                        Margin="8,4,4,4"
                                        VerticalAlignment="Center"/>
                             
-                            <!-- Dirty indicator -->
+                            <!-- Dirty indicator (uses Opacity instead of Visibility to prevent tab width jumping) -->
                             <TextBlock Grid.Column="1" 
                                        Text="·" 
-                                       Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibilityConverter}}"
                                        Foreground="{DynamicResource AppWarningBrush}"
                                        FontWeight="Bold"
                                        FontSize="16"
                                        Margin="2,4"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Opacity" Value="0"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsDirty}" Value="True">
+                                                <Setter Property="Opacity" Value="1"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                             
                             <!-- Close button with LucideCircleX icon (shows on tab hover) -->
                             <Button Grid.Column="2"
@@ -239,6 +249,14 @@
                                                CornerRadius="4,4,0,0"
                                                Padding="4,6,4,4"
                                                Margin="0">
+                                            <!-- Subtle drop shadow for depth (hardware accelerated, negligible performance impact) -->
+                                            <Border.Effect>
+                                                <DropShadowEffect Color="Black" 
+                                                                 Opacity="0.15" 
+                                                                 BlurRadius="4" 
+                                                                 ShadowDepth="2" 
+                                                                 Direction="270"/>
+                                            </Border.Effect>
                                             <!-- This properly renders the ItemTemplate content (Grid with Title, Dirty indicator, Close button) -->
                                             <ContentPresenter x:Name="ContentSite"
                                                             ContentSource="Header"

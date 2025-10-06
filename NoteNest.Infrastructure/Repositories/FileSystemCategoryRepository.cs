@@ -130,6 +130,15 @@ namespace NoteNest.Infrastructure.Repositories
             var category = await GetByIdAsync(id);
             return category != null;
         }
+        
+        /// <summary>
+        /// No-op for file system repository (no cache to invalidate)
+        /// </summary>
+        public Task InvalidateCacheAsync()
+        {
+            // File system repository doesn't use caching
+            return Task.CompletedTask;
+        }
 
         private async Task<IReadOnlyList<Category>> GetAllCategoriesFromFileSystemAsync()
         {

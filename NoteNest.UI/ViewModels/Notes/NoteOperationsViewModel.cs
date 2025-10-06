@@ -208,6 +208,13 @@ namespace NoteNest.UI.ViewModels.Notes
                 else
                 {
                     StatusMessage = $"Deleted note: {result.Value.DeletedNoteTitle}";
+                    
+                    // Show warning if file deletion failed
+                    if (!string.IsNullOrEmpty(result.Value.Warning))
+                    {
+                        _dialogService.ShowInfo(result.Value.Warning, "File Deletion Warning");
+                    }
+                    
                     NoteDeleted?.Invoke(noteId);
                 }
             }

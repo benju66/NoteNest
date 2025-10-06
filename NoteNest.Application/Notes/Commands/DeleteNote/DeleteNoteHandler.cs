@@ -40,6 +40,7 @@ namespace NoteNest.Application.Notes.Commands.DeleteNote
                 return Result.Fail<DeleteNoteResult>(deleteResult.Error);
 
             // Delete file if requested
+            string fileDeleteWarning = null;
             if (request.DeleteFile && !string.IsNullOrEmpty(filePath))
             {
                 try
@@ -51,6 +52,7 @@ namespace NoteNest.Application.Notes.Commands.DeleteNote
                     // Log but don't fail - metadata is already deleted
                     // Could implement a cleanup service for orphaned files
                     System.Diagnostics.Debug.WriteLine($"Failed to delete file {filePath}: {ex.Message}");
+                    fileDeleteWarning = $"Note removed from database but file could not be deleted: {ex.Message}. You may need to manually delete the file.";
                 }
             }
 
@@ -64,7 +66,8 @@ namespace NoteNest.Application.Notes.Commands.DeleteNote
             {
                 Success = true,
                 DeletedNoteTitle = noteTitle,
-                DeletedFilePath = filePath
+                DeletedFilePath = filePath,
+                Warning = fileDeleteWarning
             });
         }
     }
