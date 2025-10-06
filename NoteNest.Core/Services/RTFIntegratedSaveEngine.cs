@@ -22,7 +22,8 @@ namespace NoteNest.Core.Services
         private readonly string _tempPath;
         private readonly string _walPath;
         private readonly SemaphoreSlim _saveLock = new(1, 1);
-        private readonly Dictionary<string, DateTime> _lastSaveTime = new();
+        private readonly ConcurrentDictionary<string, DateTime> _lastSaveTime = new();
+        private readonly object _pathMappingLock = new object();
         private readonly IStatusNotifier _statusNotifier;
         
         // Write-Ahead Log for crash protection
@@ -36,10 +37,10 @@ namespace NoteNest.Core.Services
         private readonly ConcurrentDictionary<string, bool> _dirtyNotes = new();
         private readonly ConcurrentDictionary<string, bool> _savingNotes = new();
         
-        // Metrics
-        private int _totalSaves = 0;
-        private int _failedSaves = 0;
-        private int _retriedSaves = 0;
+        // Metrics (long for Interlocked compatibility)
+        private long _totalSaves = 0;
+        private long _failedSaves = 0;
+        private long _retriedSaves = 0;
         private bool _disposed = false;
         
         // ISaveManager Events
@@ -78,7 +79,7 @@ namespace NoteNest.Core.Services
             await _saveLock.WaitAsync();
             try
             {
-                _totalSaves++;
+                Interlocked.Increment(ref _totalSaves);
                 var startTime = DateTime.UtcNow;
                 
                 // Show saving status
@@ -157,7 +158,7 @@ namespace NoteNest.Core.Services
                         // File locked - retry after delay
                         lastException = ioEx;
                         retryCount++;
-                        _retriedSaves++;
+                        Interlocked.Increment(ref _retriedSaves);
                         
                         if (retryCount < maxRetries)
                         {
@@ -176,7 +177,7 @@ namespace NoteNest.Core.Services
                 }
 
                 // Save failed after retries
-                _failedSaves++;
+                Interlocked.Increment(ref _failedSaves);
                 
                 // Emergency save attempt for manual saves
                 if (saveType == SaveType.Manual && !string.IsNullOrEmpty(rtfContent))
@@ -505,7 +506,7 @@ namespace NoteNest.Core.Services
                 {
                     lastException = ioEx;
                     retryCount++;
-                    _retriedSaves++;
+                    Interlocked.Increment(ref _retriedSaves);
                     
                     if (retryCount < maxRetries)
                     {
@@ -523,7 +524,7 @@ namespace NoteNest.Core.Services
                 }
             }
 
-            _failedSaves++;
+            Interlocked.Increment(ref _failedSaves);
             _statusNotifier.ShowStatus(
                 $"Failed to save {title ?? noteId}: {lastException?.Message}", 
                 StatusType.Error, duration: 5000);
@@ -581,13 +582,18 @@ namespace NoteNest.Core.Services
         /// </summary>
         public SaveMetrics GetMetrics()
         {
+            // Use Interlocked for thread-safe reads
+            var totalSaves = Interlocked.Read(ref _totalSaves);
+            var failedSaves = Interlocked.Read(ref _failedSaves);
+            var retriedSaves = Interlocked.Read(ref _retriedSaves);
+            
             return new SaveMetrics
             {
-                TotalSaves = _totalSaves,
-                FailedSaves = _failedSaves,
-                RetriedSaves = _retriedSaves,
-                SuccessRate = _totalSaves > 0 
-                    ? ((_totalSaves - _failedSaves) * 100.0 / _totalSaves) 
+                TotalSaves = (int)totalSaves,
+                FailedSaves = (int)failedSaves,
+                RetriedSaves = (int)retriedSaves,
+                SuccessRate = totalSaves > 0 
+                    ? ((totalSaves - failedSaves) * 100.0 / totalSaves) 
                     : 100
             };
         }
@@ -860,19 +866,25 @@ namespace NoteNest.Core.Services
         }
 
         /// <summary>
-        /// Get the file path for a note
+        /// Get the file path for a note (thread-safe)
         /// </summary>
         public string? GetFilePath(string noteId)
         {
-            return _noteFilePaths.TryGetValue(noteId, out var path) ? path : null;
+            lock (_pathMappingLock)
+            {
+                return _noteFilePaths.TryGetValue(noteId, out var path) ? path : null;
+            }
         }
 
         /// <summary>
-        /// Get the note ID for a file path
+        /// Get the note ID for a file path (thread-safe)
         /// </summary>
         public string? GetNoteIdForPath(string filePath)
         {
-            return _pathToNoteId.TryGetValue(filePath, out var noteId) ? noteId : null;
+            lock (_pathMappingLock)
+            {
+                return _pathToNoteId.TryGetValue(filePath, out var noteId) ? noteId : null;
+            }
         }
 
         /// <summary>
@@ -928,22 +940,25 @@ namespace NoteNest.Core.Services
         }
 
         /// <summary>
-        /// Update the file path for a note
+        /// Update the file path for a note (thread-safe)
         /// </summary>
         public void UpdateFilePath(string noteId, string newFilePath)
         {
             if (string.IsNullOrEmpty(noteId) || string.IsNullOrEmpty(newFilePath))
                 return;
 
-            // Remove old path mapping
-            if (_noteFilePaths.TryGetValue(noteId, out var oldPath))
+            lock (_pathMappingLock)
             {
-                _pathToNoteId.TryRemove(oldPath, out _);
-            }
+                // Remove old path mapping
+                if (_noteFilePaths.TryGetValue(noteId, out var oldPath))
+                {
+                    _pathToNoteId.TryRemove(oldPath, out _);
+                }
 
-            // Add new path mapping
-            _noteFilePaths[noteId] = newFilePath;
-            _pathToNoteId[newFilePath] = noteId;
+                // Add new path mapping
+                _noteFilePaths[noteId] = newFilePath;
+                _pathToNoteId[newFilePath] = noteId;
+            }
         }
 
         /// <summary>

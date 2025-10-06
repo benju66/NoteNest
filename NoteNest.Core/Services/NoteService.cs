@@ -16,7 +16,7 @@ using NoteNest.Core.Interfaces.Services;
 
 namespace NoteNest.Core.Services
 {
-    public partial class NoteService
+    public partial class NoteService : IDisposable
     {
         private readonly IFileSystemProvider _fileSystem;
         private readonly ConfigurationService _configService;
@@ -28,6 +28,7 @@ namespace NoteNest.Core.Services
         private readonly INoteStorageService? _noteStorage;
         private readonly IUserNotificationService? _notifications;
         private readonly NoteMetadataManager? _metadataManager;
+        private bool _disposed = false;
 
         public NoteService(
             IFileSystemProvider fileSystem,
@@ -205,6 +206,38 @@ namespace NoteNest.Core.Services
             Text,
             Markdown,
             Html
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            try
+            {
+                _logger?.Debug($"Disposing NoteService with {_fileLocks.Count} file locks");
+
+                // Dispose all file lock semaphores
+                foreach (var kvp in _fileLocks)
+                {
+                    try
+                    {
+                        kvp.Value?.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.Warning($"Error disposing file lock for {kvp.Key}: {ex.Message}");
+                    }
+                }
+
+                _fileLocks.Clear();
+
+                _disposed = true;
+                _logger?.Info("NoteService disposed successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, "Error disposing NoteService");
+            }
         }
     }
 }

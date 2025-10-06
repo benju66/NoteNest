@@ -40,6 +40,12 @@ namespace NoteNest.Tests.Services
                 _mockFileSystem);
         }
 
+        [TearDown]
+        public void TearDown()
+        {
+            _noteService?.Dispose();
+        }
+
         [Test]
         public async Task CreateCategory_ValidName_CreatesCategory()
         {

@@ -503,7 +503,11 @@ namespace NoteNest.UI.ViewModels.Categories
                 // Immediately flush any pending changes on shutdown
                 _expandedStateTimer?.Stop();
                 FlushExpandedStateChanges().GetAwaiter().GetResult();
-                _logger.Debug("Flushed expanded state on dispose");
+                
+                // Properly dispose timer
+                _expandedStateTimer = null;
+                
+                _logger.Debug("Flushed expanded state and disposed timer on dispose");
             }
             catch (Exception ex)
             {

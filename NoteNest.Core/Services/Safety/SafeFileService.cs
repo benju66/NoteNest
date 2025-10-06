@@ -8,11 +8,13 @@ using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.Core.Services.Safety
 {
-	public class SafeFileService
+	public class SafeFileService : IDisposable
 	{
 		private readonly IUserNotificationService? _notifications;
 		private readonly IAppLogger? _logger;
 		private readonly Dictionary<string, SemaphoreSlim> _perFileLocks = new();
+		private readonly object _locksLock = new object();
+		private bool _disposed = false;
 
 		public SafeFileService(IUserNotificationService? notifications = null, IAppLogger? logger = null)
 		{
@@ -88,8 +90,11 @@ namespace NoteNest.Core.Services.Safety
 
 		private SemaphoreSlim GetOrCreateFileLock(string filePath)
 		{
+			if (_disposed)
+				throw new ObjectDisposedException(nameof(SafeFileService));
+				
 			var normalizedPath = Path.GetFullPath(filePath).ToLowerInvariant();
-			lock (_perFileLocks)
+			lock (_locksLock)
 			{
 				if (!_perFileLocks.TryGetValue(normalizedPath, out var semaphore))
 				{
@@ -97,6 +102,41 @@ namespace NoteNest.Core.Services.Safety
 					_perFileLocks[normalizedPath] = semaphore;
 				}
 				return semaphore;
+			}
+		}
+
+		public void Dispose()
+		{
+			if (_disposed) return;
+
+			try
+			{
+				_logger?.Debug($"Disposing SafeFileService with {_perFileLocks.Count} file locks");
+
+				lock (_locksLock)
+				{
+					// Dispose all semaphores
+					foreach (var kvp in _perFileLocks)
+					{
+						try
+						{
+							kvp.Value?.Dispose();
+						}
+						catch (Exception ex)
+						{
+							_logger?.Warning($"Error disposing file lock for {kvp.Key}: {ex.Message}");
+						}
+					}
+
+					_perFileLocks.Clear();
+				}
+
+				_disposed = true;
+				_logger?.Info("SafeFileService disposed successfully");
+			}
+			catch (Exception ex)
+			{
+				_logger?.Error(ex, "Error disposing SafeFileService");
 			}
 		}
 	}

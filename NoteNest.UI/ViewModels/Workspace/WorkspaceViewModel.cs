@@ -33,6 +33,9 @@ namespace NoteNest.UI.ViewModels.Workspace
         private bool _isMoveInProgress;
         private readonly object _moveLock = new object();
         
+        // State snapshot synchronization (prevent collection modification during enumeration)
+        private readonly object _stateSnapshotLock = new object();
+        
         public ObservableCollection<PaneViewModel> Panes { get; }
         
         public PaneViewModel ActivePane
@@ -557,29 +560,33 @@ namespace NoteNest.UI.ViewModels.Workspace
                 return;
             }
             
-            var paneToClose = ActivePane;
-            var remainingPane = Panes.FirstOrDefault(p => p != paneToClose);
-            
-            if (paneToClose != null && remainingPane != null)
+            // Protect pane operations with same lock as state snapshots
+            lock (_stateSnapshotLock)
             {
-                // Move all tabs from closing pane to remaining pane
-                var tabsToMove = paneToClose.Tabs.ToList();
-                foreach (var tab in tabsToMove)
+                var paneToClose = ActivePane;
+                var remainingPane = Panes.FirstOrDefault(p => p != paneToClose);
+                
+                if (paneToClose != null && remainingPane != null)
                 {
-                    paneToClose.RemoveTab(tab);
-                    remainingPane.AddTab(tab, select: false);
+                    // Move all tabs from closing pane to remaining pane
+                    var tabsToMove = paneToClose.Tabs.ToList();
+                    foreach (var tab in tabsToMove)
+                    {
+                        paneToClose.RemoveTab(tab);
+                        remainingPane.AddTab(tab, select: false);
+                    }
+                    
+                    // Remove the pane
+                    Panes.Remove(paneToClose);
+                    ActivePane = remainingPane;
+                
+                    OnPropertyChanged(nameof(CanSplit));
+                    
+                    _logger.Info($"[WorkspaceViewModel] Closed pane - Moved {tabsToMove.Count} tabs to remaining pane");
+                    StatusMessage = $"Pane closed - {tabsToMove.Count} tab(s) moved";
+                    
+                    System.Diagnostics.Debug.WriteLine($"[WorkspaceViewModel] Pane closed - Now {Panes.Count} pane(s)");
                 }
-                
-                // Remove the pane
-                Panes.Remove(paneToClose);
-                ActivePane = remainingPane;
-                
-                OnPropertyChanged(nameof(CanSplit));
-                
-                _logger.Info($"[WorkspaceViewModel] Closed pane - Moved {tabsToMove.Count} tabs to remaining pane");
-                StatusMessage = $"Pane closed - {tabsToMove.Count} tab(s) moved";
-                
-                System.Diagnostics.Debug.WriteLine($"[WorkspaceViewModel] Pane closed - Now {Panes.Count} pane(s)");
             }
         }
         
@@ -794,36 +801,40 @@ namespace NoteNest.UI.ViewModels.Workspace
                 {
                     _savePending = false;
                     
-                    // CRITICAL: Take snapshot of collections BEFORE enumerating
-                    // This prevents "Collection was modified" exceptions during rapid operations
-                    var panesSnapshot = Panes.ToList();
-                    var activePaneSnapshot = ActivePane;
-                    
-                    var state = new WorkspaceState
+                    // CRITICAL: Take snapshot atomically to prevent collection modification exceptions
+                    WorkspaceState state;
+                    lock (_stateSnapshotLock)
                     {
-                        PaneCount = panesSnapshot.Count,
-                        ActivePaneIndex = Math.Max(0, panesSnapshot.IndexOf(activePaneSnapshot))
-                    };
-                    
-                    // Capture state of each pane (using snapshot)
-                    foreach (var pane in panesSnapshot)
-                    {
-                        var tabsSnapshot = pane.Tabs.ToList(); // Snapshot tabs too
+                        var panesSnapshot = Panes.ToList();
+                        var activePaneSnapshot = ActivePane;
                         
-                        var paneState = new PaneState
+                        state = new WorkspaceState
                         {
-                            Tabs = tabsSnapshot.Select(t => new TabState
-                            {
-                                TabId = t.TabId,
-                                FilePath = t.Note.FilePath,
-                                Title = t.Title
-                            }).ToList(),
-                            ActiveTabId = pane.SelectedTab?.TabId
+                            PaneCount = panesSnapshot.Count,
+                            ActivePaneIndex = Math.Max(0, panesSnapshot.IndexOf(activePaneSnapshot))
                         };
                         
-                        state.Panes.Add(paneState);
+                        // Capture state of each pane (using snapshot)
+                        foreach (var pane in panesSnapshot)
+                        {
+                            var tabsSnapshot = pane.Tabs.ToList(); // Snapshot tabs too
+                            
+                            var paneState = new PaneState
+                            {
+                                Tabs = tabsSnapshot.Select(t => new TabState
+                                {
+                                    TabId = t.TabId,
+                                    FilePath = t.Note.FilePath,
+                                    Title = t.Title
+                                }).ToList(),
+                                ActiveTabId = pane.SelectedTab?.TabId
+                            };
+                            
+                            state.Panes.Add(paneState);
+                        }
                     }
                     
+                    // Perform I/O outside lock for better concurrency
                     await _workspacePersistence.SaveAsync(state);
                     
                     _logger.Debug($"[WorkspaceViewModel] Saved workspace state: {state.Panes.Sum(p => p.Tabs.Count)} total tabs");

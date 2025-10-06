@@ -51,6 +51,7 @@ namespace NoteNest.Tests.Services
         [TearDown]
         public void TearDown()
         {
+            _noteService?.Dispose();
             _contentCache?.Dispose();
             _mockSaveManager?.Dispose();
         }

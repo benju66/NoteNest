@@ -28,6 +28,12 @@ namespace NoteNest.Tests.Services
             _noteService = new NoteService(_mockFileSystem, _configService);
         }
 
+        [TearDown]
+        public void TearDown()
+        {
+            _noteService?.Dispose();
+        }
+
         [Test]
         public async Task CreateNote_ValidInput_CreatesFileAndReturnsModel()
         {

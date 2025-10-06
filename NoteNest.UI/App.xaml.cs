@@ -25,14 +25,6 @@ namespace NoteNest.UI
             // GUARANTEED to run - no competing startup paths
             System.Diagnostics.Debug.WriteLine($"🚀 MINIMAL APP STARTUP: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
             
-            // ALSO write to a file for absolute confirmation
-            try 
-            {
-                System.IO.File.WriteAllText(@"C:\Users\Burness\AppData\Local\NoteNest\CONTROLLED_STARTUP_PROOF.txt", 
-                    $"🚀 CONTROLLED STARTUP WORKING: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
-            } 
-            catch { /* ignore errors */ }
-            
             try
             {
                 // Simple, predictable service configuration
