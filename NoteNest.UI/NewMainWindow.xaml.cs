@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Extensions.DependencyInjection;
 using NoteNest.UI.Windows;
 using NoteNest.Core.Services;
@@ -20,30 +21,36 @@ namespace NoteNest.UI
         {
             InitializeComponent();
             Loaded += OnWindowLoaded;
+            StateChanged += OnWindowStateChanged;
         }
         
         private void OnWindowLoaded(object sender, RoutedEventArgs e)
         {
-            // Set theme selector to current theme
-            try
+            UpdateMaximizeRestoreIcon();
+        }
+        
+        private void OnWindowStateChanged(object sender, EventArgs e)
+        {
+            UpdateMaximizeRestoreIcon();
+        }
+        
+        private void UpdateMaximizeRestoreIcon()
+        {
+            if (MaximizeIcon != null && MaximizeRestoreButton != null)
             {
-                var app = (App)System.Windows.Application.Current;
-                var themeService = app.ServiceProvider?.GetService<IThemeService>();
-                if (themeService != null)
+                if (WindowState == WindowState.Maximized)
                 {
-                    // Select the current theme in the dropdown
-                    var currentTheme = themeService.CurrentTheme.ToString();
-                    foreach (ComboBoxItem item in ThemeSelector.Items)
-                    {
-                        if (item.Tag?.ToString() == currentTheme)
-                        {
-                            ThemeSelector.SelectedItem = item;
-                            break;
-                        }
-                    }
+                    // Restore icon (two overlapping squares)
+                    MaximizeIcon.Data = Geometry.Parse("M0,3 H7 V10 H0 Z M3,0 H10 V7");
+                    MaximizeRestoreButton.ToolTip = "Restore Down";
+                }
+                else
+                {
+                    // Maximize icon (single square)
+                    MaximizeIcon.Data = Geometry.Parse("M0,0 H10 V10 H0 Z");
+                    MaximizeRestoreButton.ToolTip = "Maximize";
                 }
             }
-            catch { /* Ignore errors setting initial theme */ }
         }
 
         private void CategoryTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -62,6 +69,33 @@ namespace NoteNest.UI
         private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
         {
             Close();
+        }
+        
+        // =============================================================================
+        // WINDOW CONTROL BUTTON HANDLERS
+        // =============================================================================
+        
+        private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState.Minimized;
+        }
+        
+        private void MaximizeRestoreButton_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState == WindowState.Maximized 
+                ? WindowState.Normal 
+                : WindowState.Maximized;
+        }
+        
+        private void CloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+        
+        private void MoreMenuButton_Click(object sender, RoutedEventArgs e)
+        {
+            // TODO: Show More menu popup in Phase 3
+            MessageBox.Show("More menu coming in Phase 3!", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         
         private void DatabaseHealthMenuItem_Click(object sender, RoutedEventArgs e)

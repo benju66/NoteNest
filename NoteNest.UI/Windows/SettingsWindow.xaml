@@ -29,11 +29,11 @@
                 <TextBlock Text="Appearance" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
                 <Border Background="{DynamicResource AppSurfaceBrush}" 
                        BorderBrush="{DynamicResource AppBorderBrush}"
-                       BorderThickness="1"
-                       CornerRadius="4"
+                                BorderThickness="1"
+                                CornerRadius="4"
                        Padding="15"
                        Margin="0,0,0,20">
-                    <StackPanel>
+                            <StackPanel>
                         <TextBlock Text="Theme" Margin="0,0,0,8"/>
                         <ComboBox x:Name="ThemeComboBox" 
                                  SelectionChanged="ThemeComboBox_SelectionChanged"
@@ -43,26 +43,26 @@
                             <ComboBoxItem Content="Solarized Light" Tag="SolarizedLight"/>
                             <ComboBoxItem Content="Solarized Dark" Tag="SolarizedDark"/>
                         </ComboBox>
-                    </StackPanel>
-                </Border>
-                
+                            </StackPanel>
+                        </Border>
+                        
                 <!-- General Section -->
                 <TextBlock Text="General" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
                 <Border Background="{DynamicResource AppSurfaceBrush}" 
                        BorderBrush="{DynamicResource AppBorderBrush}"
                        BorderThickness="1"
-                       CornerRadius="4"
+                                CornerRadius="4" 
                        Padding="15"
                        Margin="0,0,0,20">
-                    <StackPanel>
+                            <StackPanel>
                         <CheckBox x:Name="AutoSaveCheckBox" Content="Auto-save notes" Margin="0,0,0,10"/>
                         <CheckBox x:Name="SpellCheckCheckBox" Content="Enable spell check" Margin="0,0,0,10" IsChecked="True"/>
                         <TextBlock Text="Note: More settings will be added in future updates" 
                                   Opacity="0.6" FontSize="11" FontStyle="Italic"/>
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
+                            </StackPanel>
+                        </Border>
+                </StackPanel>
+            </ScrollViewer>
         
         <!-- Footer Buttons -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">

@@ -6,8 +6,21 @@
         xmlns:converters="clr-namespace:NoteNest.UI.Converters"
         xmlns:controls="clr-namespace:NoteNest.UI.Controls"
         xmlns:workspace="clr-namespace:NoteNest.UI.Controls.Workspace"
-        Title="NoteNest - New Architecture" Height="600" Width="1000"
+        Title="NoteNest" 
+        Height="600" Width="1000"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        ResizeMode="CanResize"
         Background="{DynamicResource AppBackgroundBrush}">
+    
+    <!-- Modern Custom Title Bar with WindowChrome -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="36"
+                     ResizeBorderThickness="8"
+                     CornerRadius="0"
+                     GlassFrameThickness="0"
+                     UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
     <Window.InputBindings>
         <!-- 🎹 KEYBOARD SHORTCUTS -->
         <KeyBinding Key="S" Modifiers="Control" 
@@ -43,10 +56,56 @@
             </ResourceDictionary.MergedDictionaries>
             
             <!-- Converters -->
-        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
-        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
-        <local:BoolToTextConverter x:Key="BoolToTextConverter"/>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
+            <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
+            <local:BoolToTextConverter x:Key="BoolToTextConverter"/>
+            
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            <!-- TITLE BAR BUTTON STYLES                                        -->
+            <!-- ═══════════════════════════════════════════════════════════════ -->
+            
+            <!-- Standard Title Bar Button (Settings, More, Minimize, Maximize) -->
+            <Style x:Key="TitleBarButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="36"/>
+                <Setter Property="Height" Value="36"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                   BorderThickness="0">
+                                <ContentPresenter HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource AppSurfacePressedBrush}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            
+            <!-- Close Button (Red hover effect) -->
+            <Style x:Key="TitleBarCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource TitleBarButtonStyle}">
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#E81123"/>
+                        <Setter Property="Foreground" Value="White"/>
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter Property="Background" Value="#C50F1F"/>
+                        <Setter Property="Foreground" Value="White"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
     <Grid>
@@ -56,50 +115,97 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         
-               <!-- Enhanced Toolbar with Database Search -->
-               <ToolBar Grid.Row="0"
-                       Background="{DynamicResource AppSurfaceBrush}"
-                       Foreground="{DynamicResource AppTextPrimaryBrush}"
-                       BorderBrush="{DynamicResource AppBorderBrush}">
-                   <Button Content="New Note" Command="{Binding NoteOperations.CreateNoteCommand}" />
-                   <Button Content="Save" Command="{Binding Workspace.SaveTabCommand}" 
-                           CommandParameter="{Binding Workspace.SelectedTab}" />
-                   <Button Content="Save All" Command="{Binding Workspace.SaveAllTabsCommand}" />
-                   <Separator />
-                   
-                   <!-- 🆕 MILESTONE 2A: Split View Button -->
-                   <Button Content="⫿ Split Editor" 
-                           Command="{Binding Workspace.SplitVerticalCommand}"
-                           ToolTip="Split editor vertically (Ctrl+\)"
-                           IsEnabled="{Binding Workspace.CanSplit}"/>
-                   
-                   <Separator />
-                   <Button Content="Refresh" Command="{Binding RefreshCommand}" />
-                   <Separator />
-                   
-                   <!-- 🔍 YOUR EXISTING SOPHISTICATED SEARCH - FTS5 Powered -->
-                   <StackPanel Orientation="Horizontal" Margin="10,0">
-                       <TextBlock Text="Search:" FontSize="12" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                       <controls:SmartSearchControl DataContext="{Binding Search}" 
-                                                   Width="300"
-                                                   ResultSelected="SmartSearch_ResultSelected"/>
-                   </StackPanel>
-                   
-                  <Separator />
-                  
-                  <!-- 🎨 THEME SWITCHER - Quick access to all themes -->
-                  <TextBlock Text="Theme:" VerticalAlignment="Center" Margin="10,0,5,0"/>
-                  <ComboBox x:Name="ThemeSelector" Width="140" VerticalAlignment="Center"
-                           SelectionChanged="ThemeSelector_SelectionChanged">
-                      <ComboBoxItem Content="Light" Tag="Light"/>
-                      <ComboBoxItem Content="Dark" Tag="Dark"/>
-                      <ComboBoxItem Content="Solarized Light" Tag="SolarizedLight"/>
-                      <ComboBoxItem Content="Solarized Dark" Tag="SolarizedDark"/>
-                  </ComboBox>
-                  
-                  <Separator />
-                  <Button Content="Settings" Click="SettingsMenuItem_Click" ToolTip="Open application settings" />
-              </ToolBar>
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- CUSTOM TITLE BAR - Modern Design                            -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <Grid Grid.Row="0" Height="36" 
+              Background="{DynamicResource AppSurfaceBrush}"
+              WindowChrome.IsHitTestVisibleInChrome="False">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>  <!-- Logo -->
+                <ColumnDefinition Width="*"/>     <!-- Search (centered) -->
+                <ColumnDefinition Width="Auto"/>  <!-- Settings, More, Window Controls -->
+            </Grid.ColumnDefinitions>
+            
+            <!-- LEFT: App Logo/Name -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBlock Text="NoteNest" 
+                          FontSize="14" 
+                          FontWeight="SemiBold"
+                          Foreground="{DynamicResource AppAccentBrush}"
+                          VerticalAlignment="Center"/>
+            </StackPanel>
+            
+            <!-- CENTER: Search Control -->
+            <controls:SmartSearchControl Grid.Column="1"
+                                        Width="400" 
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        DataContext="{Binding Search}"
+                                        ResultSelected="SmartSearch_ResultSelected"
+                                        WindowChrome.IsHitTestVisibleInChrome="True"/>
+            
+            <!-- RIGHT: Settings, More Menu, Window Controls -->
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                
+                <!-- Settings Button -->
+                <Button x:Name="SettingsButton"
+                       Click="SettingsMenuItem_Click"
+                       ToolTip="Settings"
+                       Style="{StaticResource TitleBarButtonStyle}"
+                       WindowChrome.IsHitTestVisibleInChrome="True">
+                    <ContentControl Template="{StaticResource LucideSettings}"
+                                   Width="16" Height="16"
+                                   Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                </Button>
+                
+                <!-- More Menu Button -->
+                <Button x:Name="MoreMenuButton"
+                       Click="MoreMenuButton_Click"
+                       ToolTip="More options"
+                       Style="{StaticResource TitleBarButtonStyle}"
+                       WindowChrome.IsHitTestVisibleInChrome="True">
+                    <ContentControl Template="{StaticResource LucideEllipsisVertical}"
+                                   Width="16" Height="16"
+                                   Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                </Button>
+                
+                <!-- Window Control Buttons -->
+                <Button x:Name="MinimizeButton"
+                       Click="MinimizeButton_Click"
+                       ToolTip="Minimize"
+                       Style="{StaticResource TitleBarButtonStyle}"
+                       WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Path Data="M0,0 H10" 
+                          Stroke="{DynamicResource AppTextPrimaryBrush}"
+                          StrokeThickness="1"
+                          Stretch="None"/>
+                </Button>
+                
+                <Button x:Name="MaximizeRestoreButton"
+                       Click="MaximizeRestoreButton_Click"
+                       ToolTip="Maximize"
+                       Style="{StaticResource TitleBarButtonStyle}"
+                       WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Path x:Name="MaximizeIcon"
+                          Data="M0,0 H10 V10 H0 Z"
+                          Stroke="{DynamicResource AppTextPrimaryBrush}"
+                          StrokeThickness="1"
+                          Stretch="None"/>
+                </Button>
+                
+                <Button x:Name="CloseButton"
+                       Click="CloseButton_Click"
+                       ToolTip="Close"
+                       Style="{StaticResource TitleBarCloseButtonStyle}"
+                       WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Path Data="M0,0 L10,10 M10,0 L0,10"
+                          Stroke="{DynamicResource AppTextPrimaryBrush}"
+                          StrokeThickness="1"
+                          Stretch="None"/>
+                </Button>
+            </StackPanel>
+        </Grid>
         
         <!-- Main Content -->
         <Grid Grid.Row="1">
