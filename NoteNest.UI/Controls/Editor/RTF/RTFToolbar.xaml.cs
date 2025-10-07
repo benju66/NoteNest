@@ -72,10 +72,24 @@ namespace NoteNest.UI.Controls.Editor.RTF
         private void OnEditorSelectionChanged(object sender, RoutedEventArgs e)
         {
             // Update toggle states when selection changes
-            Dispatcher.BeginInvoke(new Action(() =>
+            try
             {
-                UpdateAllToggleStates();
-            }), System.Windows.Threading.DispatcherPriority.Background);
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        UpdateAllToggleStates();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[RTFToolbar] Failed to update toggle states: {ex.Message}");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Background);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFToolbar] Failed to dispatch selection change update: {ex.Message}");
+            }
         }
 
         private void UpdateHighlightColor()

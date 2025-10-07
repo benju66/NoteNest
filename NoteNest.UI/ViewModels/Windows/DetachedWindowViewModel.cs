@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
+using System.Windows;
 using System.Windows.Input;
 using System.Threading.Tasks;
 using NoteNest.UI.ViewModels.Common;
@@ -47,7 +49,9 @@ namespace NoteNest.UI.ViewModels.Windows
             
             // Create pane for this window
             _paneViewModel = new PaneViewModel(_windowId);
-            _paneViewModel.PropertyChanged += OnPanePropertyChanged;
+            // Use weak event pattern to prevent memory leaks
+            WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>
+                .AddHandler(_paneViewModel, nameof(INotifyPropertyChanged.PropertyChanged), OnPanePropertyChanged);
             
             // Initialize commands
             InitializeCommands();
@@ -385,7 +389,9 @@ namespace NoteNest.UI.ViewModels.Windows
             // Cleanup event subscriptions
             if (_paneViewModel != null)
             {
-                _paneViewModel.PropertyChanged -= OnPanePropertyChanged;
+                // Remove weak event handler
+                WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>
+                    .RemoveHandler(_paneViewModel, nameof(INotifyPropertyChanged.PropertyChanged), OnPanePropertyChanged);
             }
         }
         

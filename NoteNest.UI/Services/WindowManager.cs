@@ -34,7 +34,7 @@ namespace NoteNest.UI.Services
         /// <summary>
         /// Create new detached window with initial tabs
         /// </summary>
-        Task<DetachedWindowViewModel> CreateDetachedWindowAsync(List<TabViewModel> initialTabs);
+        Task<DetachedWindowViewModel> CreateDetachedWindowAsync(List<TabViewModel> initialTabs, Point? preferredPosition = null);
         
         /// <summary>
         /// Close detached window and handle tab redocking
@@ -126,9 +126,9 @@ namespace NoteNest.UI.Services
         
         #region Window Creation & Destruction
         
-        public async Task<DetachedWindowViewModel> CreateDetachedWindowAsync(List<TabViewModel> initialTabs)
+        public async Task<DetachedWindowViewModel> CreateDetachedWindowAsync(List<TabViewModel> initialTabs, Point? preferredPosition = null)
         {
-            _logger.Debug($"[WindowManager] CreateDetachedWindowAsync called with {initialTabs?.Count ?? 0} tabs");
+            _logger.Debug($"[WindowManager] CreateDetachedWindowAsync called with {initialTabs?.Count ?? 0} tabs, preferredPosition: {preferredPosition}");
             
             if (IsAtWindowLimit())
             {
@@ -165,6 +165,12 @@ namespace NoteNest.UI.Services
                 if (System.Windows.Application.Current?.MainWindow != null)
                 {
                     detachedWpfWindow.Owner = System.Windows.Application.Current.MainWindow;
+                }
+                
+                // Apply smart positioning if preferred position is provided
+                if (preferredPosition.HasValue)
+                {
+                    ApplySmartPositioning(detachedWpfWindow, preferredPosition.Value);
                 }
                 
                 // Add to collections
@@ -534,6 +540,84 @@ namespace NoteNest.UI.Services
             else
             {
                 window.WindowTitle = $"NoteNest - {tabCount} tabs";
+            }
+        }
+        
+        #endregion
+        
+        #region Smart Positioning
+        
+        /// <summary>
+        /// Apply smart positioning to a detached window based on preferred drop location
+        /// </summary>
+        private void ApplySmartPositioning(DetachedWindow window, Point screenDropPosition)
+        {
+            try
+            {
+                _logger?.Debug($"[WindowManager] Applying smart positioning at screen position: {screenDropPosition}");
+                
+                // Default window size for new detached windows
+                const double defaultWidth = 800;
+                const double defaultHeight = 600;
+                
+                // Calculate position relative to drop point
+                // Position window so that it appears near the drop location but doesn't obscure it
+                double windowLeft = screenDropPosition.X - 100; // Offset to left of cursor
+                double windowTop = screenDropPosition.Y - 50;   // Offset above cursor
+                
+                // Get screen bounds to ensure window stays on screen
+                var workingArea = SystemParameters.WorkArea;
+                var screenBounds = new Rect(
+                    SystemParameters.VirtualScreenLeft,
+                    SystemParameters.VirtualScreenTop,
+                    SystemParameters.VirtualScreenWidth,
+                    SystemParameters.VirtualScreenHeight);
+                
+                // Adjust position to keep window fully visible
+                // Ensure right edge doesn't go off screen
+                if (windowLeft + defaultWidth > screenBounds.Right)
+                {
+                    windowLeft = screenBounds.Right - defaultWidth - 20; // 20px margin
+                }
+                
+                // Ensure left edge doesn't go off screen
+                if (windowLeft < screenBounds.Left)
+                {
+                    windowLeft = screenBounds.Left + 20; // 20px margin
+                }
+                
+                // Ensure bottom edge doesn't go off screen
+                if (windowTop + defaultHeight > screenBounds.Bottom)
+                {
+                    windowTop = screenBounds.Bottom - defaultHeight - 20; // 20px margin
+                }
+                
+                // Ensure top edge doesn't go off screen
+                if (windowTop < screenBounds.Top)
+                {
+                    windowTop = screenBounds.Top + 20; // 20px margin
+                }
+                
+                // Apply positioning using RestoreBounds method for consistency
+                window.RestoreBounds(windowLeft, windowTop, defaultWidth, defaultHeight, false);
+                
+                _logger?.Debug($"[WindowManager] Smart positioning applied: ({windowLeft}, {windowTop}) {defaultWidth}x{defaultHeight}");
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning($"[WindowManager] Failed to apply smart positioning, using default: {ex.Message}");
+                
+                // Fallback to default positioning (slightly offset from main window)
+                var mainWindow = System.Windows.Application.Current?.MainWindow;
+                if (mainWindow != null)
+                {
+                    window.RestoreBounds(
+                        mainWindow.Left + 50, 
+                        mainWindow.Top + 50, 
+                        800, 
+                        600, 
+                        false);
+                }
             }
         }
         

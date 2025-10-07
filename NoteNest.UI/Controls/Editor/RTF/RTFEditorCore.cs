@@ -78,14 +78,14 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 
                 // Create single spacing list style with space for bullet markers
                 var listStyle = new System.Windows.Style(typeof(List));
-                listStyle.Setters.Add(new System.Windows.Setter(List.MarginProperty, new System.Windows.Thickness(0, 0, 0, 6)));
+                listStyle.Setters.Add(new System.Windows.Setter(List.MarginProperty, new System.Windows.Thickness(0, 4, 0, 8))); // More space after lists
                 listStyle.Setters.Add(new System.Windows.Setter(List.PaddingProperty, new System.Windows.Thickness(20, 0, 0, 0))); // Left padding for bullets
                 Document.Resources.Add(typeof(List), listStyle);
                 
                 // Create single spacing list item style with bullet marker space
                 var listItemStyle = new System.Windows.Style(typeof(ListItem));
-                listItemStyle.Setters.Add(new System.Windows.Setter(ListItem.MarginProperty, new System.Windows.Thickness(0, 0, 0, 0)));
-                listItemStyle.Setters.Add(new System.Windows.Setter(ListItem.PaddingProperty, new System.Windows.Thickness(0, 0, 0, 2)));
+                listItemStyle.Setters.Add(new System.Windows.Setter(ListItem.MarginProperty, new System.Windows.Thickness(0, 2, 0, 2))); // Small vertical spacing
+                listItemStyle.Setters.Add(new System.Windows.Setter(ListItem.PaddingProperty, new System.Windows.Thickness(0, 0, 0, 0)));
                 Document.Resources.Add(typeof(ListItem), listItemStyle);
                 
                 System.Diagnostics.Debug.WriteLine("[RTFEditorCore] Single spacing document styles initialized");

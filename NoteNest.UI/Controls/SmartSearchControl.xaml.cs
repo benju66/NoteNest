@@ -174,13 +174,27 @@ namespace NoteNest.UI.Controls
             if (_suppressFocusChange) return;
             
             // Delay closing to allow click events to process
-            Dispatcher.BeginInvoke(new Action(() =>
+            try
             {
-                if (!SearchTextBox.IsFocused && !ResultsList.IsFocused && !ResultsPopup.IsKeyboardFocusWithin)
+                Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    ResultsPopup.IsOpen = false;
-                }
-            }), System.Windows.Threading.DispatcherPriority.Input);
+                    try
+                    {
+                        if (!SearchTextBox.IsFocused && !ResultsList.IsFocused && !ResultsPopup.IsKeyboardFocusWithin)
+                        {
+                            ResultsPopup.IsOpen = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[SmartSearchControl] Failed to update popup state: {ex.Message}");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Input);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SmartSearchControl] Failed to dispatch focus change: {ex.Message}");
+            }
         }
 
         // Results list event handlers

@@ -22,8 +22,16 @@ namespace NoteNest.UI.ViewModels.Workspace
             get => _selectedTab;
             set
             {
+                var previousTab = _selectedTab;
                 if (SetProperty(ref _selectedTab, value))
                 {
+                    // Save previous tab if it was dirty before switching
+                    if (previousTab != null && previousTab.IsDirty)
+                    {
+                        _ = previousTab.SaveAsync(); // Fire and forget
+                        System.Diagnostics.Debug.WriteLine($"[PaneViewModel] Auto-saving dirty tab on switch: {previousTab.Title}");
+                    }
+                    
                     System.Diagnostics.Debug.WriteLine($"[PaneViewModel] Selected tab changed: {value?.Title ?? "null"}");
                 }
             }

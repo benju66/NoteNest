@@ -390,30 +390,43 @@ namespace NoteNest.UI.Controls.Workspace
             try
             {
                 bool isDetachedWindow = IsInDetachedWindow();
+                var window = Window.GetWindow(this);
+                System.Diagnostics.Debug.WriteLine($"[CONTEXT-MENU-FIX] OnContextMenuOpened - Window Type: {window?.GetType().Name}, IsDetachedWindow: {isDetachedWindow}");
                 
                 // Find menu items by traversing items since FindName doesn't work in DataTemplate
                 var contextMenu = sender as ContextMenu;
                 if (contextMenu != null)
                 {
+                    System.Diagnostics.Debug.WriteLine($"[CONTEXT-MENU-FIX] ContextMenu found with {contextMenu.Items.Count} items");
+                    int menuItemIndex = 0;
+                    
                     foreach (var item in contextMenu.Items)
                     {
                         if (item is MenuItem menuItem)
                         {
                             var header = menuItem.Header?.ToString();
+                            System.Diagnostics.Debug.WriteLine($"[CONTEXT-MENU-FIX] MenuItem {menuItemIndex}: '{header}', Current Visibility: {menuItem.Visibility}");
+                            
                             if (header == "Redock to Main Window" || header == "Redock All Tabs")
                             {
-                                menuItem.Visibility = isDetachedWindow ? Visibility.Visible : Visibility.Collapsed;
-                                System.Diagnostics.Debug.WriteLine($"[PaneView] Set {header} visibility to {menuItem.Visibility}");
+                                var newVisibility = isDetachedWindow ? Visibility.Visible : Visibility.Collapsed;
+                                menuItem.Visibility = newVisibility;
+                                System.Diagnostics.Debug.WriteLine($"[CONTEXT-MENU-FIX] *** UPDATED {header} visibility: {menuItem.Visibility} (was {(newVisibility == Visibility.Visible ? "Collapsed" : "Visible")})");
                             }
                         }
+                        menuItemIndex++;
                     }
                 }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"[CONTEXT-MENU-FIX] ERROR: ContextMenu is null, sender type: {sender?.GetType().Name}");
+                }
                 
-                System.Diagnostics.Debug.WriteLine($"[PaneView] Context menu opened, detached window: {isDetachedWindow}");
+                System.Diagnostics.Debug.WriteLine($"[CONTEXT-MENU-FIX] Context menu processing complete");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[PaneView] Error updating context menu: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[CONTEXT-MENU-FIX] ERROR in OnContextMenuOpened: {ex.Message}\nStack: {ex.StackTrace}");
             }
         }
         

@@ -1,4 +1,5 @@
 using System;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Documents;
 using System.Linq;
@@ -208,6 +209,9 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 var highlightCommand = new RelayCommand(() => _highlight.CycleHighlight(this));
                 InputBindings.Add(new KeyBinding(highlightCommand, Key.H, ModifierKeys.Control));
                 
+                // Override paste command to strip formatting
+                CommandBindings.Add(new CommandBinding(ApplicationCommands.Paste, OnPasteCommand, CanPasteCommand));
+                
                 System.Diagnostics.Debug.WriteLine("[RTFEditor] Enhanced keyboard shortcuts registered");
             }
             catch (Exception ex)
@@ -364,6 +368,44 @@ namespace NoteNest.UI.Controls.Editor.RTF
                 System.Diagnostics.Debug.WriteLine($"[RTFEditor] Shift+Tab handling failed: {ex.Message}");
                 return false;
             }
+        }
+        
+        /// <summary>
+        /// Handle paste command - strip external formatting
+        /// </summary>
+        private void OnPasteCommand(object sender, ExecutedRoutedEventArgs e)
+        {
+            try
+            {
+                e.Handled = true; // Prevent default paste
+                
+                // Get text from clipboard
+                if (Clipboard.ContainsText())
+                {
+                    var plainText = Clipboard.GetText();
+                    
+                    // Insert as plain text (will inherit current formatting)
+                    if (!string.IsNullOrEmpty(plainText))
+                    {
+                        Selection.Text = plainText;
+                        System.Diagnostics.Debug.WriteLine($"[RTFEditor] Pasted as plain text: {plainText.Length} chars");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[RTFEditor] Paste failed: {ex.Message}");
+                // Fall back to default paste
+                e.Handled = false;
+            }
+        }
+        
+        /// <summary>
+        /// Check if paste is available
+        /// </summary>
+        private void CanPasteCommand(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = Clipboard.ContainsText();
         }
         
         /// <summary>
@@ -997,8 +1039,8 @@ namespace NoteNest.UI.Controls.Editor.RTF
                         foreach (var listItem in list.ListItems)
                         {
                             // Apply styles to the list item itself
-                            listItem.Margin = new System.Windows.Thickness(0, 0, 0, 0);
-                            listItem.Padding = new System.Windows.Thickness(0, 0, 0, 2);
+                            listItem.Margin = new System.Windows.Thickness(0, 2, 0, 2);
+                            listItem.Padding = new System.Windows.Thickness(0, 0, 0, 0);
                             
                             // Recursively process any nested content (including nested lists)
                             ProcessBlocksRecursively(listItem.Blocks);
