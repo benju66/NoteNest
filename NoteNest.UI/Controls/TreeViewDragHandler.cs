@@ -16,11 +16,12 @@ namespace NoteNest.UI.Controls
 	/// </summary>
 	public class TreeViewDragHandler : IDisposable
 	{
-		private readonly TreeView _treeView;
-		private Point _dragStartPosition;
-		private bool _isDragging;
-		private object _draggedItem; // CategoryViewModel or NoteItemViewModel
-		private TreeViewItem _draggedTreeViewItem;
+	private readonly TreeView _treeView;
+	private Point _dragStartPosition;
+	private bool _isDragging;
+	private object _draggedItem; // CategoryViewModel or NoteItemViewModel
+	private TreeViewItem _draggedTreeViewItem;
+	private Point _dragOffset; // Offset from cursor to adorner top-left
 		
 		// Visual feedback
 		private Window _dragAdornerWindow;
@@ -99,6 +100,10 @@ namespace NoteNest.UI.Controls
 				return;
 			
 			_isDragging = true;
+			
+			// Calculate drag offset - position adorner near cursor
+			// Negative Y moves it up, negative X moves it left
+			_dragOffset = new Point(-50, 5); // Center horizontally, just above cursor
 			
 			// Create drag adorner (ghost image)
 			CreateDragAdorner();
@@ -232,10 +237,11 @@ namespace NoteNest.UI.Controls
 			if (_dragAdornerWindow == null)
 				return;
 			
-			// Convert to screen coordinates
-			var screenPosition = _treeView.PointToScreen(mousePosition);
-			_dragAdornerWindow.Left = screenPosition.X + 10;
-			_dragAdornerWindow.Top = screenPosition.Y + 10;
+			// Get current mouse position in screen coordinates directly
+			// This avoids coordinate system conversion issues that occur with nested controls
+			var currentMousePos = Mouse.GetPosition(null); // null = screen coordinates
+			_dragAdornerWindow.Left = currentMousePos.X + _dragOffset.X;
+			_dragAdornerWindow.Top = currentMousePos.Y + _dragOffset.Y;
 		}
 		
 		private void UpdateDropTarget(Point mousePosition)

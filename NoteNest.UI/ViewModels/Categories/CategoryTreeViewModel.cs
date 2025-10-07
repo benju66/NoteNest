@@ -10,6 +10,7 @@ using NoteNest.Application.Common.Interfaces;
 using NoteNest.Domain.Categories;
 using NoteNest.UI.ViewModels.Common;
 using NoteNest.UI.Controls;
+using NoteNest.UI.Collections;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.ViewModels.Categories
@@ -46,7 +47,7 @@ namespace NoteNest.UI.ViewModels.Categories
             _treeRepository = treeRepository;
             _logger = logger;
             
-            Categories = new ObservableCollection<CategoryViewModel>();
+            Categories = new SmartObservableCollection<CategoryViewModel>();
             
             // Initialize debounce timer for expanded state persistence
             _expandedStateTimer = new DispatcherTimer 
@@ -58,10 +59,10 @@ namespace NoteNest.UI.ViewModels.Categories
             _ = LoadCategoriesAsync();
         }
 
-        public ObservableCollection<CategoryViewModel> Categories { get; }
+        public SmartObservableCollection<CategoryViewModel> Categories { get; }
         
         // Alias for XAML binding compatibility
-        public ObservableCollection<CategoryViewModel> RootCategories => Categories;
+        public SmartObservableCollection<CategoryViewModel> RootCategories => Categories;
 
         /// <summary>
         /// Currently selected item in the TreeView (can be CategoryViewModel or NoteItemViewModel)
@@ -354,26 +355,35 @@ namespace NoteNest.UI.ViewModels.Categories
             
             try
             {
-                Categories.Clear();
-                
-                // Create CategoryViewModels for root categories with dependency injection
-                foreach (var category in rootCategories)
+                // ✨ SMOOTH UX: Batch update eliminates tree flickering
+                using (Categories.BatchUpdate())
                 {
-                    var categoryViewModel = new CategoryViewModel(category, _noteRepository, this, _logger);
+                    Categories.Clear();
                     
-                    // Wire up note events to bubble up
-                    categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
-                    categoryViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
+                    // Create all CategoryViewModels first (faster)
+                    var categoryViewModels = new List<CategoryViewModel>();
                     
-                    await LoadChildrenAsync(categoryViewModel, allCategories);
-                    Categories.Add(categoryViewModel);
+                    foreach (var category in rootCategories)
+                    {
+                        var categoryViewModel = new CategoryViewModel(category, _noteRepository, this, _logger);
+                        
+                        // Wire up note events to bubble up
+                        categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
+                        categoryViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
+                        
+                        await LoadChildrenAsync(categoryViewModel, allCategories);
+                        categoryViewModels.Add(categoryViewModel);
+                        
+                        // ⭐ Load initial expanded state from database (after children loaded)
+                        // This doesn't trigger persistence because _isLoadingFromDatabase = true
+                        await LoadExpandedStateFromDatabase(categoryViewModel, category);
+                    }
                     
-                    // ⭐ Load initial expanded state from database (after children loaded)
-                    // This doesn't trigger persistence because _isLoadingFromDatabase = true
-                    await LoadExpandedStateFromDatabase(categoryViewModel, category);
+                    // Add all at once - single UI update
+                    Categories.AddRange(categoryViewModels);
                 }
                 
-                _logger.Info($"Loaded {Categories.Count} root categories");
+                _logger.Info($"Loaded {Categories.Count} root categories with smooth batching");
             }
             finally
             {
@@ -562,7 +572,7 @@ namespace NoteNest.UI.ViewModels.Categories
         
         /// <summary>
         /// Moves a note to a different category in the tree WITHOUT full refresh.
-        /// Provides smooth UX with no flickering.
+        /// Provides smooth UX with no flickering using batched updates.
         /// </summary>
         public async Task MoveNoteInTreeAsync(string noteId, string sourceCategoryId, string targetCategoryId)
         {
@@ -595,23 +605,24 @@ namespace NoteNest.UI.ViewModels.Categories
                     return;
                 }
                 
-                // Remove from source (triggers UI update via ObservableCollection)
-                sourceCategory.Notes.Remove(noteViewModel);
-                
-                // Ensure target category has loaded its notes
-                if (!targetCategory.IsExpanded)
+                // ✨ SMOOTH UX: Batch the remove/add operations
+                using (sourceCategory.Notes.BatchUpdate())
+                using (targetCategory.Notes.BatchUpdate())
                 {
-                    await targetCategory.ExpandAsync();
-                }
-                else if (targetCategory.Notes.Count == 0)
-                {
+                    // Remove from source
+                    sourceCategory.Notes.Remove(noteViewModel);
+                    
+                    // Ensure target category has loaded its notes
+                    if (!targetCategory.IsExpanded)
+                    {
+                        await targetCategory.ExpandAsync();
+                    }
+                    
+                    // Reload notes in target to get the moved note from database
                     await targetCategory.RefreshNotesAsync();
                 }
                 
-                // Reload notes in target to get the moved note from database
-                await targetCategory.RefreshNotesAsync();
-                
-                _logger.Info($"Moved note {noteId} from {sourceCategoryId} to {targetCategoryId} in tree");
+                _logger.Info($"Smoothly moved note {noteId} from {sourceCategoryId} to {targetCategoryId}");
             }
             catch (Exception ex)
             {
@@ -622,7 +633,7 @@ namespace NoteNest.UI.ViewModels.Categories
         
         /// <summary>
         /// Moves a category to a new parent in the tree WITHOUT full refresh.
-        /// Provides smooth UX with no flickering.
+        /// Provides smooth UX with no flickering using batched updates.
         /// </summary>
         public async Task MoveCategoryInTreeAsync(string categoryId, string oldParentId, string newParentId)
         {
@@ -647,32 +658,54 @@ namespace NoteNest.UI.ViewModels.Categories
                     ? null 
                     : FindCategoryById(newParentId);
                 
-                // Remove from old location
-                if (oldParent != null)
+                // ✨ SMOOTH UX: Batch all collection updates
+                var batches = new List<IDisposable>();
+                try
                 {
-                    oldParent.Children.Remove(categoryToMove);
-                }
-                else
-                {
-                    Categories.Remove(categoryToMove);
-                }
-                
-                // Add to new location
-                if (newParent != null)
-                {
-                    // Ensure parent is expanded to show the moved category
-                    if (!newParent.IsExpanded)
+                    // Start batching on all affected collections
+                    if (oldParent != null)
+                        batches.Add(oldParent.Children.BatchUpdate());
+                    else
+                        batches.Add(Categories.BatchUpdate());
+                        
+                    if (newParent != null)
+                        batches.Add(newParent.Children.BatchUpdate());
+                    else if (oldParent != null) // Don't double-batch root
+                        batches.Add(Categories.BatchUpdate());
+                    
+                    // Remove from old location
+                    if (oldParent != null)
                     {
-                        await newParent.ExpandAsync();
+                        oldParent.Children.Remove(categoryToMove);
                     }
-                    newParent.Children.Add(categoryToMove);
+                    else
+                    {
+                        Categories.Remove(categoryToMove);
+                    }
+                    
+                    // Add to new location
+                    if (newParent != null)
+                    {
+                        // Ensure parent is expanded to show the moved category
+                        if (!newParent.IsExpanded)
+                        {
+                            await newParent.ExpandAsync();
+                        }
+                        newParent.Children.Add(categoryToMove);
+                    }
+                    else
+                    {
+                        Categories.Add(categoryToMove);
+                    }
                 }
-                else
+                finally
                 {
-                    Categories.Add(categoryToMove);
+                    // Dispose all batches - triggers single UI update
+                    foreach (var batch in batches)
+                        batch.Dispose();
                 }
                 
-                _logger.Info($"Moved category {categoryId} from {oldParentId ?? "root"} to {newParentId ?? "root"} in tree");
+                _logger.Info($"Smoothly moved category {categoryId} from {oldParentId ?? "root"} to {newParentId ?? "root"}");
             }
             catch (Exception ex)
             {

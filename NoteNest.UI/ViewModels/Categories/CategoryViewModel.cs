@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using NoteNest.Domain.Categories;
 using NoteNest.UI.ViewModels.Common;
+using NoteNest.UI.Collections;
 using NoteNest.Application.Common.Interfaces;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Notes;
@@ -36,9 +37,9 @@ namespace NoteNest.UI.ViewModels.Categories
             _parentTree = parentTree;
             _logger = logger;
             
-            Children = new ObservableCollection<CategoryViewModel>();
-            Notes = new ObservableCollection<NoteItemViewModel>();
-            TreeItems = new ObservableCollection<object>();
+            Children = new SmartObservableCollection<CategoryViewModel>();
+            Notes = new SmartObservableCollection<NoteItemViewModel>();
+            TreeItems = new SmartObservableCollection<object>();
             
             // Subscribe to collection changes to update TreeItems
             Children.CollectionChanged += (s, e) => UpdateTreeItems();
@@ -86,11 +87,11 @@ namespace NoteNest.UI.ViewModels.Categories
             }
         }
         
-        public ObservableCollection<CategoryViewModel> Children { get; }
-        public ObservableCollection<NoteItemViewModel> Notes { get; }
+        public SmartObservableCollection<CategoryViewModel> Children { get; }
+        public SmartObservableCollection<NoteItemViewModel> Notes { get; }
         
         // Composite collection for TreeView binding - combines children and notes
-        public ObservableCollection<object> TreeItems { get; private set; }
+        public SmartObservableCollection<object> TreeItems { get; private set; }
         
         public bool HasChildren => Children.Any();
         public bool HasNotes => Notes.Any();
@@ -202,17 +203,15 @@ namespace NoteNest.UI.ViewModels.Categories
                 var categoryId = NoteNest.Domain.Categories.CategoryId.From(Id);
                 var notes = await _noteRepository.GetByCategoryAsync(categoryId);
                 
-                Notes.Clear();
-                foreach (var note in notes)
-                {
+                var noteViewModels = notes.Select(note => {
                     var noteViewModel = new NoteItemViewModel(note);
-                    
                     // Wire up note events to bubble up to tree level
                     noteViewModel.OpenRequested += OnNoteOpenRequested;
                     noteViewModel.SelectionRequested += OnNoteSelectionRequested;
-                    
-                    Notes.Add(noteViewModel);
-                }
+                    return noteViewModel;
+                }).ToList();
+
+                Notes.ReplaceAll(noteViewModels);
                 
                 _notesLoaded = true;
                 _logger?.Info($"Loaded {Notes.Count} notes for category: {Name}");
@@ -236,28 +235,34 @@ namespace NoteNest.UI.ViewModels.Categories
         public async Task RefreshNotesAsync()
         {
             _notesLoaded = false;
-            Notes.Clear();
-            UpdateTreeItems();
-            if (IsExpanded)
+            using (Notes.BatchUpdate())
             {
-                await LoadNotesAsync();
+                Notes.Clear();
+                if (IsExpanded)
+                {
+                    await LoadNotesAsync();
+                }
             }
+            UpdateTreeItems();
         }
 
         private void UpdateTreeItems()
         {
-            TreeItems.Clear();
-            
-            // Add child categories first
-            foreach (var child in Children)
+            using (TreeItems.BatchUpdate())
             {
-                TreeItems.Add(child);
-            }
-            
-            // Add notes second
-            foreach (var note in Notes)
-            {
-                TreeItems.Add(note);
+                TreeItems.Clear();
+                
+                // Add child categories first
+                foreach (var child in Children)
+                {
+                    TreeItems.Add(child);
+                }
+                
+                // Add notes second
+                foreach (var note in Notes)
+                {
+                    TreeItems.Add(note);
+                }
             }
             
             // Update UI binding properties
