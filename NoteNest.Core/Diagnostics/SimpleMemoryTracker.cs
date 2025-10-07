@@ -14,6 +14,10 @@ namespace NoteNest.Core.Diagnostics
         private static long _totalContentSize = 0;
         private static readonly object _trackingLock = new object();
         
+        // Enhanced tracking for detached windows (Phase 6)
+        private static int _detachedWindowCount = 0;
+        private static int _totalWindowCount = 1; // Start with 1 for main window
+        
         /// <summary>
         /// Set memory baseline when app starts
         /// </summary>
@@ -73,6 +77,61 @@ namespace NoteNest.Core.Diagnostics
         }
         
         /// <summary>
+        /// Track memory when detached window is created (Phase 6)
+        /// </summary>
+        public static void TrackDetachedWindowCreation(string windowId = "")
+        {
+            lock (_trackingLock)
+            {
+                _detachedWindowCount++;
+                _totalWindowCount++;
+                
+                // Always log detached window creation (significant event)
+                LogCurrentMemoryUsage($"Detached window created: {windowId}");
+                
+                DebugLogger.Log($"[WINDOWS] Created detached window {windowId}. " +
+                              $"Total windows: {_totalWindowCount} (Main + {_detachedWindowCount} detached)");
+            }
+        }
+        
+        /// <summary>
+        /// Track memory when detached window is disposed (Phase 6)
+        /// </summary>
+        public static void TrackDetachedWindowDisposal(string windowId = "")
+        {
+            lock (_trackingLock)
+            {
+                _detachedWindowCount = Math.Max(0, _detachedWindowCount - 1);
+                _totalWindowCount = Math.Max(1, _totalWindowCount - 1); // Always keep at least main window
+                
+                // Always log detached window disposal (significant event)
+                LogCurrentMemoryUsage($"Detached window disposed: {windowId}");
+                
+                DebugLogger.Log($"[WINDOWS] Disposed detached window {windowId}. " +
+                              $"Remaining windows: {_totalWindowCount} (Main + {_detachedWindowCount} detached)");
+                
+                // Force garbage collection after window disposal to reclaim memory
+                if (_detachedWindowCount == 0)
+                {
+                    DebugLogger.Log("[MEMORY] All detached windows closed, forcing garbage collection");
+                    GC.Collect(2, GCCollectionMode.Default, true);
+                    GC.WaitForPendingFinalizers();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Get current window count for diagnostics
+        /// </summary>
+        public static (int TotalWindows, int DetachedWindows) GetWindowCounts()
+        {
+            lock (_trackingLock)
+            {
+                return (_totalWindowCount, _detachedWindowCount);
+            }
+        }
+        
+        /// <summary>
         /// Force memory logging (for debugging)
         /// </summary>
         public static void LogMemoryStatus(string context = "")
@@ -87,19 +146,37 @@ namespace NoteNest.Core.Diagnostics
                 var currentMemory = GC.GetTotalMemory(false);
                 var deltaMemory = currentMemory - _baselineMemory;
                 var memoryPerTab = _tabCount > 0 ? deltaMemory / _tabCount : 0;
+                var memoryPerWindow = _totalWindowCount > 0 ? deltaMemory / _totalWindowCount : 0;
                 var avgContentSize = _tabCount > 0 ? _totalContentSize / _tabCount : 0;
+                
+                var detachedWindowInfo = _detachedWindowCount > 0 
+                    ? $" | Detached Windows: {_detachedWindowCount}"
+                    : "";
                 
                 DebugLogger.Log($"[MEMORY] {context} | " +
                               $"Total: {currentMemory / 1024 / 1024}MB | " +
                               $"Delta: {deltaMemory / 1024 / 1024}MB | " +
                               $"Per Tab: {memoryPerTab / 1024}KB | " +
-                              $"Tabs: {_tabCount} | " +
+                              $"Per Window: {memoryPerWindow / 1024}KB | " +
+                              $"Tabs: {_tabCount} | Windows: {_totalWindowCount}{detachedWindowInfo} | " +
                               $"Avg Content: {avgContentSize / 1024}KB");
                 
-                // Check for concerning patterns
+                // Enhanced warnings for multi-window scenarios
                 if (memoryPerTab > 10 * 1024 * 1024)  // >10MB per tab
                 {
                     DebugLogger.Log($"WARNING: High memory per tab detected: {memoryPerTab / 1024 / 1024}MB");
+                }
+                
+                if (_detachedWindowCount > 0 && memoryPerWindow > 50 * 1024 * 1024) // >50MB per window
+                {
+                    DebugLogger.Log($"WARNING: High memory per window detected: {memoryPerWindow / 1024 / 1024}MB " +
+                                  $"({_detachedWindowCount} detached windows)");
+                }
+                
+                if (_detachedWindowCount >= 3) // Alert when many windows are open
+                {
+                    DebugLogger.Log($"INFO: {_detachedWindowCount} detached windows active, " +
+                                  $"consider consolidating tabs for better performance");
                 }
             }
             catch (Exception ex)

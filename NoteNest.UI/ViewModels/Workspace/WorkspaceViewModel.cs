@@ -6,8 +6,11 @@ using System.Windows.Input;
 using NoteNest.Core.Models;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Core.Diagnostics;
 using NoteNest.Domain.Notes;
 using NoteNest.UI.ViewModels.Common;
+using NoteNest.UI.ViewModels.Windows;
+using NoteNest.UI.Services;
 using System.Collections.Generic;
 
 namespace NoteNest.UI.ViewModels.Workspace
@@ -21,6 +24,10 @@ namespace NoteNest.UI.ViewModels.Workspace
         private readonly ISaveManager _saveManager;
         private readonly IAppLogger _logger;
         private readonly IWorkspacePersistenceService _workspacePersistence;
+        private readonly IWindowManager _windowManager; // Phase 7: Tear-out functionality
+        private readonly IMultiWindowThemeCoordinator _themeCoordinator; // Phase 7: Theme sync
+        private readonly NoteNest.Core.Services.IMultiMonitorManager _multiMonitorManager; // Phase 7: Multi-monitor support
+        
         private PaneViewModel _activePane;
         private bool _isLoading;
         private string _statusMessage;
@@ -117,6 +124,12 @@ namespace NoteNest.UI.ViewModels.Workspace
         public ICommand CloseOtherTabsCommand { get; private set; }
         public ICommand MoveToOtherPaneCommand { get; private set; }
         
+        // Phase 7: Tear-out functionality commands
+        public ICommand DetachTabCommand { get; private set; }
+        public ICommand DetachOtherTabsCommand { get; private set; }
+        public ICommand RedockTabCommand { get; private set; }
+        public ICommand RedockAllTabsCommand { get; private set; }
+        
         // Events for coordination
         public event Action<TabViewModel> TabSelected;
         public event Action<TabViewModel> TabClosed;
@@ -126,11 +139,17 @@ namespace NoteNest.UI.ViewModels.Workspace
         public WorkspaceViewModel(
             ISaveManager saveManager, 
             IAppLogger logger,
-            IWorkspacePersistenceService workspacePersistence)
+            IWorkspacePersistenceService workspacePersistence,
+            IWindowManager windowManager = null, // Optional for tear-out functionality
+            IMultiWindowThemeCoordinator themeCoordinator = null, // Optional for theme sync
+            NoteNest.Core.Services.IMultiMonitorManager multiMonitorManager = null) // Optional for multi-monitor support
         {
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _workspacePersistence = workspacePersistence ?? throw new ArgumentNullException(nameof(workspacePersistence));
+            _windowManager = windowManager; // Can be null (tear-out disabled)
+            _themeCoordinator = themeCoordinator; // Can be null (no theme sync)
+            _multiMonitorManager = multiMonitorManager; // Can be null (single monitor)
             
             Panes = new ObservableCollection<PaneViewModel>();
             
@@ -174,6 +193,12 @@ namespace NoteNest.UI.ViewModels.Workspace
             CloseAllTabsCommand = new AsyncRelayCommand(ExecuteCloseAllTabs, () => HasOpenTabs);
             CloseOtherTabsCommand = new AsyncRelayCommand<TabViewModel>(ExecuteCloseOtherTabs);
             MoveToOtherPaneCommand = new NoteNest.Core.Commands.RelayCommand<TabViewModel>(ExecuteMoveToOtherPane, CanMoveToOtherPane);
+            
+            // Phase 7: Tear-out functionality commands
+            DetachTabCommand = new AsyncRelayCommand<TabViewModel>(ExecuteDetachTab, CanDetachTab);
+            DetachOtherTabsCommand = new AsyncRelayCommand<TabViewModel>(ExecuteDetachOtherTabs, CanDetachOtherTabs);
+            RedockTabCommand = new AsyncRelayCommand<TabViewModel>(ExecuteRedockTab, CanRedockTab);
+            RedockAllTabsCommand = new AsyncRelayCommand(ExecuteRedockAllTabs, CanRedockAllTabs);
         }
         
         /// <summary>
@@ -946,6 +971,145 @@ namespace NoteNest.UI.ViewModels.Workspace
                 // Don't throw - restoration failures shouldn't prevent app startup
             }
         }
+        
+        #endregion
+        
+        #region Tear-Out Command Implementations (Phase 7)
+        
+        /// <summary>
+        /// Detach single tab to new window
+        /// </summary>
+        private async Task ExecuteDetachTab(TabViewModel tab)
+        {
+            if (tab == null || _windowManager == null) return;
+            
+            try
+            {
+                _logger.Info($"[WorkspaceViewModel] Detaching tab: {tab.Title}");
+                
+                // Create new detached window with this tab
+                var initialTabs = new List<TabViewModel> { tab };
+                var detachedWindow = await _windowManager.CreateDetachedWindowAsync(initialTabs);
+                
+                if (detachedWindow != null)
+                {
+                    // Remove from current pane
+                    var sourcePane = FindPaneContainingTab(tab);
+                    sourcePane?.RemoveTab(tab);
+                    
+                    // Track memory usage
+                    SimpleMemoryTracker.TrackDetachedWindowCreation(detachedWindow.WindowId);
+                    
+                    _logger.Info($"[WorkspaceViewModel] Tab detached successfully: {tab.Title} to window {detachedWindow.WindowId}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[WorkspaceViewModel] Failed to detach tab: {tab?.Title}");
+            }
+        }
+        
+        /// <summary>
+        /// Detach all other tabs to new window (keep current tab in main window)
+        /// </summary>
+        private async Task ExecuteDetachOtherTabs(TabViewModel keepTab)
+        {
+            if (keepTab == null || _windowManager == null) return;
+            
+            try
+            {
+                var sourcePane = FindPaneContainingTab(keepTab);
+                if (sourcePane == null) return;
+                
+                // Get all other tabs
+                var otherTabs = sourcePane.Tabs.Where(t => t != keepTab).ToList();
+                if (!otherTabs.Any()) return;
+                
+                _logger.Info($"[WorkspaceViewModel] Detaching {otherTabs.Count} other tabs, keeping: {keepTab.Title}");
+                
+                // Create new detached window with other tabs
+                var detachedWindow = await _windowManager.CreateDetachedWindowAsync(otherTabs);
+                
+                if (detachedWindow != null)
+                {
+                    // Remove other tabs from source pane
+                    foreach (var tab in otherTabs)
+                    {
+                        sourcePane.RemoveTab(tab);
+                    }
+                    
+                    // Track memory usage
+                    SimpleMemoryTracker.TrackDetachedWindowCreation(detachedWindow.WindowId);
+                    
+                    _logger.Info($"[WorkspaceViewModel] {otherTabs.Count} tabs detached to window {detachedWindow.WindowId}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[WorkspaceViewModel] Failed to detach other tabs");
+            }
+        }
+        
+        /// <summary>
+        /// Redock single tab from detached window to main window
+        /// </summary>
+        private async Task ExecuteRedockTab(TabViewModel tab)
+        {
+            if (tab == null || _windowManager == null) return;
+            
+            try
+            {
+                var sourceWindow = _windowManager.FindWindowContainingTab(tab);
+                if (sourceWindow == null) return;
+                
+                _logger.Info($"[WorkspaceViewModel] Redocking tab: {tab.Title} from window {sourceWindow.WindowId}");
+                
+                await _windowManager.RedockTabAsync(tab, sourceWindow);
+                
+                // Add to active pane in main window
+                ActivePane.AddTab(tab, true);
+                
+                _logger.Info($"[WorkspaceViewModel] Tab redocked successfully: {tab.Title}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[WorkspaceViewModel] Failed to redock tab: {tab?.Title}");
+            }
+        }
+        
+        /// <summary>
+        /// Redock all tabs from detached windows to main window
+        /// </summary>
+        private async Task ExecuteRedockAllTabs()
+        {
+            if (_windowManager == null) return;
+            
+            try
+            {
+                var detachedWindows = _windowManager.DetachedWindows.ToList();
+                if (!detachedWindows.Any()) return;
+                
+                _logger.Info($"[WorkspaceViewModel] Redocking all tabs from {detachedWindows.Count} detached windows");
+                
+                foreach (var window in detachedWindows)
+                {
+                    await _windowManager.RedockAllTabsAsync(window);
+                }
+                
+                _logger.Info("[WorkspaceViewModel] All tabs redocked successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[WorkspaceViewModel] Failed to redock all tabs");
+            }
+        }
+        
+        // CanExecute methods for tear-out commands
+        private bool CanDetachTab(TabViewModel tab) => tab != null && _windowManager != null && !_windowManager.IsAtWindowLimit();
+        private bool CanDetachOtherTabs(TabViewModel tab) => tab != null && _windowManager != null && ActivePane?.Tabs?.Count > 1 && !_windowManager.IsAtWindowLimit();
+        private bool CanRedockTab(TabViewModel tab) => tab != null && _windowManager != null && _windowManager.FindWindowContainingTab(tab) != null;
+        private bool CanRedockAllTabs() => _windowManager?.DetachedWindows?.Any() == true;
+        
         
         #endregion
     }

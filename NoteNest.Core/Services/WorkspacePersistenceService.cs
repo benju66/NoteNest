@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,8 +10,9 @@ using NoteNest.Core.Services.Logging;
 namespace NoteNest.Core.Services
 {
     /// <summary>
-    /// Handles persistence of workspace state (tabs and panes) to JSON file
-    /// Part of NEW clean architecture (Milestone 2A completion)
+    /// Handles persistence of workspace state (tabs, panes, and detached windows) to JSON file
+    /// Enhanced with detached window support for tear-out functionality
+    /// Supports schema versioning for backward compatibility
     /// </summary>
     public interface IWorkspacePersistenceService
     {
@@ -72,8 +74,14 @@ namespace NoteNest.Core.Services
                     return null;
                 }
                 
-                _logger.Info($"[WorkspacePersistence] Loaded state: {state.PaneCount} pane(s), " +
-                           $"{state.Panes.Count} pane state(s), saved {state.LastSaved:yyyy-MM-dd HH:mm:ss}");
+                // Enhanced logging for detached window support (Version 2+)
+                var detachedWindowsInfo = state.DetachedWindows?.Count > 0 
+                    ? $", {state.DetachedWindows.Count} detached window(s)"
+                    : "";
+                    
+                _logger.Info($"[WorkspacePersistence] Loaded state: Version {state.Version}, " +
+                           $"{state.PaneCount} pane(s), {state.Panes.Count} pane state(s)" +
+                           $"{detachedWindowsInfo}, saved {state.LastSaved:yyyy-MM-dd HH:mm:ss}");
                 
                 return state;
             }
@@ -106,8 +114,16 @@ namespace NoteNest.Core.Services
                 await File.WriteAllTextAsync(tempFile, json);
                 File.Move(tempFile, _stateFilePath, overwrite: true);
                 
-                _logger.Debug($"[WorkspacePersistence] Saved state: {state.PaneCount} pane(s), " +
-                            $"{state.Panes.Sum(p => p.Tabs.Count)} total tabs");
+                // Enhanced logging for detached window support
+                var mainWindowTabs = state.Panes?.Sum(p => p.Tabs?.Count ?? 0) ?? 0;
+                var detachedWindowTabs = state.DetachedWindows?.Sum(w => w.Tabs?.Count ?? 0) ?? 0;
+                var detachedWindowsInfo = state.DetachedWindows?.Count > 0 
+                    ? $", {state.DetachedWindows.Count} detached window(s) with {detachedWindowTabs} tabs"
+                    : "";
+                    
+                _logger.Debug($"[WorkspacePersistence] Saved state: Version {state.Version}, " +
+                            $"{state.PaneCount} pane(s) with {mainWindowTabs} tabs" +
+                            $"{detachedWindowsInfo}");
             }
             catch (Exception ex)
             {

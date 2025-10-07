@@ -50,11 +50,31 @@
                     Command="{Binding Workspace.SwitchToPaneCommand}" 
                     CommandParameter="1"/>
         
+        <!-- 🚪 TEAR-OUT: Detach/Redock Operations -->
+        <KeyBinding Key="D" Modifiers="Control+Shift" 
+                    Command="{Binding Workspace.DetachTabCommand}"
+                    CommandParameter="{Binding Workspace.SelectedTab}"/>
+        <KeyBinding Key="Enter" Modifiers="Control+Shift" 
+                    Command="{Binding Workspace.RedockTabCommand}"
+                    CommandParameter="{Binding Workspace.SelectedTab}"/>
+        <KeyBinding Key="Enter" Modifiers="Control+Alt" 
+                    Command="{Binding Workspace.RedockAllTabsCommand}"/>
+        
         <!-- ✨ TIER 1: Tab Cycling (Browser/IDE standard) -->
         <KeyBinding Key="Tab" Modifiers="Control" 
                     Command="{Binding Workspace.NextTabCommand}"/>
         <KeyBinding Key="Tab" Modifiers="Control+Shift" 
                     Command="{Binding Workspace.PreviousTabCommand}"/>
+        
+        <!-- 🚪 TEAR-OUT: Detach/Redock Operations -->
+        <KeyBinding Key="D" Modifiers="Control+Shift" 
+                    Command="{Binding Workspace.DetachTabCommand}"
+                    CommandParameter="{Binding Workspace.SelectedTab}"/>
+        <KeyBinding Key="Enter" Modifiers="Control+Shift" 
+                    Command="{Binding Workspace.RedockTabCommand}"
+                    CommandParameter="{Binding Workspace.SelectedTab}"/>
+        <KeyBinding Key="Enter" Modifiers="Control+Alt" 
+                    Command="{Binding Workspace.RedockAllTabsCommand}"/>
     </Window.InputBindings>
     <Window.Resources>
         <!-- 🎨 LUCIDE ICON LIBRARY - Pre-compiled resources -->

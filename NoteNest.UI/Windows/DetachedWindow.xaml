@@ -1,0 +1,228 @@
+<Window x:Class="NoteNest.UI.Windows.DetachedWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:workspace="clr-namespace:NoteNest.UI.Controls.Workspace"
+        xmlns:viewModels="clr-namespace:NoteNest.UI.ViewModels.Windows"
+        Title="NoteNest - Detached" 
+        Height="600" Width="800"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        ResizeMode="CanResize"
+        ShowInTaskbar="True"
+        Background="{DynamicResource AppBackgroundBrush}"
+        x:Name="DetachedWindowRoot">
+    
+    <!-- Modern Custom Title Bar with WindowChrome -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="36"
+                     ResizeBorderThickness="8"
+                     CornerRadius="0"
+                     GlassFrameThickness="0"
+                     UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+    
+    <Window.InputBindings>
+        <!-- Tab Management Shortcuts -->
+        <KeyBinding Key="S" Modifiers="Control" 
+                    Command="{Binding SaveTabCommand}" 
+                    CommandParameter="{Binding SelectedTab}"/>
+        <KeyBinding Key="S" Modifiers="Control+Shift" 
+                    Command="{Binding SaveAllTabsCommand}"/>
+        <KeyBinding Key="W" Modifiers="Control" 
+                    Command="{Binding CloseTabCommand}" 
+                    CommandParameter="{Binding SelectedTab}"/>
+        
+        <!-- Window Management -->
+        <KeyBinding Key="F4" Modifiers="Alt" 
+                    Command="{Binding CloseWindowCommand}"/>
+        <KeyBinding Key="Enter" Modifiers="Control+Shift" 
+                    Command="{Binding RedockAllTabsCommand}"/>
+        
+        <!-- Redock Operations (detached window specific) -->
+        <KeyBinding Key="R" Modifiers="Control+Shift" 
+                    Command="{Binding RedockTabCommand}"
+                    CommandParameter="{Binding SelectedTab}"/>
+        <KeyBinding Key="R" Modifiers="Control+Alt" 
+                    Command="{Binding RedockAllTabsCommand}"/>
+        
+        <!-- Tab Navigation -->
+        <KeyBinding Key="Tab" Modifiers="Control" 
+                    Command="{Binding NextTabCommand}"/>
+        <KeyBinding Key="Tab" Modifiers="Control+Shift" 
+                    Command="{Binding PreviousTabCommand}"/>
+    </Window.InputBindings>
+    
+    <Window.Resources>
+        <!-- Import shared icon resources -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="../Resources/LucideIcons.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Title Bar Button Styles (copied from NewMainWindow.xaml) -->
+            <Style x:Key="TitleBarButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="36"/>
+                <Setter Property="Height" Value="36"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}"
+                                   BorderThickness="0">
+                                <ContentPresenter HorizontalAlignment="Center" 
+                                                VerticalAlignment="Center"/>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource AppSurfacePressedBrush}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            
+            <!-- Close Button (Red hover effect) -->
+            <Style x:Key="TitleBarCloseButtonStyle" TargetType="Button" BasedOn="{StaticResource TitleBarButtonStyle}">
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#E81123"/>
+                        <Setter Property="Foreground" Value="White"/>
+                    </Trigger>
+                    <Trigger Property="IsPressed" Value="True">
+                        <Setter Property="Background" Value="#C50F1F"/>
+                        <Setter Property="Foreground" Value="White"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Custom Title Bar -->
+            <RowDefinition Height="36"/>
+            <!-- Main Content -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- ===================================== -->
+        <!-- CUSTOM TITLE BAR -->
+        <!-- ===================================== -->
+        <Border Grid.Row="0" 
+                Background="{DynamicResource AppSurfaceBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <!-- Window Icon & Title -->
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <!-- Action Buttons -->
+                    <ColumnDefinition Width="Auto"/>
+                    <!-- Window Controls -->
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <!-- Window Icon & Title -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" 
+                           Margin="10,0,0,0" VerticalAlignment="Center">
+                    <Image Source="../NoteNest.ico" Width="16" Height="16" Margin="0,0,8,0"/>
+                    <TextBlock Text="{Binding WindowTitle}" 
+                              Foreground="{DynamicResource AppTextPrimaryBrush}"
+                              FontSize="14" FontWeight="Normal"
+                              VerticalAlignment="Center"/>
+                </StackPanel>
+                
+                <!-- Drag Area (most of title bar) -->
+                <Rectangle Grid.Column="1" Fill="Transparent" 
+                          WindowChrome.IsHitTestVisibleInChrome="True"
+                          MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"/>
+                
+                <!-- Action Buttons -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" 
+                           Margin="10,0,10,0">
+                    
+                    <!-- Redock All Button -->
+                    <Button Style="{DynamicResource TitleBarButtonStyle}"
+                            Command="{Binding RedockAllTabsCommand}"
+                            ToolTip="Redock all tabs to main window (Ctrl+Shift+Enter)"
+                            Width="28" Height="28" Margin="2,0">
+                        <ContentControl Template="{StaticResource LucideArrowLeftToLine}"
+                                      Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                      Width="14" Height="14"/>
+                    </Button>
+                    
+                    <!-- Save All Button -->
+                    <Button Style="{DynamicResource TitleBarButtonStyle}"
+                            Command="{Binding SaveAllTabsCommand}"
+                            ToolTip="Save all tabs (Ctrl+Shift+S)"
+                            Width="28" Height="28" Margin="2,0">
+                        <ContentControl Template="{StaticResource LucideSave}"
+                                      Foreground="{DynamicResource AppTextPrimaryBrush}"
+                                      Width="14" Height="14"/>
+                    </Button>
+                </StackPanel>
+                
+                <!-- Window Controls -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <!-- Minimize Button -->
+                    <Button x:Name="MinimizeButton" 
+                            Style="{DynamicResource TitleBarButtonStyle}"
+                            Click="MinimizeButton_Click"
+                            ToolTip="Minimize"
+                            Width="46" Height="36">
+                        <Path Data="M 0,0 H 10" 
+                              Stroke="{DynamicResource AppTextPrimaryBrush}"
+                              StrokeThickness="1"
+                              VerticalAlignment="Center"/>
+                    </Button>
+                    
+                    <!-- Maximize/Restore Button -->
+                    <Button x:Name="MaximizeRestoreButton" 
+                            Style="{DynamicResource TitleBarButtonStyle}"
+                            Click="MaximizeRestoreButton_Click"
+                            ToolTip="Maximize"
+                            Width="46" Height="36">
+                        <Path x:Name="MaximizeRestoreIcon"
+                              Data="M 0,0 H 10 V 10 H 0 Z M 0,0 H 10 M 0,10 H 10 M 0,0 V 10 M 10,0 V 10" 
+                              Stroke="{DynamicResource AppTextPrimaryBrush}"
+                              StrokeThickness="1"
+                              Fill="Transparent"/>
+                    </Button>
+                    
+                    <!-- Close Button -->
+                    <Button x:Name="CloseButton" 
+                            Style="{DynamicResource TitleBarCloseButtonStyle}"
+                            Click="CloseButton_Click"
+                            ToolTip="Close detached window"
+                            Width="46" Height="36">
+                        <Path Data="M 0,0 L 10,10 M 0,10 L 10,0" 
+                              Stroke="{DynamicResource AppTextPrimaryBrush}"
+                              StrokeThickness="1"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+        
+        <!-- ===================================== -->
+        <!-- MAIN CONTENT AREA -->
+        <!-- ===================================== -->
+        <Border Grid.Row="1" 
+                Background="{DynamicResource AppBackgroundBrush}"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="1,0,1,1">
+            
+            <!-- Workspace Container - Single Pane (no tree view) -->
+            <workspace:PaneView x:Name="DetachedPaneView"
+                               DataContext="{Binding PaneViewModel}"
+                               ShowPaneCloseButton="False"
+                               Margin="0"/>
+        </Border>
+    </Grid>
+</Window>

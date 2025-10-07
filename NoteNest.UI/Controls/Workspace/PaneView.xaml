@@ -144,7 +144,7 @@
                               PreviewMouseDown="TabHeader_PreviewMouseDown"
                               Tag="{Binding}">
                             <Grid.ContextMenu>
-                                <ContextMenu x:Name="TabContextMenu">
+                                <ContextMenu x:Name="TabContextMenu" ContextMenuOpening="OnContextMenuOpened">
                                     <MenuItem Header="Close Tab" 
                                               Click="ContextMenu_CloseTab_Click"
                                               Tag="{Binding}"/>
@@ -157,6 +157,52 @@
                                     <MenuItem Header="Move to Other Pane" 
                                               Click="ContextMenu_MoveToOtherPane_Click"
                                               Tag="{Binding}"/>
+                                    <Separator/>
+                                    <!-- Tear-Out Functionality -->
+                                    <MenuItem Header="Detach Tab" 
+                                              Click="ContextMenu_DetachTab_Click"
+                                              Tag="{Binding}"
+                                              ToolTip="Open this tab in a separate window (Ctrl+Shift+D)">
+                                        <MenuItem.Icon>
+                                            <ContentControl Template="{StaticResource LucideSquareArrowUpRight}"
+                                                          Foreground="{DynamicResource AppForegroundBrush}"
+                                                          Width="12" Height="12"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Detach Other Tabs" 
+                                              Click="ContextMenu_DetachOtherTabs_Click"
+                                              Tag="{Binding}"
+                                              ToolTip="Move all other tabs to a new detached window">
+                                        <MenuItem.Icon>
+                                            <ContentControl Template="{StaticResource LucideArrowRightToLine}"
+                                                          Foreground="{DynamicResource AppForegroundBrush}"
+                                                          Width="12" Height="12"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <!-- Redock option (only shown in detached windows) -->
+                                    <MenuItem Header="Redock to Main Window" 
+                                              Click="ContextMenu_RedockTab_Click"
+                                              Tag="{Binding}"
+                                              ToolTip="Move this tab back to the main window"
+                                              x:Name="RedockMenuItem"
+                                              Visibility="Collapsed">
+                                        <MenuItem.Icon>
+                                            <ContentControl Template="{StaticResource LucideArrowLeftToLine}"
+                                                          Foreground="{DynamicResource AppForegroundBrush}"
+                                                          Width="12" Height="12"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Redock All Tabs" 
+                                              Click="ContextMenu_RedockAllTabs_Click"
+                                              ToolTip="Move all tabs in this window back to the main window"
+                                              x:Name="RedockAllMenuItem"
+                                              Visibility="Collapsed">
+                                        <MenuItem.Icon>
+                                            <ContentControl Template="{StaticResource LucideArrowLeftToLine}"
+                                                          Foreground="{DynamicResource AppForegroundBrush}"
+                                                          Width="12" Height="12"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
                                 </ContextMenu>
                             </Grid.ContextMenu>
                             <Grid.ColumnDefinitions>

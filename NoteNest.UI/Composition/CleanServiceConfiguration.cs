@@ -191,13 +191,21 @@ namespace NoteNest.UI.Composition
             // Workspace Persistence Service (Milestone 2A - Tab Persistence)
             services.AddSingleton<IWorkspacePersistenceService, WorkspacePersistenceService>();
             
-            // NEW: Clean Workspace ViewModel (Milestone 1 - Core Tab System)
-            // Replaces ModernWorkspaceViewModel with better MVVM separation
+            // NEW: Tear-Out Services (Multi-Window Tab Management)
+            services.AddSingleton<NoteNest.UI.Services.IWindowManager, NoteNest.UI.Services.WindowManager>();
+            services.AddSingleton<NoteNest.UI.Services.IMultiWindowThemeCoordinator, NoteNest.UI.Services.MultiWindowThemeCoordinator>();
+            services.AddSingleton<NoteNest.Core.Services.IMultiMonitorManager, NoteNest.Core.Services.MultiMonitorManager>();
+            
+            // NEW: Clean Workspace ViewModel (Enhanced with Tear-Out Support)
+            // Replaces ModernWorkspaceViewModel with better MVVM separation + multi-window support
             services.AddTransient<NoteNest.UI.ViewModels.Workspace.WorkspaceViewModel>(provider =>
                 new NoteNest.UI.ViewModels.Workspace.WorkspaceViewModel(
                     provider.GetRequiredService<ISaveManager>(),
                     provider.GetRequiredService<IAppLogger>(),
-                    provider.GetRequiredService<IWorkspacePersistenceService>()));
+                    provider.GetRequiredService<IWorkspacePersistenceService>(),
+                    provider.GetRequiredService<NoteNest.UI.Services.IWindowManager>(),
+                    provider.GetRequiredService<NoteNest.UI.Services.IMultiWindowThemeCoordinator>(),
+                    provider.GetRequiredService<NoteNest.Core.Services.IMultiMonitorManager>()));
             
             return services;
         }

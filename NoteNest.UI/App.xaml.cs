@@ -45,6 +45,11 @@ namespace NoteNest.UI
                 await themeService.InitializeAsync();
                 _logger.Info($"✅ Theme system initialized: {themeService.CurrentTheme}");
 
+                // Initialize multi-window theme coordinator for tear-out functionality
+                var multiWindowThemeCoordinator = _host.Services.GetRequiredService<NoteNest.UI.Services.IMultiWindowThemeCoordinator>();
+                multiWindowThemeCoordinator.Initialize();
+                _logger.Info("✅ Multi-window theme coordinator initialized");
+
                 // 🔍 Initialize search service at startup
                 try
                 {
@@ -138,6 +143,21 @@ namespace NoteNest.UI
         protected override void OnExit(ExitEventArgs e)
         {
             _logger?.Info("Minimal app shutting down...");
+            
+            // Close all detached windows first
+            try
+            {
+                var windowManager = _host?.Services?.GetService<NoteNest.UI.Services.IWindowManager>();
+                if (windowManager is IDisposable disposableWindowManager)
+                {
+                    disposableWindowManager.Dispose();
+                    _logger?.Info("✅ All detached windows closed");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.Warning($"Failed to close detached windows on exit: {ex.Message}");
+            }
             
             // Save workspace state before exit
             try
