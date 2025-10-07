@@ -88,6 +88,7 @@ namespace NoteNest.UI.Services
         private readonly List<DetachedWindowViewModel> _detachedWindows = new();
         private readonly List<DetachedWindow> _detachedWpfWindows = new(); // Track WPF windows too
         private readonly object _windowsLock = new object();
+        private ViewModels.Workspace.WorkspaceViewModel _mainWorkspace;
         
         // Soft limit for detached windows (performance consideration)
         private const int MAX_DETACHED_WINDOWS = 5;
@@ -112,6 +113,15 @@ namespace NoteNest.UI.Services
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _logger.Debug("[WindowManager] Initialized");
+        }
+
+        /// <summary>
+        /// Set the main workspace for redocking operations
+        /// </summary>
+        public void SetMainWorkspace(ViewModels.Workspace.WorkspaceViewModel workspace)
+        {
+            _mainWorkspace = workspace;
+            _logger.Debug("[WindowManager] Main workspace reference set");
         }
         
         #region Window Creation & Destruction
@@ -297,9 +307,16 @@ namespace NoteNest.UI.Services
                 // Remove from detached window
                 sourceWindow.RemoveTab(tab);
                 
-                // TODO: Add to main window (WorkspaceViewModel integration needed)
-                // For now, just log the operation
-                _logger.Info($"[WindowManager] Tab redocked to main window: {tab.Title} from {sourceWindow.WindowId}");
+                // Add to main window's active pane
+                if (_mainWorkspace != null)
+                {
+                    _mainWorkspace.ActivePane?.AddTab(tab, true);
+                    _logger.Info($"[WindowManager] Tab redocked to main window: {tab.Title} from {sourceWindow.WindowId}");
+                }
+                else
+                {
+                    _logger.Warning($"[WindowManager] Cannot redock tab - no main workspace reference: {tab.Title}");
+                }
                 
                 // Update source window title
                 UpdateWindowTitle(sourceWindow);
@@ -460,7 +477,8 @@ namespace NoteNest.UI.Services
         
         private async void OnWindowClosed(object sender, DetachedWindowViewModel window)
         {
-            await CloseDetachedWindowAsync(window);
+            // Redock tabs back to main window when closing detached window (industry standard behavior)
+            await CloseDetachedWindowAsync(window, redockTabs: true);
         }
         
         private async void OnTabCloseRequested(object sender, TabViewModel tab)

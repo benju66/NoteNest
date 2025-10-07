@@ -151,6 +151,12 @@ namespace NoteNest.UI.ViewModels.Workspace
             _themeCoordinator = themeCoordinator; // Can be null (no theme sync)
             _multiMonitorManager = multiMonitorManager; // Can be null (single monitor)
             
+            // Register this workspace with the WindowManager for redocking operations
+            if (_windowManager is NoteNest.UI.Services.WindowManager wm)
+            {
+                wm.SetMainWorkspace(this);
+            }
+            
             Panes = new ObservableCollection<PaneViewModel>();
             
             // Initialize with single pane

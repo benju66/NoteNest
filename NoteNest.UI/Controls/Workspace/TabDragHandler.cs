@@ -323,6 +323,17 @@ namespace NoteNest.UI.Controls.Workspace
         }
         
         /// <summary>
+        /// Find detached window containing a specific pane
+        /// </summary>
+        private DetachedWindowViewModel FindDetachedWindowContainingPane(PaneViewModel pane)
+        {
+            if (_windowManager?.DetachedWindows == null || pane == null) return null;
+            
+            return _windowManager.DetachedWindows.FirstOrDefault(w => 
+                w.PaneViewModel == pane);
+        }
+        
+        /// <summary>
         /// Phase 3: Find detached window under cursor
         /// </summary>
         private DetachedWindow FindDetachedWindowAtPoint(Point screenPosition)
@@ -374,7 +385,7 @@ namespace NoteNest.UI.Controls.Workspace
             // Priority 2: Main window pane (inside main window)
             if (!_isOutsideMainWindow)
             {
-                var targetPaneView = FindPaneViewAtPoint(screenPosition);
+            var targetPaneView = FindPaneViewAtPoint(screenPosition);
                 System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Main window pane target: {targetPaneView?.GetHashCode() ?? 0} vs source: {_paneView.GetHashCode()}");
                 return new DragTarget
                 {
@@ -660,8 +671,24 @@ namespace NoteNest.UI.Controls.Workspace
             {
                 System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Cross-pane drag: '{_draggedTab.Title}' to pane at index {insertionIndex}");
                 
+                // Check if source pane is in a detached window before moving
+                var sourceWindow = FindDetachedWindowContainingPane(sourcePaneVm);
+                
                 var workspace = FindWorkspaceViewModel();
                 workspace?.MoveTabBetweenPanes(_draggedTab, sourcePaneVm, targetPaneVm, insertionIndex);
+                
+                // If source was a detached window that's now empty, close it
+                if (sourceWindow != null && !sourceWindow.HasTabs)
+                {
+                    try 
+                    {
+                        var app = System.Windows.Application.Current as NoteNest.UI.App;
+                        var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                        logger?.Info($"[TabDragHandler] Closing empty detached window after drag: {sourceWindow.WindowId}");
+                    }
+                    catch { /* Ignore logging errors */ }
+                    _windowManager?.CloseDetachedWindowAsync(sourceWindow).ConfigureAwait(false);
+                }
             }
             // Same-pane reorder
             else
@@ -854,8 +881,24 @@ namespace NoteNest.UI.Controls.Workspace
             {
                 System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Cross-pane drag: '{_draggedTab.Title}' to pane at index {insertionIndex}");
                 
+                // Check if source pane is in a detached window before moving
+                var sourceWindow = FindDetachedWindowContainingPane(sourcePaneVm);
+                
                 var workspace = FindWorkspaceViewModel();
                 workspace?.MoveTabBetweenPanes(_draggedTab, sourcePaneVm, targetPaneVm, insertionIndex);
+                
+                // If source was a detached window that's now empty, close it
+                if (sourceWindow != null && !sourceWindow.HasTabs)
+                {
+                    try 
+                    {
+                        var app = System.Windows.Application.Current as NoteNest.UI.App;
+                        var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                        logger?.Info($"[TabDragHandler] Closing empty detached window after drag: {sourceWindow.WindowId}");
+                    }
+                    catch { /* Ignore logging errors */ }
+                    _windowManager?.CloseDetachedWindowAsync(sourceWindow).ConfigureAwait(false);
+                }
             }
             // Same-pane reorder
             else
