@@ -987,15 +987,16 @@ namespace NoteNest.UI.ViewModels.Workspace
             {
                 _logger.Info($"[WorkspaceViewModel] Detaching tab: {tab.Title}");
                 
+                // Remove from current pane FIRST (without dispose)
+                var sourcePane = FindPaneContainingTab(tab);
+                sourcePane?.RemoveTabWithoutDispose(tab);
+                
                 // Create new detached window with this tab
                 var initialTabs = new List<TabViewModel> { tab };
                 var detachedWindow = await _windowManager.CreateDetachedWindowAsync(initialTabs);
                 
                 if (detachedWindow != null)
                 {
-                    // Remove from current pane
-                    var sourcePane = FindPaneContainingTab(tab);
-                    sourcePane?.RemoveTab(tab);
                     
                     // Track memory usage
                     SimpleMemoryTracker.TrackDetachedWindowCreation(detachedWindow.WindowId);

@@ -132,9 +132,12 @@ namespace NoteNest.UI.Services
                 var detachedWindowViewModel = new DetachedWindowViewModel(_logger);
                 
                 // Add initial tabs
+                _logger.Debug($"[WindowManager] Adding {initialTabs?.Count ?? 0} initial tabs to detached window");
                 foreach (var tab in initialTabs ?? new List<TabViewModel>())
                 {
+                    _logger.Debug($"[WindowManager] Adding tab '{tab?.Title}' to detached window {detachedWindowViewModel.WindowId}");
                     detachedWindowViewModel.AddTab(tab);
+                    _logger.Debug($"[WindowManager] Tab added. Detached window now has {detachedWindowViewModel.TabCount} tabs");
                 }
                 
                 // Update window title based on tabs

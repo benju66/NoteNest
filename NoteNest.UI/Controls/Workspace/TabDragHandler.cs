@@ -777,13 +777,42 @@ namespace NoteNest.UI.Controls.Workspace
         /// </summary>
         private void HandleNewDetachedWindowDropSync(Point screenDropPosition)
         {
+            // CRITICAL: Capture the tab reference NOW before it gets cleared by CleanupDrag!
+            var tabToDetach = _draggedTab;
+            var sourcePaneVm = _paneView.DataContext as PaneViewModel;
+            
+            if (tabToDetach == null || _windowManager == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[TabDragHandler] No tab or WindowManager for detach");
+                return;
+            }
+            
             // Execute on UI thread since WPF windows require STA thread
             System.Windows.Application.Current.Dispatcher.BeginInvoke(
                 new Action(async () => 
                 {
                     try
                     {
-                        await HandleNewDetachedWindowDrop(screenDropPosition);
+                        // Remove from source pane first (captured reference)
+                        sourcePaneVm?.RemoveTabWithoutDispose(tabToDetach);
+                        
+                        // Create detached window with the captured tab
+                        var initialTabs = new List<TabViewModel> { tabToDetach };
+                        var newWindow = await _windowManager.CreateDetachedWindowAsync(initialTabs);
+                        
+                        if (newWindow != null)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] ✅ Tab '{tabToDetach.Title}' detached to window {newWindow.WindowId}");
+                            
+                            // Log success
+                            try 
+                            {
+                                var app = System.Windows.Application.Current as NoteNest.UI.App;
+                                var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                                logger?.Info($"[TabDragHandler] ✅ TAB DETACHED VIA DRAG: '{tabToDetach.Title}'");
+                            }
+                            catch { /* Ignore logging errors */ }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -923,19 +952,51 @@ namespace NoteNest.UI.Controls.Workspace
             
             try
             {
-                // Use the SAME approach as working context menu detach:
-                // 1. Create window with tab first 
-                // 2. THEN remove from source (AFTER window creation)
+                // CRITICAL FIX: Remove from source FIRST to avoid Tabs.Contains() check!
+                var sourcePaneVm = _paneView.DataContext as PaneViewModel;
                 
-                // Create new detached window with this tab
+                // Debug: Log state before removal
+                try 
+                {
+                    var app = System.Windows.Application.Current as NoteNest.UI.App;
+                    var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                    logger?.Debug($"[TabDragHandler] BEFORE RemoveTab: Tab='{_draggedTab?.Title}', SourcePane has {sourcePaneVm?.Tabs?.Count ?? -1} tabs");
+                }
+                catch { /* Ignore logging errors */ }
+                
+                // Remove from source pane without disposing (tab is being moved, not closed)
+                sourcePaneVm?.RemoveTabWithoutDispose(_draggedTab);
+                
+                try 
+                {
+                    var app = System.Windows.Application.Current as NoteNest.UI.App;
+                    var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                    logger?.Debug($"[TabDragHandler] AFTER RemoveTab: SourcePane now has {sourcePaneVm?.Tabs?.Count ?? -1} tabs");
+                }
+                catch { /* Ignore logging errors */ }
+                
+                // NOW create detached window with the tab (after it's been removed from source)
                 var initialTabs = new List<TabViewModel> { _draggedTab };
+                
+                try 
+                {
+                    var app = System.Windows.Application.Current as NoteNest.UI.App;
+                    var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                    logger?.Debug($"[TabDragHandler] BEFORE CreateDetachedWindowAsync: Tab='{_draggedTab?.Title}' (removed from source)");
+                }
+                catch { /* Ignore logging errors */ }
+                
                 var newWindow = await _windowManager.CreateDetachedWindowAsync(initialTabs);
                 
                 if (newWindow != null)
                 {
-                    // Remove from source pane AFTER successful window creation (like context menu)
-                    var sourcePaneVm = _paneView.DataContext as PaneViewModel;
-                    sourcePaneVm?.RemoveTab(_draggedTab);  // Use same method as context menu
+                    try 
+                    {
+                        var app = System.Windows.Application.Current as NoteNest.UI.App;
+                        var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                        logger?.Debug($"[TabDragHandler] SUCCESS: Tab '{_draggedTab?.Title}' moved to detached window {newWindow.WindowId}");
+                    }
+                    catch { /* Ignore logging errors */ }
                     
                     System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Tab '{_draggedTab.Title}' torn out to new window {newWindow.WindowId}");
                     
