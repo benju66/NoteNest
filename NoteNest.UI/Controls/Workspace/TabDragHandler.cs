@@ -359,9 +359,10 @@ namespace NoteNest.UI.Controls.Workspace
         {
             System.Diagnostics.Debug.WriteLine($"[TabDragHandler] DetermineDragTarget: Outside={_isOutsideMainWindow}, Threshold={_hasExceededDetachThreshold}");
             
-            // Priority 1: Detached window target
+            // Priority 1: Existing detached window (if cursor is over one)
             if (_currentTargetWindow != null && _currentTargetWindowViewModel != null)
             {
+                System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Dropping into existing detached window");
                 return new DragTarget
                 {
                     Type = DragTargetType.DetachedWindow,
@@ -370,7 +371,7 @@ namespace NoteNest.UI.Controls.Workspace
                 };
             }
             
-            // Priority 2: Main window pane
+            // Priority 2: Main window pane (inside main window)
             if (!_isOutsideMainWindow)
             {
                 var targetPaneView = FindPaneViewAtPoint(screenPosition);
@@ -382,9 +383,10 @@ namespace NoteNest.UI.Controls.Workspace
                 };
             }
             
-            // Priority 3: New detached window (if threshold exceeded)
+            // Priority 3: New detached window (if outside main window and threshold exceeded)
             if (_hasExceededDetachThreshold && _windowManager != null)
             {
+                System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Creating new detached window - threshold exceeded");
                 return new DragTarget
                 {
                     Type = DragTargetType.NewDetachedWindow
@@ -636,8 +638,8 @@ namespace NoteNest.UI.Controls.Workspace
             if (sourcePaneVm == null || targetPaneVm == null)
             {
                 System.Diagnostics.Debug.WriteLine("[TabDragHandler] Missing ViewModels for main window drop");
-                return;
-            }
+                    return;
+                }
             
             // Log to file for debugging
             try 
@@ -730,8 +732,44 @@ namespace NoteNest.UI.Controls.Workspace
         /// </summary>
         private void HandleDetachedWindowDropSync(DragTarget target, Point screenDropPosition)
         {
-            // For now, just log that this was called - implement later if needed
-            System.Diagnostics.Debug.WriteLine("[TabDragHandler] DetachedWindowDrop (sync) not yet implemented");
+            if (target.DetachedWindow == null)
+            {
+                System.Diagnostics.Debug.WriteLine("[TabDragHandler] No target detached window for drop");
+                return;
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Dropping '{_draggedTab?.Title}' into detached window {target.DetachedWindow.WindowId}");
+            
+            // Log to file for debugging
+            try 
+            {
+                var app = System.Windows.Application.Current as NoteNest.UI.App;
+                var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                logger?.Debug($"[TabDragHandler] DETACHED WINDOW DROP: Tab='{_draggedTab?.Title}' to Window={target.DetachedWindow.WindowId}");
+            }
+            catch { /* Ignore logging errors */ }
+            
+            // Move tab from source pane to detached window
+            var sourcePaneVm = _paneView.DataContext as PaneViewModel;
+            if (sourcePaneVm != null && _draggedTab != null)
+            {
+                // Remove from source (without disposing the tab)
+                sourcePaneVm.RemoveTabWithoutDispose(_draggedTab);
+                
+                // Add to detached window
+                target.DetachedWindow.AddTab(_draggedTab, true);
+                
+                System.Diagnostics.Debug.WriteLine($"[TabDragHandler] ✅ Tab moved to detached window successfully");
+                
+                // Log success
+                try 
+                {
+                    var app = System.Windows.Application.Current as NoteNest.UI.App;
+                    var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                    logger?.Info($"[TabDragHandler] ✅ TAB MOVED TO DETACHED WINDOW: '{_draggedTab.Title}'");
+                }
+                catch { /* Ignore logging errors */ }
+            }
         }
         
         /// <summary>
@@ -739,8 +777,28 @@ namespace NoteNest.UI.Controls.Workspace
         /// </summary>
         private void HandleNewDetachedWindowDropSync(Point screenDropPosition)
         {
-            // This can remain async since it creates windows
-            _ = Task.Run(async () => await HandleNewDetachedWindowDrop(screenDropPosition));
+            // Execute on UI thread since WPF windows require STA thread
+            System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                new Action(async () => 
+                {
+                    try
+                    {
+                        await HandleNewDetachedWindowDrop(screenDropPosition);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Error creating detached window: {ex.Message}");
+                        
+                        // Log error to file
+                        try 
+                        {
+                            var app = System.Windows.Application.Current as NoteNest.UI.App;
+                            var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                            logger?.Error(ex, "[TabDragHandler] Failed to create detached window via drag");
+                        }
+                        catch { /* Ignore logging errors */ }
+                    }
+                }));
         }
         
         /// <summary>
@@ -789,15 +847,15 @@ namespace NoteNest.UI.Controls.Workspace
                     }
                     catch { /* Ignore logging errors */ }
                     
-                    sourcePaneVm.Tabs.RemoveAt(currentIndex);
-                    
-                    if (insertionIndex > currentIndex)
-                        insertionIndex--;
-                    
+                        sourcePaneVm.Tabs.RemoveAt(currentIndex);
+                        
+                        if (insertionIndex > currentIndex)
+                            insertionIndex--;
+                        
                     int finalIndex = Math.Min(insertionIndex, sourcePaneVm.Tabs.Count);
                     sourcePaneVm.Tabs.Insert(finalIndex, _draggedTab);
-                    sourcePaneVm.SelectedTab = _draggedTab;
-                    
+                        sourcePaneVm.SelectedTab = _draggedTab;
+                        
                     System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Tab reordered from {currentIndex} to {finalIndex}");
                     
                     // Log success
@@ -865,17 +923,30 @@ namespace NoteNest.UI.Controls.Workspace
             
             try
             {
+                // Use the SAME approach as working context menu detach:
+                // 1. Create window with tab first 
+                // 2. THEN remove from source (AFTER window creation)
+                
                 // Create new detached window with this tab
                 var initialTabs = new List<TabViewModel> { _draggedTab };
                 var newWindow = await _windowManager.CreateDetachedWindowAsync(initialTabs);
                 
                 if (newWindow != null)
                 {
-                    // Remove tab from source pane
+                    // Remove from source pane AFTER successful window creation (like context menu)
                     var sourcePaneVm = _paneView.DataContext as PaneViewModel;
-                    sourcePaneVm?.RemoveTab(_draggedTab);
+                    sourcePaneVm?.RemoveTab(_draggedTab);  // Use same method as context menu
                     
                     System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Tab '{_draggedTab.Title}' torn out to new window {newWindow.WindowId}");
+                    
+                    // Log success
+                    try 
+                    {
+                        var app = System.Windows.Application.Current as NoteNest.UI.App;
+                        var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                        logger?.Info($"[TabDragHandler] ✅ TAB TORN OUT: '{_draggedTab.Title}' moved to new detached window");
+                    }
+                    catch { /* Ignore logging errors */ }
                 }
             }
             catch (Exception ex)
