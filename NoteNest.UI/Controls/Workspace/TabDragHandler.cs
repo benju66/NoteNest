@@ -199,6 +199,7 @@ namespace NoteNest.UI.Controls.Workspace
             
             // Capture mouse to receive events even outside the control
             _tabControl.CaptureMouse();
+            System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Mouse captured by TabControl in window: {Window.GetWindow(_tabControl)?.GetType().Name}");
         }
         
         private void OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -389,6 +390,7 @@ namespace NoteNest.UI.Controls.Workspace
         {
             bool isDraggingFromDetached = _sourceWindow is NoteNest.UI.Windows.DetachedWindow;
             System.Diagnostics.Debug.WriteLine($"[TabDragHandler] DetermineDragTarget: Outside={_isOutsideMainWindow}, Threshold={_hasExceededDetachThreshold}, FromDetached={isDraggingFromDetached}");
+            System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] DetermineDragTarget - SourceWindow: {_sourceWindow?.GetType().Name}, CurrentPaneView: {_paneView.GetHashCode()}");
             
             // Priority 1: Existing detached window (if cursor is over one)
             if (_currentTargetWindow != null && _currentTargetWindowViewModel != null)
@@ -407,10 +409,12 @@ namespace NoteNest.UI.Controls.Workspace
             {
             var targetPaneView = FindPaneViewAtPoint(screenPosition);
                 System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Main window pane target: {targetPaneView?.GetHashCode() ?? 0} vs source: {_paneView.GetHashCode()}");
+                System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Target PaneView found: {targetPaneView?.GetHashCode() ?? -1}, Are they same: {targetPaneView == _paneView}");
                 
-                // Ensure we have a valid target pane view
-                if (targetPaneView != null)
+                // Ensure we have a valid target pane view that's NOT the source
+                if (targetPaneView != null && targetPaneView != _paneView)
                 {
+                    System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Returning MainWindowPane target with PaneView: {targetPaneView.GetHashCode()}");
                     return new DragTarget
                     {
                         Type = DragTargetType.MainWindowPane,
@@ -548,21 +552,31 @@ namespace NoteNest.UI.Controls.Workspace
         {
             try
             {
+                System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] FindPaneViewAtPoint called from {_sourceWindow?.GetType().Name}, SourcePaneView: {_paneView.GetHashCode()}");
+                
                 // Get the workspace container
                 var workspace = FindWorkspaceViewModel();
                 if (workspace == null || workspace.Panes.Count <= 1)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Returning source PaneView (only one pane): {_paneView.GetHashCode()}");
                     return _paneView; // Only one pane, stay in current
+                }
                 
                 // Get the main window (not the current pane's window which might be detached)
                 var mainWindow = System.Windows.Application.Current.MainWindow;
                 if (mainWindow == null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] No main window found, returning source PaneView: {_paneView.GetHashCode()}");
                     return _paneView;
+                }
                 
                 // Convert to window coordinates
                 var windowPoint = mainWindow.PointFromScreen(screenPosition);
                 
                 // Hit-test to find element under cursor
                 var hitElement = mainWindow.InputHitTest(windowPoint) as DependencyObject;
+                System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Hit test at window point ({windowPoint.X:F0}, {windowPoint.Y:F0}) returned: {hitElement?.GetType().Name ?? "null"}");
+                System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Mouse captured by: {Mouse.Captured?.GetType().Name ?? "nothing"}");
                 
                 // Walk up visual tree to find PaneView
                 var foundPaneView = TabHitTestHelper.FindAncestor<PaneView>(hitElement);
@@ -571,6 +585,7 @@ namespace NoteNest.UI.Controls.Workspace
                 if (foundPaneView != null)
                 {
                     System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Found PaneView in main window: {foundPaneView.GetHashCode()}");
+                    System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Returning found PaneView: {foundPaneView.GetHashCode()} (different from source: {foundPaneView.GetHashCode() != _paneView.GetHashCode()})");
                     return foundPaneView;
                 }
                 
@@ -579,15 +594,44 @@ namespace NoteNest.UI.Controls.Workspace
                 if (_sourceWindow is NoteNest.UI.Windows.DetachedWindow && workspace.Panes.Count > 0)
                 {
                     System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Using first pane in main window for detached->main drag");
-                    // Get the first pane view from the main window
-                    return FindFirstPaneViewInWindow(mainWindow) ?? _paneView;
+                    System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Attempting to find first pane in main window...");
+                    
+                    // Try multiple approaches to find a main window pane
+                    var firstPaneView = FindFirstPaneViewInWindow(mainWindow);
+                    if (firstPaneView == null)
+                    {
+                        // Try a more thorough search
+                        firstPaneView = FindPaneViewInVisualTree(mainWindow);
+                    }
+                    
+                    if (firstPaneView != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Found first pane: {firstPaneView.GetHashCode()} (different from source: {firstPaneView.GetHashCode() != _paneView.GetHashCode()})");
+                        return firstPaneView;
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] ERROR: Could not find ANY PaneView in main window!");
+                        // CRITICAL: Do NOT return the source pane from detached window
+                        // This would cause the drag to be treated as same-pane reorder
+                        return null; // Returning null will cancel the drop, which is better than wrong behavior
+                    }
                 }
                 
-                return _paneView; // Fallback to current pane
+                // Only return source pane if NOT dragging from detached window
+                if (_sourceWindow is NoteNest.UI.Windows.DetachedWindow)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] ERROR: About to return source pane from detached window - returning null instead");
+                    return null; // Prevent same-pane reorder bug
+                }
+                
+                System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Final fallback - returning source PaneView: {_paneView.GetHashCode()}");
+                return _paneView; // Fallback to current pane ONLY for main window drags
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Error in FindPaneViewAtPoint: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Exception occurred, returning source PaneView: {_paneView.GetHashCode()}");
                 return _paneView; // Fallback to current pane on error
             }
         }
@@ -600,6 +644,44 @@ namespace NoteNest.UI.Controls.Workspace
             if (window == null) return null;
             
             return FindVisualChild<PaneView>(window);
+        }
+        
+        /// <summary>
+        /// More thorough search for PaneView in visual tree
+        /// </summary>
+        private PaneView FindPaneViewInVisualTree(DependencyObject parent)
+        {
+            if (parent == null) return null;
+            
+            // Use a queue for breadth-first search
+            var queue = new Queue<DependencyObject>();
+            queue.Enqueue(parent);
+            
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+                
+                // Check if this is a PaneView
+                if (current is PaneView paneView && paneView != _paneView)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Found PaneView via BFS: {paneView.GetHashCode()}");
+                    return paneView;
+                }
+                
+                // Add all children to queue
+                int childCount = System.Windows.Media.VisualTreeHelper.GetChildrenCount(current);
+                for (int i = 0; i < childCount; i++)
+                {
+                    var child = System.Windows.Media.VisualTreeHelper.GetChild(current, i);
+                    if (child != null)
+                    {
+                        queue.Enqueue(child);
+                    }
+                }
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] BFS found no PaneView in visual tree");
+            return null;
         }
         
         /// <summary>
@@ -756,6 +838,10 @@ namespace NoteNest.UI.Controls.Workspace
         {
             var sourcePaneVm = _paneView.DataContext as PaneViewModel;
             var targetPaneVm = target.PaneView?.DataContext as PaneViewModel;
+            
+            System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] HandleMainWindowPaneDropSync - Source PaneView: {_paneView.GetHashCode()}, Target PaneView: {target.PaneView?.GetHashCode() ?? -1}");
+            System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Source PaneViewModel: {sourcePaneVm?.GetHashCode() ?? -1}, Target PaneViewModel: {targetPaneVm?.GetHashCode() ?? -1}");
+            System.Diagnostics.Debug.WriteLine($"[DIAGNOSTIC] Are ViewModels equal: {sourcePaneVm == targetPaneVm}");
             
             if (sourcePaneVm == null || targetPaneVm == null)
             {

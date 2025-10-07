@@ -1,0 +1,45 @@
+TEST PROCEDURE: Detached Window to Main Window Drop
+==================================================
+
+This test will help diagnose why dragging tabs from detached windows back to the main window fails.
+
+SETUP:
+1. Build and run NoteNest
+2. Open Debug Output window in Visual Studio OR use DebugView++ to capture debug output
+3. Filter for "[DIAGNOSTIC]" messages
+
+TEST STEPS:
+1. Launch NoteNest
+2. Open 2-3 tabs in the main window
+3. Right-click on a tab and select "Detach Tab" (or drag a tab outside the window beyond 75 pixels)
+4. Confirm a detached window appears with the tab
+5. Now drag a tab FROM the detached window BACK to the main window
+6. Try dropping it:
+   - Over an existing tab in the main window
+   - In the empty space after tabs
+   - Between two tabs
+
+EXPECTED DEBUG OUTPUT:
+Look for these key diagnostic messages:
+
+[DIAGNOSTIC] FindPaneViewAtPoint called from DetachedWindow, SourcePaneView: [HashCode1]
+[DIAGNOSTIC] Hit test at window point (...) returned: [ElementType or null]
+[DIAGNOSTIC] Mouse captured by: [TabControl or nothing]
+[DIAGNOSTIC] Returning source PaneView: [HashCode1]  <-- THIS IS THE PROBLEM IF IT MATCHES SOURCE
+[DIAGNOSTIC] DetermineDragTarget - SourceWindow: DetachedWindow, CurrentPaneView: [HashCode1]
+[DIAGNOSTIC] Target PaneView found: [HashCode], Are they same: True  <-- THIS CONFIRMS THE BUG
+[DIAGNOSTIC] HandleMainWindowPaneDropSync - Source PaneView: [HashCode1], Target PaneView: [HashCode1]
+[DIAGNOSTIC] Are ViewModels equal: True  <-- THIS TRIGGERS SAME-PANE LOGIC INSTEAD OF CROSS-WINDOW
+
+KEY INDICATORS OF THE BUG:
+1. FindPaneViewAtPoint returns the same HashCode as the source PaneView
+2. "Are they same: True" in DetermineDragTarget
+3. "Are ViewModels equal: True" in HandleMainWindowPaneDropSync
+4. The tab stays in the detached window instead of moving to main
+
+WHAT TO REPORT:
+Please copy all [DIAGNOSTIC] messages from the debug output and note:
+- Which fallback path was taken in FindPaneViewAtPoint
+- Whether hit testing returned null
+- Whether the source and target PaneViews have the same HashCode
+- Whether the tab moved or stayed in place
