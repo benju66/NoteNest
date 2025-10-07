@@ -39,6 +39,7 @@ namespace NoteNest.UI.Controls.Workspace
         // Phase 3: Cross-window drag tracking
         private DetachedWindow _currentTargetWindow;
         private DetachedWindowViewModel _currentTargetWindowViewModel;
+        private Window _sourceWindow; // Track which window the drag started from
         private bool _isOutsideMainWindow;
         private bool _hasExceededDetachThreshold;
         
@@ -148,7 +149,10 @@ namespace NoteNest.UI.Controls.Workspace
                 return;
             
             _isDragging = true;
-            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Starting drag: {_draggedTab.Title}");
+            
+            // Track the source window (could be main or detached)
+            _sourceWindow = Window.GetWindow(_paneView);
+            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Starting drag: {_draggedTab.Title} from window: {_sourceWindow?.GetType().Name}");
             
             // Log to file for debugging
             try 
@@ -284,11 +288,15 @@ namespace NoteNest.UI.Controls.Workspace
         /// </summary>
         private void UpdateCrossWindowDetection(Point screenPosition, Window mainWindow)
         {
-            // Check if cursor is outside main window bounds
-            var mainWindowBounds = new Rect(mainWindow.Left, mainWindow.Top, mainWindow.ActualWidth, mainWindow.ActualHeight);
+            // Get the actual main window (not the current window)
+            var actualMainWindow = System.Windows.Application.Current.MainWindow;
+            var mainWindowBounds = new Rect(actualMainWindow.Left, actualMainWindow.Top, actualMainWindow.ActualWidth, actualMainWindow.ActualHeight);
             _isOutsideMainWindow = !mainWindowBounds.Contains(screenPosition);
             
-            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Window bounds: {mainWindowBounds}, Position: {screenPosition}, Outside: {_isOutsideMainWindow}");
+            // Check if we're dragging from a detached window
+            bool isDraggingFromDetached = _sourceWindow is NoteNest.UI.Windows.DetachedWindow;
+            
+            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Main window bounds: {mainWindowBounds}, Position: {screenPosition}, Outside: {_isOutsideMainWindow}, From detached: {isDraggingFromDetached}");
             
             if (_isOutsideMainWindow)
             {
@@ -305,10 +313,21 @@ namespace NoteNest.UI.Controls.Workspace
             }
             else
             {
-                // Inside main window - reset cross-window state
-                _hasExceededDetachThreshold = false;
+                // Inside main window - clear any detached window targets
                 _currentTargetWindow = null;
                 _currentTargetWindowViewModel = null;
+                
+                if (isDraggingFromDetached)
+                {
+                    // When dragging from detached to main window, we're dropping into main
+                    _hasExceededDetachThreshold = false;
+                    System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Dragging from detached window to main window");
+                }
+                else
+                {
+                    // Normal drag within main window
+                    _hasExceededDetachThreshold = false;
+                }
             }
         }
         
@@ -368,7 +387,8 @@ namespace NoteNest.UI.Controls.Workspace
         /// </summary>
         private DragTarget DetermineDragTarget(Point screenPosition)
         {
-            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] DetermineDragTarget: Outside={_isOutsideMainWindow}, Threshold={_hasExceededDetachThreshold}");
+            bool isDraggingFromDetached = _sourceWindow is NoteNest.UI.Windows.DetachedWindow;
+            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] DetermineDragTarget: Outside={_isOutsideMainWindow}, Threshold={_hasExceededDetachThreshold}, FromDetached={isDraggingFromDetached}");
             
             // Priority 1: Existing detached window (if cursor is over one)
             if (_currentTargetWindow != null && _currentTargetWindowViewModel != null)
@@ -387,15 +407,44 @@ namespace NoteNest.UI.Controls.Workspace
             {
             var targetPaneView = FindPaneViewAtPoint(screenPosition);
                 System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Main window pane target: {targetPaneView?.GetHashCode() ?? 0} vs source: {_paneView.GetHashCode()}");
-                return new DragTarget
+                
+                // Ensure we have a valid target pane view
+                if (targetPaneView != null)
                 {
-                    Type = DragTargetType.MainWindowPane,
-                    PaneView = targetPaneView ?? _paneView
-                };
+                    return new DragTarget
+                    {
+                        Type = DragTargetType.MainWindowPane,
+                        PaneView = targetPaneView
+                    };
+                }
+                else if (isDraggingFromDetached)
+                {
+                    // Dragging from detached to main window but couldn't find specific pane
+                    // Use the first available pane
+                    var workspace = FindWorkspaceViewModel();
+                    if (workspace?.Panes.Count > 0)
+                    {
+                        // Get the first pane view from the main window
+                        // Since we can't directly access the view from the view model,
+                        // we'll return the first pane we can find in the main window
+                        var mainWindow = System.Windows.Application.Current.MainWindow;
+                        var firstPaneView = FindFirstPaneViewInWindow(mainWindow);
+                        if (firstPaneView != null)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Using first pane for detached->main drop");
+                            return new DragTarget
+                            {
+                                Type = DragTargetType.MainWindowPane,
+                                PaneView = firstPaneView
+                            };
+                        }
+                    }
+                }
             }
             
             // Priority 3: New detached window (if outside main window and threshold exceeded)
-            if (_hasExceededDetachThreshold && _windowManager != null)
+            // BUT NOT if we're dragging from a detached window to the main window area
+            if (_hasExceededDetachThreshold && _windowManager != null && !isDraggingFromDetached)
             {
                 System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Creating new detached window - threshold exceeded");
                 return new DragTarget
@@ -405,6 +454,7 @@ namespace NoteNest.UI.Controls.Workspace
             }
             
             // Fallback: Current pane
+            System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Fallback to current pane");
             return new DragTarget
             {
                 Type = DragTargetType.MainWindowPane,
@@ -503,8 +553,8 @@ namespace NoteNest.UI.Controls.Workspace
                 if (workspace == null || workspace.Panes.Count <= 1)
                     return _paneView; // Only one pane, stay in current
                 
-                // Try to find PaneView under cursor using hit-testing
-                var mainWindow = Window.GetWindow(_paneView);
+                // Get the main window (not the current pane's window which might be detached)
+                var mainWindow = System.Windows.Application.Current.MainWindow;
                 if (mainWindow == null)
                     return _paneView;
                 
@@ -515,12 +565,63 @@ namespace NoteNest.UI.Controls.Workspace
                 var hitElement = mainWindow.InputHitTest(windowPoint) as DependencyObject;
                 
                 // Walk up visual tree to find PaneView
-                return TabHitTestHelper.FindAncestor<PaneView>(hitElement) ?? _paneView;
+                var foundPaneView = TabHitTestHelper.FindAncestor<PaneView>(hitElement);
+                
+                // If we found a PaneView in the main window, use it
+                if (foundPaneView != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Found PaneView in main window: {foundPaneView.GetHashCode()}");
+                    return foundPaneView;
+                }
+                
+                // If dragging from detached to main window and no specific pane found,
+                // return the first pane in the main window
+                if (_sourceWindow is NoteNest.UI.Windows.DetachedWindow && workspace.Panes.Count > 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Using first pane in main window for detached->main drag");
+                    // Get the first pane view from the main window
+                    return FindFirstPaneViewInWindow(mainWindow) ?? _paneView;
+                }
+                
+                return _paneView; // Fallback to current pane
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Error in FindPaneViewAtPoint: {ex.Message}");
                 return _paneView; // Fallback to current pane on error
             }
+        }
+        
+        /// <summary>
+        /// Find the first PaneView in a window using visual tree traversal
+        /// </summary>
+        private PaneView FindFirstPaneViewInWindow(Window window)
+        {
+            if (window == null) return null;
+            
+            return FindVisualChild<PaneView>(window);
+        }
+        
+        /// <summary>
+        /// Helper to find a visual child of a specific type
+        /// </summary>
+        private T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+            
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                
+                if (child is T typedChild)
+                    return typedChild;
+                
+                var result = FindVisualChild<T>(child);
+                if (result != null)
+                    return result;
+            }
+            
+            return null;
         }
         
         private WorkspaceViewModel FindWorkspaceViewModel()
@@ -540,6 +641,16 @@ namespace NoteNest.UI.Controls.Workspace
             if (window?.DataContext is NoteNest.UI.ViewModels.Shell.MainShellViewModel shell)
             {
                 return shell.Workspace;
+            }
+            
+            // If dragging from detached window, try to get workspace from main window
+            if (_sourceWindow is NoteNest.UI.Windows.DetachedWindow)
+            {
+                var mainWindow = System.Windows.Application.Current.MainWindow;
+                if (mainWindow?.DataContext is NoteNest.UI.ViewModels.Shell.MainShellViewModel mainShell)
+                {
+                    return mainShell.Workspace;
+                }
             }
             
             return null;
@@ -671,23 +782,52 @@ namespace NoteNest.UI.Controls.Workspace
             {
                 System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Cross-pane drag: '{_draggedTab.Title}' to pane at index {insertionIndex}");
                 
-                // Check if source pane is in a detached window before moving
-                var sourceWindow = FindDetachedWindowContainingPane(sourcePaneVm);
-                
-                var workspace = FindWorkspaceViewModel();
-                workspace?.MoveTabBetweenPanes(_draggedTab, sourcePaneVm, targetPaneVm, insertionIndex);
-                
-                // If source was a detached window that's now empty, close it
-                if (sourceWindow != null && !sourceWindow.HasTabs)
+                // Check if we're dragging from a detached window by checking _sourceWindow
+                if (_sourceWindow is NoteNest.UI.Windows.DetachedWindow detachedSourceWindow)
                 {
-                    try 
+                    // Dragging from detached window to main window
+                    System.Diagnostics.Debug.WriteLine($"[TabDragHandler] Dragging from detached window to main window");
+                    
+                    // Get the DetachedWindowViewModel from the window's DataContext
+                    var detachedWindowVm = detachedSourceWindow.DataContext as DetachedWindowViewModel;
+                    if (detachedWindowVm != null)
                     {
-                        var app = System.Windows.Application.Current as NoteNest.UI.App;
-                        var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
-                        logger?.Info($"[TabDragHandler] Closing empty detached window after drag: {sourceWindow.WindowId}");
+                        // Remove from source using the DetachedWindowViewModel
+                        detachedWindowVm.RemoveTab(_draggedTab);
+                        
+                        // Add to target pane in main window
+                        if (insertionIndex >= 0 && insertionIndex < targetPaneVm.Tabs.Count)
+                        {
+                            targetPaneVm.Tabs.Insert(insertionIndex, _draggedTab);
+                        }
+                        else
+                        {
+                            targetPaneVm.AddTab(_draggedTab, true);
+                        }
+                        
+                        // If source was a detached window that's now empty, close it
+                        if (!detachedWindowVm.HasTabs)
+                        {
+                            try 
+                            {
+                                var app = System.Windows.Application.Current as NoteNest.UI.App;
+                                var logger = app?.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+                                logger?.Info($"[TabDragHandler] Closing empty detached window after drag: {detachedWindowVm.WindowId}");
+                            }
+                            catch { /* Ignore logging errors */ }
+                            _windowManager?.CloseDetachedWindowAsync(detachedWindowVm).ConfigureAwait(false);
+                        }
                     }
-                    catch { /* Ignore logging errors */ }
-                    _windowManager?.CloseDetachedWindowAsync(sourceWindow).ConfigureAwait(false);
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TabDragHandler] ERROR: Could not get DetachedWindowViewModel from DetachedWindow");
+                    }
+                }
+                else
+                {
+                    // Normal cross-pane drag within main window
+                    var workspace = FindWorkspaceViewModel();
+                    workspace?.MoveTabBetweenPanes(_draggedTab, sourcePaneVm, targetPaneVm, insertionIndex);
                 }
             }
             // Same-pane reorder
@@ -860,7 +1000,7 @@ namespace NoteNest.UI.Controls.Workspace
         /// <summary>
         /// Handle drop in main window pane (existing functionality)
         /// </summary>
-        private async Task HandleMainWindowPaneDrop(DragTarget target, Point screenDropPosition)
+        private Task HandleMainWindowPaneDrop(DragTarget target, Point screenDropPosition)
         {
             var sourcePaneVm = _paneView.DataContext as PaneViewModel;
             var targetPaneVm = target.PaneView?.DataContext as PaneViewModel;
@@ -868,7 +1008,7 @@ namespace NoteNest.UI.Controls.Workspace
             if (sourcePaneVm == null || targetPaneVm == null)
             {
                 System.Diagnostics.Debug.WriteLine("[TabDragHandler] Missing ViewModels for main window drop");
-                return;
+                return Task.CompletedTask;
             }
             
             // Calculate insertion index
@@ -953,6 +1093,8 @@ namespace NoteNest.UI.Controls.Workspace
                     catch { /* Ignore logging errors */ }
                 }
             }
+            
+            return Task.CompletedTask;
         }
         
         /// <summary>
@@ -1100,6 +1242,15 @@ namespace NoteNest.UI.Controls.Workspace
             // Clear state
             _isDragging = false;
             _draggedTab = null;
+            _draggedTabItem = null;
+            _dragStartPosition = default;
+            _currentTargetTabControl = null;
+            _currentTargetPaneView = null;
+            _currentTargetWindow = null;
+            _currentTargetWindowViewModel = null;
+            _sourceWindow = null;
+            _isOutsideMainWindow = false;
+            _hasExceededDetachThreshold = false;
             
             System.Diagnostics.Debug.WriteLine("[TabDragHandler] Drag cleanup complete");
         }

@@ -172,10 +172,25 @@ namespace NoteNest.UI.Controls.Workspace
         {
             if (sender is System.Windows.Controls.Button button && button.Tag is TabViewModel tab)
             {
-                var workspace = FindWorkspaceViewModel();
-                if (workspace?.CloseTabCommand?.CanExecute(tab) == true)
+                // Check if we're in a detached window
+                var window = Window.GetWindow(this);
+                if (window is NoteNest.UI.Windows.DetachedWindow detachedWindow)
                 {
-                    workspace.CloseTabCommand.Execute(tab);
+                    // Use detached window's close tab command
+                    var detachedVm = detachedWindow.DataContext as NoteNest.UI.ViewModels.Windows.DetachedWindowViewModel;
+                    if (detachedVm?.CloseTabCommand?.CanExecute(tab) == true)
+                    {
+                        detachedVm.CloseTabCommand.Execute(tab);
+                    }
+                }
+                else
+                {
+                    // Use workspace's close tab command
+                    var workspace = FindWorkspaceViewModel();
+                    if (workspace?.CloseTabCommand?.CanExecute(tab) == true)
+                    {
+                        workspace.CloseTabCommand.Execute(tab);
+                    }
                 }
             }
         }
@@ -191,11 +206,27 @@ namespace NoteNest.UI.Controls.Workspace
             {
                 if (sender is FrameworkElement element && element.Tag is TabViewModel tab)
                 {
-                    var workspace = FindWorkspaceViewModel();
-                    if (workspace?.CloseTabCommand?.CanExecute(tab) == true)
+                    // Check if we're in a detached window
+                    var window = Window.GetWindow(this);
+                    if (window is NoteNest.UI.Windows.DetachedWindow detachedWindow)
                     {
-                        workspace.CloseTabCommand.Execute(tab);
-                        e.Handled = true; // Prevent other actions
+                        // Use detached window's close tab command
+                        var detachedVm = detachedWindow.DataContext as NoteNest.UI.ViewModels.Windows.DetachedWindowViewModel;
+                        if (detachedVm?.CloseTabCommand?.CanExecute(tab) == true)
+                        {
+                            detachedVm.CloseTabCommand.Execute(tab);
+                            e.Handled = true; // Prevent other actions
+                        }
+                    }
+                    else
+                    {
+                        // Use workspace's close tab command
+                        var workspace = FindWorkspaceViewModel();
+                        if (workspace?.CloseTabCommand?.CanExecute(tab) == true)
+                        {
+                            workspace.CloseTabCommand.Execute(tab);
+                            e.Handled = true; // Prevent other actions
+                        }
                     }
                 }
             }
@@ -238,10 +269,25 @@ namespace NoteNest.UI.Controls.Workspace
         {
             if (sender is MenuItem menuItem && menuItem.Tag is TabViewModel tab)
             {
-                var workspace = FindWorkspaceViewModel();
-                if (workspace?.CloseTabCommand?.CanExecute(tab) == true)
+                // Check if we're in a detached window
+                var window = Window.GetWindow(this);
+                if (window is NoteNest.UI.Windows.DetachedWindow detachedWindow)
                 {
-                    workspace.CloseTabCommand.Execute(tab);
+                    // Use detached window's close tab command
+                    var detachedVm = detachedWindow.DataContext as NoteNest.UI.ViewModels.Windows.DetachedWindowViewModel;
+                    if (detachedVm?.CloseTabCommand?.CanExecute(tab) == true)
+                    {
+                        detachedVm.CloseTabCommand.Execute(tab);
+                    }
+                }
+                else
+                {
+                    // Use workspace's close tab command
+                    var workspace = FindWorkspaceViewModel();
+                    if (workspace?.CloseTabCommand?.CanExecute(tab) == true)
+                    {
+                        workspace.CloseTabCommand.Execute(tab);
+                    }
                 }
             }
         }
@@ -345,22 +391,21 @@ namespace NoteNest.UI.Controls.Workspace
             {
                 bool isDetachedWindow = IsInDetachedWindow();
                 
-                // Find menu items by name (they're inside ContextMenu, so not auto-generated fields)
+                // Find menu items by traversing items since FindName doesn't work in DataTemplate
                 var contextMenu = sender as ContextMenu;
                 if (contextMenu != null)
                 {
-                    var redockMenuItem = contextMenu.FindName("RedockMenuItem") as MenuItem;
-                    var redockAllMenuItem = contextMenu.FindName("RedockAllMenuItem") as MenuItem;
-                    
-                    // Show/hide redock options based on window type
-                    if (redockMenuItem != null)
+                    foreach (var item in contextMenu.Items)
                     {
-                        redockMenuItem.Visibility = isDetachedWindow ? Visibility.Visible : Visibility.Collapsed;
-                    }
-                    
-                    if (redockAllMenuItem != null)
-                    {
-                        redockAllMenuItem.Visibility = isDetachedWindow ? Visibility.Visible : Visibility.Collapsed;
+                        if (item is MenuItem menuItem)
+                        {
+                            var header = menuItem.Header?.ToString();
+                            if (header == "Redock to Main Window" || header == "Redock All Tabs")
+                            {
+                                menuItem.Visibility = isDetachedWindow ? Visibility.Visible : Visibility.Collapsed;
+                                System.Diagnostics.Debug.WriteLine($"[PaneView] Set {header} visibility to {menuItem.Visibility}");
+                            }
+                        }
                     }
                 }
                 
