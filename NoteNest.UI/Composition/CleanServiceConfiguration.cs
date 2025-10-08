@@ -65,6 +65,9 @@ namespace NoteNest.UI.Composition
             // 5. CLEAN ARCHITECTURE (SRP: CQRS)
             services.AddCleanArchitecture();
             
+            // 6. PLUGIN SYSTEM (SRP: Extensibility)
+            services.AddPluginSystem();
+            
             return services;
         }
         
@@ -86,11 +89,20 @@ namespace NoteNest.UI.Composition
             // File system provider
             services.AddSingleton<IFileSystemProvider, NoteNest.Core.Services.DefaultFileSystemProvider>();
             
-            // Event bus for application events
-            services.AddSingleton<NoteNest.Application.Common.Interfaces.IEventBus, InMemoryEventBus>();
+            // Event bus for application events (CQRS domain events)
+            services.AddSingleton<NoteNest.Application.Common.Interfaces.IEventBus>(provider =>
+                new InMemoryEventBus(
+                    provider.GetRequiredService<IMediator>(),
+                    provider.GetRequiredService<IAppLogger>()));
+            
+            // Plugin event bus for cross-cutting concerns and subscriptions
+            services.AddSingleton<NoteNest.Core.Services.IEventBus, NoteNest.Core.Services.EventBus>();
             
             // Legacy configuration service (for compatibility)
-            services.AddSingleton<ConfigurationService>();
+            services.AddSingleton<ConfigurationService>(provider =>
+                new ConfigurationService(
+                    provider.GetService<IFileSystemProvider>(),
+                    provider.GetService<NoteNest.Core.Services.IEventBus>()));
             
             return services;
         }
@@ -358,6 +370,9 @@ namespace NoteNest.UI.Composition
             
             // FluentValidation
             services.AddValidatorsFromAssembly(typeof(CreateNoteCommand).Assembly);
+            
+            // Domain event bridge for plugin system
+            services.AddTransient<INotificationHandler<DomainEventNotification>, DomainEventBridge>();
             
             return services;
         }
