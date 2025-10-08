@@ -1,28 +1,32 @@
+using System;
 using Microsoft.Extensions.DependencyInjection;
-using NoteNest.Application.Plugins.Interfaces;
-using NoteNest.Application.Plugins.Services;
-using NoteNest.Infrastructure.Plugins;
+using NoteNest.UI.Plugins.TodoPlugin;
+using NoteNest.UI.Plugins.TodoPlugin.Services;
+using NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels;
+using NoteNest.UI.Plugins.TodoPlugin.UI.Views;
 
 namespace NoteNest.UI.Composition
 {
     /// <summary>
-    /// Plugin system service configuration.
-    /// Registers all plugin infrastructure services with dependency injection.
+    /// Configures plugin system services in the DI container.
     /// </summary>
     public static class PluginSystemConfiguration
     {
         public static IServiceCollection AddPluginSystem(this IServiceCollection services)
         {
-            // Core Plugin Services
-            services.AddSingleton<IPluginManager, PluginManager>();
-            services.AddSingleton<IPluginRepository, PluginRepository>();
-            services.AddSingleton<IPluginDataStore, PluginDataStore>();
+            // Register plugin infrastructure
+            services.AddSingleton<TodoPlugin>();
             
-            // Note: Individual plugin implementations will be registered separately
-            // Example: services.AddTransient<TodoPlugin>();
+            // Register stores
+            services.AddSingleton<ITodoStore, TodoStore>();
+            services.AddSingleton<ICategoryStore, CategoryStore>();
+            
+            // Register UI services
+            services.AddTransient<TodoListViewModel>();
+            services.AddTransient<CategoryTreeViewModel>();
+            services.AddTransient<TodoPanelView>();
             
             return services;
         }
     }
 }
-

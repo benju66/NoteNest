@@ -75,6 +75,10 @@
                     CommandParameter="{Binding Workspace.SelectedTab}"/>
         <KeyBinding Key="Enter" Modifiers="Control+Alt" 
                     Command="{Binding Workspace.RedockAllTabsCommand}"/>
+        
+        <!-- 📋 TODO PLUGIN: Toggle Right Panel -->
+        <KeyBinding Key="B" Modifiers="Control" 
+                    Command="{Binding ToggleRightPanelCommand}"/>
     </Window.InputBindings>
     <Window.Resources>
         <!-- 🎨 LUCIDE ICON LIBRARY - Pre-compiled resources -->
@@ -162,6 +166,46 @@
                         <Setter Property="Background" Value="{DynamicResource AppSurfacePressedBrush}"/>
                     </Trigger>
                 </Style.Triggers>
+            </Style>
+            
+            <!-- Activity Bar Toggle Button Style -->
+            <Style x:Key="ActivityBarToggleButtonStyle" TargetType="ToggleButton">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border x:Name="Border"
+                                   Background="{TemplateBinding Background}"
+                                   BorderThickness="0">
+                                <Grid>
+                                    <!-- Selection indicator -->
+                                    <Rectangle x:Name="SelectionIndicator"
+                                               Width="3"
+                                               HorizontalAlignment="Left"
+                                               Fill="{DynamicResource AppAccentBrush}"
+                                               Visibility="Collapsed"/>
+                                    <ContentPresenter HorizontalAlignment="Center" 
+                                                    VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="SelectionIndicator" Property="Visibility" Value="Visible"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+                                    <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource AppSurfacePressedBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
             </Style>
         </ResourceDictionary>
     </Window.Resources>
@@ -374,9 +418,11 @@
         <!-- Main Content -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300" MinWidth="200"/>
-                <ColumnDefinition Width="5"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="300" MinWidth="200"/>  <!-- Tree -->
+                <ColumnDefinition Width="5"/>                    <!-- Splitter -->
+                <ColumnDefinition Width="*"/>                    <!-- Workspace -->
+                <ColumnDefinition Width="48"/>                   <!-- Activity Bar -->
+                <ColumnDefinition x:Name="RightPanelColumn" Width="0"/> <!-- Right Panel (initially hidden) -->
             </Grid.ColumnDefinitions>
             
             <!-- Enhanced Category Tree -->
@@ -702,6 +748,69 @@
                 <!-- 🆕 Dynamic pane container: Shows 1 or 2 panes based on Workspace.Panes -->
                 <workspace:WorkspacePaneContainer DataContext="{Binding Workspace}"/>
             </GroupBox>
+            
+            <!-- Activity Bar -->
+            <Border Grid.Column="3" 
+                    Background="{DynamicResource AppSurfaceDarkBrush}"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    BorderThickness="1,0,0,0">
+                <ItemsControl ItemsSource="{Binding ActivityBarItems}"
+                              VerticalAlignment="Top">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <ToggleButton Width="48" Height="48"
+                                          IsChecked="{Binding IsActive}"
+                                          Command="{Binding Command}"
+                                          ToolTip="{Binding Tooltip}"
+                                          Style="{DynamicResource ActivityBarToggleButtonStyle}">
+                                <ContentControl Template="{Binding IconTemplate}"
+                                                Width="24" Height="24"/>
+                            </ToggleButton>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+            
+            <!-- Right Panel (Plugin Host) -->
+            <Border Grid.Column="4" 
+                    x:Name="RightPanelBorder"
+                    Background="{DynamicResource AppBackgroundBrush}"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    BorderThickness="1,0,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Panel Header -->
+                    <Border Grid.Row="0" 
+                            Background="{DynamicResource AppSurfaceBrush}"
+                            BorderBrush="{DynamicResource AppBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Height="32">
+                        <Grid>
+                            <TextBlock Text="{Binding ActivePluginTitle}" 
+                                       VerticalAlignment="Center"
+                                       Margin="12,0,0,0"
+                                       FontWeight="Medium"
+                                       Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                            <Button HorizontalAlignment="Right"
+                                    Width="32" Height="32"
+                                    Command="{Binding ToggleRightPanelCommand}"
+                                    Style="{StaticResource TitleBarButtonStyle}">
+                                <ContentControl Template="{StaticResource LucidePanelRightClose}"
+                                                Width="16" Height="16"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+                    
+                    <!-- Plugin Content Host -->
+                    <ContentControl Grid.Row="1" 
+                                    x:Name="PluginContentHost"
+                                    Content="{Binding ActivePluginContent}"/>
+                </Grid>
+            </Border>
         </Grid>
         
         <!-- Status Bar -->

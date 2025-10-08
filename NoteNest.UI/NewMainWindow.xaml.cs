@@ -5,6 +5,7 @@ using System.Windows.Data;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using Microsoft.Extensions.DependencyInjection;
 using NoteNest.UI.Windows;
 using NoteNest.Core.Services;
@@ -48,6 +49,38 @@ namespace NoteNest.UI
                 }
             }
             catch { /* Ignore errors setting initial theme */ }
+            
+            // Subscribe to right panel toggle
+            if (DataContext is MainShellViewModel viewModel)
+            {
+                viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            }
+        }
+        
+        private void OnViewModelPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine($"🔔 Property changed: {e.PropertyName}");
+            
+            if (e.PropertyName == nameof(MainShellViewModel.IsRightPanelVisible))
+            {
+                if (DataContext is MainShellViewModel viewModel)
+                {
+                    System.Diagnostics.Debug.WriteLine($"🎬 IsRightPanelVisible changed to: {viewModel.IsRightPanelVisible}");
+                    AnimateRightPanel(viewModel.IsRightPanelVisible);
+                }
+            }
+        }
+        
+        private void AnimateRightPanel(bool show)
+        {
+            // Simple approach: Just set width directly (no animation for now)
+            // TODO: Add smooth animation later using different approach
+            if (RightPanelColumn != null)
+            {
+                var targetWidth = show ? 300 : 0;
+                RightPanelColumn.Width = new GridLength(targetWidth);
+                System.Diagnostics.Debug.WriteLine($"🎬 Right panel width set to: {targetWidth}px");
+            }
         }
 
         private void OnTreeViewLoaded(object sender, RoutedEventArgs e)

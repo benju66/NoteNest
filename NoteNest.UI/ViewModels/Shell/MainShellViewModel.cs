@@ -1,16 +1,20 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Threading;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
 using NoteNest.Application.Notes.Commands.CreateNote;
-using NoteNest.UI.ViewModels.Common;
+using NoteNest.Core.Commands;
+using NoteNest.Core.Services.Logging;
+using NoteNest.UI.Plugins.TodoPlugin;
+using NoteNest.UI.Services;
 using NoteNest.UI.ViewModels.Categories;
+using NoteNest.UI.ViewModels.Common;
 using NoteNest.UI.ViewModels.Notes;
 using NoteNest.UI.ViewModels.Workspace;
-using NoteNest.UI.Services;
 using System.Linq;
-using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.ViewModels.Shell
 {
@@ -19,17 +23,25 @@ namespace NoteNest.UI.ViewModels.Shell
         private readonly IMediator _mediator;
         private readonly IDialogService _dialogService;
         private readonly IAppLogger _logger;
+        private readonly IServiceProvider _serviceProvider;
         private bool _isLoading;
         private string _statusMessage;
         
         // Status bar enhancements
         private bool _showSaveIndicator;
         private DispatcherTimer _saveIndicatorTimer;
+        
+        // Right panel and activity bar
+        private bool _isRightPanelVisible;
+        private string _activePluginTitle = string.Empty;
+        private object? _activePluginContent;
+        private ObservableCollection<ActivityBarItemViewModel> _activityBarItems;
 
         public MainShellViewModel(
             IMediator mediator,
             IDialogService dialogService,
             IAppLogger logger,
+            IServiceProvider serviceProvider,
             CategoryTreeViewModel categoryTree,
             NoteOperationsViewModel noteOperations,
             CategoryOperationsViewModel categoryOperations,
@@ -39,6 +51,7 @@ namespace NoteNest.UI.ViewModels.Shell
             _mediator = mediator;
             _dialogService = dialogService;
             _logger = logger;
+            _serviceProvider = serviceProvider;
             
             // Composed ViewModels - each with single responsibility
             CategoryTree = categoryTree;
@@ -47,8 +60,12 @@ namespace NoteNest.UI.ViewModels.Shell
             Workspace = workspace;
             Search = search;
             
+            // Initialize activity bar items
+            _activityBarItems = new ObservableCollection<ActivityBarItemViewModel>();
+            
             InitializeCommands();
             InitializeTimers();
+            InitializePlugins();
             SubscribeToEvents();
         }
 
@@ -83,6 +100,31 @@ namespace NoteNest.UI.ViewModels.Shell
             get => _showSaveIndicator;
             set => SetProperty(ref _showSaveIndicator, value);
         }
+        
+        // Right panel properties
+        public bool IsRightPanelVisible
+        {
+            get => _isRightPanelVisible;
+            set => SetProperty(ref _isRightPanelVisible, value);
+        }
+        
+        public string ActivePluginTitle
+        {
+            get => _activePluginTitle;
+            set => SetProperty(ref _activePluginTitle, value);
+        }
+        
+        public object? ActivePluginContent
+        {
+            get => _activePluginContent;
+            set => SetProperty(ref _activePluginContent, value);
+        }
+        
+        public ObservableCollection<ActivityBarItemViewModel> ActivityBarItems
+        {
+            get => _activityBarItems;
+            set => SetProperty(ref _activityBarItems, value);
+        }
 
         // Commands are now delegated to focused ViewModels
         public ICommand CreateNoteCommand => NoteOperations.CreateNoteCommand;
@@ -93,12 +135,43 @@ namespace NoteNest.UI.ViewModels.Shell
         // Selection-based commands
         public ICommand DeleteSelectedCommand { get; private set; }
         public ICommand RenameSelectedCommand { get; private set; }
+        
+        // Right panel commands
+        public ICommand ToggleRightPanelCommand { get; private set; }
 
         private void InitializeCommands()
         {
             RefreshCommand = new AsyncRelayCommand(ExecuteRefresh);
             DeleteSelectedCommand = new AsyncRelayCommand(DeleteSelectedAsync);
             RenameSelectedCommand = new AsyncRelayCommand(RenameSelectedAsync);
+            ToggleRightPanelCommand = new RelayCommand(ExecuteToggleRightPanel);
+        }
+        
+        private void ExecuteToggleRightPanel()
+        {
+            _logger.Info($"⌨️ Ctrl+B pressed - IsRightPanelVisible: {IsRightPanelVisible}");
+            
+            if (!IsRightPanelVisible)
+            {
+                // Opening panel - activate Todo plugin if nothing is active
+                if (ActivePluginContent == null)
+                {
+                    _logger.Info("⌨️ No plugin active, activating Todo plugin...");
+                    ActivateTodoPlugin();
+                }
+                else
+                {
+                    // Just show the panel with whatever was active
+                    IsRightPanelVisible = true;
+                    _logger.Info("⌨️ Showing existing plugin content");
+                }
+            }
+            else
+            {
+                // Closing panel
+                IsRightPanelVisible = false;
+                _logger.Info("⌨️ Hiding right panel");
+            }
         }
         
         private void InitializeTimers()
@@ -114,6 +187,95 @@ namespace NoteNest.UI.ViewModels.Shell
                 _saveIndicatorTimer.Stop();
                 ShowSaveIndicator = false;
             };
+        }
+        
+        private void InitializePlugins()
+        {
+            try
+            {
+                _logger.Info("🔌 InitializePlugins() called");
+                _logger.Info($"🔌 ServiceProvider is null: {_serviceProvider == null}");
+                
+                // Get the Todo plugin
+                var todoPlugin = _serviceProvider?.GetService<TodoPlugin>();
+                _logger.Info($"🔌 TodoPlugin retrieved: {todoPlugin != null}");
+                
+                if (todoPlugin != null)
+                {
+                    // Create activity bar item for Todo plugin
+                    var todoCommand = new RelayCommand(() => ActivateTodoPlugin());
+                    var todoItem = new ActivityBarItemViewModel(
+                        todoPlugin.Id,
+                        todoPlugin.Name,
+                        System.Windows.Application.Current.FindResource("LucideCheck"),
+                        todoCommand);
+                    
+                    ActivityBarItems.Add(todoItem);
+                    _logger.Info("✅ Todo plugin registered in activity bar");
+                    _logger.Info($"✅ ActivityBarItems count: {ActivityBarItems.Count}");
+                }
+                else
+                {
+                    _logger.Warning("⚠️ TodoPlugin is null - not registered in DI container?");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "❌ Failed to initialize plugins");
+            }
+        }
+        
+        private void ActivateTodoPlugin()
+        {
+            try
+            {
+                _logger.Info("🎯 ActivateTodoPlugin() called - User clicked activity bar button");
+                
+                var todoPlugin = _serviceProvider?.GetService<TodoPlugin>();
+                _logger.Info($"🎯 TodoPlugin retrieved in Activate: {todoPlugin != null}");
+                
+                if (todoPlugin != null)
+                {
+                    // Deactivate all other activity bar items
+                    foreach (var item in ActivityBarItems)
+                    {
+                        item.IsActive = false;
+                    }
+                    
+                    // Activate this item
+                    var todoItem = ActivityBarItems.FirstOrDefault(i => i.Id == todoPlugin.Id);
+                    if (todoItem != null)
+                    {
+                        todoItem.IsActive = true;
+                        _logger.Info($"🎯 Activity bar item activated: {todoItem.Id}");
+                    }
+                    
+                    // Show the Todo panel
+                    _logger.Info($"🎯 Setting ActivePluginTitle to: {todoPlugin.Name}");
+                    ActivePluginTitle = todoPlugin.Name;
+                    
+                    _logger.Info("🎯 Creating panel via CreatePanel()...");
+                    var panel = todoPlugin.CreatePanel();
+                    _logger.Info($"🎯 Panel created: {panel != null}, Type: {panel?.GetType().Name}");
+                    
+                    ActivePluginContent = panel;
+                    _logger.Info($"🎯 ActivePluginContent set: {ActivePluginContent != null}");
+                    
+                    _logger.Info($"🎯 Setting IsRightPanelVisible = true (current: {IsRightPanelVisible})");
+                    IsRightPanelVisible = true;
+                    _logger.Info($"🎯 IsRightPanelVisible is now: {IsRightPanelVisible}");
+                    
+                    _logger.Info("✅ Todo plugin activated successfully");
+                }
+                else
+                {
+                    _logger.Warning("⚠️ TodoPlugin is null in ActivateTodoPlugin()");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "❌ Failed to activate Todo plugin");
+            }
         }
 
         private async Task ExecuteRefresh()

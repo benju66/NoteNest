@@ -398,6 +398,9 @@ namespace NoteNest.UI.Composition
             
             // OLD: IWorkspaceService removed - functionality now in WorkspaceViewModel
             
+            // Add plugin system services
+            services.AddPluginSystem();
+            
             return services;
         }
     }

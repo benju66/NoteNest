@@ -1,0 +1,204 @@
+<UserControl x:Class="NoteNest.UI.Plugins.TodoPlugin.UI.Views.TodoPanelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:NoteNest.UI.Plugins.TodoPlugin.UI.Views"
+             xmlns:vm="clr-namespace:NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels"
+             xmlns:converters="clr-namespace:NoteNest.UI.Plugins.TodoPlugin.UI.Converters"
+             xmlns:ui="http://schemas.modernwpf.com/2019"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="350">
+    
+    <UserControl.Resources>
+        <!-- Converters -->
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
+        <converters:BoolToStrikethroughConverter x:Key="BoolToStrikethroughConverter"/>
+        <converters:BoolToErrorBrushConverter x:Key="BoolToErrorBrushConverter"/>
+        <!-- Todo Item Template -->
+        <DataTemplate x:Key="TodoItemTemplate" DataType="{x:Type vm:TodoItemViewModel}">
+            <Border x:Name="TodoItemBorder"
+                    Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
+                    Background="Transparent"
+                    BorderBrush="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="12,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Checkbox -->
+                    <CheckBox Grid.Column="0"
+                              IsChecked="{Binding IsCompleted}"
+                              VerticalAlignment="Top"
+                              Margin="0,2,8,0"/>
+                    
+                    <!-- Content -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <!-- Editable Text -->
+                        <Grid>
+                            <TextBlock x:Name="TodoText"
+                                       Text="{Binding Text}"
+                                       TextWrapping="Wrap"
+                                       TextDecorations="{Binding IsCompleted, Converter={StaticResource BoolToStrikethroughConverter}}"
+                                       Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}"/>
+                            
+                            <TextBox x:Name="EditTextBox"
+                                     Text="{Binding EditingText, UpdateSourceTrigger=PropertyChanged}"
+                                     TextWrapping="Wrap"
+                                     Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                     KeyDown="EditTextBox_KeyDown"
+                                     LostFocus="EditTextBox_LostFocus"/>
+                        </Grid>
+                        
+                        <!-- Metadata -->
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                            <!-- Due Date -->
+                            <TextBlock Text="{Binding DueDateDisplay}"
+                                       FontSize="11"
+                                       Foreground="{Binding IsOverdue, Converter={StaticResource BoolToErrorBrushConverter}}"
+                                       Margin="0,0,8,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DueDateDisplay}" Value="">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            
+                            <!-- Tags -->
+                            <TextBlock Text="{Binding TagsDisplay}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                                       FontStyle="Italic">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding TagsDisplay}" Value="">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </StackPanel>
+                    
+                    <!-- Actions -->
+                    <StackPanel Grid.Column="2" 
+                                Orientation="Horizontal"
+                                VerticalAlignment="Top">
+                        <!-- Favorite -->
+                        <Button Width="24" Height="24"
+                                Style="{StaticResource TitleBarButtonStyle}"
+                                Command="{Binding ToggleFavoriteCommand}"
+                                ToolTip="Toggle Favorite">
+                            <ContentControl Template="{StaticResource LucideStar}"
+                                            Width="14" Height="14">
+                                <ContentControl.Style>
+                                    <Style TargetType="ContentControl">
+                                        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                                <Setter Property="Foreground" Value="{DynamicResource SystemControlHighlightAccentBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ContentControl.Style>
+                            </ContentControl>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            
+            <DataTemplate.Triggers>
+                <Trigger SourceName="TodoItemBorder" Property="IsMouseOver" Value="True">
+                    <Setter TargetName="TodoItemBorder" Property="Background" 
+                            Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
+                </Trigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+    
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Quick Add Bar -->
+        <Border Grid.Row="0" 
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                Padding="12,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <TextBox x:Name="QuickAddTextBox"
+                         Grid.Column="0"
+                         Text="{Binding QuickAddText, UpdateSourceTrigger=PropertyChanged}"
+                         Tag="Add a task..."
+                         KeyDown="QuickAddTextBox_KeyDown"/>
+                
+                <Button Grid.Column="1"
+                        Margin="8,0,0,0"
+                        Command="{Binding QuickAddCommand}"
+                        IsDefault="True">
+                    <StackPanel Orientation="Horizontal">
+                        <ContentControl Template="{StaticResource LucideSquarePlus}"
+                                        Width="14" Height="14"
+                                        Margin="0,0,4,0"/>
+                        <TextBlock Text="Add"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+        
+        <!-- Filter Bar -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                Padding="12,4">
+            <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Delay=300}"
+                     Tag="Filter tasks...">
+                <TextBox.InputBindings>
+                    <KeyBinding Key="Escape" Command="{Binding ClearFilterCommand}"/>
+                </TextBox.InputBindings>
+            </TextBox>
+        </Border>
+        
+        <!-- Todo List -->
+        <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Todos}"
+                          ItemTemplate="{StaticResource TodoItemTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </ScrollViewer>
+        
+        <!-- Loading Overlay -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                Opacity="0.8"
+                Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <ProgressBar IsIndeterminate="True"
+                         Width="40" Height="40"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"/>
+        </Border>
+    </Grid>
+</UserControl>
