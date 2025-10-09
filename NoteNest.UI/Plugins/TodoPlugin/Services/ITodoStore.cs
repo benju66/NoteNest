@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Services
@@ -13,8 +14,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         ObservableCollection<TodoItem> GetByCategory(Guid? categoryId);
         ObservableCollection<TodoItem> GetSmartList(SmartListType type);
         TodoItem? GetById(Guid id);
-        void Add(TodoItem todo);
-        void Update(TodoItem todo);
-        void Delete(Guid id);
+        Task AddAsync(TodoItem todo);
+        Task UpdateAsync(TodoItem todo);
+        Task DeleteAsync(Guid id);
     }
 }

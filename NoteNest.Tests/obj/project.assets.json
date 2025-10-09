@@ -3591,14 +3591,14 @@
         "net9.0-windows7.0": {
           "targetAlias": "net9.0-windows7.0",
           "projectReferences": {
-            "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
-              "projectPath": "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
+            "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
+              "projectPath": "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
             },
             "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj": {
               "projectPath": "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj"
             },
-            "c:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj": {
-              "projectPath": "c:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj"
+            "C:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj": {
+              "projectPath": "C:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj"
             }
           }
         }
@@ -3660,7 +3660,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.203/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.205/PortableRuntimeIdentifierGraph.json"
       }
     }
   },

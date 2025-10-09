@@ -88,27 +88,36 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             return _todos.FirstOrDefault(t => t.Id == id);
         }
 
-        public void Add(TodoItem todo)
+        public async Task AddAsync(TodoItem todo)
         {
             if (todo == null) throw new ArgumentNullException(nameof(todo));
             
-            _todos.Add(todo);
+            _todos.Add(todo);  // Update UI immediately
             
-            // Async fire-and-forget for performance (UI stays responsive)
-            _ = Task.Run(async () =>
+            try
             {
-                try
+                // Actually await the database insert
+                var success = await _repository.InsertAsync(todo);
+                if (success)
                 {
-                    await _repository.InsertAsync(todo);
+                    _logger.Info($"[TodoStore] ✅ Todo saved to database: {todo.Text}");
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.Error(ex, $"[TodoStore] Failed to persist new todo: {todo.Text}");
+                    _logger.Warning($"[TodoStore] ⚠️ Failed to save todo (returned false): {todo.Text}");
+                    throw new Exception("Database insert returned false");
                 }
-            });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] ❌ Failed to persist new todo: {todo.Text}");
+                // Remove from UI since save failed
+                _todos.Remove(todo);
+                throw;  // Propagate to ViewModel
+            }
         }
 
-        public void Update(TodoItem todo)
+        public async Task UpdateAsync(TodoItem todo)
         {
             if (todo == null) throw new ArgumentNullException(nameof(todo));
             
@@ -118,40 +127,50 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 var index = _todos.IndexOf(existing);
                 _todos[index] = todo;
                 
-                // Async persist
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
+                    var success = await _repository.UpdateAsync(todo);
+                    if (success)
                     {
-                        await _repository.UpdateAsync(todo);
+                        _logger.Debug($"[TodoStore] ✅ Todo updated in database: {todo.Text}");
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        _logger.Error(ex, $"[TodoStore] Failed to persist todo update: {todo.Id}");
+                        _logger.Warning($"[TodoStore] ⚠️ Failed to update todo (returned false): {todo.Text}");
                     }
-                });
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"[TodoStore] ❌ Failed to persist todo update: {todo.Id}");
+                    throw;
+                }
             }
         }
 
-        public void Delete(Guid id)
+        public async Task DeleteAsync(Guid id)
         {
             var todo = GetById(id);
             if (todo != null)
             {
                 _todos.Remove(todo);
                 
-                // Async persist
-                _ = Task.Run(async () =>
+                try
                 {
-                    try
+                    var success = await _repository.DeleteAsync(id);
+                    if (success)
                     {
-                        await _repository.DeleteAsync(id);
+                        _logger.Debug($"[TodoStore] ✅ Todo deleted from database: {id}");
                     }
-                    catch (Exception ex)
+                    else
                     {
-                        _logger.Error(ex, $"[TodoStore] Failed to persist todo deletion: {id}");
+                        _logger.Warning($"[TodoStore] ⚠️ Failed to delete todo (returned false): {id}");
                     }
-                });
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"[TodoStore] ❌ Failed to persist todo deletion: {id}");
+                    throw;
+                }
             }
         }
 

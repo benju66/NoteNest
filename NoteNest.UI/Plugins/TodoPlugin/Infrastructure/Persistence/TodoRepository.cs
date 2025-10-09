@@ -917,11 +917,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
             {
                 Id = todo.Id.ToString(),
                 todo.Text,
-                Description = todo.Description ?? string.Empty,
+                Description = todo.Description,  // NULL OK - matches TreeDatabaseRepository pattern
                 IsCompleted = todo.IsCompleted ? 1 : 0,
                 CompletedDate = (long?)todo.CompletedDate?.ToUnixTimeSeconds(),
-                CategoryId = todo.CategoryId?.ToString() ?? string.Empty,
-                ParentId = todo.ParentId?.ToString() ?? string.Empty,
+                CategoryId = todo.CategoryId?.ToString(),  // NULL OK - no FK constraint
+                ParentId = todo.ParentId?.ToString(),  // NULL OK - matches TreeDatabaseRepository pattern
                 SortOrder = todo.Order, // maps to sort_order
                 IndentLevel = 0, // future feature
                 Priority = (int)todo.Priority,
@@ -932,8 +932,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 RecurrenceRule = (string?)null, // future feature
                 LeadTimeDays = 0, // future feature
                 SourceType = todo.SourceNoteId.HasValue ? "note" : "manual",  // Detect source type
-                SourceNoteId = todo.SourceNoteId?.ToString() ?? string.Empty,
-                SourceFilePath = todo.SourceFilePath ?? string.Empty,
+                SourceNoteId = todo.SourceNoteId?.ToString(),  // NULL if not from note (not empty string!)
+                SourceFilePath = todo.SourceFilePath,  // NULL if not from note
                 SourceLineNumber = todo.SourceLineNumber,
                 SourceCharOffset = todo.SourceCharOffset,
                 LastSeenInSource = (long?)null, // Set during reconciliation

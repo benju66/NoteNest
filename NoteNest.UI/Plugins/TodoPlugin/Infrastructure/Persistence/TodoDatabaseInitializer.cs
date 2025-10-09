@@ -250,23 +250,28 @@ CREATE VIRTUAL TABLE todos_fts USING fts5(
     text,
     description,
     tags,
-    tokenize='porter unicode61',
-    content='todos',
-    content_rowid='rowid'
+    tokenize='porter unicode61'
 );
 
 CREATE TRIGGER todos_fts_insert AFTER INSERT ON todos BEGIN
-    INSERT INTO todos_fts(rowid, id, text, description, tags)
-    SELECT rowid, new.id, new.text, new.description,
-        (SELECT GROUP_CONCAT(tag, ' ') FROM todo_tags WHERE todo_id = new.id);
+    INSERT INTO todos_fts(id, text, description, tags)
+    VALUES (
+        new.id,
+        new.text,
+        COALESCE(new.description, ''),
+        (SELECT COALESCE(GROUP_CONCAT(tag, ' '), '') FROM todo_tags WHERE todo_id = new.id)
+    );
 END;
 
 CREATE TRIGGER todos_fts_update AFTER UPDATE ON todos BEGIN
-    UPDATE todos_fts 
-    SET text = new.text,
-        description = new.description,
-        tags = (SELECT GROUP_CONCAT(tag, ' ') FROM todo_tags WHERE todo_id = new.id)
-    WHERE id = new.id;
+    DELETE FROM todos_fts WHERE id = old.id;
+    INSERT INTO todos_fts(id, text, description, tags)
+    VALUES (
+        new.id,
+        new.text,
+        COALESCE(new.description, ''),
+        (SELECT COALESCE(GROUP_CONCAT(tag, ' '), '') FROM todo_tags WHERE todo_id = new.id)
+    );
 END;
 
 CREATE TRIGGER todos_fts_delete AFTER DELETE ON todos BEGIN

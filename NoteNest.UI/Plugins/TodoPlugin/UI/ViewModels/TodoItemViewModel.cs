@@ -161,7 +161,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             {
                 _todoItem.IsCompleted = !_todoItem.IsCompleted;
                 _todoItem.CompletedDate = _todoItem.IsCompleted ? DateTime.UtcNow : null;
-                _todoStore.Update(_todoItem);
+                
+                await _todoStore.UpdateAsync(_todoItem);  // ← Actually await
                 
                 OnPropertyChanged(nameof(IsCompleted));
                 OnPropertyChanged(nameof(CompletedDate));
@@ -169,6 +170,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error toggling todo completion");
+                // Revert UI state on error
+                _todoItem.IsCompleted = !_todoItem.IsCompleted;
+                _todoItem.CompletedDate = null;
+                OnPropertyChanged(nameof(IsCompleted));
             }
         }
 
@@ -177,13 +182,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             try
             {
                 _todoItem.IsFavorite = !_todoItem.IsFavorite;
-                _todoStore.Update(_todoItem);
+                
+                await _todoStore.UpdateAsync(_todoItem);  // ← Actually await
                 
                 OnPropertyChanged(nameof(IsFavorite));
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error toggling todo favorite");
+                // Revert UI state on error
+                _todoItem.IsFavorite = !_todoItem.IsFavorite;
+                OnPropertyChanged(nameof(IsFavorite));
             }
         }
 
@@ -216,16 +225,22 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             if (string.IsNullOrWhiteSpace(newText) || newText == Text)
                 return;
 
+            var oldText = _todoItem.Text;  // Capture before try block
+            
             try
             {
                 _todoItem.Text = newText.Trim();
-                _todoStore.Update(_todoItem);
+                
+                await _todoStore.UpdateAsync(_todoItem);  // ← Actually await
                 
                 OnPropertyChanged(nameof(Text));
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error updating todo text");
+                // Revert on error
+                _todoItem.Text = oldText;
+                OnPropertyChanged(nameof(Text));
             }
         }
 

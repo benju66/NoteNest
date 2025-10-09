@@ -10,6 +10,7 @@ using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 using NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels;
 using NoteNest.UI.Plugins.TodoPlugin.UI.Views;
+using NoteNest.UI.ViewModels.Shell;
 
 namespace NoteNest.UI.Composition
 {

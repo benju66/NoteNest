@@ -38,20 +38,23 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             
             _todos = new ObservableCollection<TodoItemViewModel>();
             
-            try
-            {
-                InitializeCommands();
-                _logger.Info("📋 Commands initialized");
-                
-                // Don't await in constructor - fire and forget
-                _ = LoadTodosAsync();
-                _logger.Info("📋 LoadTodosAsync triggered");
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "❌ Error in TodoListViewModel constructor");
-                throw;
-            }
+            InitializeCommands();
+            _logger.Info("📋 TodoListViewModel initialized, commands ready");
+            
+            // Load todos after construction completes
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(
+                new Action(async () =>
+                {
+                    try
+                    {
+                        await LoadTodosAsync();
+                        _logger.Info("📋 Initial todos loaded");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, "❌ Failed to load initial todos");
+                    }
+                }));
         }
 
         #region Properties
@@ -83,7 +86,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public string QuickAddText
         {
             get => _quickAddText;
-            set => SetProperty(ref _quickAddText, value);
+            set
+            {
+                if (SetProperty(ref _quickAddText, value))
+                {
+                    _logger.Debug($"📋 QuickAddText changed to: '{value}', IsNullOrWhiteSpace={string.IsNullOrWhiteSpace(value)}");
+                    // Notify command to re-evaluate CanExecute
+                    (QuickAddCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+                }
+            }
         }
 
         public bool IsLoading
@@ -143,16 +154,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
         private bool CanExecuteQuickAdd()
         {
-            return !string.IsNullOrWhiteSpace(QuickAddText);
+            var canExecute = !string.IsNullOrWhiteSpace(QuickAddText);
+            _logger.Debug($"📋 CanExecuteQuickAdd called: {canExecute}, Text='{QuickAddText}'");
+            return canExecute;
         }
 
         private async Task ExecuteQuickAdd()
         {
+            _logger.Info($"🚀 ExecuteQuickAdd CALLED! Text='{QuickAddText}'");
+            
             if (string.IsNullOrWhiteSpace(QuickAddText))
+            {
+                _logger.Warning("⚠️ QuickAddText is null/whitespace, aborting");
                 return;
+            }
 
             try
             {
+                _logger.Info("📋 Setting IsLoading = true");
                 IsLoading = true;
                 
                 var todo = new TodoItem
@@ -161,19 +180,39 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                     CategoryId = _selectedCategoryId
                 };
                 
-                _todoStore.Add(todo);
-                QuickAddText = string.Empty;
-                _logger.Info($"Created todo: {todo.Text}");
+                _logger.Info($"📋 Created TodoItem: {todo.Text}, Id={todo.Id}");
                 
-                await LoadTodosAsync(); // Refresh to ensure proper ordering
+                // Actually await the save
+                _logger.Info("📋 Calling TodoStore.AddAsync...");
+                await _todoStore.AddAsync(todo);
+                _logger.Info($"✅ TodoStore.AddAsync completed successfully");
+                
+                _logger.Info($"✅ Created and saved todo: {todo.Text}");
+                
+                QuickAddText = string.Empty;
+                _logger.Info("📋 Cleared QuickAddText");
+                
+                // Add to UI directly
+                _logger.Info("📋 Creating TodoItemViewModel...");
+                var vm = new TodoItemViewModel(todo, _todoStore, _logger);
+                _logger.Info($"📋 TodoItemViewModel created, adding to Todos collection (current count={Todos.Count})");
+                
+                Todos.Add(vm);
+                _logger.Info($"✅ Todo added to UI! New count={Todos.Count}");
+                
+                OnPropertyChanged(nameof(Todos));
+                _logger.Info("📋 PropertyChanged raised for Todos");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error creating todo");
+                _logger.Error(ex, "❌ EXCEPTION in ExecuteQuickAdd!");
+                _logger.Error(ex, $"❌ Exception details: {ex.GetType().Name}: {ex.Message}");
+                _logger.Error(ex, $"❌ Stack trace: {ex.StackTrace}");
             }
             finally
             {
                 IsLoading = false;
+                _logger.Info("📋 IsLoading = false");
             }
         }
 
@@ -188,8 +227,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 {
                     todo.IsCompleted = !todo.IsCompleted;
                     todo.CompletedDate = todo.IsCompleted ? DateTime.UtcNow : null;
-                    _todoStore.Update(todo);
-                    await LoadTodosAsync();
+                    
+                    await _todoStore.UpdateAsync(todo);
+                    _logger.Info($"✅ Todo updated: {todo.Text}");
                 }
             }
             catch (Exception ex)
@@ -204,8 +244,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
             try
             {
-                _todoStore.Delete(todoVm.Id);
-                await LoadTodosAsync();
+                await _todoStore.DeleteAsync(todoVm.Id);
+                _logger.Info($"✅ Todo deleted");
+                
+                // Remove from UI
+                Todos.Remove(todoVm);
             }
             catch (Exception ex)
             {
