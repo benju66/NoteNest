@@ -931,13 +931,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 ReminderDate = (long?)todo.ReminderDate?.ToUnixTimeSeconds(),
                 RecurrenceRule = (string?)null, // future feature
                 LeadTimeDays = 0, // future feature
-                SourceType = "manual", // default, will be updated in RTF integration
-                SourceNoteId = todo.LinkedNoteIds?.FirstOrDefault()?.ToString() ?? string.Empty,
-                SourceFilePath = (string?)null, // RTF integration
-                SourceLineNumber = (int?)null, // RTF integration
-                SourceCharOffset = (int?)null, // RTF integration
-                LastSeenInSource = (long?)null, // RTF integration
-                IsOrphaned = 0,
+                SourceType = todo.SourceNoteId.HasValue ? "note" : "manual",  // Detect source type
+                SourceNoteId = todo.SourceNoteId?.ToString() ?? string.Empty,
+                SourceFilePath = todo.SourceFilePath ?? string.Empty,
+                SourceLineNumber = todo.SourceLineNumber,
+                SourceCharOffset = todo.SourceCharOffset,
+                LastSeenInSource = (long?)null, // Set during reconciliation
+                IsOrphaned = todo.IsOrphaned ? 1 : 0,
                 CreatedAt = todo.CreatedDate.ToUnixTimeSeconds(),
                 ModifiedAt = todo.ModifiedDate.ToUnixTimeSeconds()
             };

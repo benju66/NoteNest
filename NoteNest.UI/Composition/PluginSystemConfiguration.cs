@@ -4,7 +4,9 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Plugins.TodoPlugin;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Parsing;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 using NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels;
 using NoteNest.UI.Plugins.TodoPlugin.UI.Views;
@@ -50,6 +52,16 @@ namespace NoteNest.UI.Composition
                 
             services.AddSingleton<ITodoBackupService>(provider => 
                 new TodoBackupService(connectionString, provider.GetRequiredService<IAppLogger>()));
+            
+            // =================================================================
+            // TODO PLUGIN RTF INTEGRATION
+            // =================================================================
+            
+            // Bracket todo parser
+            services.AddSingleton<BracketTodoParser>();
+            
+            // Background sync service (IHostedService)
+            services.AddHostedService<TodoSyncService>();
             
             // =================================================================
             // TODO PLUGIN SERVICES

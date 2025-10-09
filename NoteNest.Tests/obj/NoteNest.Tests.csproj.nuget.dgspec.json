@@ -4,14 +4,14 @@
     "C:\\NoteNest\\NoteNest.Tests\\NoteNest.Tests.csproj": {}
   },
   "projects": {
-    "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
+    "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj",
+        "projectUniqueName": "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj",
         "projectName": "NoteNest.Application",
-        "projectPath": "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj",
+        "projectPath": "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj",
         "packagesPath": "C:\\Users\\Burness\\.nuget\\packages\\",
-        "outputPath": "C:\\NoteNest\\NoteNest.Application\\obj\\",
+        "outputPath": "c:\\NoteNest\\NoteNest.Application\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Burness\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -229,14 +229,14 @@
         }
       }
     },
-    "C:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj": {
+    "c:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj",
+        "projectUniqueName": "c:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj",
         "projectName": "NoteNest.Infrastructure",
-        "projectPath": "C:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj",
+        "projectPath": "c:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj",
         "packagesPath": "C:\\Users\\Burness\\.nuget\\packages\\",
-        "outputPath": "C:\\NoteNest\\NoteNest.Infrastructure\\obj\\",
+        "outputPath": "c:\\NoteNest\\NoteNest.Infrastructure\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Burness\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -251,8 +251,8 @@
           "net9.0": {
             "targetAlias": "net9.0",
             "projectReferences": {
-              "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
-                "projectPath": "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
+              "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
+                "projectPath": "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
               },
               "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj": {
                 "projectPath": "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj"
@@ -346,14 +346,14 @@
           "net9.0-windows7.0": {
             "targetAlias": "net9.0-windows7.0",
             "projectReferences": {
-              "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
-                "projectPath": "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
+              "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
+                "projectPath": "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
               },
               "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj": {
                 "projectPath": "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj"
               },
-              "C:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj": {
-                "projectPath": "C:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj"
+              "c:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj": {
+                "projectPath": "c:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj"
               }
             }
           }
@@ -419,14 +419,14 @@
         }
       }
     },
-    "C:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj": {
+    "c:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj",
+        "projectUniqueName": "c:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj",
         "projectName": "NoteNest.UI",
-        "projectPath": "C:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj",
+        "projectPath": "c:\\NoteNest\\NoteNest.UI\\NoteNest.UI.csproj",
         "packagesPath": "C:\\Users\\Burness\\.nuget\\packages\\",
-        "outputPath": "C:\\NoteNest\\NoteNest.UI\\obj\\",
+        "outputPath": "c:\\NoteNest\\NoteNest.UI\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Burness\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -441,14 +441,14 @@
           "net9.0-windows7.0": {
             "targetAlias": "net9.0-windows",
             "projectReferences": {
-              "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
-                "projectPath": "C:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
+              "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj": {
+                "projectPath": "c:\\NoteNest\\NoteNest.Application\\NoteNest.Application.csproj"
               },
               "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj": {
                 "projectPath": "C:\\NoteNest\\NoteNest.Core\\NoteNest.Core.csproj"
               },
-              "C:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj": {
-                "projectPath": "C:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj"
+              "c:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj": {
+                "projectPath": "c:\\NoteNest\\NoteNest.Infrastructure\\NoteNest.Infrastructure.csproj"
               }
             }
           }

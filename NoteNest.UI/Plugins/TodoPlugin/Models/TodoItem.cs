@@ -23,7 +23,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Models
         public DateTime CreatedDate { get; set; } = DateTime.UtcNow;
         public DateTime ModifiedDate { get; set; } = DateTime.UtcNow;
         public List<string> Tags { get; set; } = new();
-        public List<string> LinkedNoteIds { get; set; } = new();
+        
+        // Source tracking for RTF integration
+        public Guid? SourceNoteId { get; set; }
+        public string? SourceFilePath { get; set; }
+        public int? SourceLineNumber { get; set; }
+        public int? SourceCharOffset { get; set; }
+        public bool IsOrphaned { get; set; }
+        public List<string> LinkedNoteIds { get; set; } = new();  // Legacy, for future use
 
         public bool IsOverdue()
         {

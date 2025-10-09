@@ -95,11 +95,34 @@
                     <StackPanel Grid.Column="2" 
                                 Orientation="Horizontal"
                                 VerticalAlignment="Top">
+                        <!-- Note Link Indicator -->
+                        <TextBlock Text="{Binding SourceIndicator}"
+                                   FontSize="14"
+                                   ToolTip="{Binding SourceTooltip}"
+                                   Margin="0,0,4,0"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsNoteLinked}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ShowOrphanedIndicator}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource SystemControlErrorTextForegroundBrush}"/>
+                                            <Setter Property="ToolTip" Value="⚠️ Source note was modified or deleted"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        
                         <!-- Favorite -->
                         <Button Width="24" Height="24"
-                                Style="{StaticResource TitleBarButtonStyle}"
+                                Background="Transparent"
+                                BorderThickness="0"
                                 Command="{Binding ToggleFavoriteCommand}"
-                                ToolTip="Toggle Favorite">
+                                ToolTip="Toggle Favorite"
+                                Cursor="Hand">
                             <ContentControl Template="{StaticResource LucideStar}"
                                             Width="14" Height="14">
                                 <ContentControl.Style>
@@ -107,7 +130,7 @@
                                         <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsFavorite}" Value="True">
-                                                <Setter Property="Foreground" Value="{DynamicResource SystemControlHighlightAccentBrush}"/>
+                                                <Setter Property="Foreground" Value="#FFD700"/>
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -147,20 +170,13 @@
                 <TextBox x:Name="QuickAddTextBox"
                          Grid.Column="0"
                          Text="{Binding QuickAddText, UpdateSourceTrigger=PropertyChanged}"
-                         Tag="Add a task..."
                          KeyDown="QuickAddTextBox_KeyDown"/>
                 
                 <Button Grid.Column="1"
                         Margin="8,0,0,0"
                         Command="{Binding QuickAddCommand}"
-                        IsDefault="True">
-                    <StackPanel Orientation="Horizontal">
-                        <ContentControl Template="{StaticResource LucideSquarePlus}"
-                                        Width="14" Height="14"
-                                        Margin="0,0,4,0"/>
-                        <TextBlock Text="Add"/>
-                    </StackPanel>
-                </Button>
+                        IsDefault="True"
+                        Content="Add"/>
             </Grid>
         </Border>
         
@@ -168,8 +184,7 @@
         <Border Grid.Row="1"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                 Padding="12,4">
-            <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Delay=300}"
-                     Tag="Filter tasks...">
+            <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Delay=300}">
                 <TextBox.InputBindings>
                     <KeyBinding Key="Escape" Command="{Binding ClearFilterCommand}"/>
                 </TextBox.InputBindings>
@@ -195,10 +210,11 @@
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                 Opacity="0.8"
                 Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <ProgressBar IsIndeterminate="True"
-                         Width="40" Height="40"
-                         HorizontalAlignment="Center"
-                         VerticalAlignment="Center"/>
+            <TextBlock Text="Loading..."
+                       FontSize="16"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
         </Border>
     </Grid>
 </UserControl>

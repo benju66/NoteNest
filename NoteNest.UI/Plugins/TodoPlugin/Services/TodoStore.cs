@@ -53,8 +53,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[TodoStore] Failed to initialize from database");
-                throw;
+                _logger.Error(ex, "[TodoStore] Failed to initialize from database - starting with empty collection");
+                // Don't throw - graceful degradation with empty collection
+                _isInitialized = true;  // Mark as initialized anyway
             }
         }
 
@@ -180,8 +181,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         private ObservableCollection<TodoItem> GetTodayItems()
         {
             var today = new SmartObservableCollection<TodoItem>();
-            var items = _todos.Where(t => !t.IsCompleted && t.IsDueToday())
-                             .OrderBy(t => t.Priority)
+            var items = _todos.Where(t => !t.IsCompleted && 
+                                        (t.DueDate == null || t.DueDate.Value.Date <= DateTime.Today))
+                             .OrderBy(t => t.DueDate ?? DateTime.MaxValue)  // Null dates last
+                             .ThenBy(t => t.Priority)
                              .ThenBy(t => t.Order);
             today.AddRange(items);
             return today;
@@ -218,26 +221,38 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
 
         private ObservableCollection<TodoItem> GetCompletedItems()
         {
+            // Show completed todos from in-memory collection
             var completed = new SmartObservableCollection<TodoItem>();
-            
-            // Load completed todos from database (not kept in memory)
-            _ = Task.Run(async () =>
+            var items = _todos.Where(t => t.IsCompleted)
+                             .OrderByDescending(t => t.CompletedDate);
+            completed.AddRange(items);
+            return completed;
+        }
+        
+        /// <summary>
+        /// Load completed todos from database (for completed view)
+        /// </summary>
+        public async Task LoadCompletedTodosAsync()
+        {
+            try
             {
-                try
+                var completedTodos = await _repository.GetRecentlyCompletedAsync(100);
+                
+                using (_todos.BatchUpdate())
                 {
-                    var completedTodos = await _repository.GetRecentlyCompletedAsync(100);
-                    using (completed.BatchUpdate())
+                    // Add completed todos to collection if not already there
+                    foreach (var todo in completedTodos.Where(t => !_todos.Any(x => x.Id == t.Id)))
                     {
-                        completed.AddRange(completedTodos);
+                        _todos.Add(todo);
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, "[TodoStore] Failed to load completed todos");
-                }
-            });
-            
-            return completed;
+                
+                _logger.Debug($"[TodoStore] Loaded {completedTodos.Count} completed todos from database");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoStore] Failed to load completed todos");
+            }
         }
     }
 }

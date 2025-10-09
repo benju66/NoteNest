@@ -1,0 +1,322 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Hosting;
+using NoteNest.Core.Services;
+using NoteNest.Core.Services.Logging;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Parsing;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Models;
+
+namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
+{
+    /// <summary>
+    /// Background service that synchronizes todos with RTF notes.
+    /// Follows SearchIndexSyncService pattern for event-driven synchronization.
+    /// 
+    /// Architecture:
+    /// - ISaveManager fires NoteSaved event when notes are saved
+    /// - This service listens and extracts todos from RTF content
+    /// - Reconciles with existing todos (add new, mark orphaned, update seen)
+    /// - Non-blocking, graceful degradation if sync fails
+    /// </summary>
+    public class TodoSyncService : IHostedService, IDisposable
+    {
+        private readonly ISaveManager _saveManager;
+        private readonly ITodoRepository _repository;
+        private readonly BracketTodoParser _parser;
+        private readonly IAppLogger _logger;
+        private readonly Timer _debounceTimer;
+        private string? _pendingNoteId;
+        private string? _pendingFilePath;
+        private bool _disposed = false;
+        
+        public TodoSyncService(
+            ISaveManager saveManager,
+            ITodoRepository repository,
+            BracketTodoParser parser,
+            IAppLogger logger)
+        {
+            _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
+            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            _parser = parser ?? throw new ArgumentNullException(nameof(parser));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            
+            // Debounce timer to avoid processing every keystroke during auto-save
+            _debounceTimer = new Timer(ProcessPendingNote, null, Timeout.Infinite, Timeout.Infinite);
+        }
+        
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            _logger.Info("[TodoSync] Starting todo sync service - monitoring note saves for bracket todos");
+            
+            // Subscribe to save events (same pattern as SearchIndexSyncService)
+            _saveManager.NoteSaved += OnNoteSaved;
+            
+            _logger.Info("✅ TodoSyncService subscribed to note save events");
+            
+            return Task.CompletedTask;
+        }
+        
+        public Task StopAsync(CancellationToken cancellationToken)
+        {
+            _logger.Info("[TodoSync] Stopping todo sync service");
+            
+            // Unsubscribe from events
+            if (_saveManager != null)
+            {
+                _saveManager.NoteSaved -= OnNoteSaved;
+            }
+            
+            // Stop debounce timer
+            _debounceTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+            
+            return Task.CompletedTask;
+        }
+        
+        /// <summary>
+        /// Event handler for NoteSaved - extracts and syncs todos from saved notes.
+        /// Pattern follows SearchIndexSyncService.OnNoteSaved() and DatabaseMetadataUpdateService.OnNoteSaved().
+        /// </summary>
+        private void OnNoteSaved(object sender, NoteSavedEventArgs e)
+        {
+            // GUARD: Validate event data
+            if (e == null || string.IsNullOrEmpty(e.FilePath))
+            {
+                _logger.Warning("[TodoSync] NoteSaved event received with invalid data - skipping");
+                return;
+            }
+            
+            // GUARD: Only process RTF files
+            if (!e.FilePath.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Debug($"[TodoSync] Skipping non-RTF file: {Path.GetFileName(e.FilePath)}");
+                return;
+            }
+            
+            // Debounce: Wait 500ms after last save before processing
+            // This avoids processing the same note multiple times during rapid auto-saves
+            _pendingNoteId = e.NoteId;
+            _pendingFilePath = e.FilePath;
+            _debounceTimer.Change(500, Timeout.Infinite);
+            
+            _logger.Debug($"[TodoSync] Note save queued for processing: {Path.GetFileName(e.FilePath)}");
+        }
+        
+        /// <summary>
+        /// Process the pending note after debounce delay.
+        /// </summary>
+        private async void ProcessPendingNote(object? state)
+        {
+            var noteId = _pendingNoteId;
+            var filePath = _pendingFilePath;
+            
+            if (string.IsNullOrEmpty(noteId) || string.IsNullOrEmpty(filePath))
+                return;
+            
+            try
+            {
+                await ProcessNoteAsync(noteId, filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoSync] Failed to process note: {Path.GetFileName(filePath)}");
+                // Don't rethrow - graceful degradation (app continues working)
+            }
+        }
+        
+        /// <summary>
+        /// Process a note file: extract todos and reconcile with database.
+        /// </summary>
+        private async Task ProcessNoteAsync(string noteId, string filePath)
+        {
+            _logger.Info($"[TodoSync] Processing note: {Path.GetFileName(filePath)}");
+            
+            // STEP 1: Read RTF file
+            if (!File.Exists(filePath))
+            {
+                _logger.Warning($"[TodoSync] File not found: {filePath} - marking todos as orphaned");
+                await HandleMissingFile(noteId);
+                return;
+            }
+            
+            string rtfContent;
+            try
+            {
+                rtfContent = await File.ReadAllTextAsync(filePath);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoSync] Failed to read file: {filePath}");
+                return;
+            }
+            
+            // STEP 2: Parse todos from RTF
+            var candidates = _parser.ExtractFromRtf(rtfContent);
+            _logger.Debug($"[TodoSync] Found {candidates.Count} todo candidates in {Path.GetFileName(filePath)}");
+            
+            // STEP 3: Reconcile with existing todos
+            if (Guid.TryParse(noteId, out var noteGuid))
+            {
+                await ReconcileTodosAsync(noteGuid, filePath, candidates);
+            }
+            else
+            {
+                _logger.Warning($"[TodoSync] Invalid NoteId format: {noteId}");
+            }
+        }
+        
+        /// <summary>
+        /// Reconcile extracted todos with existing todos in database.
+        /// </summary>
+        private async Task ReconcileTodosAsync(Guid noteGuid, string filePath, List<TodoCandidate> candidates)
+        {
+            try
+            {
+                // Get existing todos for this note
+                var existingTodos = await _repository.GetByNoteIdAsync(noteGuid);
+                
+                _logger.Debug($"[TodoSync] Reconciling {candidates.Count} candidates with {existingTodos.Count} existing todos");
+                
+                // Build lookup dictionaries for efficient matching
+                var candidatesByStableId = candidates.ToDictionary(c => c.GetStableId());
+                var existingByStableId = existingTodos.ToDictionary(t => GetTodoStableId(t));
+                
+                // PHASE 1: Find new todos (in candidates but not in existing)
+                var newCandidates = candidatesByStableId.Keys
+                    .Except(existingByStableId.Keys)
+                    .Select(id => candidatesByStableId[id])
+                    .ToList();
+                
+                foreach (var candidate in newCandidates)
+                {
+                    await CreateTodoFromCandidate(candidate, noteGuid, filePath);
+                }
+                
+                // PHASE 2: Find orphaned todos (in existing but not in candidates)
+                var orphanedIds = existingByStableId.Keys
+                    .Except(candidatesByStableId.Keys)
+                    .Select(id => existingByStableId[id].Id)
+                    .ToList();
+                
+                foreach (var todoId in orphanedIds)
+                {
+                    await MarkTodoAsOrphaned(todoId);
+                }
+                
+                // PHASE 3: Update last_seen for existing todos still in note
+                var stillPresentIds = existingByStableId.Keys
+                    .Intersect(candidatesByStableId.Keys)
+                    .Select(id => existingByStableId[id].Id)
+                    .ToList();
+                
+                foreach (var todoId in stillPresentIds)
+                {
+                    await _repository.UpdateLastSeenAsync(todoId);
+                }
+                
+                _logger.Info($"[TodoSync] Reconciliation complete: {newCandidates.Count} new, {orphanedIds.Count} orphaned, {stillPresentIds.Count} updated");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoSync] Failed to reconcile todos");
+            }
+        }
+        
+        /// <summary>
+        /// Create a new todo from a candidate.
+        /// </summary>
+        private async Task CreateTodoFromCandidate(TodoCandidate candidate, Guid noteGuid, string filePath)
+        {
+            try
+            {
+                var todo = new TodoItem
+                {
+                    Text = candidate.Text,
+                    SourceNoteId = noteGuid,
+                    SourceFilePath = filePath,
+                    SourceLineNumber = candidate.LineNumber,
+                    SourceCharOffset = candidate.CharacterOffset
+                };
+                
+                // Note: SourceType will be set to "note" by repository when inserting
+                // (we'll update TodoRepository.MapTodoToParameters to handle this)
+                
+                var success = await _repository.InsertAsync(todo);
+                if (success)
+                {
+                    _logger.Info($"[TodoSync] Created todo from note: \"{candidate.Text}\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoSync] Failed to create todo: {candidate.Text}");
+            }
+        }
+        
+        /// <summary>
+        /// Mark a todo as orphaned (source bracket was removed from note).
+        /// </summary>
+        private async Task MarkTodoAsOrphaned(Guid todoId)
+        {
+            try
+            {
+                var todo = await _repository.GetByIdAsync(todoId);
+                if (todo != null && !todo.IsOrphaned)
+                {
+                    todo.IsOrphaned = true;
+                    todo.ModifiedDate = DateTime.UtcNow;
+                    
+                    await _repository.UpdateAsync(todo);
+                    _logger.Info($"[TodoSync] Marked todo as orphaned: \"{todo.Text}\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoSync] Failed to mark todo as orphaned: {todoId}");
+            }
+        }
+        
+        /// <summary>
+        /// Handle missing file (deleted or moved) - mark all associated todos as orphaned.
+        /// </summary>
+        private async Task HandleMissingFile(string noteId)
+        {
+            try
+            {
+                if (Guid.TryParse(noteId, out var noteGuid))
+                {
+                    var count = await _repository.MarkOrphanedByNoteAsync(noteGuid);
+                    _logger.Info($"[TodoSync] Marked {count} todos as orphaned for missing file");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoSync] Failed to handle missing file");
+            }
+        }
+        
+        /// <summary>
+        /// Generate stable ID for a todo (matches TodoCandidate.GetStableId logic).
+        /// </summary>
+        private string GetTodoStableId(TodoItem todo)
+        {
+            var keyText = todo.Text.Length > 50 ? todo.Text.Substring(0, 50) : todo.Text;
+            var lineNumber = todo.SourceLineNumber ?? 0;
+            return $"{lineNumber}:{keyText.GetHashCode():X8}";
+        }
+        
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+            
+            _debounceTimer?.Dispose();
+            _disposed = true;
+        }
+    }
+}
+

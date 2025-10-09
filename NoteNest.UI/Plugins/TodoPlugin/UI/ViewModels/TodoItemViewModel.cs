@@ -127,6 +127,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         }
 
         public string TagsDisplay => Tags.Any() ? string.Join(", ", Tags) : string.Empty;
+        
+        // Source tracking for RTF integration
+        public bool IsNoteLinked => _todoItem.SourceNoteId.HasValue;
+        public string SourceIndicator => IsNoteLinked ? "📄" : string.Empty;
+        public string SourceTooltip => IsNoteLinked 
+            ? $"Linked to note:\n{System.IO.Path.GetFileName(_todoItem.SourceFilePath ?? "Unknown")}\nLine {_todoItem.SourceLineNumber ?? 0}"
+            : string.Empty;
+        public bool ShowOrphanedIndicator => _todoItem.IsOrphaned;
 
         #endregion
 
