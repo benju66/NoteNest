@@ -39,14 +39,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 await connection.OpenAsync();
                 
                 var sql = "SELECT * FROM todos WHERE id = @Id";
-                var todo = await connection.QuerySingleOrDefaultAsync<TodoItem>(sql, new { Id = id.ToString() });
+                var dto = await connection.QuerySingleOrDefaultAsync<TodoItemDto>(sql, new { Id = id.ToString() });
                 
-                if (todo != null)
+                if (dto != null)
                 {
-                    todo.Tags = (await GetTagsForTodoAsync(id)).ToList();
+                    var tags = await GetTagsForTodoAsync(id);
+                    var aggregate = dto.ToAggregate(tags.ToList());
+                    return TodoMapper.ToUiModel(aggregate);
                 }
                 
-                return todo;
+                return null;
             }
             catch (Exception ex)
             {
@@ -66,10 +68,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                     ? "SELECT * FROM todos ORDER BY sort_order ASC"
                     : "SELECT * FROM todos WHERE is_completed = 0 ORDER BY sort_order ASC";
                     
-                var todos = (await connection.QueryAsync<TodoItem>(sql)).ToList();
+                // Query as DTO (handles TEXT -> string conversion)
+                var dtos = (await connection.QueryAsync<TodoItemDto>(sql)).ToList();
                 
-                // Load tags for all todos
-                await LoadTagsForTodos(connection, todos);
+                // Load tags and convert to aggregates, then to UI models
+                var todos = new List<TodoItem>();
+                foreach (var dto in dtos)
+                {
+                    var tags = await GetTagsForTodoAsync(Guid.Parse(dto.Id));
+                    var aggregate = dto.ToAggregate(tags.ToList());
+                    var uiModel = TodoMapper.ToUiModel(aggregate);
+                    todos.Add(uiModel);
+                }
                 
                 return todos;
             }
@@ -91,6 +101,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 
                 try
                 {
+                    // Convert UI model -> Aggregate -> DTO
+                    var aggregate = TodoMapper.ToAggregate(todo);
+                    var dto = TodoItemDto.FromAggregate(aggregate);
+                    
                     var sql = @"
                         INSERT INTO todos (
                             id, text, description, is_completed, completed_date,
@@ -102,15 +116,38 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                             created_at, modified_at
                         ) VALUES (
                             @Id, @Text, @Description, @IsCompleted, @CompletedDate,
-                            @CategoryId, @ParentId, @SortOrder, @IndentLevel,
-                            @Priority, @IsFavorite, @DueDate, @DueTime, @ReminderDate,
-                            @RecurrenceRule, @LeadTimeDays, @SourceType,
+                            @CategoryId, @ParentId, @SortOrder, 0,
+                            @Priority, @IsFavorite, @DueDate, NULL, @ReminderDate,
+                            NULL, 0, @SourceType,
                             @SourceNoteId, @SourceFilePath, @SourceLineNumber,
-                            @SourceCharOffset, @LastSeenInSource, @IsOrphaned,
+                            @SourceCharOffset, NULL, @IsOrphaned,
                             @CreatedAt, @ModifiedAt
                         )";
                     
-                    var parameters = MapTodoToParameters(todo);
+                    var parameters = new
+                    {
+                        dto.Id,
+                        dto.Text,
+                        dto.Description,
+                        dto.IsCompleted,
+                        dto.CompletedDate,
+                        dto.CategoryId,
+                        dto.ParentId,
+                        dto.SortOrder,
+                        dto.Priority,
+                        dto.IsFavorite,
+                        dto.DueDate,
+                        dto.ReminderDate,
+                        SourceType = dto.SourceNoteId != null ? "note" : "manual",
+                        dto.SourceNoteId,
+                        dto.SourceFilePath,
+                        dto.SourceLineNumber,
+                        dto.SourceCharOffset,
+                        dto.IsOrphaned,
+                        dto.CreatedAt,
+                        dto.ModifiedAt
+                    };
+                    
                     await connection.ExecuteAsync(sql, parameters, transaction);
                     
                     // Insert tags
@@ -152,23 +189,49 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 {
                     todo.ModifiedDate = DateTime.UtcNow;
                     
+                    // Convert UI model -> Aggregate -> DTO
+                    var aggregate = TodoMapper.ToAggregate(todo);
+                    var dto = TodoItemDto.FromAggregate(aggregate);
+                    
                     var sql = @"
                         UPDATE todos SET
                             text = @Text, description = @Description,
                             is_completed = @IsCompleted, completed_date = @CompletedDate,
                             category_id = @CategoryId, parent_id = @ParentId,
-                            sort_order = @SortOrder, indent_level = @IndentLevel,
+                            sort_order = @SortOrder,
                             priority = @Priority, is_favorite = @IsFavorite,
-                            due_date = @DueDate, due_time = @DueTime,
-                            reminder_date = @ReminderDate, recurrence_rule = @RecurrenceRule,
-                            lead_time_days = @LeadTimeDays, source_type = @SourceType,
+                            due_date = @DueDate,
+                            reminder_date = @ReminderDate,
+                            source_type = @SourceType,
                             source_note_id = @SourceNoteId, source_file_path = @SourceFilePath,
                             source_line_number = @SourceLineNumber, source_char_offset = @SourceCharOffset,
-                            last_seen_in_source = @LastSeenInSource, is_orphaned = @IsOrphaned,
+                            is_orphaned = @IsOrphaned,
                             modified_at = @ModifiedAt
                         WHERE id = @Id";
                     
-                    var parameters = MapTodoToParameters(todo);
+                    var parameters = new
+                    {
+                        dto.Id,
+                        dto.Text,
+                        dto.Description,
+                        dto.IsCompleted,
+                        dto.CompletedDate,
+                        dto.CategoryId,
+                        dto.ParentId,
+                        dto.SortOrder,
+                        dto.Priority,
+                        dto.IsFavorite,
+                        dto.DueDate,
+                        dto.ReminderDate,
+                        SourceType = dto.SourceNoteId != null ? "note" : "manual",
+                        dto.SourceNoteId,
+                        dto.SourceFilePath,
+                        dto.SourceLineNumber,
+                        dto.SourceCharOffset,
+                        dto.IsOrphaned,
+                        dto.ModifiedAt
+                    };
+                    
                     await connection.ExecuteAsync(sql, parameters, transaction);
                     
                     // Update tags (delete all, re-insert)

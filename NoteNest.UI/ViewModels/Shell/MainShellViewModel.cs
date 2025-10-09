@@ -234,6 +234,11 @@ namespace NoteNest.UI.ViewModels.Shell
             {
                 _logger.Info("[TodoPlugin] Initializing database...");
                 
+                // CRITICAL: Register Dapper type handlers for Guid conversion (fixes persistence bug)
+                Dapper.SqlMapper.AddTypeHandler(new NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.GuidTypeHandler());
+                Dapper.SqlMapper.AddTypeHandler(new NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.NullableGuidTypeHandler());
+                _logger.Info("[TodoPlugin] Registered Dapper type handlers for TEXT -> Guid conversion");
+                
                 // Initialize database schema
                 var dbInitializer = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.ITodoDatabaseInitializer>();
                 if (dbInitializer != null)
