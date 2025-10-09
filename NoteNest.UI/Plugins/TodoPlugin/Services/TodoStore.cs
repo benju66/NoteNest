@@ -1,21 +1,61 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
+using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Collections;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Services
 {
     /// <summary>
-    /// Simple in-memory implementation of ITodoStore.
+    /// Todo store with database persistence.
+    /// Maintains ObservableCollection for UI binding while persisting to SQLite.
     /// </summary>
     public class TodoStore : ITodoStore
     {
+        private readonly ITodoRepository _repository;
+        private readonly IAppLogger _logger;
         private readonly SmartObservableCollection<TodoItem> _todos;
+        private bool _isInitialized;
 
-        public TodoStore()
+        public TodoStore(ITodoRepository repository, IAppLogger logger)
         {
+            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _todos = new SmartObservableCollection<TodoItem>();
+        }
+
+        /// <summary>
+        /// Initialize the store by loading todos from database.
+        /// Call this once during plugin startup.
+        /// </summary>
+        public async Task InitializeAsync()
+        {
+            if (_isInitialized)
+                return;
+
+            try
+            {
+                _logger.Info("[TodoStore] Initializing from database...");
+                
+                var todos = await _repository.GetAllAsync(includeCompleted: false);
+                
+                using (_todos.BatchUpdate())
+                {
+                    _todos.Clear();
+                    _todos.AddRange(todos);
+                }
+                
+                _isInitialized = true;
+                _logger.Info($"[TodoStore] Loaded {todos.Count} active todos from database");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoStore] Failed to initialize from database");
+                throw;
+            }
         }
 
         public ObservableCollection<TodoItem> AllTodos => _todos;
@@ -50,7 +90,21 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         public void Add(TodoItem todo)
         {
             if (todo == null) throw new ArgumentNullException(nameof(todo));
+            
             _todos.Add(todo);
+            
+            // Async fire-and-forget for performance (UI stays responsive)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _repository.InsertAsync(todo);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"[TodoStore] Failed to persist new todo: {todo.Text}");
+                }
+            });
         }
 
         public void Update(TodoItem todo)
@@ -62,6 +116,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             {
                 var index = _todos.IndexOf(existing);
                 _todos[index] = todo;
+                
+                // Async persist
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _repository.UpdateAsync(todo);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, $"[TodoStore] Failed to persist todo update: {todo.Id}");
+                    }
+                });
             }
         }
 
@@ -71,6 +138,42 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             if (todo != null)
             {
                 _todos.Remove(todo);
+                
+                // Async persist
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _repository.DeleteAsync(id);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, $"[TodoStore] Failed to persist todo deletion: {id}");
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Reload all todos from database (for refresh scenarios).
+        /// </summary>
+        public async Task ReloadAsync()
+        {
+            try
+            {
+                var todos = await _repository.GetAllAsync(includeCompleted: false);
+                
+                using (_todos.BatchUpdate())
+                {
+                    _todos.Clear();
+                    _todos.AddRange(todos);
+                }
+                
+                _logger.Debug($"[TodoStore] Reloaded {todos.Count} todos from database");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoStore] Failed to reload from database");
             }
         }
 
@@ -116,9 +219,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         private ObservableCollection<TodoItem> GetCompletedItems()
         {
             var completed = new SmartObservableCollection<TodoItem>();
-            var items = _todos.Where(t => t.IsCompleted)
-                             .OrderByDescending(t => t.CompletedDate);
-            completed.AddRange(items);
+            
+            // Load completed todos from database (not kept in memory)
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var completedTodos = await _repository.GetRecentlyCompletedAsync(100);
+                    using (completed.BatchUpdate())
+                    {
+                        completed.AddRange(completedTodos);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "[TodoStore] Failed to load completed todos");
+                }
+            });
+            
             return completed;
         }
     }

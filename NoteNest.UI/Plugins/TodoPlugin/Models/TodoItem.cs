@@ -10,6 +10,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Models
     {
         public Guid Id { get; set; } = Guid.NewGuid();
         public Guid? CategoryId { get; set; }
+        public Guid? ParentId { get; set; }  // For subtasks
         public string Text { get; set; } = string.Empty;
         public string? Description { get; set; }
         public bool IsCompleted { get; set; }
@@ -46,6 +47,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Models
         Normal = 1,
         High = 2,
         Urgent = 3
+    }
+    
+    public enum TodoSource
+    {
+        Manual,  // Created directly by user in todo panel
+        Note     // Extracted from [bracket] in RTF note
     }
 
     public enum SmartListType

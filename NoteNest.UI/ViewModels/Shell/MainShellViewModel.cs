@@ -196,6 +196,9 @@ namespace NoteNest.UI.ViewModels.Shell
                 _logger.Info("🔌 InitializePlugins() called");
                 _logger.Info($"🔌 ServiceProvider is null: {_serviceProvider == null}");
                 
+                // Initialize Todo plugin database
+                _ = InitializeTodoPluginAsync();
+                
                 // Get the Todo plugin
                 var todoPlugin = _serviceProvider?.GetService<TodoPlugin>();
                 _logger.Info($"🔌 TodoPlugin retrieved: {todoPlugin != null}");
@@ -222,6 +225,40 @@ namespace NoteNest.UI.ViewModels.Shell
             catch (Exception ex)
             {
                 _logger.Error(ex, "❌ Failed to initialize plugins");
+            }
+        }
+        
+        private async Task InitializeTodoPluginAsync()
+        {
+            try
+            {
+                _logger.Info("[TodoPlugin] Initializing database...");
+                
+                // Initialize database schema
+                var dbInitializer = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.ITodoDatabaseInitializer>();
+                if (dbInitializer != null)
+                {
+                    var dbInitialized = await dbInitializer.InitializeAsync();
+                    if (!dbInitialized)
+                    {
+                        _logger.Error("[TodoPlugin] Database initialization failed");
+                        return;
+                    }
+                    
+                    _logger.Info("[TodoPlugin] Database initialized successfully");
+                }
+                
+                // Initialize TodoStore (load todos from database)
+                var todoStore = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Services.ITodoStore>();
+                if (todoStore is NoteNest.UI.Plugins.TodoPlugin.Services.TodoStore store)
+                {
+                    await store.InitializeAsync();
+                    _logger.Info("[TodoPlugin] TodoStore initialized successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoPlugin] Failed to initialize database/store");
             }
         }
         

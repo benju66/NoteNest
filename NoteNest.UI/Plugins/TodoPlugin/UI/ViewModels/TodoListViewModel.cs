@@ -3,7 +3,6 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using MediatR;
 using NoteNest.Core.Commands;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
