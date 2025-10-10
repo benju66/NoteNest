@@ -112,7 +112,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         public ObservableCollection<TodoItem> GetByCategory(Guid? categoryId)
         {
             var filtered = new SmartObservableCollection<TodoItem>();
-            var items = _todos.Where(t => t.CategoryId == categoryId);
+            // Filter active todos only (exclude orphaned and completed)
+            // Orphaned todos show in "Uncategorized", completed in "Completed" smart list
+            var items = _todos.Where(t => t.CategoryId == categoryId && 
+                                          !t.IsOrphaned &&
+                                          !t.IsCompleted);
             filtered.AddRange(items);
             return filtered;
         }
@@ -213,14 +217,36 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             {
                 if (todo.SourceNoteId.HasValue)
                 {
-                    // SOFT DELETE: Note-linked todo → Mark as orphaned
-                    _logger.Info($"[TodoStore] Soft deleting note-linked todo (marking as orphaned): \"{todo.Text}\"");
-                    
-                    todo.IsOrphaned = true;
-                    todo.ModifiedDate = DateTime.UtcNow;
-                    await UpdateAsync(todo); // Updates in-memory + database
-                    
-                    _logger.Info($"[TodoStore] ✅ Todo marked as orphaned: \"{todo.Text}\"");
+                    if (!todo.IsOrphaned)
+                    {
+                        // SOFT DELETE: First deletion - Mark as orphaned
+                        // Preserves category_id for future restore capability
+                        _logger.Info($"[TodoStore] Soft deleting note-linked todo (marking as orphaned): \"{todo.Text}\"");
+                        
+                        todo.IsOrphaned = true;
+                        // category_id PRESERVED (allows restore feature)
+                        todo.ModifiedDate = DateTime.UtcNow;
+                        await UpdateAsync(todo); // Updates in-memory + database
+                        
+                        _logger.Info($"[TodoStore] ✅ Todo marked as orphaned: \"{todo.Text}\" - moved to Uncategorized");
+                    }
+                    else
+                    {
+                        // HARD DELETE: Second deletion (already orphaned) - User wants it gone
+                        _logger.Info($"[TodoStore] Hard deleting already-orphaned todo: \"{todo.Text}\"");
+                        
+                        _todos.Remove(todo); // Remove from UI immediately
+                        
+                        var success = await _repository.DeleteAsync(id);
+                        if (success)
+                        {
+                            _logger.Info($"[TodoStore] ✅ Orphaned todo permanently deleted: \"{todo.Text}\"");
+                        }
+                        else
+                        {
+                            _logger.Warning($"[TodoStore] ⚠️ Failed to delete orphaned todo from database: {id}");
+                        }
+                    }
                 }
                 else
                 {

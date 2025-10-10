@@ -229,6 +229,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 
                 _logger.Info("[CategoryTree] LoadCategoriesAsync started");
                 
+                // STEP 0: Save expanded state before rebuild (preserves user's expanded folders)
+                var expandedIds = new HashSet<Guid>();
+                SaveExpandedState(Categories, expandedIds);
+                _logger.Debug($"[CategoryTree] Saved {expandedIds.Count} expanded category IDs");
+                
                 // Get all categories from store
                 var allCategories = _categoryStore.Categories;
                 _logger.Info($"[CategoryTree] CategoryStore contains {allCategories.Count} categories");
@@ -247,7 +252,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                     // STEP 1: Add "Uncategorized" virtual category at the top
                     var uncategorizedNode = CreateUncategorizedNode();
                     Categories.Add(uncategorizedNode);
-                    _logger.Info($"[CategoryTree] Added 'Uncategorized' virtual category with {uncategorizedNode.Todos.Count} orphaned todos");
+                    _logger.Info($"[CategoryTree] Added 'Uncategorized' virtual category with {uncategorizedNode.Todos.Count} todos");
                     
                     // STEP 2: Add regular categories
                     var rootCategories = allCategories.Where(c => c.ParentId == null).ToList();
@@ -261,6 +266,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                         _logger.Debug($"[CategoryTree] Added CategoryNodeViewModel: DisplayPath='{nodeVm.DisplayPath}'");
                     }
                 }
+                
+                // STEP 3: Restore expanded state after rebuild
+                RestoreExpandedState(Categories, expandedIds);
+                _logger.Debug($"[CategoryTree] Restored expanded state for {expandedIds.Count} categories");
                 
                 _logger.Info($"[CategoryTree] ✅ LoadCategoriesAsync complete - Categories.Count = {Categories.Count} (including Uncategorized)");
                 
@@ -346,26 +355,73 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             
             var nodeVm = new CategoryNodeViewModel(uncategorizedCategory);
             
-            // Query orphaned todos:
-            // 1. Todos with category_id = NULL
-            // 2. Todos with category_id not in CategoryStore (deleted categories)
+            // Query uncategorized todos (all sources):
+            // 1. category_id = NULL (never categorized)
+            // 2. IsOrphaned = true (source deleted, user soft-deleted)
+            // 3. category_id not in CategoryStore (category removed from todo panel)
+            // Exclude completed todos (they go to "Completed" smart list)
             var allTodos = _todoStore.AllTodos;
             var categoryIds = _categoryStore.Categories.Select(c => c.Id).ToHashSet();
             
-            var orphanedTodos = allTodos
-                .Where(t => !t.CategoryId.HasValue || !categoryIds.Contains(t.CategoryId.Value))
+            var uncategorizedTodos = allTodos
+                .Where(t => (t.CategoryId == null || 
+                             t.IsOrphaned || 
+                             !categoryIds.Contains(t.CategoryId.Value)) &&
+                            !t.IsCompleted)
                 .ToList();
             
-            _logger.Debug($"[CategoryTree] Found {orphanedTodos.Count} orphaned todos (NULL or deleted category)");
+            _logger.Debug($"[CategoryTree] Found {uncategorizedTodos.Count} uncategorized/orphaned todos");
             
-            // Add orphaned todos to the node
-            foreach (var todo in orphanedTodos)
+            // Add uncategorized todos to the node
+            foreach (var todo in uncategorizedTodos)
             {
                 var todoVm = new TodoItemViewModel(todo, _todoStore, _logger);
                 nodeVm.Todos.Add(todoVm);
             }
             
             return nodeVm;
+        }
+        
+        /// <summary>
+        /// Recursively saves expanded state of all categories before tree rebuild.
+        /// Matches main app CategoryTreeViewModel.SaveExpandedState() pattern.
+        /// </summary>
+        private void SaveExpandedState(IEnumerable<CategoryNodeViewModel> categories, HashSet<Guid> expandedIds)
+        {
+            foreach (var category in categories)
+            {
+                if (category.IsExpanded)
+                {
+                    expandedIds.Add(category.CategoryId);
+                }
+                
+                // Recurse through children
+                if (category.Children.Any())
+                {
+                    SaveExpandedState(category.Children, expandedIds);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Recursively restores expanded state of all categories after tree rebuild.
+        /// Matches main app CategoryTreeViewModel.RestoreExpandedState() pattern.
+        /// </summary>
+        private void RestoreExpandedState(IEnumerable<CategoryNodeViewModel> categories, HashSet<Guid> expandedIds)
+        {
+            foreach (var category in categories)
+            {
+                if (expandedIds.Contains(category.CategoryId))
+                {
+                    category.IsExpanded = true;
+                }
+                
+                // Recurse through children
+                if (category.Children.Any())
+                {
+                    RestoreExpandedState(category.Children, expandedIds);
+                }
+            }
         }
         
         /// <summary>
