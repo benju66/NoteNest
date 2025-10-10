@@ -153,8 +153,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- Quick Add -->
-            <RowDefinition Height="200"/> <!-- Navigation: Smart Lists + Categories -->
-            <RowDefinition Height="Auto"/> <!-- Filter -->
+            <RowDefinition Height="Auto"/> <!-- Categories -->
             <RowDefinition Height="*"/> <!-- Todo List -->
         </Grid.RowDefinitions>
         
@@ -181,129 +180,68 @@
             </Grid>
         </Border>
         
-        <!-- Navigation Panel: Smart Lists + Categories -->
+        <!-- Categories Section - SIMPLE AND CLEAN -->
         <Border Grid.Row="1"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                 BorderBrush="{DynamicResource SystemControlBackgroundBaseLowBrush}"
-                BorderThickness="0,0,0,1">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="120"/> <!-- Smart Lists Section - FIXED HEIGHT -->
-                    <RowDefinition Height="80"/> <!-- Categories Section - GUARANTEED SPACE -->
-                </Grid.RowDefinitions>
+                BorderThickness="0,0,0,1"
+                Padding="12,8">
+            <StackPanel>
+                <TextBlock Text="CATEGORIES" 
+                           FontSize="11" 
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                           Margin="0,0,0,4"/>
                 
-                <!-- Smart Lists Section -->
-                <StackPanel Grid.Row="0">
-                    <TextBlock Text="SMART LISTS" 
-                               FontSize="11" 
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                               Margin="12,8,12,4"/>
-                    <ItemsControl ItemsSource="{Binding CategoryTree.SmartLists}"
-                                  Margin="0,0,0,8">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="Transparent"
-                                        Cursor="Hand"
-                                        Padding="12,4">
-                                    <Border.InputBindings>
-                                        <MouseBinding MouseAction="LeftClick"
-                                                      Command="{Binding SelectCommand}"/>
-                                    </Border.InputBindings>
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Background" Value="Transparent"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                    <Setter Property="Background" 
-                                                            Value="{DynamicResource SystemControlHighlightListLowBrush}"/>
-                                                </DataTrigger>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" 
-                                                            Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
-                                                </Trigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding IconGlyph}"
-                                                   FontFamily="Segoe MDL2 Assets"
-                                                   FontSize="14"
-                                                   Margin="0,0,8,0"
-                                                   VerticalAlignment="Center"/>
-                                        <TextBlock Text="{Binding Name}"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
+                <!-- LISTBOX - We know this works -->
+                <ListBox ItemsSource="{Binding CategoryTree.Categories}"
+                         SelectionMode="Single"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         MinHeight="80"
+                         MaxHeight="150"
+                         Padding="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Padding="4,2" Cursor="Hand">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="📁" FontSize="12" Margin="0,0,6,0"/>
+                                    <TextBlock Text="{Binding DisplayPath}" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                </ListBox>
                 
-                <!-- Categories Section -->
-                <StackPanel Grid.Row="1">
-                    <TextBlock Text="CATEGORIES" 
-                               FontSize="11" 
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                               Margin="12,4,12,4"/>
-                    
-                    <!-- Category ListBox - Clean display -->
-                    <ListBox ItemsSource="{Binding CategoryTree.Categories}"
-                             SelectionMode="Single"
-                             Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                             BorderBrush="{DynamicResource SystemControlBackgroundBaseLowBrush}"
-                             BorderThickness="1"
-                             Margin="12,0,12,4"
-                             Height="60"
-                             Padding="2">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Padding="8,4" Cursor="Hand" Background="Transparent">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="📁 " FontSize="12" Margin="0,0,4,0"/>
-                                        <TextBlock Text="{Binding DisplayPath}" FontSize="11"/>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                    
-                    <!-- Empty state message -->
-                    <TextBlock Text="Right-click folders in note tree to add categories"
-                               FontSize="11"
-                               FontStyle="Italic"
-                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                               Margin="12,4"
-                               TextWrapping="Wrap">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CategoryTree.Categories.Count}" Value="0">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </StackPanel>
-            </Grid>
-        </Border>
-        
-        <!-- Filter Bar -->
-        <Border Grid.Row="2"
-                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                Padding="12,4">
-            <TextBox Text="{Binding TodoList.FilterText, UpdateSourceTrigger=PropertyChanged, Delay=300}">
-                <TextBox.InputBindings>
-                    <KeyBinding Key="Escape" Command="{Binding TodoList.ClearFilterCommand}"/>
-                </TextBox.InputBindings>
-            </TextBox>
+                <!-- Empty state message -->
+                <TextBlock Text="Right-click folders in note tree to add categories"
+                           FontSize="10"
+                           FontStyle="Italic"
+                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                           Margin="0,8,0,0"
+                           TextWrapping="Wrap">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CategoryTree.Categories.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
         </Border>
         
         <!-- Todo List -->
-        <ScrollViewer Grid.Row="3"
+        <ScrollViewer Grid.Row="2"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding TodoList.Todos}"
@@ -317,7 +255,7 @@
         </ScrollViewer>
         
         <!-- Loading Overlay -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="2"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                 Opacity="0.8"
                 Visibility="{Binding TodoList.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">

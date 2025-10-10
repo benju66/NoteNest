@@ -156,6 +156,42 @@ CREATE TRIGGER todos_fts_delete AFTER DELETE ON todos BEGIN
 END;
 
 -- ============================================================================
+-- USER PREFERENCES TABLE (UI State, Settings, Selected Categories)
+-- ============================================================================
+
+CREATE TABLE user_preferences (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL,              -- JSON for flexibility
+    updated_at INTEGER NOT NULL,
+    
+    CHECK (key != '')
+);
+
+-- Store selected categories as JSON array
+-- Key: 'selected_categories'
+-- Value: JSON array of category objects with id, originalParentId, name, displayPath, isExpanded
+
+CREATE INDEX idx_user_preferences_key ON user_preferences(key);
+
+-- ============================================================================
+-- GLOBAL TAG VOCABULARY (Shared between Notes and Todos)
+-- ============================================================================
+
+CREATE TABLE global_tags (
+    tag TEXT PRIMARY KEY NOT NULL COLLATE NOCASE,
+    color TEXT,                       -- Hex color: #FF5733
+    category TEXT,                    -- Work, Personal, Project, etc.
+    icon TEXT,                        -- Emoji or icon identifier
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    
+    CHECK (tag != '')
+);
+
+CREATE INDEX idx_global_tags_category ON global_tags(category);
+CREATE INDEX idx_global_tags_usage ON global_tags(usage_count DESC);
+
+-- ============================================================================
 -- SCHEMA VERSION TABLE
 -- ============================================================================
 
@@ -166,7 +202,7 @@ CREATE TABLE schema_version (
 );
 
 INSERT INTO schema_version (version, applied_at, description) 
-VALUES (1, strftime('%s', 'now'), 'Initial schema with todos, tags, and FTS5');
+VALUES (1, strftime('%s', 'now'), 'Initial schema with todos, tags, FTS5, and user preferences');
 
 -- ============================================================================
 -- VIEWS FOR COMMON QUERIES

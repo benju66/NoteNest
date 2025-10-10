@@ -17,22 +17,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
     {
         private readonly SmartObservableCollection<Category> _categories;
         private readonly ICategorySyncService _syncService;
+        private readonly ICategoryPersistenceService _persistenceService;
         private readonly IAppLogger _logger;
         private bool _isInitialized;
 
         public CategoryStore(
             ICategorySyncService syncService,
+            ICategoryPersistenceService persistenceService,
             IAppLogger logger)
         {
             _syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
+            _persistenceService = persistenceService ?? throw new ArgumentNullException(nameof(persistenceService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _categories = new SmartObservableCollection<Category>();
         }
         
         /// <summary>
-        /// Initialize store in empty state for manual category selection.
-        /// Categories are added only when user clicks "Add to Todo Categories" in context menu.
-        /// Call this once during plugin startup.
+        /// Initialize store by loading previously selected categories from database.
+        /// Categories persist across app restarts via user_preferences table.
         /// </summary>
         public async Task InitializeAsync()
         {
@@ -44,18 +46,33 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 
             try
             {
-                // Start empty - categories added manually via context menu
-                // This provides user control over which folders appear as todo categories
+                _logger.Info("[CategoryStore] Loading saved categories from database...");
+                
+                // Load categories from user_preferences table
+                var savedCategories = await _persistenceService.LoadCategoriesAsync();
+                
+                if (savedCategories.Count > 0)
+                {
+                    using (_categories.BatchUpdate())
+                    {
+                        _categories.Clear();
+                        _categories.AddRange(savedCategories);
+                    }
+                    
+                    _logger.Info($"[CategoryStore] Restored {savedCategories.Count} categories from database");
+                }
+                else
+                {
+                    _logger.Info("[CategoryStore] No saved categories found - starting empty");
+                }
+                
                 _isInitialized = true;
-                _logger.Info("[CategoryStore] Initialized empty - manual category selection mode");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "[CategoryStore] Failed to initialize");
                 _isInitialized = true;
             }
-            
-            await Task.CompletedTask;
         }
         
         /// <summary>
@@ -100,13 +117,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         {
             if (category == null) throw new ArgumentNullException(nameof(category));
             
-            _logger.Info($"[CategoryStore] ADDING category: Name='{category.Name}', Id={category.Id}, ParentId={category.ParentId}, OriginalParentId={category.OriginalParentId}, DisplayPath='{category.DisplayPath}'");
-            _logger.Info($"[CategoryStore] Before Add - Collection count: {_categories.Count}");
+            _logger.Info($"[CategoryStore] ADDING category: Name='{category.Name}', Id={category.Id}, ParentId={category.ParentId}");
             
             _categories.Add(category);
             
-            _logger.Info($"[CategoryStore] After Add - Collection count: {_categories.Count}");
-            _logger.Info($"[CategoryStore] ✅ Category added successfully: {category.Name}");
+            // Auto-save to database
+            _ = SaveToDatabaseAsync();
+            
+            _logger.Info($"[CategoryStore] ✅ Category added: {category.Name} (Count: {_categories.Count})");
         }
 
         public void Update(Category category)
@@ -128,7 +146,27 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             if (category != null)
             {
                 _categories.Remove(category);
-                _logger.Debug($"[CategoryStore] Deleted category: {category.Name}");
+                
+                // Auto-save to database
+                _ = SaveToDatabaseAsync();
+                
+                _logger.Info($"[CategoryStore] Deleted category: {category.Name}");
+            }
+        }
+        
+        /// <summary>
+        /// Save categories to database (debounced to avoid excessive writes)
+        /// </summary>
+        private async Task SaveToDatabaseAsync()
+        {
+            try
+            {
+                await _persistenceService.SaveCategoriesAsync(_categories);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[CategoryStore] Failed to save categories to database");
+                // Don't throw - persistence failure shouldn't crash app
             }
         }
     }

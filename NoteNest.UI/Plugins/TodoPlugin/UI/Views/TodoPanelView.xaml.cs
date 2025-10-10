@@ -74,7 +74,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
             }
         }
 
-        // Removed TreeView selection handler - using ListBox now
+        // Category selection - not needed for ListBox (SelectionChanged handled by binding)
 
         private void EditTextBox_KeyDown(object sender, KeyEventArgs e)
         {

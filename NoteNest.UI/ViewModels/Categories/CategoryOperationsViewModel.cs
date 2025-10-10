@@ -418,16 +418,19 @@ namespace NoteNest.UI.ViewModels.Categories
                     return;
                 }
                 
+                // Parse original parent ID
+                Guid? originalParentId = string.IsNullOrEmpty(categoryViewModel.ParentId) 
+                    ? null 
+                    : Guid.Parse(categoryViewModel.ParentId);
+                
                 // Add category to TodoPlugin
                 var todoCategory = new NoteNest.UI.Plugins.TodoPlugin.Models.Category
                 {
                     Id = categoryId,
-                    ParentId = null, // Flat display mode - always show at root for immediate visibility
-                    OriginalParentId = string.IsNullOrEmpty(categoryViewModel.ParentId) 
-                        ? null 
-                        : Guid.Parse(categoryViewModel.ParentId), // Preserve tree hierarchy for future
+                    ParentId = null, // FLAT MODE: Always show at root for immediate visibility
+                    OriginalParentId = originalParentId, // Preserve hierarchy for future TreeView
                     Name = categoryViewModel.Name,
-                    DisplayPath = BuildCategoryDisplayPath(categoryViewModel), // Breadcrumb: "Personal > Budget"
+                    DisplayPath = BuildCategoryDisplayPath(categoryViewModel), // Breadcrumb path
                     Order = 0,
                     CreatedDate = DateTime.UtcNow,
                     ModifiedDate = DateTime.UtcNow

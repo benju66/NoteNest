@@ -77,6 +77,10 @@ namespace NoteNest.UI.Composition
             // NEW: Category cleanup service (orphaned category handling)
             services.AddSingleton<ICategoryCleanupService, CategoryCleanupService>();
             
+            // NEW: Category persistence service (saves selected categories to database)
+            services.AddSingleton<ICategoryPersistenceService>(provider =>
+                new CategoryPersistenceService(connectionString, provider.GetRequiredService<IAppLogger>()));
+            
             // Register stores (now with database backing)
             services.AddSingleton<ITodoStore, TodoStore>();
             services.AddSingleton<ICategoryStore, CategoryStore>();
