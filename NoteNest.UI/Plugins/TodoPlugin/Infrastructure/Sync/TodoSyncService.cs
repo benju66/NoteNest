@@ -30,6 +30,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
     {
         private readonly ISaveManager _saveManager;
         private readonly ITodoRepository _repository;
+        private readonly ITodoStore _todoStore;  // NEW: For UI-synced operations
         private readonly BracketTodoParser _parser;
         private readonly ITreeDatabaseRepository _treeRepository;
         private readonly ICategoryStore _categoryStore;
@@ -43,6 +44,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         public TodoSyncService(
             ISaveManager saveManager,
             ITodoRepository repository,
+            ITodoStore todoStore,  // NEW: Inject TodoStore for UI updates
             BracketTodoParser parser,
             ITreeDatabaseRepository treeRepository,
             ICategoryStore categoryStore,
@@ -51,6 +53,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         {
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
             _parser = parser ?? throw new ArgumentNullException(nameof(parser));
             _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
             _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
@@ -290,6 +293,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         /// <summary>
         /// Create a new todo from a candidate.
         /// NEW: Includes auto-categorization based on note's parent category.
+        /// USES TodoStore: Ensures UI updates immediately (ObservableCollection auto-refresh).
         /// </summary>
         private async Task CreateTodoFromCandidate(TodoCandidate candidate, Guid noteGuid, string filePath, Guid? categoryId)
         {
@@ -305,17 +309,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                     SourceCharOffset = candidate.CharacterOffset
                 };
                 
-                var success = await _repository.InsertAsync(todo);
-                if (success)
+                // USE TODOSTORE: Auto-updates in-memory collection + UI
+                await _todoStore.AddAsync(todo);
+                
+                if (categoryId.HasValue)
                 {
-                    if (categoryId.HasValue)
-                    {
-                        _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [auto-categorized: {categoryId.Value}]");
-                    }
-                    else
-                    {
-                        _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [uncategorized]");
-                    }
+                    _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [auto-categorized: {categoryId.Value}] - UI will auto-refresh");
+                }
+                else
+                {
+                    _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [uncategorized] - UI will auto-refresh");
                 }
             }
             catch (Exception ex)
@@ -326,19 +329,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         
         /// <summary>
         /// Mark a todo as orphaned (source bracket was removed from note).
+        /// USES TodoStore: Ensures UI updates when todo state changes.
         /// </summary>
         private async Task MarkTodoAsOrphaned(Guid todoId)
         {
             try
             {
-                var todo = await _repository.GetByIdAsync(todoId);
+                var todo = _todoStore.GetById(todoId);
                 if (todo != null && !todo.IsOrphaned)
                 {
                     todo.IsOrphaned = true;
                     todo.ModifiedDate = DateTime.UtcNow;
                     
-                    await _repository.UpdateAsync(todo);
-                    _logger.Info($"[TodoSync] Marked todo as orphaned: \"{todo.Text}\"");
+                    await _todoStore.UpdateAsync(todo);
+                    _logger.Info($"[TodoSync] Marked todo as orphaned: \"{todo.Text}\" - UI will auto-refresh");
                 }
             }
             catch (Exception ex)
