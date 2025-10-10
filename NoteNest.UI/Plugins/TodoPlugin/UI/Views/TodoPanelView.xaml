@@ -193,31 +193,56 @@
                            Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                            Margin="0,0,0,4"/>
                 
-                <!-- LISTBOX - We know this works -->
-                <ListBox ItemsSource="{Binding CategoryTree.Categories}"
-                         SelectionMode="Single"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         MinHeight="80"
-                         MaxHeight="150"
-                         Padding="0"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Border Padding="4,2" Cursor="Hand">
+                <!-- UNIFIED TREEVIEW - Categories contain Todos -->
+                <TreeView ItemsSource="{Binding CategoryTree.Categories}"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          MinHeight="100"
+                          MaxHeight="200"
+                          Padding="0"
+                          x:Name="CategoryTreeView"
+                          KeyDown="CategoryTreeView_KeyDown">
+                    <TreeView.Resources>
+                        <!-- Category template - displays folder with child categories and todos -->
+                        <HierarchicalDataTemplate DataType="{x:Type vm:CategoryNodeViewModel}"
+                                                  ItemsSource="{Binding AllItems}">
+                            <StackPanel Orientation="Horizontal" Margin="2">
+                                <TextBlock Text="📁" FontSize="12" Margin="0,0,4,0" Foreground="#FFA500"/>
+                                <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="Medium"/>
+                                <TextBlock Text="{Binding Todos.Count, StringFormat=' ({0})'}" 
+                                           FontSize="10" 
+                                           Foreground="Gray" 
+                                           Margin="4,0,0,0"/>
+                            </StackPanel>
+                        </HierarchicalDataTemplate>
+                        
+                        <!-- Todo template - displays todo item with checkbox -->
+                        <DataTemplate DataType="{x:Type vm:TodoItemViewModel}">
+                            <Border Padding="4,2" Background="Transparent" Cursor="Hand">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="📁" FontSize="12" Margin="0,0,6,0"/>
-                                    <TextBlock Text="{Binding DisplayPath}" FontSize="11"/>
+                                    <CheckBox IsChecked="{Binding IsCompleted}" 
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              Command="{Binding ToggleCompletionCommand}"/>
+                                    <TextBlock Text="{Binding Text}" 
+                                               FontSize="11"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="⭐" 
+                                               FontSize="10" 
+                                               Margin="8,0,0,0"
+                                               Visibility="{Binding IsFavorite, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>
-                    </ListBox.ItemTemplate>
-                    <ListBox.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel/>
-                        </ItemsPanelTemplate>
-                    </ListBox.ItemsPanel>
-                </ListBox>
+                    </TreeView.Resources>
+                    
+                    <TreeView.ItemContainerStyle>
+                        <Style TargetType="TreeViewItem">
+                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                            <Setter Property="Padding" Value="2,1"/>
+                        </Style>
+                    </TreeView.ItemContainerStyle>
+                </TreeView>
                 
                 <!-- Empty state message -->
                 <TextBlock Text="Right-click folders in note tree to add categories"
@@ -240,30 +265,6 @@
             </StackPanel>
         </Border>
         
-        <!-- Todo List -->
-        <ScrollViewer Grid.Row="2"
-                      VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl ItemsSource="{Binding TodoList.Todos}"
-                          ItemTemplate="{StaticResource TodoItemTemplate}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <VirtualizingStackPanel />
-                    </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
-        </ScrollViewer>
-        
-        <!-- Loading Overlay -->
-        <Border Grid.Row="2"
-                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
-                Opacity="0.8"
-                Visibility="{Binding TodoList.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <TextBlock Text="Loading..."
-                       FontSize="16"
-                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"/>
-        </Border>
+        <!-- Removed: Todos now live inside categories in the tree above -->
     </Grid>
 </UserControl>

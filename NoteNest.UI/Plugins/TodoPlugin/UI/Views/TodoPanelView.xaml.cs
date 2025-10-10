@@ -73,6 +73,36 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                 }
             }
         }
+        
+        private void CategoryTreeView_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Delete && sender is TreeView treeView)
+            {
+                // Get selected item
+                var selectedItem = treeView.SelectedItem;
+                
+                // Only delete categories, not todo items
+                if (selectedItem is CategoryNodeViewModel categoryNode)
+                {
+                    if (DataContext is TodoPanelViewModel panelVm)
+                    {
+                        // Get CategoryStore and delete
+                        var categoryStore = panelVm.CategoryTree.CategoryStore;
+                        if (categoryStore != null)
+                        {
+                            categoryStore.Delete(categoryNode.CategoryId);
+                            _logger.Info($"[TodoPanelView] Category removed from todo tree: {categoryNode.Name}");
+                            e.Handled = true;
+                        }
+                    }
+                }
+                else if (selectedItem is TodoItemViewModel)
+                {
+                    // Don't allow deleting todos with Delete key (use checkbox/context menu)
+                    _logger.Debug("[TodoPanelView] Delete key pressed on todo - ignoring (use checkbox to complete)");
+                }
+            }
+        }
 
         // Category selection - not needed for ListBox (SelectionChanged handled by binding)
 

@@ -18,7 +18,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
     public class CategoryTreeViewModel : ViewModelBase
     {
         private readonly ICategoryStore _categoryStore;
+        private readonly ITodoStore _todoStore;
         private readonly IAppLogger _logger;
+        
+        // Expose for UI operations (delete key, etc.)
+        public ICategoryStore CategoryStore => _categoryStore;
         
         private ObservableCollection<CategoryNodeViewModel> _categories;
         private CategoryNodeViewModel? _selectedCategory;
@@ -27,9 +31,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
         public CategoryTreeViewModel(
             ICategoryStore categoryStore,
+            ITodoStore todoStore,
             IAppLogger logger)
         {
             _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
+            _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _categories = new ObservableCollection<CategoryNodeViewModel>();
@@ -278,6 +284,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 nodeVm.Children.Add(childNode);
             }
             
+            // Load todos for this category
+            var categoryTodos = _todoStore.GetByCategory(category.Id);
+            if (categoryTodos != null && categoryTodos.Count > 0)
+            {
+                _logger.Debug($"[CategoryTree] Loading {categoryTodos.Count} todos for category: {category.Name}");
+                
+                foreach (var todo in categoryTodos)
+                {
+                    var todoVm = new TodoItemViewModel(todo, _todoStore, _logger);
+                    nodeVm.Todos.Add(todoVm);
+                }
+            }
+            
             return nodeVm;
         }
 
@@ -286,13 +305,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
     /// <summary>
     /// View model for category tree nodes.
+    /// Follows main app CategoryViewModel pattern with Children + Todos + AllItems composite.
     /// </summary>
     public class CategoryNodeViewModel : ViewModelBase
     {
         private string _name;
         private bool _isExpanded;
         private bool _isSelected;
-
         private string _displayPath;
         
         public CategoryNodeViewModel(Category category)
@@ -311,6 +330,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             }
             
             Children = new ObservableCollection<CategoryNodeViewModel>();
+            Todos = new ObservableCollection<TodoItemViewModel>();
+            AllItems = new ObservableCollection<object>();
+            
+            // Subscribe to collection changes to auto-update AllItems
+            Children.CollectionChanged += (s, e) => UpdateAllItems();
+            Todos.CollectionChanged += (s, e) => UpdateAllItems();
         }
 
         public Guid CategoryId { get; }
@@ -340,6 +365,34 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         }
 
         public ObservableCollection<CategoryNodeViewModel> Children { get; }
+        public ObservableCollection<TodoItemViewModel> Todos { get; }
+        public ObservableCollection<object> AllItems { get; } // Composite for TreeView binding
+        
+        /// <summary>
+        /// Combines Children and Todos into AllItems for TreeView display.
+        /// Follows main app CategoryViewModel.UpdateTreeItems() pattern.
+        /// </summary>
+        private void UpdateAllItems()
+        {
+            // Use regular Clear/Add since we don't have BatchUpdate on ObservableCollection
+            AllItems.Clear();
+            
+            // Add child categories first
+            foreach (var child in Children)
+            {
+                AllItems.Add(child);
+            }
+            
+            // Add todos second
+            foreach (var todo in Todos)
+            {
+                AllItems.Add(todo);
+            }
+        }
+        
+        public bool HasChildren => Children.Any();
+        public bool HasTodos => Todos.Any();
+        public bool HasContent => HasChildren || HasTodos;
     }
 
     /// <summary>

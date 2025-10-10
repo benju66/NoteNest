@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Domain.Trees;
 using NoteNest.Infrastructure.Database;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Parsing;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
@@ -141,6 +142,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         
         /// <summary>
         /// Process a note file: extract todos and reconcile with database.
+        /// ROBUST: Uses path-based lookup following DatabaseMetadataUpdateService pattern.
         /// </summary>
         private async Task ProcessNoteAsync(string noteId, string filePath)
         {
@@ -149,8 +151,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             // STEP 1: Read RTF file
             if (!File.Exists(filePath))
             {
-                _logger.Warning($"[TodoSync] File not found: {filePath} - marking todos as orphaned");
-                await HandleMissingFile(noteId);
+                _logger.Warning($"[TodoSync] File not found: {filePath}");
+                // Note: HandleMissingFile uses legacy noteId - skip for now
                 return;
             }
             
@@ -169,51 +171,73 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             var candidates = _parser.ExtractFromRtf(rtfContent);
             _logger.Debug($"[TodoSync] Found {candidates.Count} todo candidates in {Path.GetFileName(filePath)}");
             
-            // STEP 3: Reconcile with existing todos
-            if (Guid.TryParse(noteId, out var noteGuid))
+            if (candidates.Count == 0)
             {
-                await ReconcileTodosAsync(noteGuid, filePath, candidates);
+                _logger.Debug($"[TodoSync] No todos found in note - nothing to process");
+                return;
+            }
+            
+            // STEP 3: Get note from tree database by path (ROBUST - follows DatabaseMetadataUpdateService pattern)
+            var canonicalPath = filePath.ToLowerInvariant();
+            var noteNode = await _treeRepository.GetNodeByPathAsync(canonicalPath);
+            
+            if (noteNode == null)
+            {
+                _logger.Debug($"[TodoSync] Note not in tree DB yet: {Path.GetFileName(filePath)} - FileWatcher will add it soon");
+                _logger.Info($"[TodoSync] Creating {candidates.Count} uncategorized todos (will auto-categorize on next save)");
+                
+                // GRACEFUL DEGRADATION: Create todos without category
+                // When FileWatcher adds note to tree, next save will auto-categorize them
+                await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId: null);
+                return;
+            }
+            
+            // STEP 4: Validate node type
+            if (noteNode.NodeType != TreeNodeType.Note)
+            {
+                _logger.Warning($"[TodoSync] Path resolves to {noteNode.NodeType}, not a note: {filePath}");
+                return;
+            }
+            
+            // STEP 5: Auto-categorize (category = note's parent folder)
+            var categoryId = noteNode.ParentId;  // Can be null for root-level notes
+            
+            if (categoryId.HasValue)
+            {
+                _logger.Debug($"[TodoSync] Note is in category: {categoryId.Value} - todos will be auto-categorized");
+                
+                // Auto-add category to todo tree if user hasn't added it yet
+                await EnsureCategoryAddedAsync(categoryId.Value);
             }
             else
             {
-                _logger.Warning($"[TodoSync] Invalid NoteId format: {noteId}");
+                _logger.Debug($"[TodoSync] Note is at root level - todos will be uncategorized");
             }
+            
+            // STEP 6: Reconcile todos with database
+            await ReconcileTodosAsync(noteNode.Id, filePath, candidates, categoryId);
         }
         
         /// <summary>
         /// Reconcile extracted todos with existing todos in database.
-        /// NEW: Auto-categorizes todos based on note's parent category.
+        /// AUTO-CATEGORIZES: Assigns todos to category based on note's parent folder.
+        /// ROBUST: Handles missing categories gracefully (creates uncategorized todos).
         /// </summary>
-        private async Task ReconcileTodosAsync(Guid noteGuid, string filePath, List<TodoCandidate> candidates)
+        private async Task ReconcileTodosAsync(Guid noteGuid, string filePath, List<TodoCandidate> candidates, Guid? categoryId)
         {
             try
             {
-                // STEP 1: Get the source note to determine auto-category
-                Guid? noteCategoryId = null;
-                
-                try
+                // Category ID already determined in ProcessNoteAsync() - use it directly
+                if (categoryId.HasValue)
                 {
-                    // Query tree to find note's parent category
-                    var noteNode = await _treeRepository.GetNodeByIdAsync(noteGuid);
-                    if (noteNode != null && noteNode.ParentId.HasValue)
-                    {
-                        noteCategoryId = noteNode.ParentId.Value;
-                        _logger.Debug($"[TodoSync] Note is in category: {noteCategoryId} - todos will be auto-categorized");
-                        
-                        // Auto-add category to TodoPlugin if not already present
-                        await EnsureCategoryAddedAsync(noteCategoryId.Value);
-                    }
-                    else
-                    {
-                        _logger.Debug($"[TodoSync] Note has no parent category - todos will be uncategorized");
-                    }
+                    _logger.Debug($"[TodoSync] Auto-categorizing {candidates.Count} todos under category: {categoryId.Value}");
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.Warning($"[TodoSync] Failed to query note's category - todos will be uncategorized: {ex.Message}");
+                    _logger.Debug($"[TodoSync] Creating {candidates.Count} uncategorized todos");
                 }
                 
-                // STEP 2: Get existing todos for this note
+                // STEP 1: Get existing todos for this note
                 var existingTodos = await _repository.GetByNoteIdAsync(noteGuid);
                 
                 _logger.Debug($"[TodoSync] Reconciling {candidates.Count} candidates with {existingTodos.Count} existing todos");
@@ -230,7 +254,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                 
                 foreach (var candidate in newCandidates)
                 {
-                    await CreateTodoFromCandidate(candidate, noteGuid, filePath, noteCategoryId);
+                    await CreateTodoFromCandidate(candidate, noteGuid, filePath, categoryId);
                 }
                 
                 // PHASE 2: Find orphaned todos (in existing but not in candidates)
