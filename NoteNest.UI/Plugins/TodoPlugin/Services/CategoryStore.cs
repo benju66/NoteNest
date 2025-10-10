@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -35,6 +36,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         /// <summary>
         /// Initialize store by loading previously selected categories from database.
         /// Categories persist across app restarts via user_preferences table.
+        /// Validates that loaded categories still exist in the tree.
         /// </summary>
         public async Task InitializeAsync()
         {
@@ -53,13 +55,51 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 
                 if (savedCategories.Count > 0)
                 {
-                    using (_categories.BatchUpdate())
+                    _logger.Debug($"[CategoryStore] Loaded {savedCategories.Count} saved categories, validating...");
+                    
+                    // Validate that categories still exist in the tree
+                    var validCategories = new List<Category>();
+                    var removedCount = 0;
+                    
+                    foreach (var category in savedCategories)
                     {
-                        _categories.Clear();
-                        _categories.AddRange(savedCategories);
+                        // Check if category still exists in tree database
+                        var stillExists = await _syncService.IsCategoryInTreeAsync(category.Id);
+                        
+                        if (stillExists)
+                        {
+                            validCategories.Add(category);
+                        }
+                        else
+                        {
+                            _logger.Warning($"[CategoryStore] Removing orphaned category: {category.Name} (deleted from tree)");
+                            removedCount++;
+                        }
                     }
                     
-                    _logger.Info($"[CategoryStore] Restored {savedCategories.Count} categories from database");
+                    // Load only valid categories
+                    if (validCategories.Count > 0)
+                    {
+                        using (_categories.BatchUpdate())
+                        {
+                            _categories.Clear();
+                            _categories.AddRange(validCategories);
+                        }
+                        
+                        _logger.Info($"[CategoryStore] Restored {validCategories.Count} valid categories");
+                        
+                        if (removedCount > 0)
+                        {
+                            _logger.Info($"[CategoryStore] Removed {removedCount} orphaned categories");
+                            
+                            // Save cleaned list back to database
+                            await _persistenceService.SaveCategoriesAsync(validCategories);
+                        }
+                    }
+                    else
+                    {
+                        _logger.Info("[CategoryStore] No valid categories found after cleanup - starting empty");
+                    }
                 }
                 else
                 {

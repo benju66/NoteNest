@@ -496,8 +496,8 @@ namespace NoteNest.UI.ViewModels.Shell
             await CategoryTree.RefreshAsync();
             StatusMessage = "Category created";
             
-            // NEW: Refresh TodoPlugin categories to include the new category
-            await RefreshTodoCategoriesAsync();
+            // NOTE: Do NOT refresh TodoPlugin categories - they're manually selected by user
+            // Auto-refresh would replace user's selections with all categories from tree
         }
         
         private async void OnCategoryDeleted(string categoryId)
@@ -506,8 +506,7 @@ namespace NoteNest.UI.ViewModels.Shell
             await CategoryTree.RefreshAsync();
             StatusMessage = "Category deleted";
             
-            // NEW: Refresh TodoPlugin categories to reflect deletion
-            await RefreshTodoCategoriesAsync();
+            // NOTE: Do NOT refresh TodoPlugin categories - manual selection mode
         }
         
         private async void OnCategoryRenamed(string categoryId, string newName)
@@ -516,30 +515,8 @@ namespace NoteNest.UI.ViewModels.Shell
             await CategoryTree.RefreshAsync();
             StatusMessage = $"Category renamed to: {newName}";
             
-            // NEW: Refresh TodoPlugin categories to reflect the new name
-            await RefreshTodoCategoriesAsync();
-        }
-        
-        /// <summary>
-        /// Refresh TodoPlugin's CategoryStore when tree structure changes.
-        /// Follows event-driven pattern to keep todo categories in sync.
-        /// </summary>
-        private async Task RefreshTodoCategoriesAsync()
-        {
-            try
-            {
-                var categoryStore = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Services.ICategoryStore>();
-                if (categoryStore != null)
-                {
-                    await categoryStore.RefreshAsync();
-                    _logger.Debug("[MainShell] Refreshed todo categories after tree change");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "[MainShell] Failed to refresh todo categories");
-                // Don't rethrow - this is a non-critical background operation
-            }
+            // TODO: Update category name in TodoPlugin if user has it selected
+            // For now: User can re-add if they want the new name
         }
         
         private async void OnCategoryMoved(string categoryId, string oldParentId, string newParentId)
