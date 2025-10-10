@@ -37,6 +37,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             
             InitializeCommands();
             InitializeSmartLists();
+            
+            // Subscribe to CategoryStore changes to refresh tree when categories added
+            _categoryStore.Categories.CollectionChanged += (s, e) =>
+            {
+                _logger.Debug("[CategoryTree] CategoryStore changed, refreshing tree");
+                _ = LoadCategoriesAsync();
+            };
+            
             _ = LoadCategoriesAsync();
         }
 
@@ -78,6 +86,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             {
                 if (SetProperty(ref _selectedSmartList, value))
                 {
+                    // Update IsSelected state for all smart lists
+                    foreach (var smartList in SmartLists)
+                    {
+                        smartList.IsSelected = (smartList == value);
+                    }
+                    
                     if (value != null)
                     {
                         // Clear category selection
@@ -185,6 +199,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             SmartLists.Add(new SmartListNodeViewModel("All", SmartListType.All, "\uE8FD")); // List icon
             SmartLists.Add(new SmartListNodeViewModel("Completed", SmartListType.Completed, "\uE73E")); // Checkmark icon
             
+            // Wire click events for selection
+            foreach (var smartList in SmartLists)
+            {
+                var list = smartList; // Capture for closure
+                smartList.SelectCommand = new Core.Commands.RelayCommand(() => SelectedSmartList = list);
+            }
+            
             // Select Today by default
             SelectedSmartList = SmartLists.FirstOrDefault();
         }
@@ -286,6 +307,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public string Name { get; }
         public SmartListType ListType { get; }
         public string IconGlyph { get; }
+        public ICommand SelectCommand { get; set; } // Set after construction
 
         public bool IsSelected
         {

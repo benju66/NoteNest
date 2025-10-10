@@ -12,7 +12,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
     /// </summary>
     public partial class TodoPanelView : UserControl
     {
-        public TodoPanelView(TodoListViewModel viewModel)
+        public TodoPanelView(TodoPanelViewModel viewModel)
         {
             try
             {
@@ -22,7 +22,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                 System.Diagnostics.Debug.WriteLine("🎨 InitializeComponent completed");
                 
                 DataContext = viewModel;
-                System.Diagnostics.Debug.WriteLine($"🎨 DataContext set: {viewModel != null}");
+                System.Diagnostics.Debug.WriteLine($"🎨 DataContext set to TodoPanelViewModel: {viewModel != null}");
             }
             catch (Exception ex)
             {
@@ -36,11 +36,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
         {
             if (e.Key == Key.Enter)
             {
-                if (DataContext is TodoListViewModel viewModel && viewModel.QuickAddCommand.CanExecute(null))
+                if (DataContext is TodoPanelViewModel panelVm && panelVm.TodoList.QuickAddCommand.CanExecute(null))
                 {
-                    viewModel.QuickAddCommand.Execute(null);
+                    panelVm.TodoList.QuickAddCommand.Execute(null);
                     e.Handled = true;
                 }
+            }
+        }
+
+        private void CategoryTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (DataContext is TodoPanelViewModel panelVm && e.NewValue is CategoryNodeViewModel categoryNode)
+            {
+                panelVm.CategoryTree.SelectedCategory = categoryNode;
             }
         }
 

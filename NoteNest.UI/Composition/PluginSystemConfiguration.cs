@@ -84,6 +84,7 @@ namespace NoteNest.UI.Composition
             // Register UI services
             services.AddTransient<TodoListViewModel>();
             services.AddTransient<CategoryTreeViewModel>();
+            services.AddTransient<TodoPanelViewModel>(); // Composite ViewModel
             services.AddTransient<TodoPanelView>();
             
             return services;

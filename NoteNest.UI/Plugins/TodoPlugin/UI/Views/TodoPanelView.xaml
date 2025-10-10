@@ -152,9 +152,10 @@
     
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/> <!-- Quick Add -->
+            <RowDefinition Height="200"/> <!-- Navigation: Smart Lists + Categories -->
+            <RowDefinition Height="Auto"/> <!-- Filter -->
+            <RowDefinition Height="*"/> <!-- Todo List -->
         </Grid.RowDefinitions>
         
         <!-- Quick Add Bar -->
@@ -169,33 +170,143 @@
                 
                 <TextBox x:Name="QuickAddTextBox"
                          Grid.Column="0"
-                         Text="{Binding QuickAddText, UpdateSourceTrigger=PropertyChanged}"
+                         Text="{Binding TodoList.QuickAddText, UpdateSourceTrigger=PropertyChanged}"
                          KeyDown="QuickAddTextBox_KeyDown"/>
                 
                 <Button Grid.Column="1"
                         Margin="8,0,0,0"
-                        Command="{Binding QuickAddCommand}"
+                        Command="{Binding TodoList.QuickAddCommand}"
                         IsDefault="True"
                         Content="Add"/>
             </Grid>
         </Border>
         
-        <!-- Filter Bar -->
+        <!-- Navigation Panel: Smart Lists + Categories -->
         <Border Grid.Row="1"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                BorderBrush="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+                BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/> <!-- Smart Lists Section -->
+                    <RowDefinition Height="*"/> <!-- Categories Section -->
+                </Grid.RowDefinitions>
+                
+                <!-- Smart Lists Section -->
+                <StackPanel Grid.Row="0">
+                    <TextBlock Text="SMART LISTS" 
+                               FontSize="11" 
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               Margin="12,8,12,4"/>
+                    <ItemsControl ItemsSource="{Binding CategoryTree.SmartLists}"
+                                  Margin="0,0,0,8">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="Transparent"
+                                        Cursor="Hand"
+                                        Padding="12,4">
+                                    <Border.InputBindings>
+                                        <MouseBinding MouseAction="LeftClick"
+                                                      Command="{Binding SelectCommand}"/>
+                                    </Border.InputBindings>
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                    <Setter Property="Background" 
+                                                            Value="{DynamicResource SystemControlHighlightListLowBrush}"/>
+                                                </DataTrigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" 
+                                                            Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding IconGlyph}"
+                                                   FontFamily="Segoe MDL2 Assets"
+                                                   FontSize="14"
+                                                   Margin="0,0,8,0"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                
+                <!-- Categories Section -->
+                <StackPanel Grid.Row="1">
+                    <TextBlock Text="CATEGORIES" 
+                               FontSize="11" 
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               Margin="12,4,12,4"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  MaxHeight="100">
+                        <TreeView ItemsSource="{Binding CategoryTree.Categories}"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  x:Name="CategoryTreeView"
+                                  SelectedItemChanged="CategoryTreeView_SelectedItemChanged">
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem">
+                                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                </Style>
+                            </TreeView.ItemContainerStyle>
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                    <StackPanel Orientation="Horizontal" Margin="2">
+                                        <TextBlock Text="📁" Margin="0,0,4,0" FontSize="12"/>
+                                        <TextBlock Text="{Binding Name}"/>
+                                    </StackPanel>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </ScrollViewer>
+                    <!-- Empty state message -->
+                    <TextBlock Text="Right-click folders in note tree to add categories"
+                               FontSize="11"
+                               FontStyle="Italic"
+                               Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                               Margin="12,4"
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CategoryTree.Categories.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+        </Border>
+        
+        <!-- Filter Bar -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                 Padding="12,4">
-            <TextBox Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Delay=300}">
+            <TextBox Text="{Binding TodoList.FilterText, UpdateSourceTrigger=PropertyChanged, Delay=300}">
                 <TextBox.InputBindings>
-                    <KeyBinding Key="Escape" Command="{Binding ClearFilterCommand}"/>
+                    <KeyBinding Key="Escape" Command="{Binding TodoList.ClearFilterCommand}"/>
                 </TextBox.InputBindings>
             </TextBox>
         </Border>
         
         <!-- Todo List -->
-        <ScrollViewer Grid.Row="2"
+        <ScrollViewer Grid.Row="3"
                       VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl ItemsSource="{Binding Todos}"
+            <ItemsControl ItemsSource="{Binding TodoList.Todos}"
                           ItemTemplate="{StaticResource TodoItemTemplate}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -206,10 +317,10 @@
         </ScrollViewer>
         
         <!-- Loading Overlay -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                 Opacity="0.8"
-                Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+                Visibility="{Binding TodoList.IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
             <TextBlock Text="Loading..."
                        FontSize="16"
                        Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"

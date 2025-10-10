@@ -11,6 +11,7 @@ using NoteNest.Infrastructure.Database;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Parsing;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
+using NoteNest.UI.Plugins.TodoPlugin.Services;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
 {
@@ -30,6 +31,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         private readonly ITodoRepository _repository;
         private readonly BracketTodoParser _parser;
         private readonly ITreeDatabaseRepository _treeRepository;
+        private readonly ICategoryStore _categoryStore;
+        private readonly ICategorySyncService _categorySyncService;
         private readonly IAppLogger _logger;
         private readonly Timer _debounceTimer;
         private string? _pendingNoteId;
@@ -41,12 +44,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             ITodoRepository repository,
             BracketTodoParser parser,
             ITreeDatabaseRepository treeRepository,
+            ICategoryStore categoryStore,
+            ICategorySyncService categorySyncService,
             IAppLogger logger)
         {
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _parser = parser ?? throw new ArgumentNullException(nameof(parser));
             _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
+            _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
+            _categorySyncService = categorySyncService ?? throw new ArgumentNullException(nameof(categorySyncService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             // Debounce timer to avoid processing every keystroke during auto-save
@@ -192,6 +199,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                     {
                         noteCategoryId = noteNode.ParentId.Value;
                         _logger.Debug($"[TodoSync] Note is in category: {noteCategoryId} - todos will be auto-categorized");
+                        
+                        // Auto-add category to TodoPlugin if not already present
+                        await EnsureCategoryAddedAsync(noteCategoryId.Value);
                     }
                     else
                     {
@@ -340,6 +350,41 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             var keyText = todo.Text.Length > 50 ? todo.Text.Substring(0, 50) : todo.Text;
             var lineNumber = todo.SourceLineNumber ?? 0;
             return $"{lineNumber}:{keyText.GetHashCode():X8}";
+        }
+        
+        /// <summary>
+        /// Ensure category is added to CategoryStore for RTF-extracted todos.
+        /// This automatically makes the category visible in TodoPlugin when todos are extracted.
+        /// </summary>
+        private async Task EnsureCategoryAddedAsync(Guid categoryId)
+        {
+            try
+            {
+                // Check if category already in store
+                var existing = _categoryStore.GetById(categoryId);
+                if (existing != null)
+                {
+                    _logger.Debug($"[TodoSync] Category already in store: {categoryId}");
+                    return;
+                }
+                
+                // Get category from tree
+                var category = await _categorySyncService.GetCategoryByIdAsync(categoryId);
+                if (category == null)
+                {
+                    _logger.Warning($"[TodoSync] Category not found in tree: {categoryId}");
+                    return;
+                }
+                
+                // Auto-add to CategoryStore
+                _categoryStore.Add(category);
+                _logger.Info($"[TodoSync] ✅ Auto-added category to todo panel: {category.Name} (for RTF todos)");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoSync] Failed to auto-add category: {categoryId}");
+                // Don't throw - this is a nice-to-have feature, not critical
+            }
         }
         
         public void Dispose()

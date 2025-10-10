@@ -30,8 +30,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         }
         
         /// <summary>
-        /// Initialize by loading categories from tree database.
-        /// Uses SmartObservableCollection.BatchUpdate() to eliminate UI flickering.
+        /// Initialize store in empty state for manual category selection.
+        /// Categories are added only when user clicks "Add to Todo Categories" in context menu.
         /// Call this once during plugin startup.
         /// </summary>
         public async Task InitializeAsync()
@@ -44,26 +44,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 
             try
             {
-                _logger.Info("[CategoryStore] Loading categories from note tree...");
-                
-                var categories = await _syncService.GetAllCategoriesAsync();
-                
-                // Use batch update for smooth UI transition (no flickering)
-                using (_categories.BatchUpdate())
-                {
-                    _categories.Clear();
-                    _categories.AddRange(categories);
-                }
-                
+                // Start empty - categories added manually via context menu
+                // This provides user control over which folders appear as todo categories
                 _isInitialized = true;
-                _logger.Info($"[CategoryStore] Loaded {categories.Count} categories from tree");
+                _logger.Info("[CategoryStore] Initialized empty - manual category selection mode");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[CategoryStore] Failed to load categories - starting with empty collection");
-                // Graceful degradation: mark as initialized anyway
+                _logger.Error(ex, "[CategoryStore] Failed to initialize");
                 _isInitialized = true;
             }
+            
+            await Task.CompletedTask;
         }
         
         /// <summary>
