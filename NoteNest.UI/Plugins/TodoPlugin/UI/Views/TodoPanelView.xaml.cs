@@ -43,25 +43,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                             _logger.Info($"🎨 [TodoPanelView] - Category: DisplayPath='{item.DisplayPath}', Name='{item.Name}'");
                         }
                         
-                        // NUCLEAR OPTION: Show dialog with category info
-                        try
-                        {
-                            var categories = viewModel.CategoryTree.Categories;
-                            var categoryList = new System.Text.StringBuilder();
-                            foreach (var cat in categories)
-                            {
-                                categoryList.AppendLine(cat.DisplayPath);
-                            }
-                            
-                            System.Windows.MessageBox.Show(
-                                $"CATEGORIES COLLECTION CHANGED!\n\nCount: {categories.Count}\n\nCategories:\n{categoryList}",
-                                "Category Debug",
-                                System.Windows.MessageBoxButton.OK);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Error(ex, "Failed to show debug dialog");
-                        }
+                        // Removed popup - was for diagnostics only
                     };
                     
                     _logger.Info("🎨 [TodoPanelView] Subscribed to Categories.CollectionChanged");
