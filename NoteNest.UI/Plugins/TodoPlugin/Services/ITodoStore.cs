@@ -17,5 +17,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         Task AddAsync(TodoItem todo);
         Task UpdateAsync(TodoItem todo);
         Task DeleteAsync(Guid id);
+        
+        /// <summary>
+        /// Ensures the store is initialized from database (lazy, thread-safe).
+        /// Safe to call multiple times. Waits if initialization is in progress.
+        /// </summary>
+        Task EnsureInitializedAsync();
     }
 }

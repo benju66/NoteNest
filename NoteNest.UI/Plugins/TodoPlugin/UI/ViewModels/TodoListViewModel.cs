@@ -275,6 +275,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 _logger.Info("📋 LoadTodosAsync started");
                 IsLoading = true;
                 
+                // CRITICAL: Ensure TodoStore initialized before querying (lazy, thread-safe)
+                await _todoStore.EnsureInitializedAsync();
+                
                 ObservableCollection<TodoItem> todos;
                 
                 if (_selectedSmartList.HasValue)

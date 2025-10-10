@@ -1,111 +1,117 @@
-# 🧪 Persistence Test - Domain Layer Implementation
+# 🧪 TEST PERSISTENCE - QUICK VERIFICATION
 
-**Status:** Core infrastructure complete, ready to test  
-**Changes:** TodoItemDto + GuidTypeHandler + Updated Repository methods
-
----
-
-## ✅ WHAT'S BEEN IMPLEMENTED
-
-### **Domain Layer:**
-- ✅ AggregateRoot, ValueObject, Result base classes
-- ✅ TodoId, TodoText, DueDate value objects
-- ✅ TodoAggregate with business logic
-- ✅ Domain events (TodoCreated, TodoCompleted, etc.)
-
-### **Infrastructure:**
-- ✅ TodoItemDto (database DTO with TEXT/INTEGER types)
-- ✅ GuidTypeHandler (Dapper TEXT → Guid conversion)
-- ✅ TodoMapper (converts between UI/Domain/Database)
-- ✅ Updated TodoRepository methods:
-  - GetAllAsync (uses DTO → Aggregate → UI model)
-  - GetByIdAsync (uses DTO → Aggregate → UI model)
-  - InsertAsync (uses UI → Aggregate → DTO)
-  - UpdateAsync (uses UI → Aggregate → DTO)
-- ✅ Type handlers registered in MainShellViewModel
+**Goal:** Verify todos appear on first load AND persist across restarts
 
 ---
 
-## 🎯 TEST INSTRUCTIONS
+## ✅ **PRIMARY TEST (60 seconds)**
 
-### **Step 1: Build & Run**
-```powershell
-# Build succeeded ✅
-dotnet build
+### **Step 1: Verify Database Has Todos**
+You already confirmed this - the database has **8 active todos**:
+- ✅ test task (Projects)
+- ✅ test task note test (Founders Ridge)
+- ✅ RFI 54 Unit... (OP III)
+- ✅ 5 more todos
 
-# Launch app
-.\Launch-NoteNest.bat
+### **Step 2: Close App Completely**
+1. **Close NoteNest** (click X or Alt+F4)
+2. **Verify it's closed** (check Task Manager if needed)
+
+### **Step 3: Reopen App**
+1. **Launch NoteNest** (from Start menu or desktop)
+2. **Wait for app to fully load** (~2 seconds)
+
+### **Step 4: Open Todo Manager (CRITICAL MOMENT)**
+1. **Press Ctrl+B** OR click Todo Manager icon
+2. **WATCH THE PANEL LOAD** (don't blink!)
+
+---
+
+## 🎯 **EXPECTED RESULTS**
+
+### ✅ **SUCCESS:**
+- Todo panel opens
+- You see categories: Projects, Founders Ridge, etc.
+- **TODOS ARE VISIBLE** under their categories:
+  - Projects (1)  ← Expandable, shows "test task"
+  - Founders Ridge (2)  ← Shows "test task note test"
+  - OP III (1)  ← Shows "RFI 54..."
+- **NO FLICKER** (smooth load)
+- **NO DELAY** (appears within 200ms)
+
+### ❌ **FAILURE:**
+- Categories appear but show (0) counts
+- No todos visible
+- Need to close/reopen panel to see todos
+
+---
+
+## 📊 **WHAT TO CHECK IN LOGS**
+
+Open: `%LocalAppData%\NoteNest\Logs\notenest-20251010.log`
+
+Search for this sequence (should appear when you open panel):
+```
+[TodoStore] Starting lazy initialization...
+[TodoStore] Initializing from database...
+[TodoStore] Loaded 8 active todos from database
+[CategoryTree] LoadCategoriesAsync started
+[CategoryTree] Loading 1 todos for category: Projects
+[CategoryTree] Loading 2 todos for category: Founders Ridge
 ```
 
-### **Step 2: Add Todos**
-1. Click Todo icon in activity bar
-2. Add 3 todos:
-   - "Test 1 - Persistence check"
-   - "Test 2 - Domain model"
-   - "Test 3 - DTO mapping"
-3. Verify they appear in list ✅
-
-### **Step 3: Restart & Verify**
-1. Close NoteNest
-2. Relaunch app
-3. Open Todo panel
-4. **CRITICAL:** Todos should now persist! ✅
-
 ---
 
-## 📊 EXPECTED RESULTS
+## 🔍 **IF IT WORKS**
 
-### **Logs Should Show:**
+You should see todos **organized in a tree structure:**
+
 ```
-[TodoPlugin] Registered Dapper type handlers for TEXT -> Guid conversion
-[TodoPlugin] Database initialized successfully
-[TodoStore] Loaded 3 active todos from database  ← Should be 3, not 0!
+📁 Projects (1)
+   └─ ☐ test task
+
+📁 Founders Ridge (2)
+   ├─ ☐ test task
+   └─ ☐ test task note test
+
+📁 25-117 - OP III (1)
+   └─ ☐ RFI 54 Unit Patio Privacy screens
+
+... etc
 ```
 
-### **UI Should Show:**
-- ✅ 3 todos visible in panel
-- ✅ Text preserved
-- ✅ Checkboxes work
-- ✅ No errors in logs
+**If you see this, the fix is 100% successful!** ✅
 
 ---
 
-## 🔍 IF IT WORKS
+## 🧪 **BONUS TEST: RTF Auto-Categorization**
 
-**This means:**
-- ✅ DTO mapping works (TEXT → string → Guid)
-- ✅ Type handlers work
-- ✅ Aggregate → DTO → Aggregate round-trip works
-- ✅ **PERSISTENCE BUG IS FIXED!** 🎉
+While the app is open:
 
-**Next Steps:**
-- Complete remaining query methods
-- Add application layer (commands/handlers) - optional for now
-- Clean up old code
+1. **Create new note** in Projects folder
+2. **Type:** `[persistence test task]`
+3. **Save** (Ctrl+S)
+4. **Wait 2 seconds**
+5. **Check Todo Manager:** Should see "persistence test task" under Projects
+6. **Close app, reopen, check again:** Task should still be there
 
----
-
-## ❌ IF IT FAILS
-
-**Check logs for:**
-- InvalidCastException (type handler not working)
-- Parse errors (DTO mapping issue)
-- Empty list returned (query issue)
-
-**Debugging:**
-1. Check `%LocalAppData%\NoteNest\.plugins\NoteNest.TodoPlugin\todos.db`
-2. Verify todos are in database
-3. Check for exceptions in logs
+**This verifies both instant creation AND persistence!**
 
 ---
 
-## 🎯 THIS IS THE CRITICAL TEST
+## 💡 **TROUBLESHOOTING**
 
-**If persistence works now, we've solved the original bug with:**
-- Clean architecture ✅
-- Proper domain model ✅
-- Type-safe mapping ✅
-- Zero UI changes ✅
+### If Todos Don't Appear:
+1. Check logs for errors during initialization
+2. Verify database file exists: `%LocalAppData%\NoteNest\.plugins\NoteNest.TodoPlugin\todos.db`
+3. Check if "Starting lazy initialization" appears in logs
+4. Report back with log excerpt
 
-**Test it now!** 🚀
+### If Performance is Slow (> 500ms):
+1. Check database file size
+2. Check if SSD vs HDD
+3. Report timing from logs
 
+---
+
+**Ready to test!** The app is running now. Just close it, reopen it, and click Todo Manager! 🚀

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Collections;
@@ -12,13 +13,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
     /// <summary>
     /// Todo store with database persistence.
     /// Maintains ObservableCollection for UI binding while persisting to SQLite.
+    /// Uses lazy initialization pattern for optimal performance and thread safety.
     /// </summary>
-    public class TodoStore : ITodoStore
+    public class TodoStore : ITodoStore, IDisposable
     {
         private readonly ITodoRepository _repository;
         private readonly IAppLogger _logger;
         private readonly SmartObservableCollection<TodoItem> _todos;
         private bool _isInitialized;
+        
+        // Lazy initialization tracking (thread-safe, matches TreeDatabaseRepository pattern)
+        private Task? _initializationTask;
+        private readonly SemaphoreSlim _initLock = new(1, 1);
 
         public TodoStore(ITodoRepository repository, IAppLogger logger)
         {
@@ -57,6 +63,40 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 // Don't throw - graceful degradation with empty collection
                 _isInitialized = true;  // Mark as initialized anyway
             }
+        }
+        
+        /// <summary>
+        /// Ensures TodoStore is initialized exactly once, thread-safely.
+        /// Safe to call multiple times. Waits if initialization in progress.
+        /// Enterprise pattern: Lazy initialization with double-check locking.
+        /// </summary>
+        public async Task EnsureInitializedAsync()
+        {
+            // Fast path: Already initialized (99% of calls after first load)
+            if (_isInitialized)
+                return;
+            
+            // Slow path: Need to initialize (only on first access)
+            if (_initializationTask == null)
+            {
+                await _initLock.WaitAsync();
+                try
+                {
+                    // Double-check after acquiring lock (handles race conditions)
+                    if (_initializationTask == null)
+                    {
+                        _logger.Debug("[TodoStore] Starting lazy initialization...");
+                        _initializationTask = InitializeAsync();
+                    }
+                }
+                finally
+                {
+                    _initLock.Release();
+                }
+            }
+            
+            // Wait for initialization to complete (if in progress)
+            await _initializationTask;
         }
 
         public ObservableCollection<TodoItem> AllTodos => _todos;
@@ -272,6 +312,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             {
                 _logger.Error(ex, "[TodoStore] Failed to load completed todos");
             }
+        }
+        
+        /// <summary>
+        /// Dispose resources (SemaphoreSlim must be disposed to prevent handle leaks).
+        /// </summary>
+        public void Dispose()
+        {
+            _initLock?.Dispose();
         }
     }
 }

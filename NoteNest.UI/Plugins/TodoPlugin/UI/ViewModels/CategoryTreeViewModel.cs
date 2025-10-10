@@ -224,6 +224,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             try
             {
+                // CRITICAL: Ensure TodoStore initialized before querying (lazy, thread-safe)
+                await _todoStore.EnsureInitializedAsync();
+                
                 _logger.Info("[CategoryTree] LoadCategoriesAsync started");
                 
                 // Get all categories from store
