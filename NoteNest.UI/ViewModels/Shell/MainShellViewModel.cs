@@ -253,6 +253,25 @@ namespace NoteNest.UI.ViewModels.Shell
                     _logger.Info("[TodoPlugin] Database initialized successfully");
                 }
                 
+                // NEW: Initialize CategoryStore (load categories from tree)
+                var categoryStore = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Services.ICategoryStore>();
+                if (categoryStore != null)
+                {
+                    await categoryStore.InitializeAsync();
+                    _logger.Info("[TodoPlugin] CategoryStore initialized from tree");
+                    
+                    // Run cleanup to handle any orphaned categories from previous sessions
+                    var cleanupService = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Services.ICategoryCleanupService>();
+                    if (cleanupService != null)
+                    {
+                        var cleanedCount = await cleanupService.CleanupOrphanedCategoriesAsync();
+                        if (cleanedCount > 0)
+                        {
+                            _logger.Info($"[TodoPlugin] Cleaned up {cleanedCount} todos from orphaned categories");
+                        }
+                    }
+                }
+                
                 // Initialize TodoStore (load todos from database)
                 var todoStore = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Services.ITodoStore>();
                 if (todoStore is NoteNest.UI.Plugins.TodoPlugin.Services.TodoStore store)
@@ -476,6 +495,9 @@ namespace NoteNest.UI.ViewModels.Shell
             // Refresh tree to show new category
             await CategoryTree.RefreshAsync();
             StatusMessage = "Category created";
+            
+            // NEW: Refresh TodoPlugin categories to include the new category
+            await RefreshTodoCategoriesAsync();
         }
         
         private async void OnCategoryDeleted(string categoryId)
@@ -483,6 +505,9 @@ namespace NoteNest.UI.ViewModels.Shell
             // Refresh tree to reflect deletion
             await CategoryTree.RefreshAsync();
             StatusMessage = "Category deleted";
+            
+            // NEW: Refresh TodoPlugin categories to reflect deletion
+            await RefreshTodoCategoriesAsync();
         }
         
         private async void OnCategoryRenamed(string categoryId, string newName)
@@ -490,6 +515,31 @@ namespace NoteNest.UI.ViewModels.Shell
             // Refresh tree to reflect renamed category
             await CategoryTree.RefreshAsync();
             StatusMessage = $"Category renamed to: {newName}";
+            
+            // NEW: Refresh TodoPlugin categories to reflect the new name
+            await RefreshTodoCategoriesAsync();
+        }
+        
+        /// <summary>
+        /// Refresh TodoPlugin's CategoryStore when tree structure changes.
+        /// Follows event-driven pattern to keep todo categories in sync.
+        /// </summary>
+        private async Task RefreshTodoCategoriesAsync()
+        {
+            try
+            {
+                var categoryStore = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Services.ICategoryStore>();
+                if (categoryStore != null)
+                {
+                    await categoryStore.RefreshAsync();
+                    _logger.Debug("[MainShell] Refreshed todo categories after tree change");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[MainShell] Failed to refresh todo categories");
+                // Don't rethrow - this is a non-critical background operation
+            }
         }
         
         private async void OnCategoryMoved(string categoryId, string oldParentId, string newParentId)

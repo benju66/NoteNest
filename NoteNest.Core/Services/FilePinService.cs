@@ -29,7 +29,7 @@ namespace NoteNest.Core.Services
         private Dictionary<string, PinEntry> _pinEntries = new(StringComparer.OrdinalIgnoreCase);
         private bool _initialized = false;
         
-        public event EventHandler<PinChangedEventArgs> PinChanged;
+        public event EventHandler<PinChangedEventArgs>? PinChanged;
         
         public FilePinService(IFileSystemProvider fileSystem, ConfigurationService config, IAppLogger logger)
         {

@@ -78,7 +78,7 @@ namespace NoteNest.Core.Services.Search
         /// <summary>
         /// Initialize database with schema and optimizations
         /// </summary>
-        public static async Task InitializeDatabaseAsync(string databasePath, IAppLogger logger = null)
+        public static async Task InitializeDatabaseAsync(string databasePath, IAppLogger? logger = null)
         {
             try
             {
@@ -155,7 +155,7 @@ namespace NoteNest.Core.Services.Search
         /// <summary>
         /// Check if database exists and has correct schema
         /// </summary>
-        public static async Task<bool> ValidateDatabaseAsync(string databasePath, IAppLogger logger = null)
+        public static async Task<bool> ValidateDatabaseAsync(string databasePath, IAppLogger? logger = null)
         {
             try
             {

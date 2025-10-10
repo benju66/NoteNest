@@ -17,15 +17,15 @@ namespace NoteNest.Core.Services
         private readonly ICategoryManagementService _categoryService;
         private readonly INoteOperationsService _noteOperationsService;
         private readonly IAppLogger _logger;
-        private readonly ITreeStructureValidationService _treeStructureValidationService;
-        private readonly ITreeCacheService _cacheService;
+        private readonly ITreeStructureValidationService? _treeStructureValidationService;
+        private readonly ITreeCacheService? _cacheService;
 
         public TreeOperationService(
             ICategoryManagementService categoryService,
             INoteOperationsService noteOperationsService,
             IAppLogger logger,
-            ITreeStructureValidationService treeStructureValidationService = null,
-            ITreeCacheService cacheService = null)
+            ITreeStructureValidationService? treeStructureValidationService = null,
+            ITreeCacheService? cacheService = null)
         {
             _categoryService = categoryService ?? throw new ArgumentNullException(nameof(categoryService));
             _noteOperationsService = noteOperationsService ?? throw new ArgumentNullException(nameof(noteOperationsService));

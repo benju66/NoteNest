@@ -69,7 +69,7 @@ namespace NoteNest.Core.Interfaces.Services
         public string? ErrorMessage { get; set; }
         public string? StatusMessage { get; set; }
         
-        public static TreeOperationResult<T> CreateSuccess(T data, string statusMessage = null)
+        public static TreeOperationResult<T> CreateSuccess(T data, string? statusMessage = null)
         {
             return new TreeOperationResult<T>
             {

@@ -23,7 +23,7 @@ namespace NoteNest.Core.Services
         {
             if (eventData == null) return;
 
-            List<Delegate> handlersToInvoke = null;
+            List<Delegate>? handlersToInvoke = null;
 
             _lock.EnterReadLock();
             try

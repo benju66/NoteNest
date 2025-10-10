@@ -38,7 +38,7 @@ namespace NoteNest.Core.Services
             return null;
         }
 
-        public string ResolveNotesPath(StorageMode mode, string customPath = null)
+        public string ResolveNotesPath(StorageMode mode, string? customPath = null)
         {
             switch (mode)
             {

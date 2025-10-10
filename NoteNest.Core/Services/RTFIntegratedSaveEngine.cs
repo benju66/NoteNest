@@ -70,7 +70,7 @@ namespace NoteNest.Core.Services
         public async Task<SaveResult> SaveRTFContentAsync(
             string noteId,
             string rtfContent,
-            string title = null,
+            string? title = null,
             SaveType saveType = SaveType.Manual)
         {
             if (string.IsNullOrEmpty(noteId) || string.IsNullOrEmpty(rtfContent))
@@ -218,7 +218,7 @@ namespace NoteNest.Core.Services
         public async Task<SaveResult> SaveFromStringAsync(
             string noteId,
             string content,
-            string title = null,
+            string? title = null,
             SaveType saveType = SaveType.Manual,
             bool isRtf = true)
         {

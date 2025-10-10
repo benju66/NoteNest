@@ -35,7 +35,7 @@ namespace NoteNest.Core.Services
         public async Task<SettingsChangeResult> ApplySettingsAsync(
             AppSettings newSettings, 
             AppSettings originalSettings,
-            IProgress<StorageTransactionProgress> progress = null)
+            IProgress<StorageTransactionProgress>? progress = null)
         {
             try
             {
@@ -301,7 +301,7 @@ namespace NoteNest.Core.Services
         Task<SettingsChangeResult> ApplySettingsAsync(
             AppSettings newSettings, 
             AppSettings originalSettings,
-            IProgress<StorageTransactionProgress> progress = null);
+            IProgress<StorageTransactionProgress>? progress = null);
     }
 
     /// <summary>
@@ -311,7 +311,7 @@ namespace NoteNest.Core.Services
     {
         public bool Success { get; set; }
         public string ErrorMessage { get; set; } = string.Empty;
-        public Exception Exception { get; set; }
+        public Exception? Exception { get; set; }
         public string NewStoragePath { get; set; } = string.Empty;
         public string OldStoragePath { get; set; } = string.Empty;
         public string TransactionId { get; set; } = string.Empty;

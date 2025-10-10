@@ -71,6 +71,12 @@ namespace NoteNest.UI.Composition
             // Register plugin infrastructure
             services.AddSingleton<TodoPlugin>();
             
+            // NEW: Category sync service (syncs with main app's tree database)
+            services.AddSingleton<ICategorySyncService, CategorySyncService>();
+            
+            // NEW: Category cleanup service (orphaned category handling)
+            services.AddSingleton<ICategoryCleanupService, CategoryCleanupService>();
+            
             // Register stores (now with database backing)
             services.AddSingleton<ITodoStore, TodoStore>();
             services.AddSingleton<ICategoryStore, CategoryStore>();

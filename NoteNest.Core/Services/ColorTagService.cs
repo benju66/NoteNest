@@ -54,7 +54,7 @@ namespace NoteNest.Core.Services
             }
         }
 
-        public string GetCategoryColor(string categoryId)
+        public string? GetCategoryColor(string categoryId)
         {
             EnsureLoaded();
             lock (_lock)
@@ -76,7 +76,7 @@ namespace NoteNest.Core.Services
             }
         }
 
-        public string GetNoteColor(string absolutePath)
+        public string? GetNoteColor(string absolutePath)
         {
             EnsureLoaded();
             var rel = PathService.ToRelativePath(PathService.NormalizeAbsolutePath(absolutePath) ?? absolutePath);
@@ -118,8 +118,8 @@ namespace NoteNest.Core.Services
 
         private class ColorData
         {
-            public Dictionary<string, string> CategoryColors { get; set; }
-            public Dictionary<string, string> NoteColors { get; set; }
+            public Dictionary<string, string> CategoryColors { get; set; } = new();
+            public Dictionary<string, string> NoteColors { get; set; } = new();
         }
     }
 }

@@ -66,11 +66,11 @@ namespace NoteNest.Core.Interfaces.Services
     {
         public bool Success { get; set; }
         public string ErrorMessage { get; set; } = string.Empty;
-        public Exception Exception { get; set; }
+        public Exception? Exception { get; set; }
         public TimeSpan Duration { get; set; }
-        public object ResultData { get; set; }
+        public object? ResultData { get; set; }
         
-        public static TransactionStepResult Succeeded(object resultData = null, TimeSpan? duration = null)
+        public static TransactionStepResult Succeeded(object? resultData = null, TimeSpan? duration = null)
         {
             return new TransactionStepResult 
             { 
@@ -80,7 +80,7 @@ namespace NoteNest.Core.Interfaces.Services
             };
         }
         
-        public static TransactionStepResult Failed(string errorMessage, Exception exception = null)
+        public static TransactionStepResult Failed(string errorMessage, Exception? exception = null)
         {
             return new TransactionStepResult 
             { 

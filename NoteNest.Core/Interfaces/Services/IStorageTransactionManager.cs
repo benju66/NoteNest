@@ -17,7 +17,7 @@ namespace NoteNest.Core.Interfaces.Services
             string newPath, 
             StorageMode mode, 
             bool keepOriginalData = true,
-            IProgress<StorageTransactionProgress> progress = null);
+            IProgress<StorageTransactionProgress>? progress = null);
 
         /// <summary>
         /// Event fired when a transaction starts
@@ -42,7 +42,7 @@ namespace NoteNest.Core.Interfaces.Services
     {
         public bool Success { get; set; }
         public string ErrorMessage { get; set; } = string.Empty;
-        public Exception Exception { get; set; }
+        public Exception? Exception { get; set; }
         public string TransactionId { get; set; } = string.Empty;
         public string NewPath { get; set; } = string.Empty;
         public string OldPath { get; set; } = string.Empty;
@@ -83,7 +83,7 @@ namespace NoteNest.Core.Interfaces.Services
     /// </summary>
     public class StorageTransactionProgressEventArgs : EventArgs
     {
-        public StorageTransactionProgress Progress { get; set; }
+        public StorageTransactionProgress Progress { get; set; } = new();
         public DateTime Timestamp { get; set; }
     }
 }

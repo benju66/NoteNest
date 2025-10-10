@@ -45,7 +45,7 @@ namespace NoteNest.Core.Services
             string newPath, 
             StorageMode mode, 
             bool keepOriginalData = true,
-            IProgress<StorageTransactionProgress> progress = null)
+            IProgress<StorageTransactionProgress>? progress = null)
         {
             var transactionId = Guid.NewGuid().ToString("N")[..8];
             var startTime = DateTime.UtcNow;
@@ -333,7 +333,7 @@ namespace NoteNest.Core.Services
     {
         public string StepDescription { get; }
         
-        public TransactionStepException(string stepDescription, string message, Exception innerException = null) 
+        public TransactionStepException(string stepDescription, string message, Exception? innerException = null) 
             : base(message, innerException)
         {
             StepDescription = stepDescription;

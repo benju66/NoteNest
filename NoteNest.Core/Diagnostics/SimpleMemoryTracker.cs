@@ -554,7 +554,7 @@ namespace NoteNest.Core.Diagnostics
     /// </summary>
     public class ServiceMemoryInfo
     {
-        public string ServiceName { get; set; }
+        public string ServiceName { get; set; } = string.Empty;
         public long TotalMemoryDeltaBytes { get; set; }
         public int OperationCount { get; set; }
         public DateTime LastOperationTime { get; set; }
@@ -570,7 +570,7 @@ namespace NoteNest.Core.Diagnostics
     /// </summary>
     public class OperationMemoryInfo
     {
-        public string OperationName { get; set; }
+        public string OperationName { get; set; } = string.Empty;
         public long MemoryDeltaBytes { get; set; }
         public TimeSpan Duration { get; set; }
         public DateTime Timestamp { get; set; }
@@ -583,11 +583,11 @@ namespace NoteNest.Core.Diagnostics
     /// </summary>
     public class LeakSuspectInfo
     {
-        public string ServiceName { get; set; }
+        public string ServiceName { get; set; } = string.Empty;
         public double TotalLeakEstimateKB { get; set; }
         public double AverageLeakPerOperationKB { get; set; }
         public int OperationCount { get; set; }
-        public string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -595,7 +595,7 @@ namespace NoteNest.Core.Diagnostics
     /// </summary>
     public class MemoryTrendInfo
     {
-        public string Trend { get; set; }
+        public string Trend { get; set; } = string.Empty;
         public double ChangeRateMBPerMinute { get; set; }
         public int DataPoints { get; set; }
     }

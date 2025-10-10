@@ -2,6 +2,8 @@ using System;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using NoteNest.Core.Services.Logging;
 using NoteNest.UI.ViewModels.Common;
 using NoteNest.UI.Services;
 using NoteNest.Application.Categories.Commands.CreateCategory;
@@ -19,15 +21,21 @@ namespace NoteNest.UI.ViewModels.Categories
     {
         private readonly IMediator _mediator;
         private readonly IDialogService _dialogService;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly IAppLogger _logger;
         private bool _isProcessing;
         private string _statusMessage;
 
         public CategoryOperationsViewModel(
             IMediator mediator,
-            IDialogService dialogService)
+            IDialogService dialogService,
+            IServiceProvider serviceProvider,
+            IAppLogger logger)
         {
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             InitializeCommands();
         }
@@ -49,6 +57,7 @@ namespace NoteNest.UI.ViewModels.Categories
         public ICommand RenameCategoryCommand { get; private set; }
         public ICommand MoveCategoryCommand { get; private set; }
         public ICommand MoveNoteCommand { get; private set; }
+        public ICommand AddToTodoCategoriesCommand { get; private set; }
 
         // Events for UI coordination
         public event Action<string> CategoryCreated;
@@ -65,6 +74,7 @@ namespace NoteNest.UI.ViewModels.Categories
             RenameCategoryCommand = new AsyncRelayCommand<object>(ExecuteRenameCategory, CanRenameCategory);
             MoveCategoryCommand = new AsyncRelayCommand<object>(ExecuteMoveCategory, CanMoveCategory);
             MoveNoteCommand = new AsyncRelayCommand<object>(ExecuteMoveNote, CanMoveNote);
+            AddToTodoCategoriesCommand = new AsyncRelayCommand<object>(ExecuteAddToTodoCategories, CanAddToTodoCategories);
         }
 
         private async Task ExecuteCreateCategory(object parameter)
@@ -347,5 +357,107 @@ namespace NoteNest.UI.ViewModels.Categories
         private bool CanMoveCategory(object parameter) => !IsProcessing;
         
         private bool CanMoveNote(object parameter) => !IsProcessing;
+        
+        /// <summary>
+        /// Adds the selected note tree category to TodoPlugin categories.
+        /// Follows proven pattern from MainShellViewModel event wiring.
+        /// </summary>
+        private async Task ExecuteAddToTodoCategories(object parameter)
+        {
+            // Extract CategoryViewModel from parameter
+            var categoryViewModel = parameter as CategoryViewModel;
+            if (categoryViewModel == null)
+            {
+                _logger.Warning("[CategoryOps] AddToTodoCategories called without CategoryViewModel");
+                return;
+            }
+            
+            try
+            {
+                IsProcessing = true;
+                StatusMessage = $"Adding '{categoryViewModel.Name}' to todo categories...";
+                
+                _logger.Info($"[CategoryOps] Adding category to todos: {categoryViewModel.Name}");
+                
+                // Get TodoPlugin's CategoryStore via service locator
+                var todoCategoryStore = _serviceProvider.GetService<
+                    NoteNest.UI.Plugins.TodoPlugin.Services.ICategoryStore>();
+                
+                if (todoCategoryStore == null)
+                {
+                    _logger.Warning("[CategoryOps] TodoPlugin CategoryStore not available");
+                    _dialogService.ShowError(
+                        "Todo plugin is not loaded or initialized.", 
+                        "Todo Categories");
+                    StatusMessage = "Todo plugin not available";
+                    return;
+                }
+                
+                // Parse category ID
+                if (!Guid.TryParse(categoryViewModel.Id, out var categoryId))
+                {
+                    _logger.Error($"[CategoryOps] Invalid category ID: {categoryViewModel.Id}");
+                    _dialogService.ShowError(
+                        "Invalid category ID format.",
+                        "Error");
+                    StatusMessage = "Invalid category ID";
+                    return;
+                }
+                
+                // Check if already added
+                var existing = todoCategoryStore.GetById(categoryId);
+                if (existing != null)
+                {
+                    _logger.Info($"[CategoryOps] Category already in todos: {categoryViewModel.Name}");
+                    _dialogService.ShowInfo(
+                        $"'{categoryViewModel.Name}' is already in todo categories.",
+                        "Todo Categories");
+                    StatusMessage = $"'{categoryViewModel.Name}' already in todos";
+                    return;
+                }
+                
+                // Add category to TodoPlugin
+                var todoCategory = new NoteNest.UI.Plugins.TodoPlugin.Models.Category
+                {
+                    Id = categoryId,
+                    ParentId = string.IsNullOrEmpty(categoryViewModel.ParentId) 
+                        ? null 
+                        : Guid.Parse(categoryViewModel.ParentId),
+                    Name = categoryViewModel.Name,
+                    Order = 0,
+                    CreatedDate = DateTime.UtcNow,
+                    ModifiedDate = DateTime.UtcNow
+                };
+                
+                todoCategoryStore.Add(todoCategory);
+                
+                _logger.Info($"✅ Category added to todos: {categoryViewModel.Name}");
+                
+                // Show success notification
+                _dialogService.ShowInfo(
+                    $"'{categoryViewModel.Name}' added to todo categories!",
+                    "Todo Categories");
+                
+                StatusMessage = $"Added '{categoryViewModel.Name}' to todo categories";
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[CategoryOps] Failed to add category to todos");
+                _dialogService.ShowError(
+                    $"Failed to add category: {ex.Message}",
+                    "Error");
+                StatusMessage = $"Error adding category: {ex.Message}";
+            }
+            finally
+            {
+                IsProcessing = false;
+            }
+        }
+        
+        private bool CanAddToTodoCategories(object parameter)
+        {
+            // Can add if parameter is CategoryViewModel and not processing
+            return !IsProcessing && parameter is CategoryViewModel;
+        }
     }
 }

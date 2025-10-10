@@ -18,9 +18,9 @@ namespace NoteNest.Core.Services
     public class TreeStateService : ITreeStateService
     {
         private readonly ConfigurationService _configService;
-        private readonly IAppLogger _logger;
+        private readonly IAppLogger? _logger;
 
-        public TreeStateService(ConfigurationService configService, IAppLogger logger = null)
+        public TreeStateService(ConfigurationService configService, IAppLogger? logger = null)
         {
             _configService = configService ?? throw new ArgumentNullException(nameof(configService));
             _logger = logger; // logger is optional

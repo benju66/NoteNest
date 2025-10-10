@@ -103,25 +103,25 @@ namespace NoteNest.Core.Services
 	public class BackupResult
 	{
 		public bool Success { get; set; }
-		public string BackupId { get; set; }
-		public string BackupPath { get; set; }
-		public string OriginalPath { get; set; }
+		public string BackupId { get; set; } = string.Empty;
+		public string BackupPath { get; set; } = string.Empty;
+		public string OriginalPath { get; set; } = string.Empty;
 		public DateTime Timestamp { get; set; }
-		public string Error { get; set; }
+		public string Error { get; set; } = string.Empty;
 	}
 
 	public class RestoreResult
 	{
 		public bool Success { get; set; }
-		public string RestoredPath { get; set; }
-		public string Error { get; set; }
+		public string RestoredPath { get; set; } = string.Empty;
+		public string Error { get; set; } = string.Empty;
 	}
 
 	public class BackupInfo
 	{
-		public string BackupId { get; set; }
-		public string OriginalPath { get; set; }
-		public string BackupPath { get; set; }
+		public string BackupId { get; set; } = string.Empty;
+		public string OriginalPath { get; set; } = string.Empty;
+		public string BackupPath { get; set; } = string.Empty;
 		public long Size { get; set; }
 		public DateTime Timestamp { get; set; }
 	}

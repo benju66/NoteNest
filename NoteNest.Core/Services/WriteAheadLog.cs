@@ -141,7 +141,7 @@ namespace NoteNest.Core.Services
         /// <summary>
         /// Recover content for a specific note from WAL
         /// </summary>
-        public async Task<string> RecoverAsync(string noteId)
+        public async Task<string?> RecoverAsync(string noteId)
         {
             if (_disposed || string.IsNullOrEmpty(noteId))
                 return null;

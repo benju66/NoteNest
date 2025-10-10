@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Infrastructure.Database;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Parsing;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
@@ -28,6 +29,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         private readonly ISaveManager _saveManager;
         private readonly ITodoRepository _repository;
         private readonly BracketTodoParser _parser;
+        private readonly ITreeDatabaseRepository _treeRepository;
         private readonly IAppLogger _logger;
         private readonly Timer _debounceTimer;
         private string? _pendingNoteId;
@@ -38,11 +40,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             ISaveManager saveManager,
             ITodoRepository repository,
             BracketTodoParser parser,
+            ITreeDatabaseRepository treeRepository,
             IAppLogger logger)
         {
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _parser = parser ?? throw new ArgumentNullException(nameof(parser));
+            _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             // Debounce timer to avoid processing every keystroke during auto-save
@@ -171,12 +175,35 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         
         /// <summary>
         /// Reconcile extracted todos with existing todos in database.
+        /// NEW: Auto-categorizes todos based on note's parent category.
         /// </summary>
         private async Task ReconcileTodosAsync(Guid noteGuid, string filePath, List<TodoCandidate> candidates)
         {
             try
             {
-                // Get existing todos for this note
+                // STEP 1: Get the source note to determine auto-category
+                Guid? noteCategoryId = null;
+                
+                try
+                {
+                    // Query tree to find note's parent category
+                    var noteNode = await _treeRepository.GetNodeByIdAsync(noteGuid);
+                    if (noteNode != null && noteNode.ParentId.HasValue)
+                    {
+                        noteCategoryId = noteNode.ParentId.Value;
+                        _logger.Debug($"[TodoSync] Note is in category: {noteCategoryId} - todos will be auto-categorized");
+                    }
+                    else
+                    {
+                        _logger.Debug($"[TodoSync] Note has no parent category - todos will be uncategorized");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning($"[TodoSync] Failed to query note's category - todos will be uncategorized: {ex.Message}");
+                }
+                
+                // STEP 2: Get existing todos for this note
                 var existingTodos = await _repository.GetByNoteIdAsync(noteGuid);
                 
                 _logger.Debug($"[TodoSync] Reconciling {candidates.Count} candidates with {existingTodos.Count} existing todos");
@@ -193,7 +220,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                 
                 foreach (var candidate in newCandidates)
                 {
-                    await CreateTodoFromCandidate(candidate, noteGuid, filePath);
+                    await CreateTodoFromCandidate(candidate, noteGuid, filePath, noteCategoryId);
                 }
                 
                 // PHASE 2: Find orphaned todos (in existing but not in candidates)
@@ -228,27 +255,33 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         
         /// <summary>
         /// Create a new todo from a candidate.
+        /// NEW: Includes auto-categorization based on note's parent category.
         /// </summary>
-        private async Task CreateTodoFromCandidate(TodoCandidate candidate, Guid noteGuid, string filePath)
+        private async Task CreateTodoFromCandidate(TodoCandidate candidate, Guid noteGuid, string filePath, Guid? categoryId)
         {
             try
             {
                 var todo = new TodoItem
                 {
                     Text = candidate.Text,
+                    CategoryId = categoryId,  // AUTO-CATEGORIZE! Links to note's parent category
                     SourceNoteId = noteGuid,
                     SourceFilePath = filePath,
                     SourceLineNumber = candidate.LineNumber,
                     SourceCharOffset = candidate.CharacterOffset
                 };
                 
-                // Note: SourceType will be set to "note" by repository when inserting
-                // (we'll update TodoRepository.MapTodoToParameters to handle this)
-                
                 var success = await _repository.InsertAsync(todo);
                 if (success)
                 {
-                    _logger.Info($"[TodoSync] Created todo from note: \"{candidate.Text}\"");
+                    if (categoryId.HasValue)
+                    {
+                        _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [auto-categorized: {categoryId.Value}]");
+                    }
+                    else
+                    {
+                        _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [uncategorized]");
+                    }
                 }
             }
             catch (Exception ex)

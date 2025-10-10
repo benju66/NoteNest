@@ -17,7 +17,7 @@ namespace NoteNest.Core.Services.Transaction
         private readonly string _sourcePath;
         private readonly string _destinationPath;
         private readonly bool _keepOriginal;
-        private readonly IProgress<MigrationProgress> _progressReporter;
+        private readonly IProgress<MigrationProgress>? _progressReporter;
         private readonly List<string> _copiedFiles = new();
         private readonly List<string> _createdDirectories = new();
 
@@ -29,7 +29,7 @@ namespace NoteNest.Core.Services.Transaction
             string destinationPath, 
             bool keepOriginal,
             IAppLogger logger,
-            IProgress<MigrationProgress> progressReporter = null) : base(logger)
+            IProgress<MigrationProgress>? progressReporter = null) : base(logger)
         {
             _sourcePath = sourcePath ?? throw new ArgumentNullException(nameof(sourcePath));
             _destinationPath = destinationPath ?? throw new ArgumentNullException(nameof(destinationPath));

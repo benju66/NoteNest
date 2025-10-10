@@ -558,6 +558,17 @@
                                 <MenuItem Header="_Delete" 
                                           Command="{Binding PlacementTarget.Tag.CategoryOperations.DeleteCategoryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding}"/>
+                                <Separator/>
+                                <!-- NEW: Add to Todo Categories -->
+                                <MenuItem Header="Add to _Todo Categories" 
+                                          Command="{Binding PlacementTarget.Tag.CategoryOperations.AddToTodoCategoriesCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding}">
+                                    <MenuItem.Icon>
+                                        <ContentControl Template="{StaticResource LucideCheck}"
+                                                        Width="12" Height="12"
+                                                        Foreground="{DynamicResource AppAccentBrush}"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
                             </ContextMenu>
                             
                             <!-- 📄 Note Context Menu (PlacementTarget binding for proper DataContext) -->
