@@ -12,22 +12,70 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
     /// </summary>
     public partial class TodoPanelView : UserControl
     {
-        public TodoPanelView(TodoPanelViewModel viewModel)
+        private readonly NoteNest.Core.Services.Logging.IAppLogger _logger;
+        
+        public TodoPanelView(TodoPanelViewModel viewModel, NoteNest.Core.Services.Logging.IAppLogger logger)
         {
+            _logger = logger;
+            
             try
             {
-                System.Diagnostics.Debug.WriteLine("🎨 TodoPanelView constructor called");
+                _logger.Info("🎨 [TodoPanelView] Constructor called");
                 
                 InitializeComponent();
-                System.Diagnostics.Debug.WriteLine("🎨 InitializeComponent completed");
+                _logger.Info("🎨 [TodoPanelView] InitializeComponent completed");
                 
                 DataContext = viewModel;
-                System.Diagnostics.Debug.WriteLine($"🎨 DataContext set to TodoPanelViewModel: {viewModel != null}");
+                _logger.Info($"🎨 [TodoPanelView] DataContext set: {viewModel != null}");
+                _logger.Info($"🎨 [TodoPanelView] CategoryTree not null: {viewModel?.CategoryTree != null}");
+                _logger.Info($"🎨 [TodoPanelView] Initial Categories.Count: {viewModel?.CategoryTree?.Categories?.Count ?? -1}");
+                
+                // Monitor Categories collection changes for diagnostics
+                if (viewModel?.CategoryTree?.Categories != null)
+                {
+                    viewModel.CategoryTree.Categories.CollectionChanged += (s, e) =>
+                    {
+                        _logger.Info($"🎨 [TodoPanelView] Categories CollectionChanged! Action={e.Action}, Count={viewModel.CategoryTree.Categories.Count}");
+                        
+                        // Log items in collection
+                        foreach (var item in viewModel.CategoryTree.Categories)
+                        {
+                            _logger.Info($"🎨 [TodoPanelView] - Category: DisplayPath='{item.DisplayPath}', Name='{item.Name}'");
+                        }
+                        
+                        // NUCLEAR OPTION: Show dialog with category info
+                        try
+                        {
+                            var categories = viewModel.CategoryTree.Categories;
+                            var categoryList = new System.Text.StringBuilder();
+                            foreach (var cat in categories)
+                            {
+                                categoryList.AppendLine(cat.DisplayPath);
+                            }
+                            
+                            System.Windows.MessageBox.Show(
+                                $"CATEGORIES COLLECTION CHANGED!\n\nCount: {categories.Count}\n\nCategories:\n{categoryList}",
+                                "Category Debug",
+                                System.Windows.MessageBoxButton.OK);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error(ex, "Failed to show debug dialog");
+                        }
+                    };
+                    
+                    _logger.Info("🎨 [TodoPanelView] Subscribed to Categories.CollectionChanged");
+                }
+                
+                // Check view after loaded
+                this.Loaded += (s, e) =>
+                {
+                    _logger.Info($"🎨 [TodoPanelView] View LOADED - Categories in ViewModel: {viewModel?.CategoryTree?.Categories?.Count ?? 0}");
+                };
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"❌ TodoPanelView constructor failed: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"❌ Stack trace: {ex.StackTrace}");
+                _logger?.Error(ex, "❌ [TodoPanelView] Constructor failed");
                 throw;
             }
         }
@@ -44,13 +92,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
             }
         }
 
-        private void CategoryTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
-        {
-            if (DataContext is TodoPanelViewModel panelVm && e.NewValue is CategoryNodeViewModel categoryNode)
-            {
-                panelVm.CategoryTree.SelectedCategory = categoryNode;
-            }
-        }
+        // Removed TreeView selection handler - using ListBox now
 
         private void EditTextBox_KeyDown(object sender, KeyEventArgs e)
         {

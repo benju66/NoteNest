@@ -99,8 +99,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         public void Add(Category category)
         {
             if (category == null) throw new ArgumentNullException(nameof(category));
+            
+            _logger.Info($"[CategoryStore] ADDING category: Name='{category.Name}', Id={category.Id}, ParentId={category.ParentId}, OriginalParentId={category.OriginalParentId}, DisplayPath='{category.DisplayPath}'");
+            _logger.Info($"[CategoryStore] Before Add - Collection count: {_categories.Count}");
+            
             _categories.Add(category);
-            _logger.Debug($"[CategoryStore] Added category: {category.Name}");
+            
+            _logger.Info($"[CategoryStore] After Add - Collection count: {_categories.Count}");
+            _logger.Info($"[CategoryStore] ✅ Category added successfully: {category.Name}");
         }
 
         public void Update(Category category)

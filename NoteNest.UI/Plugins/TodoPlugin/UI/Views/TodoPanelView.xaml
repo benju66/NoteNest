@@ -188,8 +188,8 @@
                 BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/> <!-- Smart Lists Section -->
-                    <RowDefinition Height="*"/> <!-- Categories Section -->
+                    <RowDefinition Height="120"/> <!-- Smart Lists Section - FIXED HEIGHT -->
+                    <RowDefinition Height="80"/> <!-- Categories Section - GUARANTEED SPACE -->
                 </Grid.RowDefinitions>
                 
                 <!-- Smart Lists Section -->
@@ -247,28 +247,26 @@
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                                Margin="12,4,12,4"/>
-                    <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                  MaxHeight="100">
-                        <TreeView ItemsSource="{Binding CategoryTree.Categories}"
-                                  Background="Transparent"
-                                  BorderThickness="0"
-                                  x:Name="CategoryTreeView"
-                                  SelectedItemChanged="CategoryTreeView_SelectedItemChanged">
-                            <TreeView.ItemContainerStyle>
-                                <Style TargetType="TreeViewItem">
-                                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                                </Style>
-                            </TreeView.ItemContainerStyle>
-                            <TreeView.ItemTemplate>
-                                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                    <StackPanel Orientation="Horizontal" Margin="2">
-                                        <TextBlock Text="📁" Margin="0,0,4,0" FontSize="12"/>
-                                        <TextBlock Text="{Binding Name}"/>
-                                    </StackPanel>
-                                </HierarchicalDataTemplate>
-                            </TreeView.ItemTemplate>
-                        </TreeView>
-                    </ScrollViewer>
+                    
+                    <!-- SIMPLE LISTBOX - Guaranteed visible with fixed dimensions -->
+                    <ListBox ItemsSource="{Binding CategoryTree.Categories}"
+                             SelectionMode="Single"
+                             Background="White"
+                             BorderBrush="Gray"
+                             BorderThickness="2"
+                             Margin="12,0,12,4"
+                             Height="60"
+                             Padding="4">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="4,2" Cursor="Hand">
+                                    <TextBlock Text="📁 " FontSize="14" Margin="0,0,4,0"/>
+                                    <TextBlock Text="{Binding DisplayPath}" FontSize="12" FontWeight="Bold"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    
                     <!-- Empty state message -->
                     <TextBlock Text="Right-click folders in note tree to add categories"
                                FontSize="11"

@@ -355,6 +355,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         /// <summary>
         /// Ensure category is added to CategoryStore for RTF-extracted todos.
         /// This automatically makes the category visible in TodoPlugin when todos are extracted.
+        /// Builds display path with full breadcrumb for rich context.
         /// </summary>
         private async Task EnsureCategoryAddedAsync(Guid categoryId)
         {
@@ -376,14 +377,61 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                     return;
                 }
                 
+                // Build display path by walking up the tree
+                var displayPath = await BuildCategoryDisplayPathAsync(categoryId);
+                category.DisplayPath = displayPath;
+                
+                // Set for flat display mode (immediate visibility)
+                category.ParentId = null;
+                // OriginalParentId already set by CategorySyncService
+                
                 // Auto-add to CategoryStore
                 _categoryStore.Add(category);
-                _logger.Info($"[TodoSync] ✅ Auto-added category to todo panel: {category.Name} (for RTF todos)");
+                _logger.Info($"[TodoSync] ✅ Auto-added category to todo panel: {displayPath} (for RTF todos)");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"[TodoSync] Failed to auto-add category: {categoryId}");
                 // Don't throw - this is a nice-to-have feature, not critical
+            }
+        }
+        
+        /// <summary>
+        /// Builds display path for a category by walking up the tree.
+        /// Example: "Work > Projects > ProjectAlpha"
+        /// </summary>
+        private async Task<string> BuildCategoryDisplayPathAsync(Guid categoryId)
+        {
+            try
+            {
+                var parts = new List<string>();
+                var current = categoryId;
+                int depth = 0;
+                const int maxDepth = 10; // Prevent infinite loops
+                
+                while (current != Guid.Empty && depth < maxDepth)
+                {
+                    var category = await _categorySyncService.GetCategoryByIdAsync(current);
+                    if (category == null) break;
+                    
+                    parts.Insert(0, category.Name);
+                    depth++;
+                    
+                    // Move to parent
+                    current = category.ParentId ?? Guid.Empty;
+                }
+                
+                // Remove "Notes" if it's the workspace root
+                var relevantParts = parts.Where(p => !p.Equals("Notes", StringComparison.OrdinalIgnoreCase)).ToList();
+                
+                return relevantParts.Count > 0 
+                    ? string.Join(" > ", relevantParts) 
+                    : "Uncategorized";
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to build display path for category: {categoryId}");
+                return "Category"; // Fallback
             }
         }
         

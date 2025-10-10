@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using MediatR;
@@ -420,10 +422,12 @@ namespace NoteNest.UI.ViewModels.Categories
                 var todoCategory = new NoteNest.UI.Plugins.TodoPlugin.Models.Category
                 {
                     Id = categoryId,
-                    ParentId = string.IsNullOrEmpty(categoryViewModel.ParentId) 
+                    ParentId = null, // Flat display mode - always show at root for immediate visibility
+                    OriginalParentId = string.IsNullOrEmpty(categoryViewModel.ParentId) 
                         ? null 
-                        : Guid.Parse(categoryViewModel.ParentId),
+                        : Guid.Parse(categoryViewModel.ParentId), // Preserve tree hierarchy for future
                     Name = categoryViewModel.Name,
+                    DisplayPath = BuildCategoryDisplayPath(categoryViewModel), // Breadcrumb: "Personal > Budget"
                     Order = 0,
                     CreatedDate = DateTime.UtcNow,
                     ModifiedDate = DateTime.UtcNow
@@ -458,6 +462,42 @@ namespace NoteNest.UI.ViewModels.Categories
         {
             // Can add if parameter is CategoryViewModel and not processing
             return !IsProcessing && parameter is CategoryViewModel;
+        }
+        
+        /// <summary>
+        /// Builds a breadcrumb display path for a category.
+        /// Example: "Work > Projects > ProjectAlpha"
+        /// Uses CategoryViewModel.BreadcrumbPath which already computes the hierarchy.
+        /// </summary>
+        private string BuildCategoryDisplayPath(CategoryViewModel categoryVm)
+        {
+            try
+            {
+                // CategoryViewModel already has BreadcrumbPath property that walks the tree!
+                var breadcrumb = categoryVm.BreadcrumbPath;
+                
+                if (!string.IsNullOrEmpty(breadcrumb))
+                {
+                    // Clean up the breadcrumb - remove "Notes >" prefix if present
+                    var parts = breadcrumb.Split(new[] { " > " }, StringSplitOptions.RemoveEmptyEntries);
+                    
+                    // Skip "Notes" if it's the first part (workspace root)
+                    var relevantParts = parts.Where(p => !p.Equals("Notes", StringComparison.OrdinalIgnoreCase)).ToArray();
+                    
+                    if (relevantParts.Length > 0)
+                    {
+                        return string.Join(" > ", relevantParts);
+                    }
+                }
+                
+                // Fallback to simple name
+                return categoryVm.Name;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to build display path for category: {categoryVm.Name}");
+                return categoryVm.Name; // Fallback to simple name
+            }
         }
     }
 }

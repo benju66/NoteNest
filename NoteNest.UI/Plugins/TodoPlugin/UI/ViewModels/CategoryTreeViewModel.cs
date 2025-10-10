@@ -39,10 +39,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             InitializeSmartLists();
             
             // Subscribe to CategoryStore changes to refresh tree when categories added
+            // Use Dispatcher to ensure UI thread execution
             _categoryStore.Categories.CollectionChanged += (s, e) =>
             {
-                _logger.Debug("[CategoryTree] CategoryStore changed, refreshing tree");
-                _ = LoadCategoriesAsync();
+                System.Windows.Application.Current?.Dispatcher.InvokeAsync(async () =>
+                {
+                    _logger.Debug("[CategoryTree] CategoryStore changed, refreshing tree");
+                    await LoadCategoriesAsync();
+                });
             };
             
             _ = LoadCategoriesAsync();
@@ -214,31 +218,60 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             try
             {
+                _logger.Info("[CategoryTree] LoadCategoriesAsync started");
+                
                 // Get all categories from store
                 var allCategories = _categoryStore.Categories;
+                _logger.Info($"[CategoryTree] CategoryStore contains {allCategories.Count} categories");
+                
+                // Log each category for diagnostics
+                foreach (var cat in allCategories)
+                {
+                    _logger.Debug($"[CategoryTree] Category in store: Id={cat.Id}, Name='{cat.Name}', ParentId={cat.ParentId}, DisplayPath='{cat.DisplayPath}'");
+                }
                 
                 // Build tree structure
                 Categories.Clear();
-                var rootCategories = allCategories.Where(c => c.ParentId == null);
+                var rootCategories = allCategories.Where(c => c.ParentId == null).ToList();
+                _logger.Info($"[CategoryTree] Found {rootCategories.Count} root categories (ParentId == null)");
                 
                 foreach (var category in rootCategories)
                 {
+                    _logger.Debug($"[CategoryTree] Building tree for root category: {category.Name}");
                     var nodeVm = BuildCategoryNode(category, allCategories);
                     Categories.Add(nodeVm);
+                    _logger.Debug($"[CategoryTree] Added CategoryNodeViewModel: DisplayPath='{nodeVm.DisplayPath}'");
                 }
+                
+                _logger.Info($"[CategoryTree] ✅ LoadCategoriesAsync complete - Categories.Count = {Categories.Count}");
+                
+                // Note: OnPropertyChanged not needed - ObservableCollection already notifies
+                // Keeping for diagnostic purposes
+                OnPropertyChanged(nameof(Categories));
+                _logger.Debug("[CategoryTree] OnPropertyChanged(Categories) raised");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error loading categories");
+                _logger.Error(ex, "[CategoryTree] ❌ Error loading categories");
             }
+            
+            await Task.CompletedTask;
         }
 
         private CategoryNodeViewModel BuildCategoryNode(Category category, ObservableCollection<Category> allCategories)
         {
+            _logger.Debug($"[CategoryTree] BuildCategoryNode for: '{category.Name}', DisplayPath='{category.DisplayPath}'");
+            
             var nodeVm = new CategoryNodeViewModel(category);
+            _logger.Debug($"[CategoryTree] CategoryNodeViewModel created: DisplayPath='{nodeVm.DisplayPath}', Name='{nodeVm.Name}'");
             
             // Find child categories
-            var children = allCategories.Where(c => c.ParentId == category.Id);
+            var children = allCategories.Where(c => c.ParentId == category.Id).ToList();
+            if (children.Any())
+            {
+                _logger.Debug($"[CategoryTree] Found {children.Count} children for {category.Name}");
+            }
+            
             foreach (var child in children)
             {
                 var childNode = BuildCategoryNode(child, allCategories);
@@ -260,10 +293,23 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         private bool _isExpanded;
         private bool _isSelected;
 
+        private string _displayPath;
+        
         public CategoryNodeViewModel(Category category)
         {
             CategoryId = category.Id;
             _name = category.Name;
+            
+            // Ensure DisplayPath is never null or empty for UI display
+            if (string.IsNullOrWhiteSpace(category.DisplayPath))
+            {
+                _displayPath = category.Name; // Fallback to Name
+            }
+            else
+            {
+                _displayPath = category.DisplayPath;
+            }
+            
             Children = new ObservableCollection<CategoryNodeViewModel>();
         }
 
@@ -273,6 +319,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             get => _name;
             set => SetProperty(ref _name, value);
+        }
+        
+        public string DisplayPath
+        {
+            get => _displayPath;
+            set => SetProperty(ref _displayPath, value);
         }
 
         public bool IsExpanded
