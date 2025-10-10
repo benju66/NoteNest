@@ -96,10 +96,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                         }
                     }
                 }
-                else if (selectedItem is TodoItemViewModel)
+                else if (selectedItem is TodoItemViewModel todoVm)
                 {
-                    // Don't allow deleting todos with Delete key (use checkbox/context menu)
-                    _logger.Debug("[TodoPanelView] Delete key pressed on todo - ignoring (use checkbox to complete)");
+                    // Delete todo using hybrid strategy (hard for manual, soft for note-linked)
+                    if (DataContext is TodoPanelViewModel panelVm)
+                    {
+                        // Execute delete command (has hybrid logic built-in)
+                        if (panelVm.TodoList.DeleteTodoCommand.CanExecute(todoVm))
+                        {
+                            panelVm.TodoList.DeleteTodoCommand.Execute(todoVm);
+                            _logger.Info($"[TodoPanelView] Todo deleted: {todoVm.Text}");
+                        }
+                    }
+                    e.Handled = true; // CRITICAL: Prevent event bubbling to parent controls!
                 }
             }
         }

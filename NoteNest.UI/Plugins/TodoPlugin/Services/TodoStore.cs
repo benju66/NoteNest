@@ -3,8 +3,10 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Collections;
+using NoteNest.UI.Plugins.TodoPlugin.Events;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 
@@ -14,10 +16,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
     /// Todo store with database persistence.
     /// Maintains ObservableCollection for UI binding while persisting to SQLite.
     /// Uses lazy initialization pattern for optimal performance and thread safety.
+    /// Subscribes to category events for automatic orphaned todo management.
     /// </summary>
     public class TodoStore : ITodoStore, IDisposable
     {
         private readonly ITodoRepository _repository;
+        private readonly IEventBus _eventBus;
         private readonly IAppLogger _logger;
         private readonly SmartObservableCollection<TodoItem> _todos;
         private bool _isInitialized;
@@ -26,11 +30,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         private Task? _initializationTask;
         private readonly SemaphoreSlim _initLock = new(1, 1);
 
-        public TodoStore(ITodoRepository repository, IAppLogger logger)
+        public TodoStore(ITodoRepository repository, IEventBus eventBus, IAppLogger logger)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _todos = new SmartObservableCollection<TodoItem>();
+            
+            // Subscribe to category events for automatic cleanup
+            SubscribeToEvents();
         }
 
         /// <summary>
@@ -187,30 +195,55 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             }
         }
 
+        /// <summary>
+        /// Delete a todo using hybrid strategy:
+        /// - Manual todos: Hard delete (permanent removal)
+        /// - Note-linked todos: Soft delete (mark as orphaned for user visibility)
+        /// </summary>
         public async Task DeleteAsync(Guid id)
         {
             var todo = GetById(id);
-            if (todo != null)
+            if (todo == null)
             {
-                _todos.Remove(todo);
-                
-                try
+                _logger.Warning($"[TodoStore] Cannot delete todo - not found: {id}");
+                return;
+            }
+            
+            try
+            {
+                if (todo.SourceNoteId.HasValue)
                 {
+                    // SOFT DELETE: Note-linked todo → Mark as orphaned
+                    _logger.Info($"[TodoStore] Soft deleting note-linked todo (marking as orphaned): \"{todo.Text}\"");
+                    
+                    todo.IsOrphaned = true;
+                    todo.ModifiedDate = DateTime.UtcNow;
+                    await UpdateAsync(todo); // Updates in-memory + database
+                    
+                    _logger.Info($"[TodoStore] ✅ Todo marked as orphaned: \"{todo.Text}\"");
+                }
+                else
+                {
+                    // HARD DELETE: Manual todo → Permanent removal
+                    _logger.Info($"[TodoStore] Hard deleting manual todo: \"{todo.Text}\"");
+                    
+                    _todos.Remove(todo); // Remove from UI immediately
+                    
                     var success = await _repository.DeleteAsync(id);
                     if (success)
                     {
-                        _logger.Debug($"[TodoStore] ✅ Todo deleted from database: {id}");
+                        _logger.Info($"[TodoStore] ✅ Todo permanently deleted: \"{todo.Text}\"");
                     }
                     else
                     {
-                        _logger.Warning($"[TodoStore] ⚠️ Failed to delete todo (returned false): {id}");
+                        _logger.Warning($"[TodoStore] ⚠️ Failed to delete todo from database (returned false): {id}");
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, $"[TodoStore] ❌ Failed to persist todo deletion: {id}");
-                    throw;
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] ❌ Failed to delete todo: {id}");
+                throw;
             }
         }
 
@@ -311,6 +344,52 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             catch (Exception ex)
             {
                 _logger.Error(ex, "[TodoStore] Failed to load completed todos");
+            }
+        }
+        
+        /// <summary>
+        /// Subscribe to category events for automatic orphaned todo management.
+        /// </summary>
+        private void SubscribeToEvents()
+        {
+            _eventBus.Subscribe<CategoryDeletedEvent>(async e => await HandleCategoryDeletedAsync(e));
+        }
+        
+        /// <summary>
+        /// Handles category deletion by setting affected todos' category_id = NULL.
+        /// This makes them appear in the "Uncategorized" virtual category.
+        /// </summary>
+        private async Task HandleCategoryDeletedAsync(CategoryDeletedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] Handling category deletion: {e.CategoryName} ({e.CategoryId})");
+                
+                // Find all todos in the deleted category
+                var affectedTodos = _todos.Where(t => t.CategoryId == e.CategoryId).ToList();
+                
+                if (affectedTodos.Count == 0)
+                {
+                    _logger.Debug($"[TodoStore] No todos affected by category deletion");
+                    return;
+                }
+                
+                _logger.Info($"[TodoStore] Setting category_id = NULL for {affectedTodos.Count} orphaned todos");
+                
+                // Set category_id = NULL for each affected todo
+                foreach (var todo in affectedTodos)
+                {
+                    todo.CategoryId = null;
+                    todo.ModifiedDate = DateTime.UtcNow;
+                    await UpdateAsync(todo);
+                }
+                
+                _logger.Info($"[TodoStore] ✅ Successfully orphaned {affectedTodos.Count} todos - they will appear in 'Uncategorized'");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle category deletion: {e.CategoryId}");
+                // Don't throw - event handler failures shouldn't crash the application
             }
         }
         

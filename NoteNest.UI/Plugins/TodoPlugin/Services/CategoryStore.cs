@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Collections;
+using NoteNest.UI.Plugins.TodoPlugin.Events;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Services
@@ -13,22 +15,26 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
     /// Category store implementation that syncs with main app's tree database.
     /// Categories are loaded from tree_nodes on initialization and can be refreshed.
     /// Follows TodoStore pattern with SmartObservableCollection batch updates.
+    /// Publishes events via EventBus for loose coupling with TodoStore.
     /// </summary>
     public class CategoryStore : ICategoryStore
     {
         private readonly SmartObservableCollection<Category> _categories;
         private readonly ICategorySyncService _syncService;
         private readonly ICategoryPersistenceService _persistenceService;
+        private readonly IEventBus _eventBus;
         private readonly IAppLogger _logger;
         private bool _isInitialized;
 
         public CategoryStore(
             ICategorySyncService syncService,
             ICategoryPersistenceService persistenceService,
+            IEventBus eventBus,
             IAppLogger logger)
         {
             _syncService = syncService ?? throw new ArgumentNullException(nameof(syncService));
             _persistenceService = persistenceService ?? throw new ArgumentNullException(nameof(persistenceService));
+            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _categories = new SmartObservableCollection<Category>();
         }
@@ -164,6 +170,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             // Auto-save to database
             _ = SaveToDatabaseAsync();
             
+            // Publish event for loose coupling
+            _ = _eventBus.PublishAsync(new CategoryAddedEvent(category.Id, category.Name));
+            
             _logger.Info($"[CategoryStore] ✅ Category added: {category.Name} (Count: {_categories.Count})");
         }
 
@@ -182,15 +191,27 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
 
         public void Delete(Guid id)
         {
+            // Prevent deletion of system categories
+            if (id == Guid.Empty)
+            {
+                _logger.Warning($"[CategoryStore] Cannot delete system category: Uncategorized");
+                return;
+            }
+            
             var category = GetById(id);
             if (category != null)
             {
+                var categoryName = category.Name; // Capture before removal
+                
                 _categories.Remove(category);
                 
                 // Auto-save to database
                 _ = SaveToDatabaseAsync();
                 
-                _logger.Info($"[CategoryStore] Deleted category: {category.Name}");
+                // Publish event for TodoStore to clean up orphaned todos
+                _ = _eventBus.PublishAsync(new CategoryDeletedEvent(id, categoryName));
+                
+                _logger.Info($"[CategoryStore] Deleted category: {categoryName}");
             }
         }
         

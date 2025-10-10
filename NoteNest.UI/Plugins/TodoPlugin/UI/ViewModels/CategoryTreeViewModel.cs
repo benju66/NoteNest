@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -6,6 +7,7 @@ using System.Windows.Input;
 using MediatR;
 using NoteNest.Core.Commands;
 using NoteNest.Core.Services.Logging;
+using NoteNest.UI.Collections;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 using NoteNest.UI.ViewModels.Common;
@@ -14,17 +16,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 {
     /// <summary>
     /// View model for the category tree view.
+    /// Implements IDisposable for proper event unsubscription and memory leak prevention.
     /// </summary>
-    public class CategoryTreeViewModel : ViewModelBase
+    public class CategoryTreeViewModel : ViewModelBase, IDisposable
     {
         private readonly ICategoryStore _categoryStore;
         private readonly ITodoStore _todoStore;
         private readonly IAppLogger _logger;
+        private bool _disposed = false;
         
         // Expose for UI operations (delete key, etc.)
         public ICategoryStore CategoryStore => _categoryStore;
         
-        private ObservableCollection<CategoryNodeViewModel> _categories;
+        private SmartObservableCollection<CategoryNodeViewModel> _categories;
         private CategoryNodeViewModel? _selectedCategory;
         private SmartListNodeViewModel? _selectedSmartList;
         private ObservableCollection<SmartListNodeViewModel> _smartLists;
@@ -38,7 +42,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
-            _categories = new ObservableCollection<CategoryNodeViewModel>();
+            _categories = new SmartObservableCollection<CategoryNodeViewModel>();
             _smartLists = new ObservableCollection<SmartListNodeViewModel>();
             
             InitializeCommands();
@@ -46,21 +50,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             
             // Subscribe to CategoryStore changes to refresh tree when categories added
             // Use Dispatcher to ensure UI thread execution
-            _categoryStore.Categories.CollectionChanged += (s, e) =>
-            {
-                System.Windows.Application.Current?.Dispatcher.InvokeAsync(async () =>
-                {
-                    _logger.Debug("[CategoryTree] CategoryStore changed, refreshing tree");
-                    await LoadCategoriesAsync();
-                });
-            };
+            _categoryStore.Categories.CollectionChanged += OnCategoryStoreChanged;
+            
+            // Subscribe to TodoStore changes to refresh tree when todos added/updated/removed
+            _todoStore.AllTodos.CollectionChanged += OnTodoStoreChanged;
             
             _ = LoadCategoriesAsync();
         }
 
         #region Properties
 
-        public ObservableCollection<CategoryNodeViewModel> Categories
+        public SmartObservableCollection<CategoryNodeViewModel> Categories
         {
             get => _categories;
             set => SetProperty(ref _categories, value);
@@ -239,20 +239,30 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                     _logger.Debug($"[CategoryTree] Category in store: Id={cat.Id}, Name='{cat.Name}', ParentId={cat.ParentId}, DisplayPath='{cat.DisplayPath}'");
                 }
                 
-                // Build tree structure
-                Categories.Clear();
-                var rootCategories = allCategories.Where(c => c.ParentId == null).ToList();
-                _logger.Info($"[CategoryTree] Found {rootCategories.Count} root categories (ParentId == null)");
-                
-                foreach (var category in rootCategories)
+                // Build tree structure with BatchUpdate for smooth, flicker-free UI
+                using (Categories.BatchUpdate())
                 {
-                    _logger.Debug($"[CategoryTree] Building tree for root category: {category.Name}");
-                    var nodeVm = BuildCategoryNode(category, allCategories);
-                    Categories.Add(nodeVm);
-                    _logger.Debug($"[CategoryTree] Added CategoryNodeViewModel: DisplayPath='{nodeVm.DisplayPath}'");
+                    Categories.Clear();
+                    
+                    // STEP 1: Add "Uncategorized" virtual category at the top
+                    var uncategorizedNode = CreateUncategorizedNode();
+                    Categories.Add(uncategorizedNode);
+                    _logger.Info($"[CategoryTree] Added 'Uncategorized' virtual category with {uncategorizedNode.Todos.Count} orphaned todos");
+                    
+                    // STEP 2: Add regular categories
+                    var rootCategories = allCategories.Where(c => c.ParentId == null).ToList();
+                    _logger.Info($"[CategoryTree] Found {rootCategories.Count} root categories (ParentId == null)");
+                    
+                    foreach (var category in rootCategories)
+                    {
+                        _logger.Debug($"[CategoryTree] Building tree for root category: {category.Name}");
+                        var nodeVm = BuildCategoryNode(category, allCategories);
+                        Categories.Add(nodeVm);
+                        _logger.Debug($"[CategoryTree] Added CategoryNodeViewModel: DisplayPath='{nodeVm.DisplayPath}'");
+                    }
                 }
                 
-                _logger.Info($"[CategoryTree] ✅ LoadCategoriesAsync complete - Categories.Count = {Categories.Count}");
+                _logger.Info($"[CategoryTree] ✅ LoadCategoriesAsync complete - Categories.Count = {Categories.Count} (including Uncategorized)");
                 
                 // Note: OnPropertyChanged not needed - ObservableCollection already notifies
                 // Keeping for diagnostic purposes
@@ -267,9 +277,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             await Task.CompletedTask;
         }
 
-        private CategoryNodeViewModel BuildCategoryNode(Category category, ObservableCollection<Category> allCategories)
+        private CategoryNodeViewModel BuildCategoryNode(Category category, ObservableCollection<Category> allCategories, HashSet<Guid>? visited = null, int depth = 0)
         {
-            _logger.Debug($"[CategoryTree] BuildCategoryNode for: '{category.Name}', DisplayPath='{category.DisplayPath}'");
+            // Circular reference protection (matches main app pattern)
+            const int maxDepth = 10;
+            if (depth >= maxDepth)
+            {
+                _logger.Warning($"[CategoryTree] Max depth ({maxDepth}) reached for category: {category.Name} - possible circular reference");
+                return new CategoryNodeViewModel(category);
+            }
+            
+            visited ??= new HashSet<Guid>();
+            if (!visited.Add(category.Id))
+            {
+                _logger.Warning($"[CategoryTree] Circular reference detected: {category.Name} already visited");
+                return new CategoryNodeViewModel(category);
+            }
+            
+            _logger.Debug($"[CategoryTree] BuildCategoryNode for: '{category.Name}', DisplayPath='{category.DisplayPath}' [Depth: {depth}]");
             
             var nodeVm = new CategoryNodeViewModel(category);
             _logger.Debug($"[CategoryTree] CategoryNodeViewModel created: DisplayPath='{nodeVm.DisplayPath}', Name='{nodeVm.Name}'");
@@ -283,7 +308,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             
             foreach (var child in children)
             {
-                var childNode = BuildCategoryNode(child, allCategories);
+                var childNode = BuildCategoryNode(child, allCategories, visited, depth + 1);
                 nodeVm.Children.Add(childNode);
             }
             
@@ -301,6 +326,96 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             }
             
             return nodeVm;
+        }
+        
+        /// <summary>
+        /// Creates the "Uncategorized" virtual category node.
+        /// This is a special system category (Guid.Empty) that shows orphaned todos.
+        /// Orphaned todos = todos with category_id = NULL or category_id not in CategoryStore.
+        /// </summary>
+        private CategoryNodeViewModel CreateUncategorizedNode()
+        {
+            // Create virtual category with special ID
+            var uncategorizedCategory = new Category
+            {
+                Id = Guid.Empty, // Special ID for system category
+                Name = "Uncategorized",
+                DisplayPath = "Uncategorized",
+                ParentId = null
+            };
+            
+            var nodeVm = new CategoryNodeViewModel(uncategorizedCategory);
+            
+            // Query orphaned todos:
+            // 1. Todos with category_id = NULL
+            // 2. Todos with category_id not in CategoryStore (deleted categories)
+            var allTodos = _todoStore.AllTodos;
+            var categoryIds = _categoryStore.Categories.Select(c => c.Id).ToHashSet();
+            
+            var orphanedTodos = allTodos
+                .Where(t => !t.CategoryId.HasValue || !categoryIds.Contains(t.CategoryId.Value))
+                .ToList();
+            
+            _logger.Debug($"[CategoryTree] Found {orphanedTodos.Count} orphaned todos (NULL or deleted category)");
+            
+            // Add orphaned todos to the node
+            foreach (var todo in orphanedTodos)
+            {
+                var todoVm = new TodoItemViewModel(todo, _todoStore, _logger);
+                nodeVm.Todos.Add(todoVm);
+            }
+            
+            return nodeVm;
+        }
+        
+        /// <summary>
+        /// Event handler for CategoryStore changes - refreshes tree on UI thread.
+        /// </summary>
+        private void OnCategoryStoreChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (_disposed) return;
+            
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(async () =>
+            {
+                _logger.Debug("[CategoryTree] CategoryStore changed, refreshing tree");
+                await LoadCategoriesAsync();
+            });
+        }
+        
+        /// <summary>
+        /// Event handler for TodoStore changes - refreshes tree on UI thread.
+        /// </summary>
+        private void OnTodoStoreChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (_disposed) return;
+            
+            System.Windows.Application.Current?.Dispatcher.InvokeAsync(async () =>
+            {
+                _logger.Debug("[CategoryTree] TodoStore changed, refreshing tree");
+                await LoadCategoriesAsync();
+            });
+        }
+        
+        /// <summary>
+        /// Dispose resources and unsubscribe from events to prevent memory leaks.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed) return;
+            
+            try
+            {
+                // Unsubscribe from events
+                _categoryStore.Categories.CollectionChanged -= OnCategoryStoreChanged;
+                _todoStore.AllTodos.CollectionChanged -= OnTodoStoreChanged;
+                
+                _disposed = true;
+                _logger.Debug("[CategoryTree] Disposed successfully - events unsubscribed");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[CategoryTree] Error during disposal");
+            }
         }
 
         #endregion
