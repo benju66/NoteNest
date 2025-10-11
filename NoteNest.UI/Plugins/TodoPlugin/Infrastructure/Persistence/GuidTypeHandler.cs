@@ -1,6 +1,7 @@
 using System;
 using System.Data;
 using Dapper;
+using Serilog;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
 {
@@ -40,16 +41,38 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
     {
         public override Guid? Parse(object value)
         {
+            // DIAGNOSTIC: Log every invocation to both Debug and Serilog
+            var valueType = value?.GetType().Name ?? "null";
+            var valueStr = value?.ToString() ?? "null";
+            
             if (value == null || value is DBNull)
+            {
+                Log.Debug("[GuidTypeHandler] Parse: value=null/DBNull → returning null");
                 return null;
+            }
 
             if (value is Guid guid)
+            {
+                Log.Debug("[GuidTypeHandler] Parse: already Guid={Guid} → returning as-is", guid);
                 return guid;
+            }
 
             if (value is string str && !string.IsNullOrWhiteSpace(str))
             {
                 if (Guid.TryParse(str, out var parsed))
+                {
+                    Log.Debug("[GuidTypeHandler] Parse: '{String}' → {Parsed} ✅", str.Substring(0, Math.Min(8, str.Length)), parsed);
                     return parsed;
+                }
+                else
+                {
+                    Log.Warning("[GuidTypeHandler] Parse: '{String}' → TryParse FAILED → NULL", str);
+                }
+            }
+            else
+            {
+                Log.Warning("[GuidTypeHandler] Parse: type={ValueType}, whitespace={IsWhitespace} → NULL", 
+                    valueType, string.IsNullOrWhiteSpace(valueStr));
             }
 
             return null;

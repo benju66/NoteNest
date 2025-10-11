@@ -39,16 +39,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 await connection.OpenAsync();
                 
                 var sql = "SELECT * FROM todos WHERE id = @Id";
-                var dto = await connection.QuerySingleOrDefaultAsync<TodoItemDto>(sql, new { Id = id.ToString() });
+                // FIX: Query directly to TodoItem (matches all other queries)
+                var todo = await connection.QuerySingleOrDefaultAsync<TodoItem>(sql, new { Id = id.ToString() });
                 
-                if (dto != null)
+                if (todo != null)
                 {
                     var tags = await GetTagsForTodoAsync(id);
-                    var aggregate = dto.ToAggregate(tags.ToList());
-                    return TodoMapper.ToUiModel(aggregate);
+                    todo.Tags = tags;
                 }
                 
-                return null;
+                return todo;
             }
             catch (Exception ex)
             {
@@ -68,18 +68,66 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                     ? "SELECT * FROM todos ORDER BY sort_order ASC"
                     : "SELECT * FROM todos WHERE is_completed = 0 ORDER BY sort_order ASC";
                     
-                // Query as DTO (handles TEXT -> string conversion)
-                var dtos = (await connection.QueryAsync<TodoItemDto>(sql)).ToList();
-                
-                // Load tags and convert to aggregates, then to UI models
-                var todos = new List<TodoItem>();
-                foreach (var dto in dtos)
+                // DIAGNOSTIC: Check raw SQL result BEFORE Dapper mapping
+                var rawResults = (await connection.QueryAsync(sql)).ToList();
+                foreach (var row in rawResults)
                 {
-                    var tags = await GetTagsForTodoAsync(Guid.Parse(dto.Id));
-                    var aggregate = dto.ToAggregate(tags.ToList());
-                    var uiModel = TodoMapper.ToUiModel(aggregate);
-                    todos.Add(uiModel);
+                    var rawCategoryId = ((IDictionary<string, object>)row).ContainsKey("category_id") 
+                        ? ((IDictionary<string, object>)row)["category_id"] 
+                        : null;
+                    _logger.Debug($"[TodoRepository] RAW SQL result: category_id column = '{rawCategoryId}' (type: {rawCategoryId?.GetType().Name ?? "null"})");
                 }
+                
+                // WORKAROUND: Dapper isn't calling type handler, so manually map the problematic fields
+                var todos = new List<TodoItem>();
+                foreach (var row in rawResults)
+                {
+                    var dict = (IDictionary<string, object>)row;
+                    var todo = new TodoItem
+                    {
+                        Id = Guid.Parse((string)dict["id"]),
+                        Text = (string)dict["text"],
+                        Description = dict["description"] as string,
+                        IsCompleted = Convert.ToBoolean(dict["is_completed"]),
+                        CompletedDate = dict["completed_date"] != null && dict["completed_date"] is not DBNull
+                            ? DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(dict["completed_date"])).UtcDateTime
+                            : null,
+                        CategoryId = dict["category_id"] != null && dict["category_id"] is not DBNull && !string.IsNullOrWhiteSpace(dict["category_id"].ToString())
+                            ? Guid.Parse((string)dict["category_id"])
+                            : null,
+                        ParentId = dict["parent_id"] != null && dict["parent_id"] is not DBNull && !string.IsNullOrWhiteSpace(dict["parent_id"].ToString())
+                            ? Guid.Parse((string)dict["parent_id"])
+                            : null,
+                        Order = Convert.ToInt32(dict["sort_order"]),
+                        Priority = (Models.Priority)Convert.ToInt32(dict["priority"]),
+                        IsFavorite = Convert.ToBoolean(dict["is_favorite"]),
+                        DueDate = dict["due_date"] != null && dict["due_date"] is not DBNull
+                            ? DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(dict["due_date"])).UtcDateTime
+                            : null,
+                        ReminderDate = dict["reminder_date"] != null && dict["reminder_date"] is not DBNull
+                            ? DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(dict["reminder_date"])).UtcDateTime
+                            : null,
+                        SourceNoteId = dict["source_note_id"] != null && dict["source_note_id"] is not DBNull && !string.IsNullOrWhiteSpace(dict["source_note_id"].ToString())
+                            ? Guid.Parse((string)dict["source_note_id"])
+                            : null,
+                        SourceFilePath = dict["source_file_path"] as string,
+                        SourceLineNumber = dict["source_line_number"] is not DBNull ? Convert.ToInt32(dict["source_line_number"]) : null,
+                        SourceCharOffset = dict["source_char_offset"] is not DBNull ? Convert.ToInt32(dict["source_char_offset"]) : null,
+                        IsOrphaned = Convert.ToBoolean(dict["is_orphaned"]),
+                        CreatedDate = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(dict["created_at"])).UtcDateTime,
+                        ModifiedDate = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(dict["modified_at"])).UtcDateTime
+                    };
+                    todos.Add(todo);
+                }
+                
+                await LoadTagsForTodos(connection, todos);
+                
+                // DIAGNOSTIC: Log what we actually loaded
+                foreach (var todo in todos)
+                {
+                    _logger.Debug($"[TodoRepository] GetAllAsync loaded: \"{todo.Text}\" - CategoryId={todo.CategoryId?.ToString() ?? "NULL"}, IsOrphaned={todo.IsOrphaned}");
+                }
+                _logger.Info($"[TodoRepository] GetAllAsync returned {todos.Count} todos");
                 
                 return todos;
             }
