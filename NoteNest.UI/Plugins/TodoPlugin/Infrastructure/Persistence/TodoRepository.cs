@@ -365,6 +365,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
         
         /// <summary>
         /// Update last_seen timestamp for a todo (for sync tracking).
+        /// OPTIONAL: Gracefully handles if column doesn't exist (for backward compatibility).
         /// </summary>
         public async Task UpdateLastSeenAsync(Guid todoId)
         {
@@ -372,6 +373,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
             {
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
+                
+                // Check if last_seen column exists first
+                var checkSql = "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='last_seen'";
+                var columnExists = await connection.ExecuteScalarAsync<int>(checkSql) > 0;
+                
+                if (!columnExists)
+                {
+                    _logger.Debug($"[TodoRepository] last_seen column doesn't exist - skipping update (backward compat)");
+                    return;  // Gracefully skip if column doesn't exist
+                }
                 
                 var sql = "UPDATE todos SET last_seen = @LastSeen WHERE id = @Id";
                 await connection.ExecuteAsync(sql, new 
@@ -384,8 +395,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
             }
             catch (Exception ex)
             {
-                _logger.Error($"[TodoRepository] ❌ UpdateLastSeenAsync({todoId}) failed: {ex.Message}");
-                throw;
+                // Don't propagate - this is optional tracking
+                _logger.Warning($"[TodoRepository] ⚠️ UpdateLastSeenAsync({todoId}) failed (non-critical): {ex.Message}");
             }
         }
         
