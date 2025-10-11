@@ -127,27 +127,28 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Parsing
         }
         
         /// <summary>
-        /// Filter out brackets that are likely not todos (metadata, placeholders, etc.).
+        /// Filter out brackets that are likely not todos (empty, whitespace, etc.).
+        /// UPDATED: Less aggressive - lets users decide what's a todo.
+        /// Configurable via settings in future.
         /// </summary>
         private bool IsLikelyNotATodo(string text)
         {
-            var lowerText = text.ToLowerInvariant();
+            var lowerText = text.ToLowerInvariant().Trim();
             
-            // Skip common metadata patterns
-            var metadataPatterns = new[]
-            {
-                "note:", "source:", "reference:", "link:", "url:",
-                "date:", "time:", "author:", "version:",
-                "tbd", "todo", "n/a", "wip", "draft"
-            };
-            
-            // If text is ONLY metadata (not a sentence with metadata)
-            if (text.Length < 15 && metadataPatterns.Any(p => lowerText.Contains(p)))
+            // Filter only truly empty/useless brackets
+            if (string.IsNullOrWhiteSpace(text))
                 return true;
             
-            // Skip single words (likely abbreviations or labels)
-            if (!text.Contains(' ') && text.Length < 15)
+            // Filter exact matches of checkbox marks and placeholders
+            var exactExclusions = new[] { "x", " ", "..." };
+            if (exactExclusions.Contains(lowerText))
                 return true;
+            
+            // NOTE: Removed aggressive filtering!
+            // - Single words are now ALLOWED ([test], [refactor], [debug])
+            // - Metadata patterns are now ALLOWED ([todo: call john], [draft proposal])
+            // - Users decide what's a todo, not the parser!
+            // - Future: Make this configurable via settings UI
             
             return false;
         }

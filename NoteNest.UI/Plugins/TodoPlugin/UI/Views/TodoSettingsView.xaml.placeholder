@@ -1,0 +1,58 @@
+<!-- 
+    TodoSettingsView.xaml - PLACEHOLDER
+    
+    Future: Full settings UI for todo extraction customization
+    
+    Will include:
+    - Syntax pattern toggles (brackets, markdown checkboxes, custom)
+    - Filtering options (smart filtering on/off, exclusion patterns)
+    - Confidence threshold slider
+    - Auto-categorization toggle
+    - Sync behavior settings
+    - Custom pattern editor
+    
+    Integration point: Settings menu → Todo Plugin Settings tab
+    
+    Architecture:
+    - ViewModel: TodoSettingsViewModel (MVVM pattern)
+    - Data binding: Two-way binding to TodoExtractionSettings
+    - Persistence: Save to user_preferences.db
+    - Real-time preview: Show what brackets would be extracted
+    
+    Timeline: Milestone 2 or later (after core features)
+-->
+
+<UserControl x:Class="NoteNest.UI.Plugins.TodoPlugin.UI.Views.TodoSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel Padding="20">
+        <TextBlock Text="Todo Plugin Settings" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+        
+        <!-- PLACEHOLDER: Will be implemented in Milestone 2+ -->
+        <TextBlock Text="Settings UI coming soon!" Foreground="Gray"/>
+        
+        <!-- Future sections:
+        
+        <GroupBox Header="Extraction Syntax">
+            <StackPanel>
+                <CheckBox Content="Enable [bracket] syntax" IsChecked="{Binding Settings.EnableBracketSyntax}"/>
+                <CheckBox Content="Enable - [ ] Markdown checkboxes" IsChecked="{Binding Settings.EnableMarkdownCheckboxes}"/>
+            </StackPanel>
+        </GroupBox>
+        
+        <GroupBox Header="Filtering">
+            <StackPanel>
+                <CheckBox Content="Enable smart filtering" IsChecked="{Binding Settings.EnableSmartFiltering}"/>
+                <Label Content="Minimum confidence:"/>
+                <Slider Minimum="0" Maximum="1" Value="{Binding Settings.MinimumConfidence}"/>
+            </StackPanel>
+        </GroupBox>
+        
+        <GroupBox Header="Auto-Categorization">
+            <CheckBox Content="Auto-categorize by note folder" IsChecked="{Binding Settings.AutoCategorizeByNoteFolder}"/>
+        </GroupBox>
+        
+        -->
+    </StackPanel>
+</UserControl>
+
