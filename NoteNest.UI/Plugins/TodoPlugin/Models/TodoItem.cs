@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Models
 {
     /// <summary>
-    /// Simple DTO for a Todo item.
+    /// UI model for a Todo item. Converts to/from TodoAggregate for business logic.
     /// </summary>
     public class TodoItem
     {
@@ -45,6 +46,69 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Models
         public bool IsDueTomorrow()
         {
             return !IsCompleted && DueDate.HasValue && DueDate.Value.Date == DateTime.UtcNow.Date.AddDays(1);
+        }
+
+        // =============================================================================
+        // AGGREGATE CONVERSIONS (for clean architecture)
+        // =============================================================================
+
+        /// <summary>
+        /// Convert UI model to domain aggregate for business logic
+        /// </summary>
+        public TodoAggregate ToAggregate()
+        {
+            return TodoAggregate.CreateFromDatabase(
+                id: this.Id,
+                text: this.Text,
+                isCompleted: this.IsCompleted,
+                completedDate: this.CompletedDate,
+                dueDate: this.DueDate,
+                reminderDate: this.ReminderDate,
+                priority: (int)this.Priority,
+                isFavorite: this.IsFavorite,
+                order: this.Order,
+                createdAt: this.CreatedDate,
+                modifiedDate: this.ModifiedDate,
+                tags: this.Tags,
+                categoryId: this.CategoryId,
+                parentId: this.ParentId,
+                sourceNoteId: this.SourceNoteId,
+                sourceFilePath: this.SourceFilePath,
+                sourceLineNumber: this.SourceLineNumber,
+                sourceCharOffset: this.SourceCharOffset,
+                isOrphaned: this.IsOrphaned,
+                description: this.Description
+            );
+        }
+
+        /// <summary>
+        /// Convert domain aggregate to UI model
+        /// </summary>
+        public static TodoItem FromAggregate(TodoAggregate aggregate)
+        {
+            return new TodoItem
+            {
+                Id = aggregate.Id.Value,
+                CategoryId = aggregate.CategoryId,
+                ParentId = aggregate.ParentId,
+                Text = aggregate.Text.Value,
+                Description = aggregate.Description,
+                IsCompleted = aggregate.IsCompleted,
+                CompletedDate = aggregate.CompletedDate,
+                DueDate = aggregate.DueDate?.Value,
+                ReminderDate = aggregate.ReminderDate,
+                Priority = (Priority)(int)aggregate.Priority,  // Cast from domain to UI enum
+                IsFavorite = aggregate.IsFavorite,
+                Order = aggregate.Order,
+                CreatedDate = aggregate.CreatedAt,
+                ModifiedDate = aggregate.ModifiedDate,
+                Tags = aggregate.Tags ?? new List<string>(),
+                SourceNoteId = aggregate.SourceNoteId,
+                SourceFilePath = aggregate.SourceFilePath,
+                SourceLineNumber = aggregate.SourceLineNumber,
+                SourceCharOffset = aggregate.SourceCharOffset,
+                IsOrphaned = aggregate.IsOrphaned
+            };
         }
     }
 

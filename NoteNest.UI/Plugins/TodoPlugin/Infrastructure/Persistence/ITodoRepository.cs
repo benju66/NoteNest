@@ -6,100 +6,84 @@ using NoteNest.UI.Plugins.TodoPlugin.Models;
 namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
 {
     /// <summary>
-    /// Repository interface for todo database operations.
-    /// Follows TreeDatabaseRepository pattern with high-performance queries.
+    /// Clean repository interface following DDD + DTO pattern.
+    /// Flow: Database → TodoItemDto → TodoAggregate → TodoItem (UI)
+    /// 
+    /// Only methods actually used by consumers (TodoStore, TodoSyncService, CategoryCleanupService).
     /// </summary>
     public interface ITodoRepository
     {
         // =========================================================================
-        // CORE CRUD OPERATIONS
+        // CORE OPERATIONS (TodoStore)
         // =========================================================================
         
-        Task<TodoItem?> GetByIdAsync(Guid id);
+        /// <summary>
+        /// Get all todos with optional completion filter.
+        /// </summary>
         Task<List<TodoItem>> GetAllAsync(bool includeCompleted = true);
+        
+        /// <summary>
+        /// Get single todo by ID. Returns null if not found.
+        /// </summary>
+        Task<TodoItem?> GetByIdAsync(Guid id);
+        
+        /// <summary>
+        /// Insert new todo. Returns true if successful.
+        /// </summary>
         Task<bool> InsertAsync(TodoItem todo);
+        
+        /// <summary>
+        /// Update existing todo. Returns true if successful.
+        /// </summary>
         Task<bool> UpdateAsync(TodoItem todo);
+        
+        /// <summary>
+        /// Delete todo permanently. Returns true if deleted.
+        /// </summary>
         Task<bool> DeleteAsync(Guid id);
-        Task<int> BulkInsertAsync(IEnumerable<TodoItem> todos);
         
         // =========================================================================
-        // QUERY OPERATIONS
+        // QUERY OPERATIONS (TodoStore)
         // =========================================================================
         
+        /// <summary>
+        /// Get todos by category ID.
+        /// </summary>
         Task<List<TodoItem>> GetByCategoryAsync(Guid categoryId, bool includeCompleted = false);
-        Task<List<TodoItem>> GetBySourceAsync(TodoSource sourceType);
-        Task<List<TodoItem>> GetByParentAsync(Guid parentId);
-        Task<List<TodoItem>> GetRootTodosAsync(Guid? categoryId = null);
+        
+        /// <summary>
+        /// Get recently completed todos.
+        /// </summary>
+        Task<List<TodoItem>> GetRecentlyCompletedAsync(int count = 10);
         
         // =========================================================================
-        // SMART LISTS
+        // NOTE SYNC OPERATIONS (TodoSyncService)
         // =========================================================================
         
-        Task<List<TodoItem>> GetTodayTodosAsync();
-        Task<List<TodoItem>> GetOverdueTodosAsync();
-        Task<List<TodoItem>> GetHighPriorityTodosAsync();
-        Task<List<TodoItem>> GetFavoriteTodosAsync();
-        Task<List<TodoItem>> GetRecentlyCompletedAsync(int count = 100);
-        Task<List<TodoItem>> GetScheduledTodosAsync();
-        
-        // =========================================================================
-        // SEARCH
-        // =========================================================================
-        
-        Task<List<TodoItem>> SearchAsync(string searchTerm);
-        Task<List<TodoItem>> GetByTagAsync(string tag);
-        Task<List<string>> GetAllTagsAsync();
-        
-        // =========================================================================
-        // TAG OPERATIONS
-        // =========================================================================
-        
-        Task<List<string>> GetTagsForTodoAsync(Guid todoId);
-        Task<bool> AddTagAsync(Guid todoId, string tag);
-        Task<bool> RemoveTagAsync(Guid todoId, string tag);
-        Task<bool> SetTagsAsync(Guid todoId, IEnumerable<string> tags);
-        
-        // =========================================================================
-        // NOTE-LINKED TODO OPERATIONS
-        // =========================================================================
-        
+        /// <summary>
+        /// Get todos linked to a specific note.
+        /// </summary>
         Task<List<TodoItem>> GetByNoteIdAsync(Guid noteId);
-        Task<List<TodoItem>> GetOrphanedTodosAsync();
+        
+        /// <summary>
+        /// Update last_seen timestamp for a todo (used by sync service).
+        /// </summary>
+        Task UpdateLastSeenAsync(Guid todoId);
+        
+        /// <summary>
+        /// Mark all todos from a note as orphaned (when note deleted).
+        /// Returns count of todos marked.
+        /// </summary>
         Task<int> MarkOrphanedByNoteAsync(Guid noteId);
-        Task<bool> UpdateLastSeenAsync(Guid todoId);
         
         // =========================================================================
-        // MAINTENANCE
+        // CLEANUP OPERATIONS (CategoryCleanupService)
         // =========================================================================
         
-        Task<int> DeleteCompletedOlderThanAsync(int days);
-        Task<int> DeleteOrphanedOlderThanAsync(int days);
-        Task<DatabaseStats> GetStatsAsync();
-        Task<bool> OptimizeAsync();
-        Task<bool> VacuumAsync();
-        
-        // =========================================================================
-        // REBUILD OPERATIONS (for note-linked todos)
-        // =========================================================================
-        
-        Task<int> DeleteAllNoteLin​kedTodosAsync();
-        Task<bool> RebuildFromNotesAsync(string notesRootPath);
-    }
-    
-    /// <summary>
-    /// Database statistics
-    /// </summary>
-    public class DatabaseStats
-    {
-        public int TotalTodos { get; set; }
-        public int ActiveTodos { get; set; }
-        public int CompletedTodos { get; set; }
-        public int ManualTodos { get; set; }
-        public int NoteLinkedTodos { get; set; }
-        public int OrphanedTodos { get; set; }
-        public int OverdueTodos { get; set; }
-        public int HighPriorityTodos { get; set; }
-        public long DatabaseSizeBytes { get; set; }
+        /// <summary>
+        /// Update category for todos in bulk.
+        /// </summary>
+        Task UpdateCategoryForTodosAsync(Guid oldCategoryId, Guid? newCategoryId);
     }
 }
 
