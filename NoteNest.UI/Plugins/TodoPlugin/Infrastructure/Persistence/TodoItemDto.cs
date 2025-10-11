@@ -28,6 +28,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
         public string ParentId { get; set; }
         
         // Source tracking
+        public string SourceType { get; set; }  // 'manual' or 'note'
         public string SourceNoteId { get; set; }
         public string SourceFilePath { get; set; }
         public int? SourceLineNumber { get; set; }
@@ -84,6 +85,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 ModifiedAt = new DateTimeOffset(aggregate.ModifiedDate).ToUnixTimeSeconds(),
                 CategoryId = aggregate.CategoryId?.ToString(),
                 ParentId = aggregate.ParentId?.ToString(),
+                SourceType = aggregate.SourceNoteId.HasValue ? "note" : "manual",  // Determine type from source
                 SourceNoteId = aggregate.SourceNoteId?.ToString(),
                 SourceFilePath = aggregate.SourceFilePath,
                 SourceLineNumber = aggregate.SourceLineNumber,

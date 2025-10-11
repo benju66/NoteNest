@@ -115,12 +115,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                         INSERT INTO todos (
                             id, text, description, is_completed, completed_date, due_date, 
                             reminder_date, priority, is_favorite, sort_order, created_at, 
-                            modified_at, category_id, parent_id, source_note_id, 
+                            modified_at, category_id, parent_id, source_type, source_note_id, 
                             source_file_path, source_line_number, source_char_offset, is_orphaned
                         ) VALUES (
                             @Id, @Text, @Description, @IsCompleted, @CompletedDate, @DueDate,
                             @ReminderDate, @Priority, @IsFavorite, @SortOrder, @CreatedAt,
-                            @ModifiedAt, @CategoryId, @ParentId, @SourceNoteId,
+                            @ModifiedAt, @CategoryId, @ParentId, @SourceType, @SourceNoteId,
                             @SourceFilePath, @SourceLineNumber, @SourceCharOffset, @IsOrphaned
                         )";
                     
@@ -176,6 +176,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                             modified_at = @ModifiedAt,
                             category_id = @CategoryId,
                             parent_id = @ParentId,
+                            source_type = @SourceType,
                             source_note_id = @SourceNoteId,
                             source_file_path = @SourceFilePath,
                             source_line_number = @SourceLineNumber,
