@@ -41,21 +41,33 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                     ? "SELECT * FROM todos ORDER BY sort_order ASC"
                     : "SELECT * FROM todos WHERE is_completed = 0 ORDER BY sort_order ASC";
                     
-                var dtos = (await connection.QueryAsync<TodoItemDto>(sql)).ToList();
+                // MANUAL MAPPING: Query dynamic objects to avoid Dapper TEXT → Guid? issues
+                var rawResults = (await connection.QueryAsync(sql)).ToList();
                 var todos = new List<TodoItem>();
                 
-                foreach (var dto in dtos)
+                foreach (var row in rawResults)
                 {
                     try
                     {
+                        var dict = (IDictionary<string, object>)row;
+                        
+                        // Parse row to DTO (manual but reliable)
+                        var dto = ParseRowToDto(dict);
+                        
+                        // Load tags
                         var tags = await GetTagsForTodoAsync(connection, Guid.Parse(dto.Id));
+                        
+                        // Convert DTO → Aggregate → TodoItem (clean DDD flow)
                         var aggregate = dto.ToAggregate(tags);
                         var todoItem = TodoItem.FromAggregate(aggregate);
                         todos.Add(todoItem);
+                        
+                        // DIAGNOSTIC: Log what was loaded
+                        _logger.Debug($"[TodoRepository] Loaded: \"{todoItem.Text}\" - CategoryId={todoItem.CategoryId?.ToString() ?? "NULL"}");
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warning($"[TodoRepository] Failed to convert todo {dto.Id}: {ex.Message}. Skipping.");
+                        _logger.Warning($"[TodoRepository] Failed to convert todo: {ex.Message}. Skipping.");
                     }
                 }
                 
@@ -77,13 +89,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 await connection.OpenAsync();
                 
                 var sql = "SELECT * FROM todos WHERE id = @Id";
-                var dto = await connection.QuerySingleOrDefaultAsync<TodoItemDto>(sql, new { Id = id.ToString() });
                 
-                if (dto == null)
+                // MANUAL MAPPING: Use dynamic query to avoid Dapper TEXT → Guid? issues
+                var row = await connection.QuerySingleOrDefaultAsync(sql, new { Id = id.ToString() });
+                
+                if (row == null)
                 {
                     _logger.Debug($"[TodoRepository] Todo {id} not found");
                     return null;
                 }
+                
+                var dict = (IDictionary<string, object>)row;
+                var dto = ParseRowToDto(dict);
                 
                 var tags = await GetTagsForTodoAsync(connection, id);
                 var aggregate = dto.ToAggregate(tags);
@@ -260,20 +277,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                     ? "SELECT * FROM todos WHERE category_id = @CategoryId ORDER BY sort_order ASC"
                     : "SELECT * FROM todos WHERE category_id = @CategoryId AND is_completed = 0 ORDER BY sort_order ASC";
                 
-                var dtos = (await connection.QueryAsync<TodoItemDto>(sql, new { CategoryId = categoryId.ToString() })).ToList();
+                // MANUAL MAPPING: Query dynamic objects
+                var rawResults = (await connection.QueryAsync(sql, new { CategoryId = categoryId.ToString() })).ToList();
                 var todos = new List<TodoItem>();
                 
-                foreach (var dto in dtos)
+                foreach (var row in rawResults)
                 {
                     try
                     {
+                        var dict = (IDictionary<string, object>)row;
+                        var dto = ParseRowToDto(dict);
+                        
                         var tags = await GetTagsForTodoAsync(connection, Guid.Parse(dto.Id));
                         var aggregate = dto.ToAggregate(tags);
                         todos.Add(TodoItem.FromAggregate(aggregate));
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warning($"[TodoRepository] Failed to convert todo {dto.Id}: {ex.Message}");
+                        _logger.Warning($"[TodoRepository] Failed to convert todo: {ex.Message}");
                     }
                 }
                 
@@ -299,20 +320,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                     ORDER BY completed_date DESC 
                     LIMIT @Count";
                 
-                var dtos = (await connection.QueryAsync<TodoItemDto>(sql, new { Count = count })).ToList();
+                // MANUAL MAPPING: Query dynamic objects
+                var rawResults = (await connection.QueryAsync(sql, new { Count = count })).ToList();
                 var todos = new List<TodoItem>();
                 
-                foreach (var dto in dtos)
+                foreach (var row in rawResults)
                 {
                     try
                     {
+                        var dict = (IDictionary<string, object>)row;
+                        var dto = ParseRowToDto(dict);
+                        
                         var tags = await GetTagsForTodoAsync(connection, Guid.Parse(dto.Id));
                         var aggregate = dto.ToAggregate(tags);
                         todos.Add(TodoItem.FromAggregate(aggregate));
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warning($"[TodoRepository] Failed to convert todo {dto.Id}: {ex.Message}");
+                        _logger.Warning($"[TodoRepository] Failed to convert todo: {ex.Message}");
                     }
                 }
                 
@@ -337,20 +362,25 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 await connection.OpenAsync();
                 
                 var sql = "SELECT * FROM todos WHERE source_note_id = @NoteId ORDER BY source_line_number ASC";
-                var dtos = (await connection.QueryAsync<TodoItemDto>(sql, new { NoteId = noteId.ToString() })).ToList();
+                
+                // MANUAL MAPPING: Query dynamic objects
+                var rawResults = (await connection.QueryAsync(sql, new { NoteId = noteId.ToString() })).ToList();
                 var todos = new List<TodoItem>();
                 
-                foreach (var dto in dtos)
+                foreach (var row in rawResults)
                 {
                     try
                     {
+                        var dict = (IDictionary<string, object>)row;
+                        var dto = ParseRowToDto(dict);
+                        
                         var tags = await GetTagsForTodoAsync(connection, Guid.Parse(dto.Id));
                         var aggregate = dto.ToAggregate(tags);
                         todos.Add(TodoItem.FromAggregate(aggregate));
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warning($"[TodoRepository] Failed to convert todo {dto.Id}: {ex.Message}");
+                        _logger.Warning($"[TodoRepository] Failed to convert todo: {ex.Message}");
                     }
                 }
                 
@@ -449,6 +479,67 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 _logger.Error($"[TodoRepository] ❌ UpdateCategoryForTodosAsync failed: {ex.Message}");
                 throw;
             }
+        }
+        
+        // =========================================================================
+        // MANUAL MAPPING HELPERS (Handles SQLite TEXT → Guid? issues)
+        // =========================================================================
+        
+        /// <summary>
+        /// Parse database row to TodoItemDto with manual field mapping.
+        /// This handles SQLite TEXT → Guid? conversion issues that Dapper can't handle reliably.
+        /// </summary>
+        private TodoItemDto ParseRowToDto(IDictionary<string, object> row)
+        {
+            return new TodoItemDto
+            {
+                Id = row["id"]?.ToString(),
+                Text = row["text"]?.ToString(),
+                Description = row["description"]?.ToString(),
+                IsCompleted = Convert.ToInt32(row["is_completed"]),
+                CompletedDate = row["completed_date"] != null && row["completed_date"] is not DBNull 
+                    ? Convert.ToInt64(row["completed_date"]) 
+                    : (long?)null,
+                DueDate = row["due_date"] != null && row["due_date"] is not DBNull 
+                    ? Convert.ToInt64(row["due_date"]) 
+                    : (long?)null,
+                ReminderDate = row["reminder_date"] != null && row["reminder_date"] is not DBNull 
+                    ? Convert.ToInt64(row["reminder_date"]) 
+                    : (long?)null,
+                Priority = Convert.ToInt32(row["priority"]),
+                IsFavorite = Convert.ToInt32(row["is_favorite"]),
+                SortOrder = Convert.ToInt32(row["sort_order"]),
+                CreatedAt = Convert.ToInt64(row["created_at"]),
+                ModifiedAt = Convert.ToInt64(row["modified_at"]),
+                CategoryId = ParseGuidColumn(row["category_id"]),
+                ParentId = ParseGuidColumn(row["parent_id"]),
+                SourceType = row["source_type"]?.ToString(),
+                SourceNoteId = ParseGuidColumn(row["source_note_id"]),
+                SourceFilePath = row["source_file_path"]?.ToString(),
+                SourceLineNumber = row["source_line_number"] != null && row["source_line_number"] is not DBNull 
+                    ? Convert.ToInt32(row["source_line_number"]) 
+                    : (int?)null,
+                SourceCharOffset = row["source_char_offset"] != null && row["source_char_offset"] is not DBNull 
+                    ? Convert.ToInt32(row["source_char_offset"]) 
+                    : (int?)null,
+                IsOrphaned = Convert.ToInt32(row["is_orphaned"])
+            };
+        }
+        
+        /// <summary>
+        /// Parse SQLite TEXT column to Guid string (nullable).
+        /// Handles NULL, DBNull, empty string, and whitespace.
+        /// </summary>
+        private string ParseGuidColumn(object value)
+        {
+            if (value == null || value is DBNull)
+                return null;
+            
+            var stringValue = value.ToString();
+            if (string.IsNullOrWhiteSpace(stringValue))
+                return null;
+            
+            return stringValue;
         }
         
         // =========================================================================
