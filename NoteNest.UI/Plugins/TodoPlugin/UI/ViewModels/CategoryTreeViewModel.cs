@@ -364,6 +364,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 foreach (var todo in categoryTodos)
                 {
                     var todoVm = new TodoItemViewModel(todo, _todoStore, _logger);
+                    // Wire up todo events to bubble up to category level
+                    todoVm.OpenRequested += nodeVm.OnTodoOpenRequested;
+                    todoVm.SelectionRequested += nodeVm.OnTodoSelectionRequested;
                     nodeVm.Todos.Add(todoVm);
                 }
             }
@@ -410,6 +413,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             foreach (var todo in uncategorizedTodos)
             {
                 var todoVm = new TodoItemViewModel(todo, _todoStore, _logger);
+                // Wire up todo events to bubble up to category level
+                todoVm.OpenRequested += nodeVm.OnTodoOpenRequested;
+                todoVm.SelectionRequested += nodeVm.OnTodoSelectionRequested;
                 nodeVm.Todos.Add(todoVm);
             }
             
@@ -524,6 +530,42 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         }
         
         /// <summary>
+        /// Finds a category by its ID in the tree.
+        /// Useful for category operations, validation, and debugging.
+        /// Complements FindCategoryContainingTodo for complete tree navigation.
+        /// </summary>
+        public CategoryNodeViewModel? FindCategoryById(Guid categoryId)
+        {
+            return FindCategoryByIdRecursive(Categories, categoryId);
+        }
+
+        /// <summary>
+        /// Recursively searches the category tree to find a category by ID.
+        /// </summary>
+        private CategoryNodeViewModel? FindCategoryByIdRecursive(
+            IEnumerable<CategoryNodeViewModel> categories, 
+            Guid categoryId)
+        {
+            foreach (var category in categories)
+            {
+                // Check if this is the category we're looking for
+                if (category.CategoryId == categoryId)
+                {
+                    return category;
+                }
+                
+                // Recursively search child categories
+                var foundInChild = FindCategoryByIdRecursive(category.Children, categoryId);
+                if (foundInChild != null)
+                {
+                    return foundInChild;
+                }
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
         /// Dispose resources and unsubscribe from events to prevent memory leaks.
         /// </summary>
         public void Dispose()
@@ -558,6 +600,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         private bool _isExpanded;
         private bool _isSelected;
         private string _displayPath;
+
+        // Events for todo interaction (bubble up to tree level)
+        public event Action<TodoItemViewModel>? TodoOpenRequested;
+        public event Action<TodoItemViewModel>? TodoSelectionRequested;
 
         public CategoryNodeViewModel(Category category)
         {
@@ -647,6 +693,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                     TreeItems.Add(todo);
                 }
             }
+        }
+        
+        // =============================================================================
+        // TODO EVENT HANDLERS - Bubble events up to tree level
+        // =============================================================================
+
+        public void OnTodoOpenRequested(TodoItemViewModel todo)
+        {
+            TodoOpenRequested?.Invoke(todo);
+        }
+
+        public void OnTodoSelectionRequested(TodoItemViewModel todo)
+        {
+            TodoSelectionRequested?.Invoke(todo);
         }
         
         public bool HasChildren => Children.Any();

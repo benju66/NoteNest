@@ -171,6 +171,27 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
         #endregion
 
+        #region Events
+
+        /// <summary>
+        /// Events for parent coordination - enables event bubbling pattern.
+        /// Matches main app NoteItemViewModel pattern for architectural consistency.
+        /// </summary>
+        public event Action<TodoItemViewModel>? OpenRequested;
+        public event Action<TodoItemViewModel>? SelectionRequested;
+
+        private void OnOpenRequested()
+        {
+            OpenRequested?.Invoke(this);
+        }
+
+        private void OnSelectionRequested()
+        {
+            SelectionRequested?.Invoke(this);
+        }
+
+        #endregion
+
         #region Commands
 
         public ICommand ToggleCompletionCommand { get; private set; }
@@ -182,6 +203,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public ICommand CyclePriorityCommand { get; private set; }
         public ICommand SetDueDateCommand { get; private set; }
         public ICommand DeleteCommand { get; private set; }
+        public ICommand OpenCommand { get; private set; }
+        public ICommand SelectCommand { get; private set; }
 
         private void InitializeCommands()
         {
@@ -194,6 +217,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             CyclePriorityCommand = new AsyncRelayCommand(CyclePriorityAsync);
             SetDueDateCommand = new RelayCommand(SetDueDate);
             DeleteCommand = new AsyncRelayCommand(DeleteAsync);
+            OpenCommand = new RelayCommand(() => OnOpenRequested());
+            SelectCommand = new RelayCommand(() => OnSelectionRequested());
         }
 
         private async Task ToggleCompletionAsync()
