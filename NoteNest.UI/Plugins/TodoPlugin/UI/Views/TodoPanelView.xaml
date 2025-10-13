@@ -93,17 +93,88 @@
                             <MenuItem Header="Toggle _Favorite" Command="{Binding ToggleFavoriteCommand}"/>
                         </ContextMenu>
                         
-                        <!-- Category template - displays folder with child categories and todos -->
+                        <!-- Category template - EXACT match from main app note tree -->
                         <HierarchicalDataTemplate DataType="{x:Type vm:CategoryNodeViewModel}"
                                                   ItemsSource="{Binding AllItems}">
-                            <StackPanel Orientation="Horizontal" Margin="2">
-                                <TextBlock Text="📁" FontSize="12" Margin="0,0,4,0" Foreground="#FFA500"/>
-                                <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="Medium"/>
-                                <TextBlock Text="{Binding Todos.Count, StringFormat=' ({0})'}" 
-                                           FontSize="10" 
-                                           Foreground="Gray" 
-                                           Margin="4,0,0,0"/>
-                            </StackPanel>
+                            <Grid Height="26">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="20"/>   <!-- Expander -->
+                                    <ColumnDefinition Width="28"/>   <!-- Icon container with padding -->
+                                    <ColumnDefinition Width="*"/>    <!-- Name -->
+                                    <ColumnDefinition Width="Auto"/> <!-- Count -->
+                                </Grid.ColumnDefinitions>
+                                
+                                <!-- Custom expander button (EXACT from main app) -->
+                                <Button Grid.Column="0"
+                                        Command="{Binding ToggleExpandCommand}"
+                                        Background="Transparent" 
+                                        BorderThickness="0"
+                                        Padding="0"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center"
+                                        Visibility="{Binding HasPotentialContent, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <ContentControl Width="12" Height="12" Foreground="#FF6B6B6B">
+                                        <ContentControl.Style>
+                                            <Style TargetType="ContentControl">
+                                                <Setter Property="Template" Value="{StaticResource LucideChevronRight}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                        <Setter Property="Template" Value="{StaticResource LucideChevronDown}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ContentControl.Style>
+                                    </ContentControl>
+                                </Button>
+                                
+                                <!-- Icon container (EXACT from main app) -->
+                                <Border Grid.Column="1" 
+                                        Width="24" Height="24"
+                                        Background="Transparent"
+                                        ClipToBounds="False"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center">
+                                    <Grid>
+                                        <!-- Icon with absolute centering -->
+                                        <ContentControl HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Width="20" Height="20"
+                                                        Foreground="{DynamicResource AppTextSecondaryBrush}">
+                                            <ContentControl.Style>
+                                                <Style TargetType="ContentControl">
+                                                    <Setter Property="Template" Value="{StaticResource LucideFolder}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                            <Setter Property="Template" Value="{StaticResource LucideFolderOpen}"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                            <Setter Property="Foreground" Value="#FF1565C0"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ContentControl.Style>
+                                        </ContentControl>
+                                    </Grid>
+                                </Border>
+                                
+                                <!-- Folder name (EXACT from main app) -->
+                                <TextBlock Grid.Column="2"
+                                           Text="{Binding Name}" 
+                                           VerticalAlignment="Center"
+                                           Margin="4,0,0,0"
+                                           FontWeight="Medium"
+                                           FontSize="13"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                
+                                <!-- Todo count -->
+                                <TextBlock Grid.Column="3"
+                                           FontSize="10"
+                                           Margin="6,0,6,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource AppTextSecondaryBrush}">
+                                    <Run Text="("/><Run Text="{Binding Todos.Count, Mode=OneWay}"/><Run Text=")"/>
+                                </TextBlock>
+                            </Grid>
                         </HierarchicalDataTemplate>
                         
                         <!-- Todo template - ENHANCED with priority, date, editing -->
@@ -176,7 +247,18 @@
                     <TreeView.ItemContainerStyle>
                         <Style TargetType="TreeViewItem">
                             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
-                            <Setter Property="Padding" Value="2,1"/>
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,1"/>
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
                     </TreeView.ItemContainerStyle>
                 </TreeView>

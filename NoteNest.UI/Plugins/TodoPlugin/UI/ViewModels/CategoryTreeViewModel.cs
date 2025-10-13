@@ -510,6 +510,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             // Subscribe to collection changes to auto-update AllItems
             Children.CollectionChanged += (s, e) => UpdateAllItems();
             Todos.CollectionChanged += (s, e) => UpdateAllItems();
+            
+            // Initialize commands
+            ToggleExpandCommand = new RelayCommand(ToggleExpand);
+        }
+        
+        public ICommand ToggleExpandCommand { get; private set; }
+        
+        private void ToggleExpand()
+        {
+            IsExpanded = !IsExpanded;
         }
 
         public Guid CategoryId { get; }
@@ -567,6 +577,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public bool HasChildren => Children.Any();
         public bool HasTodos => Todos.Any();
         public bool HasContent => HasChildren || HasTodos;
+        public bool HasPotentialContent => HasChildren || HasTodos;  // For expander visibility
     }
 
     /// <summary>
