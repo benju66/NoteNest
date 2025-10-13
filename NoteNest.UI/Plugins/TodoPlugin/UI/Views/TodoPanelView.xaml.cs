@@ -73,6 +73,21 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                 }
             }
         }
+
+        private void CategoryTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (DataContext is TodoPanelViewModel panelVm)
+            {
+                // When a category is selected, update the ViewModel
+                if (e.NewValue is CategoryNodeViewModel categoryNode)
+                {
+                    panelVm.CategoryTree.SelectedCategory = categoryNode;
+                    _logger.Debug($"[TodoPanelView] Category selected: {categoryNode.Name} (ID: {categoryNode.CategoryId})");
+                }
+                // When a todo item is selected, we don't change the category selection
+                // The category filter should remain active
+            }
+        }
         
         private void CategoryTreeView_KeyDown(object sender, KeyEventArgs e)
         {

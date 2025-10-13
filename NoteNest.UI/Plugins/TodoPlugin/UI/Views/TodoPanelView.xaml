@@ -45,7 +45,11 @@
                         Margin="8,0,0,0"
                         Command="{Binding TodoList.QuickAddCommand}"
                         IsDefault="True"
-                        Content="Add"/>
+                        ToolTip="Add Todo">
+                    <ContentControl Template="{StaticResource LucideSquarePlus}"
+                                    Width="16" Height="16"
+                                    Foreground="{DynamicResource AppAccentBrush}"/>
+                </Button>
             </Grid>
         </Border>
         
@@ -70,7 +74,8 @@
                           MaxHeight="200"
                           Padding="0"
                           x:Name="CategoryTreeView"
-                          KeyDown="CategoryTreeView_KeyDown">
+                          KeyDown="CategoryTreeView_KeyDown"
+                          SelectedItemChanged="CategoryTreeView_SelectedItemChanged">
                     <TreeView.Resources>
                         <!-- Context Menu for Todos -->
                         <ContextMenu x:Key="TodoContextMenu">
@@ -193,10 +198,9 @@
                                     
                                     <!-- Checkbox -->
                                     <CheckBox Grid.Column="0"
-                                              IsChecked="{Binding IsCompleted}" 
+                                              IsChecked="{Binding IsCompleted, Mode=TwoWay}" 
                                               Margin="0,0,8,0"
-                                              VerticalAlignment="Center"
-                                              Command="{Binding ToggleCompletionCommand}"/>
+                                              VerticalAlignment="Center"/>
                                     
                                     <!-- Text (editable) -->
                                     <Grid Grid.Column="1">
@@ -273,8 +277,8 @@
                                                     MinHeight="26">
                                                 <ContentPresenter x:Name="PART_Header" 
                                                                   ContentSource="Header"/>
-                                            </Border>
-                                            
+        </Border>
+        
                                             <!-- Children container with indentation -->
                                             <ItemsPresenter x:Name="ItemsHost" 
                                                             Grid.Row="1" 
