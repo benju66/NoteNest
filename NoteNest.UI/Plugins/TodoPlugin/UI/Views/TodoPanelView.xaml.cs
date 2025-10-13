@@ -78,14 +78,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
         {
             if (DataContext is TodoPanelViewModel panelVm)
             {
-                // When a category is selected, update the ViewModel
+                // Use unified selection property (matches main app pattern)
+                // ViewModel handles CategoryNodeViewModel and TodoItemViewModel appropriately
+                panelVm.CategoryTree.SelectedItem = e.NewValue;
+                
+                // Log for diagnostics
                 if (e.NewValue is CategoryNodeViewModel categoryNode)
                 {
-                    panelVm.CategoryTree.SelectedCategory = categoryNode;
                     _logger.Debug($"[TodoPanelView] Category selected: {categoryNode.Name} (ID: {categoryNode.CategoryId})");
                 }
-                // When a todo item is selected, we don't change the category selection
-                // The category filter should remain active
+                else if (e.NewValue is TodoItemViewModel todoVm)
+                {
+                    _logger.Debug($"[TodoPanelView] Todo selected: {todoVm.Text} (CategoryId: {todoVm.CategoryId})");
+                }
             }
         }
         

@@ -100,7 +100,7 @@
                         
                         <!-- Category template - EXACT match from main app note tree -->
                         <HierarchicalDataTemplate DataType="{x:Type vm:CategoryNodeViewModel}"
-                                                  ItemsSource="{Binding AllItems}">
+                                                  ItemsSource="{Binding TreeItems}">
                             <Grid Height="26">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="20"/>   <!-- Expander -->

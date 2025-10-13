@@ -40,6 +40,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
         public Guid Id => _todoItem.Id;
         
+        /// <summary>
+        /// Category ID of the todo item (null for uncategorized).
+        /// Exposed for selection context tracking and parent category identification.
+        /// </summary>
+        public Guid? CategoryId => _todoItem.CategoryId;
+        
         public string Text
         {
             get => _todoItem.Text;

@@ -31,6 +31,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         private SmartObservableCollection<CategoryNodeViewModel> _categories;
         private CategoryNodeViewModel? _selectedCategory;
         private SmartListNodeViewModel? _selectedSmartList;
+        private object? _selectedItem;
         private ObservableCollection<SmartListNodeViewModel> _smartLists;
 
         public CategoryTreeViewModel(
@@ -70,6 +71,39 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             get => _smartLists;
             set => SetProperty(ref _smartLists, value);
+        }
+
+        /// <summary>
+        /// Currently selected item in the TreeView (can be CategoryNodeViewModel or TodoItemViewModel).
+        /// Matches main app CategoryTreeViewModel pattern for unified selection handling.
+        /// </summary>
+        public object? SelectedItem
+        {
+            get => _selectedItem;
+            set
+            {
+                if (SetProperty(ref _selectedItem, value))
+                {
+                    // Update typed properties based on selection
+                    if (value is CategoryNodeViewModel category)
+                    {
+                        SelectedCategory = category;
+                        _logger.Debug($"[CategoryTree] Category selected: {category.Name} (ID: {category.CategoryId})");
+                    }
+                    else if (value is TodoItemViewModel todo)
+                    {
+                        // Find parent category and set as selected to maintain category context
+                        var parentCategory = FindCategoryContainingTodo(todo);
+                        SelectedCategory = parentCategory;
+                        _logger.Debug($"[CategoryTree] Todo selected: {todo.Text}, parent category: {parentCategory?.Name ?? "Uncategorized"}");
+                    }
+                    else
+                    {
+                        SelectedCategory = null;
+                        _logger.Debug("[CategoryTree] Selection cleared");
+                    }
+                }
+            }
         }
 
         public CategoryNodeViewModel? SelectedCategory
@@ -453,6 +487,43 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         }
         
         /// <summary>
+        /// Finds the category that contains the specified todo item.
+        /// Used when a todo is selected to determine the category context for quick-add operations.
+        /// </summary>
+        private CategoryNodeViewModel? FindCategoryContainingTodo(TodoItemViewModel todo)
+        {
+            if (todo == null) return null;
+            
+            return FindCategoryContainingTodoRecursive(Categories, todo);
+        }
+
+        /// <summary>
+        /// Recursively searches the category tree to find which category contains the specified todo.
+        /// </summary>
+        private CategoryNodeViewModel? FindCategoryContainingTodoRecursive(
+            IEnumerable<CategoryNodeViewModel> categories, 
+            TodoItemViewModel todo)
+        {
+            foreach (var category in categories)
+            {
+                // Check if this category contains the todo
+                if (category.Todos.Contains(todo))
+                {
+                    return category;
+                }
+                
+                // Recursively search child categories
+                var foundInChild = FindCategoryContainingTodoRecursive(category.Children, todo);
+                if (foundInChild != null)
+                {
+                    return foundInChild;
+                }
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
         /// Dispose resources and unsubscribe from events to prevent memory leaks.
         /// </summary>
         public void Dispose()
@@ -479,7 +550,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
     /// <summary>
     /// View model for category tree nodes.
-    /// Follows main app CategoryViewModel pattern with Children + Todos + AllItems composite.
+    /// Follows main app CategoryViewModel pattern with Children + Todos + TreeItems composite.
     /// </summary>
     public class CategoryNodeViewModel : ViewModelBase
     {
@@ -505,11 +576,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             
             Children = new ObservableCollection<CategoryNodeViewModel>();
             Todos = new ObservableCollection<TodoItemViewModel>();
-            AllItems = new ObservableCollection<object>();
+            TreeItems = new SmartObservableCollection<object>();
             
-            // Subscribe to collection changes to auto-update AllItems
-            Children.CollectionChanged += (s, e) => UpdateAllItems();
-            Todos.CollectionChanged += (s, e) => UpdateAllItems();
+            // Subscribe to collection changes to auto-update TreeItems
+            Children.CollectionChanged += (s, e) => UpdateTreeItems();
+            Todos.CollectionChanged += (s, e) => UpdateTreeItems();
             
             // Initialize commands
             ToggleExpandCommand = new RelayCommand(ToggleExpand);
@@ -550,27 +621,31 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
         public ObservableCollection<CategoryNodeViewModel> Children { get; }
         public ObservableCollection<TodoItemViewModel> Todos { get; }
-        public ObservableCollection<object> AllItems { get; } // Composite for TreeView binding
+        public SmartObservableCollection<object> TreeItems { get; } // Composite for TreeView binding
         
         /// <summary>
-        /// Combines Children and Todos into AllItems for TreeView display.
+        /// Combines Children and Todos into TreeItems for TreeView display.
         /// Follows main app CategoryViewModel.UpdateTreeItems() pattern.
+        /// Uses BatchUpdate to eliminate UI flickering (matches main app implementation).
         /// </summary>
-        private void UpdateAllItems()
+        private void UpdateTreeItems()
         {
-            // Use regular Clear/Add since we don't have BatchUpdate on ObservableCollection
-            AllItems.Clear();
-            
-            // Add child categories first
-            foreach (var child in Children)
+            // ✨ SMOOTH UX: BatchUpdate eliminates flickering during collection updates
+            using (TreeItems.BatchUpdate())
             {
-                AllItems.Add(child);
-            }
-            
-            // Add todos second
-            foreach (var todo in Todos)
-            {
-                AllItems.Add(todo);
+                TreeItems.Clear();
+                
+                // Add child categories first
+                foreach (var child in Children)
+                {
+                    TreeItems.Add(child);
+                }
+                
+                // Add todos second
+                foreach (var todo in Todos)
+                {
+                    TreeItems.Add(todo);
+                }
             }
         }
         
