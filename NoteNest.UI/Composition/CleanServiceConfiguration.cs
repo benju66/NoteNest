@@ -362,6 +362,7 @@ namespace NoteNest.UI.Composition
             services.AddMediatR(cfg =>
             {
                 cfg.RegisterServicesFromAssembly(typeof(CreateNoteCommand).Assembly);
+                cfg.RegisterServicesFromAssembly(typeof(NoteNest.UI.Plugins.TodoPlugin.TodoPlugin).Assembly);
             });
             
             // Pipeline behaviors (now compatible with Microsoft.Extensions.Logging)
@@ -370,6 +371,7 @@ namespace NoteNest.UI.Composition
             
             // FluentValidation
             services.AddValidatorsFromAssembly(typeof(CreateNoteCommand).Assembly);
+            services.AddValidatorsFromAssembly(typeof(NoteNest.UI.Plugins.TodoPlugin.TodoPlugin).Assembly);
             
             // Domain event bridge for plugin system
             services.AddTransient<INotificationHandler<DomainEventNotification>, DomainEventBridge>();

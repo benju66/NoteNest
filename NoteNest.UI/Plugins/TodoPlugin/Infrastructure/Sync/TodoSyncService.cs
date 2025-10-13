@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using MediatR;
 using Microsoft.Extensions.Hosting;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
@@ -31,6 +32,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         private readonly ISaveManager _saveManager;
         private readonly ITodoRepository _repository;
         private readonly ITodoStore _todoStore;  // NEW: For UI-synced operations
+        private readonly IMediator _mediator;
         private readonly BracketTodoParser _parser;
         private readonly ITreeDatabaseRepository _treeRepository;
         private readonly ICategoryStore _categoryStore;
@@ -45,6 +47,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             ISaveManager saveManager,
             ITodoRepository repository,
             ITodoStore todoStore,  // NEW: Inject TodoStore for UI updates
+            IMediator mediator,
             BracketTodoParser parser,
             ITreeDatabaseRepository treeRepository,
             ICategoryStore categoryStore,
@@ -54,6 +57,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
+            _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _parser = parser ?? throw new ArgumentNullException(nameof(parser));
             _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
             _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
@@ -299,7 +303,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         {
             try
             {
-                var todo = new TodoItem
+                // ✨ CQRS: Use CreateTodoCommand (RTF sync uses same command as manual creation!)
+                var command = new Application.Commands.CreateTodo.CreateTodoCommand
                 {
                     Text = candidate.Text,
                     CategoryId = categoryId,  // AUTO-CATEGORIZE! Links to note's parent category
@@ -309,12 +314,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                     SourceCharOffset = candidate.CharacterOffset
                 };
                 
-                // USE TODOSTORE: Auto-updates in-memory collection + UI
-                await _todoStore.AddAsync(todo);
+                var result = await _mediator.Send(command);
+                
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[TodoSync] CreateTodoCommand failed: {result.Error}");
+                    return;
+                }
                 
                 if (categoryId.HasValue)
                 {
-                    _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [auto-categorized: {categoryId.Value}] - UI will auto-refresh");
+                    _logger.Info($"[TodoSync] ✅ Created todo from note via command: \"{candidate.Text}\" [auto-categorized: {categoryId.Value}]");
                 }
                 else
                 {
@@ -338,11 +348,22 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                 var todo = _todoStore.GetById(todoId);
                 if (todo != null && !todo.IsOrphaned)
                 {
-                    todo.IsOrphaned = true;
-                    todo.ModifiedDate = DateTime.UtcNow;
+                    // ✨ CQRS: Use MarkOrphanedCommand
+                    var command = new Application.Commands.MarkOrphaned.MarkOrphanedCommand
+                    {
+                        TodoId = todoId,
+                        IsOrphaned = true
+                    };
                     
-                    await _todoStore.UpdateAsync(todo);
-                    _logger.Info($"[TodoSync] Marked todo as orphaned: \"{todo.Text}\" - UI will auto-refresh");
+                    var result = await _mediator.Send(command);
+                    
+                    if (result.IsFailure)
+                    {
+                        _logger.Error($"[TodoSync] MarkOrphanedCommand failed: {result.Error}");
+                        return;
+                    }
+                    
+                    _logger.Info($"[TodoSync] ✅ Marked todo as orphaned via command: \"{todo.Text}\"");
                 }
             }
             catch (Exception ex)

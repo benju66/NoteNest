@@ -22,6 +22,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
     {
         private readonly ICategoryStore _categoryStore;
         private readonly ITodoStore _todoStore;
+        private readonly IMediator _mediator;
         private readonly IAppLogger _logger;
         private bool _disposed = false;
         
@@ -37,10 +38,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public CategoryTreeViewModel(
             ICategoryStore categoryStore,
             ITodoStore todoStore,
+            IMediator mediator,
             IAppLogger logger)
         {
             _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
+            _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _categories = new SmartObservableCollection<CategoryNodeViewModel>();
@@ -363,7 +366,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 
                 foreach (var todo in categoryTodos)
                 {
-                    var todoVm = new TodoItemViewModel(todo, _todoStore, _logger);
+                    var todoVm = new TodoItemViewModel(todo, _todoStore, _mediator, _logger);
                     // Wire up todo events to bubble up to category level
                     todoVm.OpenRequested += nodeVm.OnTodoOpenRequested;
                     todoVm.SelectionRequested += nodeVm.OnTodoSelectionRequested;
@@ -412,7 +415,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             // Add uncategorized todos to the node
             foreach (var todo in uncategorizedTodos)
             {
-                var todoVm = new TodoItemViewModel(todo, _todoStore, _logger);
+                var todoVm = new TodoItemViewModel(todo, _todoStore, _mediator, _logger);
                 // Wire up todo events to bubble up to category level
                 todoVm.OpenRequested += nodeVm.OnTodoOpenRequested;
                 todoVm.SelectionRequested += nodeVm.OnTodoSelectionRequested;

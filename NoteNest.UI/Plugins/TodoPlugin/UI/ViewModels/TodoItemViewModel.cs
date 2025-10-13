@@ -19,16 +19,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
     {
         private readonly TodoItem _todoItem;
         private readonly ITodoStore _todoStore;
+        private readonly IMediator _mediator;
         private readonly IAppLogger _logger;
         
         private bool _isEditing;
         private string _editingText;
         private bool _isVisible = true;
 
-        public TodoItemViewModel(TodoItem todoItem, ITodoStore todoStore, IAppLogger logger)
+        public TodoItemViewModel(TodoItem todoItem, ITodoStore todoStore, IMediator mediator, IAppLogger logger)
         {
             _todoItem = todoItem ?? throw new ArgumentNullException(nameof(todoItem));
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
+            _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _editingText = _todoItem.Text;
@@ -225,21 +227,28 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             try
             {
-                _todoItem.IsCompleted = !_todoItem.IsCompleted;
-                _todoItem.CompletedDate = _todoItem.IsCompleted ? DateTime.UtcNow : null;
+                // ✨ CQRS: Use CompleteTodoCommand
+                var command = new Application.Commands.CompleteTodo.CompleteTodoCommand
+                {
+                    TodoId = _todoItem.Id,
+                    IsCompleted = !_todoItem.IsCompleted
+                };
                 
-                await _todoStore.UpdateAsync(_todoItem);  // ← Actually await
+                var result = await _mediator.Send(command);
                 
-                OnPropertyChanged(nameof(IsCompleted));
-                OnPropertyChanged(nameof(CompletedDate));
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[TodoItemViewModel] CompleteTodoCommand failed: {result.Error}");
+                    return;
+                }
+                
+                // NOTE: UI updates automatically via TodoCompletedEvent/TodoUncompletedEvent
+                // Event handler in TodoStore reloads from DB and updates collection
+                _logger.Debug($"[TodoItemViewModel] ✅ Todo completion toggled via command");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error toggling todo completion");
-                // Revert UI state on error
-                _todoItem.IsCompleted = !_todoItem.IsCompleted;
-                _todoItem.CompletedDate = null;
-                OnPropertyChanged(nameof(IsCompleted));
             }
         }
 
@@ -247,18 +256,27 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             try
             {
-                _todoItem.IsFavorite = !_todoItem.IsFavorite;
+                // ✨ CQRS: Use ToggleFavoriteCommand
+                var command = new Application.Commands.ToggleFavorite.ToggleFavoriteCommand
+                {
+                    TodoId = _todoItem.Id,
+                    IsFavorite = !_todoItem.IsFavorite
+                };
                 
-                await _todoStore.UpdateAsync(_todoItem);  // ← Actually await
+                var result = await _mediator.Send(command);
                 
-                OnPropertyChanged(nameof(IsFavorite));
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[TodoItemViewModel] ToggleFavoriteCommand failed: {result.Error}");
+                    return;
+                }
+                
+                // NOTE: UI updates automatically via TodoFavoritedEvent/TodoUnfavoritedEvent
+                _logger.Debug($"[TodoItemViewModel] ✅ Todo favorite toggled via command");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error toggling todo favorite");
-                // Revert UI state on error
-                _todoItem.IsFavorite = !_todoItem.IsFavorite;
-                OnPropertyChanged(nameof(IsFavorite));
             }
         }
 
@@ -290,46 +308,58 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             if (string.IsNullOrWhiteSpace(newText) || newText == Text)
                 return;
-
-            var oldText = _todoItem.Text;  // Capture before try block
             
             try
             {
-                _todoItem.Text = newText.Trim();
+                // ✨ CQRS: Use UpdateTodoTextCommand
+                var command = new Application.Commands.UpdateTodoText.UpdateTodoTextCommand
+                {
+                    TodoId = _todoItem.Id,
+                    NewText = newText.Trim()
+                };
                 
-                await _todoStore.UpdateAsync(_todoItem);  // ← Actually await
+                var result = await _mediator.Send(command);
                 
-                OnPropertyChanged(nameof(Text));
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[TodoItemViewModel] UpdateTodoTextCommand failed: {result.Error}");
+                    return;
+                }
+                
+                // NOTE: UI updates automatically via TodoTextUpdatedEvent
+                _logger.Debug($"[TodoItemViewModel] ✅ Todo text updated via command");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error updating todo text");
-                // Revert on error
-                _todoItem.Text = oldText;
-                OnPropertyChanged(nameof(Text));
             }
         }
         
         private async Task SetPriorityAsync(int priority)
         {
-            var oldPriority = _todoItem.Priority;
-            
             try
             {
-                _todoItem.Priority = (Priority)priority;
-                await _todoStore.UpdateAsync(_todoItem);
+                // ✨ CQRS: Use SetPriorityCommand
+                var command = new Application.Commands.SetPriority.SetPriorityCommand
+                {
+                    TodoId = _todoItem.Id,
+                    Priority = (Priority)priority
+                };
                 
-                OnPropertyChanged(nameof(Priority));
-                OnPropertyChanged(nameof(PriorityBrush));
-                OnPropertyChanged(nameof(PriorityTooltip));
+                var result = await _mediator.Send(command);
+                
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[TodoItemViewModel] SetPriorityCommand failed: {result.Error}");
+                    return;
+                }
+                
+                // NOTE: UI updates automatically via TodoPriorityChangedEvent
+                _logger.Debug($"[TodoItemViewModel] ✅ Todo priority set via command");
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Error setting priority");
-                _todoItem.Priority = oldPriority;
-                OnPropertyChanged(nameof(Priority));
-                OnPropertyChanged(nameof(PriorityBrush));
-                OnPropertyChanged(nameof(PriorityTooltip));
             }
         }
         
@@ -351,25 +381,30 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 
                 if (dialog.ShowDialog() == true)
                 {
-                    var oldDate = _todoItem.DueDate;
-                    
                     try
                     {
-                        _todoItem.DueDate = dialog.SelectedDate;
-                        _todoStore.UpdateAsync(_todoItem).GetAwaiter().GetResult();  // Sync call in command
+                        // ✨ CQRS: Use SetDueDateCommand
+                        var command = new Application.Commands.SetDueDate.SetDueDateCommand
+                        {
+                            TodoId = _todoItem.Id,
+                            DueDate = dialog.SelectedDate
+                        };
                         
-                        OnPropertyChanged(nameof(DueDate));
-                        OnPropertyChanged(nameof(DueDateDisplay));
-                        OnPropertyChanged(nameof(IsOverdue));
-                        OnPropertyChanged(nameof(IsDueToday));
-                        OnPropertyChanged(nameof(IsDueTomorrow));
+                        // Synchronous call (command pattern is async, but this is called from sync context)
+                        var result = _mediator.Send(command).GetAwaiter().GetResult();
+                        
+                        if (result.IsFailure)
+                        {
+                            _logger.Error($"[TodoItemViewModel] SetDueDateCommand failed: {result.Error}");
+                            return;
+                        }
+                        
+                        // NOTE: UI updates automatically via TodoDueDateChangedEvent
+                        _logger.Debug($"[TodoItemViewModel] ✅ Todo due date set via command");
                     }
                     catch (Exception ex)
                     {
                         _logger.Error(ex, "Error setting due date");
-                        _todoItem.DueDate = oldDate;
-                        OnPropertyChanged(nameof(DueDate));
-                        OnPropertyChanged(nameof(DueDateDisplay));
                     }
                 }
             }
@@ -383,8 +418,23 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             try
             {
-                await _todoStore.DeleteAsync(_todoItem.Id);
-                _logger.Info($"✅ Todo deleted: {_todoItem.Text}");
+                // ✨ CQRS: Use DeleteTodoCommand
+                var command = new Application.Commands.DeleteTodo.DeleteTodoCommand
+                {
+                    TodoId = _todoItem.Id
+                };
+                
+                var result = await _mediator.Send(command);
+                
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[TodoItemViewModel] DeleteTodoCommand failed: {result.Error}");
+                    return;
+                }
+                
+                // NOTE: UI updates automatically via TodoDeletedEvent
+                // TodoStore removes from collection
+                _logger.Info($"[TodoItemViewModel] ✅ Todo deleted via command: {_todoItem.Text}");
             }
             catch (Exception ex)
             {

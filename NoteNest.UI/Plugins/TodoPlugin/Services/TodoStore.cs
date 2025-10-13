@@ -378,7 +378,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         /// </summary>
         private void SubscribeToEvents()
         {
+            // Category events
             _eventBus.Subscribe<CategoryDeletedEvent>(async e => await HandleCategoryDeletedAsync(e));
+            
+            // Todo CQRS events (event-driven UI updates)
+            _eventBus.Subscribe<Domain.Events.TodoCreatedEvent>(async e => await HandleTodoCreatedAsync(e));
+            _eventBus.Subscribe<Domain.Events.TodoDeletedEvent>(async e => await HandleTodoDeletedAsync(e));
+            _eventBus.Subscribe<Domain.Events.TodoCompletedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
+            _eventBus.Subscribe<Domain.Events.TodoUncompletedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
+            _eventBus.Subscribe<Domain.Events.TodoTextUpdatedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
+            _eventBus.Subscribe<Domain.Events.TodoDueDateChangedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
+            _eventBus.Subscribe<Domain.Events.TodoPriorityChangedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
+            _eventBus.Subscribe<Domain.Events.TodoFavoritedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
+            _eventBus.Subscribe<Domain.Events.TodoUnfavoritedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
         }
         
         /// <summary>
@@ -416,6 +428,110 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             {
                 _logger.Error(ex, $"[TodoStore] Failed to handle category deletion: {e.CategoryId}");
                 // Don't throw - event handler failures shouldn't crash the application
+            }
+        }
+        
+        /// <summary>
+        /// Handles TodoCreatedEvent by loading the new todo from database and adding to collection.
+        /// Event-driven CQRS pattern: Command handler saves to DB and publishes event,
+        /// Store subscribes and updates UI collection.
+        /// </summary>
+        private async Task HandleTodoCreatedAsync(Domain.Events.TodoCreatedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] Handling TodoCreatedEvent: {e.TodoId.Value}");
+                
+                // Load fresh todo from database
+                var todo = await _repository.GetByIdAsync(e.TodoId.Value);
+                if (todo == null)
+                {
+                    _logger.Warning($"[TodoStore] Todo not found in database after creation: {e.TodoId.Value}");
+                    return;
+                }
+                
+                // Add to UI collection (on UI thread)
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    // Check if already exists (prevent duplicates)
+                    if (!_todos.Any(t => t.Id == todo.Id))
+                    {
+                        _todos.Add(todo);
+                        _logger.Info($"[TodoStore] ✅ Added todo to UI collection: {todo.Text}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle TodoCreatedEvent");
+            }
+        }
+        
+        /// <summary>
+        /// Handles TodoDeletedEvent by removing todo from collection.
+        /// </summary>
+        private async Task HandleTodoDeletedAsync(Domain.Events.TodoDeletedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] Handling TodoDeletedEvent: {e.TodoId.Value}");
+                
+                // Remove from UI collection (on UI thread)
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var existing = _todos.FirstOrDefault(t => t.Id == e.TodoId.Value);
+                    if (existing != null)
+                    {
+                        _todos.Remove(existing);
+                        _logger.Info($"[TodoStore] ✅ Removed todo from UI collection: {e.TodoId.Value}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle TodoDeletedEvent");
+            }
+        }
+        
+        /// <summary>
+        /// Handles todo update events by reloading from database and updating collection.
+        /// Used for: Complete, Uncomplete, TextUpdate, DueDateChange, PriorityChange, Favorite.
+        /// </summary>
+        private async Task HandleTodoUpdatedAsync(Domain.ValueObjects.TodoId todoId)
+        {
+            try
+            {
+                _logger.Debug($"[TodoStore] Handling todo update event: {todoId.Value}");
+                
+                // Load fresh todo from database
+                var updatedTodo = await _repository.GetByIdAsync(todoId.Value);
+                if (updatedTodo == null)
+                {
+                    _logger.Warning($"[TodoStore] Todo not found in database after update: {todoId.Value}");
+                    return;
+                }
+                
+                // Update in UI collection (on UI thread)
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var existing = _todos.FirstOrDefault(t => t.Id == todoId.Value);
+                    if (existing != null)
+                    {
+                        var index = _todos.IndexOf(existing);
+                        _todos[index] = updatedTodo;
+                        _logger.Debug($"[TodoStore] ✅ Updated todo in UI collection: {updatedTodo.Text}");
+                    }
+                    else
+                    {
+                        // Todo might have been created/moved - add it
+                        _todos.Add(updatedTodo);
+                        _logger.Debug($"[TodoStore] ✅ Added missing todo to UI collection: {updatedTodo.Text}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle todo update event");
             }
         }
         

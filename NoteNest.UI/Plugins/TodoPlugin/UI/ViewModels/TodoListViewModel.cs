@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using MediatR;
 using NoteNest.Core.Commands;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
@@ -17,6 +18,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
     public class TodoListViewModel : ViewModelBase
     {
         private readonly ITodoStore _todoStore;
+        private readonly IMediator _mediator;
         private readonly IAppLogger _logger;
         
         private ObservableCollection<TodoItemViewModel> _todos;
@@ -29,9 +31,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
         public TodoListViewModel(
             ITodoStore todoStore,
+            IMediator mediator,
             IAppLogger logger)
         {
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
+            _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _logger.Info("📋 TodoListViewModel constructor called");
@@ -174,34 +178,31 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 _logger.Info("📋 Setting IsLoading = true");
                 IsLoading = true;
                 
-                var todo = new TodoItem
+                // ✨ CQRS: Use CreateTodoCommand instead of direct TodoStore call
+                var command = new Application.Commands.CreateTodo.CreateTodoCommand
                 {
                     Text = QuickAddText.Trim(),
                     CategoryId = _selectedCategoryId
                 };
                 
-                _logger.Info($"📋 Created TodoItem: {todo.Text}, Id={todo.Id}");
+                _logger.Info($"📋 Sending CreateTodoCommand via MediatR...");
+                var result = await _mediator.Send(command);
                 
-                // Actually await the save
-                _logger.Info("📋 Calling TodoStore.AddAsync...");
-                await _todoStore.AddAsync(todo);
-                _logger.Info($"✅ TodoStore.AddAsync completed successfully");
+                if (result.IsFailure)
+                {
+                    _logger.Error($"❌ CreateTodoCommand failed: {result.Error}");
+                    // TODO: Show error to user (toast/status bar)
+                    return;
+                }
                 
-                _logger.Info($"✅ Created and saved todo: {todo.Text}");
+                _logger.Info($"✅ CreateTodoCommand succeeded: {result.Value.Text}");
                 
+                // Clear text box
                 QuickAddText = string.Empty;
                 _logger.Info("📋 Cleared QuickAddText");
                 
-                // Add to UI directly
-                _logger.Info("📋 Creating TodoItemViewModel...");
-                var vm = new TodoItemViewModel(todo, _todoStore, _logger);
-                _logger.Info($"📋 TodoItemViewModel created, adding to Todos collection (current count={Todos.Count})");
-                
-                Todos.Add(vm);
-                _logger.Info($"✅ Todo added to UI! New count={Todos.Count}");
-                
-                OnPropertyChanged(nameof(Todos));
-                _logger.Info("📋 PropertyChanged raised for Todos");
+                // NOTE: UI will update automatically via TodoCreatedEvent subscription in TodoStore
+                // No need to manually add to Todos collection - event-driven!
             }
             catch (Exception ex)
             {
@@ -222,14 +223,26 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
             try
             {
+                // ✨ CQRS: Delegate to TodoItemViewModel (it has the command logic)
+                // Or use command directly:
                 var todo = _todoStore.GetById(todoVm.Id);
                 if (todo != null)
                 {
-                    todo.IsCompleted = !todo.IsCompleted;
-                    todo.CompletedDate = todo.IsCompleted ? DateTime.UtcNow : null;
+                    var command = new Application.Commands.CompleteTodo.CompleteTodoCommand
+                    {
+                        TodoId = todo.Id,
+                        IsCompleted = !todo.IsCompleted
+                    };
                     
-                    await _todoStore.UpdateAsync(todo);
-                    _logger.Info($"✅ Todo updated: {todo.Text}");
+                    var result = await _mediator.Send(command);
+                    
+                    if (result.IsFailure)
+                    {
+                        _logger.Error($"[TodoListViewModel] CompleteTodoCommand failed: {result.Error}");
+                        return;
+                    }
+                    
+                    _logger.Info($"✅ Todo updated via command");
                 }
             }
             catch (Exception ex)
@@ -244,11 +257,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
             try
             {
-                await _todoStore.DeleteAsync(todoVm.Id);
-                _logger.Info($"✅ Todo deleted");
+                // ✨ CQRS: Use DeleteTodoCommand
+                var command = new Application.Commands.DeleteTodo.DeleteTodoCommand
+                {
+                    TodoId = todoVm.Id
+                };
                 
-                // Remove from UI
-                Todos.Remove(todoVm);
+                var result = await _mediator.Send(command);
+                
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[TodoListViewModel] DeleteTodoCommand failed: {result.Error}");
+                    return;
+                }
+                
+                _logger.Info($"✅ Todo deleted via command");
+                
+                // NOTE: UI updates automatically via TodoDeletedEvent
+                // TodoStore removes from collection, no need to manually remove
             }
             catch (Exception ex)
             {
@@ -305,7 +331,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 Todos.Clear();
                 foreach (var todo in todos)
                 {
-                    var vm = new TodoItemViewModel(todo, _todoStore, _logger);
+                    var vm = new TodoItemViewModel(todo, _todoStore, _mediator, _logger);
                     Todos.Add(vm);
                 }
                 
