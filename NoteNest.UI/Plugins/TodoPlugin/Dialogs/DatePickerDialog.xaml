@@ -1,0 +1,94 @@
+<Window x:Class="NoteNest.UI.Plugins.TodoPlugin.Dialogs.DatePickerDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Set Due Date"
+        Height="400"
+        Width="350"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Background="{DynamicResource AppBackgroundBrush}">
+    
+    <Window.Resources>
+        <Style x:Key="QuickButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <!-- Title -->
+        <TextBlock Grid.Row="0"
+                   Text="Set Due Date"
+                   FontSize="16"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,16"
+                   Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+        
+        <!-- Quick Options -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,16">
+            <Button x:Name="TodayButton" Content="📅 Today" Click="Today_Click" Style="{StaticResource QuickButtonStyle}"/>
+            <Button x:Name="TomorrowButton" Content="📅 Tomorrow" Click="Tomorrow_Click" Style="{StaticResource QuickButtonStyle}"/>
+            <Button x:Name="ThisWeekButton" Content="📅 End of This Week" Click="ThisWeek_Click" Style="{StaticResource QuickButtonStyle}"/>
+            <Button x:Name="NextWeekButton" Content="📅 Next Week" Click="NextWeek_Click" Style="{StaticResource QuickButtonStyle}"/>
+            <Button x:Name="ClearButton" Content="❌ No Due Date" Click="Clear_Click" Style="{StaticResource QuickButtonStyle}"/>
+        </StackPanel>
+        
+        <!-- Calendar -->
+        <Border Grid.Row="2"
+                BorderBrush="{DynamicResource AppBorderBrush}"
+                BorderThickness="1"
+                Margin="0,0,0,16">
+            <Calendar x:Name="DateCalendar"
+                      SelectionMode="SingleDate"
+                      SelectedDatesChanged="Calendar_SelectedDatesChanged"
+                      Background="{DynamicResource AppSurfaceBrush}"
+                      Foreground="{DynamicResource AppTextPrimaryBrush}"
+                      BorderThickness="0"/>
+        </Border>
+        
+        <!-- Action Buttons -->
+        <StackPanel Grid.Row="3"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right">
+            <Button Content="OK"
+                    Width="80"
+                    Margin="0,0,8,0"
+                    Click="OK_Click"
+                    IsDefault="True"
+                    Background="{DynamicResource AppAccentBrush}"
+                    Foreground="{DynamicResource AppTextOnAccentBrush}"
+                    BorderBrush="{DynamicResource AppAccentBrush}"
+                    Padding="12,6"
+                    Cursor="Hand"/>
+            <Button Content="Cancel"
+                    Width="80"
+                    Click="Cancel_Click"
+                    IsCancel="True"
+                    Background="{DynamicResource AppSurfaceBrush}"
+                    Foreground="{DynamicResource AppTextPrimaryBrush}"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    Padding="12,6"
+                    Cursor="Hand"/>
+        </StackPanel>
+    </Grid>
+</Window>
+

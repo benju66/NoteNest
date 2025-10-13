@@ -81,6 +81,33 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public bool IsDueToday => _todoItem.IsDueToday();
         
         public bool IsDueTomorrow => _todoItem.IsDueTomorrow();
+        
+        public System.Windows.Media.Brush PriorityBrush
+        {
+            get
+            {
+                var app = System.Windows.Application.Current;
+                if (app == null) return System.Windows.Media.Brushes.Gray;
+                
+                return _todoItem.Priority switch
+                {
+                    Priority.Low => (System.Windows.Media.Brush)app.Resources["AppTextSecondaryBrush"],
+                    Priority.Normal => (System.Windows.Media.Brush)app.Resources["AppTextPrimaryBrush"],
+                    Priority.High => (System.Windows.Media.Brush)app.Resources["AppWarningBrush"],
+                    Priority.Urgent => (System.Windows.Media.Brush)app.Resources["AppErrorBrush"],
+                    _ => (System.Windows.Media.Brush)app.Resources["AppTextPrimaryBrush"]
+                };
+            }
+        }
+        
+        public string PriorityTooltip => _todoItem.Priority switch
+        {
+            Priority.Low => "Low Priority",
+            Priority.Normal => "Normal Priority",
+            Priority.High => "High Priority",
+            Priority.Urgent => "Urgent Priority",
+            _ => "Normal Priority"
+        };
 
         public bool IsEditing
         {
@@ -145,6 +172,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public ICommand StartEditCommand { get; private set; }
         public ICommand SaveEditCommand { get; private set; }
         public ICommand CancelEditCommand { get; private set; }
+        public ICommand SetPriorityCommand { get; private set; }
+        public ICommand CyclePriorityCommand { get; private set; }
+        public ICommand SetDueDateCommand { get; private set; }
+        public ICommand DeleteCommand { get; private set; }
 
         private void InitializeCommands()
         {
@@ -153,6 +184,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             StartEditCommand = new RelayCommand(StartEdit);
             SaveEditCommand = new AsyncRelayCommand(SaveEdit);
             CancelEditCommand = new RelayCommand(CancelEdit);
+            SetPriorityCommand = new AsyncRelayCommand<int>(SetPriorityAsync);
+            CyclePriorityCommand = new AsyncRelayCommand(CyclePriorityAsync);
+            SetDueDateCommand = new RelayCommand(SetDueDate);
+            DeleteCommand = new AsyncRelayCommand(DeleteAsync);
         }
 
         private async Task ToggleCompletionAsync()
@@ -241,6 +276,88 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 // Revert on error
                 _todoItem.Text = oldText;
                 OnPropertyChanged(nameof(Text));
+            }
+        }
+        
+        private async Task SetPriorityAsync(int priority)
+        {
+            var oldPriority = _todoItem.Priority;
+            
+            try
+            {
+                _todoItem.Priority = (Priority)priority;
+                await _todoStore.UpdateAsync(_todoItem);
+                
+                OnPropertyChanged(nameof(Priority));
+                OnPropertyChanged(nameof(PriorityBrush));
+                OnPropertyChanged(nameof(PriorityTooltip));
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error setting priority");
+                _todoItem.Priority = oldPriority;
+                OnPropertyChanged(nameof(Priority));
+                OnPropertyChanged(nameof(PriorityBrush));
+                OnPropertyChanged(nameof(PriorityTooltip));
+            }
+        }
+        
+        private async Task CyclePriorityAsync()
+        {
+            var nextPriority = (int)_todoItem.Priority + 1;
+            if (nextPriority > 3) nextPriority = 0;  // Wrap around
+            await SetPriorityAsync(nextPriority);
+        }
+        
+        private void SetDueDate()
+        {
+            try
+            {
+                var dialog = new NoteNest.UI.Plugins.TodoPlugin.Dialogs.DatePickerDialog(_todoItem.DueDate)
+                {
+                    Owner = System.Windows.Application.Current.MainWindow
+                };
+                
+                if (dialog.ShowDialog() == true)
+                {
+                    var oldDate = _todoItem.DueDate;
+                    
+                    try
+                    {
+                        _todoItem.DueDate = dialog.SelectedDate;
+                        _todoStore.UpdateAsync(_todoItem).GetAwaiter().GetResult();  // Sync call in command
+                        
+                        OnPropertyChanged(nameof(DueDate));
+                        OnPropertyChanged(nameof(DueDateDisplay));
+                        OnPropertyChanged(nameof(IsOverdue));
+                        OnPropertyChanged(nameof(IsDueToday));
+                        OnPropertyChanged(nameof(IsDueTomorrow));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, "Error setting due date");
+                        _todoItem.DueDate = oldDate;
+                        OnPropertyChanged(nameof(DueDate));
+                        OnPropertyChanged(nameof(DueDateDisplay));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error showing date picker dialog");
+            }
+        }
+        
+        private async Task DeleteAsync()
+        {
+            try
+            {
+                await _todoStore.DeleteAsync(_todoItem.Id);
+                _logger.Info($"✅ Todo deleted: {_todoItem.Text}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Error deleting todo");
             }
         }
 

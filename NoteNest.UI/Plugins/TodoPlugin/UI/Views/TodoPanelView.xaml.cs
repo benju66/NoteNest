@@ -143,5 +143,55 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                 todoItem?.SaveEditCommand.Execute(null);
             }
         }
+
+        private void TodoText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2)
+            {
+                var border = sender as Border;
+                var todoVm = border?.DataContext as TodoItemViewModel;
+                
+                if (todoVm != null)
+                {
+                    todoVm.StartEditCommand.Execute(null);
+                    
+                    // Focus the edit box after UI updates
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        var editBox = FindVisualChild<TextBox>(border, "EditTextBox");
+                        if (editBox != null)
+                        {
+                            editBox.Focus();
+                            editBox.SelectAll();
+                            _logger.Debug($"[TodoPanelView] Edit box focused for: {todoVm.Text}");
+                        }
+                    }), System.Windows.Threading.DispatcherPriority.Loaded);
+                    
+                    e.Handled = true;
+                    _logger.Info($"[TodoPanelView] Double-click edit started for: {todoVm.Text}");
+                }
+            }
+        }
+        
+        private T FindVisualChild<T>(DependencyObject parent, string name) where T : DependencyObject
+        {
+            if (parent == null) return null;
+
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+
+                if (child is T typedChild && (string.IsNullOrEmpty(name) || (child as FrameworkElement)?.Name == name))
+                {
+                    return typedChild;
+                }
+
+                var result = FindVisualChild<T>(child, name);
+                if (result != null)
+                    return result;
+            }
+
+            return null;
+        }
     }
 }

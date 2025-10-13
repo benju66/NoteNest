@@ -247,7 +247,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 // Build tree structure with BatchUpdate for smooth, flicker-free UI
                 using (Categories.BatchUpdate())
                 {
-                    Categories.Clear();
+                Categories.Clear();
                     
                     // STEP 1: Add "Uncategorized" virtual category at the top
                     var uncategorizedNode = CreateUncategorizedNode();
@@ -257,12 +257,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                     // STEP 2: Add regular categories
                     var rootCategories = allCategories.Where(c => c.ParentId == null).ToList();
                     _logger.Info($"[CategoryTree] Found {rootCategories.Count} root categories (ParentId == null)");
-                    
-                    foreach (var category in rootCategories)
-                    {
+                
+                foreach (var category in rootCategories)
+                {
                         _logger.Debug($"[CategoryTree] Building tree for root category: {category.Name}");
-                        var nodeVm = BuildCategoryNode(category, allCategories);
-                        Categories.Add(nodeVm);
+                    var nodeVm = BuildCategoryNode(category, allCategories);
+                    Categories.Add(nodeVm);
                         _logger.Debug($"[CategoryTree] Added CategoryNodeViewModel: DisplayPath='{nodeVm.DisplayPath}'");
                     }
                 }
@@ -487,7 +487,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         private bool _isExpanded;
         private bool _isSelected;
         private string _displayPath;
-        
+
         public CategoryNodeViewModel(Category category)
         {
             CategoryId = category.Id;

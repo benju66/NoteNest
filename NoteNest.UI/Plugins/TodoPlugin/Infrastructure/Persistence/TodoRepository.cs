@@ -282,18 +282,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 var todos = new List<TodoItem>();
                 
                 foreach (var row in rawResults)
-                {
-                    try
-                    {
+        {
+            try
+            {
                         var dict = (IDictionary<string, object>)row;
                         var dto = ParseRowToDto(dict);
                         
                         var tags = await GetTagsForTodoAsync(connection, Guid.Parse(dto.Id));
                         var aggregate = dto.ToAggregate(tags);
                         todos.Add(TodoItem.FromAggregate(aggregate));
-                    }
-                    catch (Exception ex)
-                    {
+            }
+            catch (Exception ex)
+            {
                         _logger.Warning($"[TodoRepository] Failed to convert todo: {ex.Message}");
                     }
                 }
@@ -325,18 +325,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 var todos = new List<TodoItem>();
                 
                 foreach (var row in rawResults)
-                {
-                    try
-                    {
+        {
+            try
+            {
                         var dict = (IDictionary<string, object>)row;
                         var dto = ParseRowToDto(dict);
                         
                         var tags = await GetTagsForTodoAsync(connection, Guid.Parse(dto.Id));
                         var aggregate = dto.ToAggregate(tags);
                         todos.Add(TodoItem.FromAggregate(aggregate));
-                    }
-                    catch (Exception ex)
-                    {
+            }
+            catch (Exception ex)
+            {
                         _logger.Warning($"[TodoRepository] Failed to convert todo: {ex.Message}");
                     }
                 }
@@ -368,18 +368,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 var todos = new List<TodoItem>();
                 
                 foreach (var row in rawResults)
-                {
-                    try
-                    {
+        {
+            try
+            {
                         var dict = (IDictionary<string, object>)row;
                         var dto = ParseRowToDto(dict);
                         
                         var tags = await GetTagsForTodoAsync(connection, Guid.Parse(dto.Id));
                         var aggregate = dto.ToAggregate(tags);
                         todos.Add(TodoItem.FromAggregate(aggregate));
-                    }
-                    catch (Exception ex)
-                    {
+            }
+            catch (Exception ex)
+            {
                         _logger.Warning($"[TodoRepository] Failed to convert todo: {ex.Message}");
                     }
                 }

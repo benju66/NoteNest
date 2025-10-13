@@ -7,6 +7,7 @@
              xmlns:vm="clr-namespace:NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels"
              xmlns:converters="clr-namespace:NoteNest.UI.Plugins.TodoPlugin.UI.Converters"
              xmlns:ui="http://schemas.modernwpf.com/2019"
+             xmlns:System="clr-namespace:System;assembly=mscorlib"
              mc:Ignorable="d" 
              d:DesignHeight="600" d:DesignWidth="350">
     
@@ -16,138 +17,6 @@
         <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
         <converters:BoolToStrikethroughConverter x:Key="BoolToStrikethroughConverter"/>
         <converters:BoolToErrorBrushConverter x:Key="BoolToErrorBrushConverter"/>
-        <!-- Todo Item Template -->
-        <DataTemplate x:Key="TodoItemTemplate" DataType="{x:Type vm:TodoItemViewModel}">
-            <Border x:Name="TodoItemBorder"
-                    Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}"
-                    Background="Transparent"
-                    BorderBrush="{DynamicResource SystemControlBackgroundBaseLowBrush}"
-                    BorderThickness="0,0,0,1"
-                    Padding="12,8">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <!-- Checkbox -->
-                    <CheckBox Grid.Column="0"
-                              IsChecked="{Binding IsCompleted}"
-                              VerticalAlignment="Top"
-                              Margin="0,2,8,0"/>
-                    
-                    <!-- Content -->
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <!-- Editable Text -->
-                        <Grid>
-                            <TextBlock x:Name="TodoText"
-                                       Text="{Binding Text}"
-                                       TextWrapping="Wrap"
-                                       TextDecorations="{Binding IsCompleted, Converter={StaticResource BoolToStrikethroughConverter}}"
-                                       Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}"/>
-                            
-                            <TextBox x:Name="EditTextBox"
-                                     Text="{Binding EditingText, UpdateSourceTrigger=PropertyChanged}"
-                                     TextWrapping="Wrap"
-                                     Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                     KeyDown="EditTextBox_KeyDown"
-                                     LostFocus="EditTextBox_LostFocus"/>
-                        </Grid>
-                        
-                        <!-- Metadata -->
-                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                            <!-- Due Date -->
-                            <TextBlock Text="{Binding DueDateDisplay}"
-                                       FontSize="11"
-                                       Foreground="{Binding IsOverdue, Converter={StaticResource BoolToErrorBrushConverter}}"
-                                       Margin="0,0,8,0">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding DueDateDisplay}" Value="">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                            
-                            <!-- Tags -->
-                            <TextBlock Text="{Binding TagsDisplay}"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
-                                       FontStyle="Italic">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding TagsDisplay}" Value="">
-                                                <Setter Property="Visibility" Value="Collapsed"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </StackPanel>
-                    </StackPanel>
-                    
-                    <!-- Actions -->
-                    <StackPanel Grid.Column="2" 
-                                Orientation="Horizontal"
-                                VerticalAlignment="Top">
-                        <!-- Note Link Indicator -->
-                        <TextBlock Text="{Binding SourceIndicator}"
-                                   FontSize="14"
-                                   ToolTip="{Binding SourceTooltip}"
-                                   Margin="0,0,4,0"
-                                   VerticalAlignment="Center">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsNoteLinked}" Value="False">
-                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding ShowOrphanedIndicator}" Value="True">
-                                            <Setter Property="Foreground" Value="{DynamicResource SystemControlErrorTextForegroundBrush}"/>
-                                            <Setter Property="ToolTip" Value="⚠️ Source note was modified or deleted"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                        
-                        <!-- Favorite -->
-                        <Button Width="24" Height="24"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Command="{Binding ToggleFavoriteCommand}"
-                                ToolTip="Toggle Favorite"
-                                Cursor="Hand">
-                            <ContentControl Template="{StaticResource LucideStar}"
-                                            Width="14" Height="14">
-                                <ContentControl.Style>
-                                    <Style TargetType="ContentControl">
-                                        <Setter Property="Foreground" Value="{DynamicResource SystemControlForegroundBaseMediumBrush}"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsFavorite}" Value="True">
-                                                <Setter Property="Foreground" Value="#FFD700"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </ContentControl.Style>
-                            </ContentControl>
-                        </Button>
-                    </StackPanel>
-                </Grid>
-            </Border>
-            
-            <DataTemplate.Triggers>
-                <Trigger SourceName="TodoItemBorder" Property="IsMouseOver" Value="True">
-                    <Setter TargetName="TodoItemBorder" Property="Background" 
-                            Value="{DynamicResource SystemControlBackgroundListLowBrush}"/>
-                </Trigger>
-            </DataTemplate.Triggers>
-        </DataTemplate>
     </UserControl.Resources>
     
     <Grid>
@@ -203,6 +72,27 @@
                           x:Name="CategoryTreeView"
                           KeyDown="CategoryTreeView_KeyDown">
                     <TreeView.Resources>
+                        <!-- Context Menu for Todos -->
+                        <ContextMenu x:Key="TodoContextMenu">
+                            <MenuItem Header="_Edit" Command="{Binding StartEditCommand}" InputGestureText="F2">
+                                <MenuItem.Icon>
+                                    <ContentControl Template="{StaticResource LucidePencil}"
+                                                    Width="12" Height="12"
+                                                    Foreground="{DynamicResource AppAccentBrush}"/>
+                                </MenuItem.Icon>
+                            </MenuItem>
+                            <Separator/>
+                            <MenuItem Header="Set _Priority">
+                                <MenuItem Header="_Low" Command="{Binding SetPriorityCommand}" CommandParameter="0"/>
+                                <MenuItem Header="_Normal" Command="{Binding SetPriorityCommand}" CommandParameter="1"/>
+                                <MenuItem Header="_High" Command="{Binding SetPriorityCommand}" CommandParameter="2"/>
+                                <MenuItem Header="_Urgent" Command="{Binding SetPriorityCommand}" CommandParameter="3"/>
+                            </MenuItem>
+                            <MenuItem Header="Set _Due Date" Command="{Binding SetDueDateCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="Toggle _Favorite" Command="{Binding ToggleFavoriteCommand}"/>
+                        </ContextMenu>
+                        
                         <!-- Category template - displays folder with child categories and todos -->
                         <HierarchicalDataTemplate DataType="{x:Type vm:CategoryNodeViewModel}"
                                                   ItemsSource="{Binding AllItems}">
@@ -216,22 +106,69 @@
                             </StackPanel>
                         </HierarchicalDataTemplate>
                         
-                        <!-- Todo template - displays todo item with checkbox -->
+                        <!-- Todo template - ENHANCED with priority, date, editing -->
                         <DataTemplate DataType="{x:Type vm:TodoItemViewModel}">
-                            <Border Padding="4,2" Background="Transparent" Cursor="Hand">
-                                <StackPanel Orientation="Horizontal">
-                                    <CheckBox IsChecked="{Binding IsCompleted}" 
+                            <Border Padding="4,2" 
+                                    Background="Transparent" 
+                                    Cursor="Hand"
+                                    ContextMenu="{StaticResource TodoContextMenu}"
+                                    MouseLeftButtonDown="TodoText_MouseLeftButtonDown">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <!-- Checkbox -->
+                                    <CheckBox Grid.Column="0"
+                                              IsChecked="{Binding IsCompleted}" 
                                               Margin="0,0,8,0"
                                               VerticalAlignment="Center"
                                               Command="{Binding ToggleCompletionCommand}"/>
-                                    <TextBlock Text="{Binding Text}" 
-                                               FontSize="11"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="⭐" 
-                                               FontSize="10" 
-                                               Margin="8,0,0,0"
-                                               Visibility="{Binding IsFavorite, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                </StackPanel>
+                                    
+                                    <!-- Text (editable) -->
+                                    <Grid Grid.Column="1">
+                                        <TextBlock Text="{Binding Text}" 
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}"/>
+                                        
+                                        <TextBox x:Name="EditTextBox"
+                                                 Text="{Binding EditingText, UpdateSourceTrigger=PropertyChanged}"
+                                                 FontSize="11"
+                                                 Visibility="{Binding IsEditing, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                 KeyDown="EditTextBox_KeyDown"
+                                                 LostFocus="EditTextBox_LostFocus"
+                                                 BorderThickness="0"
+                                                 Background="Transparent"/>
+                                    </Grid>
+                                    
+                                    <!-- Actions -->
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,0,0">
+                                        <!-- Priority Flag -->
+                                        <Button Width="16" Height="16"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Command="{Binding CyclePriorityCommand}"
+                                                ToolTip="{Binding PriorityTooltip}"
+                                                Cursor="Hand"
+                                                Padding="0"
+                                                Margin="0,0,2,0">
+                                            <ContentControl Template="{StaticResource LucideFlag}"
+                                                            Width="12" Height="12"
+                                                            Foreground="{Binding PriorityBrush}"/>
+                                        </Button>
+                                        
+                                        <!-- Favorite Star -->
+                                        <TextBlock Text="⭐" 
+                                                   FontSize="10" 
+                                                   Margin="0,0,2,0"
+                                                   VerticalAlignment="Center"
+                                                   Visibility="{Binding IsFavorite, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                    </StackPanel>
+                                </Grid>
                             </Border>
                         </DataTemplate>
                     </TreeView.Resources>
@@ -248,7 +185,7 @@
                 <TextBlock Text="Right-click folders in note tree to add categories"
                            FontSize="10"
                            FontStyle="Italic"
-                           Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+                       Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}"
                            Margin="0,8,0,0"
                            TextWrapping="Wrap">
                     <TextBlock.Style>

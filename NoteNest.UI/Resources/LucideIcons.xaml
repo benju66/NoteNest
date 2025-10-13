@@ -1660,6 +1660,28 @@
         </Viewbox>
     </ControlTemplate>
     
+    <!-- 🚩 FLAG - Priority/flag indicator -->
+    <ControlTemplate x:Key="LucideFlag">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 22v-7"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
     <!-- 📓 NOTEBOOK - Notebook -->
     <ControlTemplate x:Key="LucideNotebook">
         <Viewbox Stretch="Uniform" ClipToBounds="False">
