@@ -26,8 +26,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
         private readonly ITodoRepository _repository;
         private readonly ITodoTagRepository _todoTagRepository;
         private readonly IGlobalTagRepository _globalTagRepository;
-        private readonly ITagGeneratorService _tagGenerator;
-        private readonly NoteNest.Infrastructure.Database.ITreeDatabaseRepository _treeRepository;
+        private readonly ITagInheritanceService _tagInheritanceService;
         private readonly IEventBus _eventBus;
         private readonly IAppLogger _logger;
 
@@ -35,16 +34,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
             ITodoRepository repository,
             ITodoTagRepository todoTagRepository,
             IGlobalTagRepository globalTagRepository,
-            ITagGeneratorService tagGenerator,
-            NoteNest.Infrastructure.Database.ITreeDatabaseRepository treeRepository,
+            ITagInheritanceService tagInheritanceService,
             IEventBus eventBus,
             IAppLogger logger)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
             _globalTagRepository = globalTagRepository ?? throw new ArgumentNullException(nameof(globalTagRepository));
-            _tagGenerator = tagGenerator ?? throw new ArgumentNullException(nameof(tagGenerator));
-            _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
+            _tagInheritanceService = tagInheritanceService ?? throw new ArgumentNullException(nameof(tagInheritanceService));
             _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -116,8 +113,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                 _logger.Info($"[CreateTodoHandler] ✅ All {aggregate.DomainEvents.Count} domain events published");
                 aggregate.ClearDomainEvents();
                 
-                // ✨ TAG MVP: Generate auto-tags for the new todo
-                await GenerateAutoTagsAsync(todoItem.Id, request);
+                // ✨ HYBRID FOLDER TAGGING: Apply folder-inherited tags to the new todo
+                await ApplyFolderTagsAsync(todoItem.Id, request.CategoryId);
                 
                 return Result.Ok(new CreateTodoResult
                 {
@@ -135,58 +132,28 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
         }
         
         /// <summary>
-        /// Generate auto-tags for newly created todo based on source (note or category).
-        /// Tags are generated from folder structure following 2-tag project-only strategy.
+        /// Apply folder-inherited tags to newly created todo.
+        /// Uses Hybrid Folder Tagging system - tags come from user-set folder tags.
         /// </summary>
-        private async Task GenerateAutoTagsAsync(Guid todoId, CreateTodoCommand command)
+        private async Task ApplyFolderTagsAsync(Guid todoId, Guid? categoryId)
         {
             try
             {
-                List<string> autoTags = new List<string>();
-                
-                // Case 1: Todo extracted from note (bracket in RTF)
-                // TODO: Once NoteTagRepository exists, inherit tags from source note
-                // For now, generate from category path if available
-                
-                // Case 2: Todo created via quick-add or has category
-                if (command.CategoryId.HasValue)
+                if (!categoryId.HasValue || categoryId.Value == Guid.Empty)
                 {
-                    // Get category from tree database
-                    var category = await _treeRepository.GetNodeByIdAsync(command.CategoryId.Value);
-                    if (category != null)
-                    {
-                        // Generate auto-tags from category path
-                        autoTags = _tagGenerator.GenerateFromPath(category.DisplayPath);
-                        _logger.Debug($"[CreateTodoHandler] Generated {autoTags.Count} auto-tags from category path: {category.DisplayPath}");
-                    }
+                    _logger.Debug($"[CreateTodoHandler] No category for todo {todoId}, skipping folder tag inheritance");
+                    return;
                 }
                 
-                // Add tags to database
-                foreach (var tag in autoTags)
-                {
-                    var todoTag = new Infrastructure.Persistence.Models.TodoTag
-                    {
-                        TodoId = todoId,
-                        Tag = tag,
-                        IsAuto = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    
-                    await _todoTagRepository.AddAsync(todoTag);
-                    
-                    // Update global tag registry
-                    await _globalTagRepository.IncrementUsageAsync(tag);
-                }
+                // Use TagInheritanceService to apply folder tags
+                await _tagInheritanceService.UpdateTodoTagsAsync(todoId, null, categoryId.Value);
                 
-                if (autoTags.Any())
-                {
-                    _logger.Info($"[CreateTodoHandler] ✅ Added {autoTags.Count} auto-tags: {string.Join(", ", autoTags)}");
-                }
+                _logger.Info($"[CreateTodoHandler] ✅ Applied folder-inherited tags to todo {todoId}");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[CreateTodoHandler] Failed to generate auto-tags (non-fatal, todo still created)");
-                // Don't throw - tag generation failure shouldn't prevent todo creation
+                _logger.Error(ex, "[CreateTodoHandler] Failed to apply folder tags (non-fatal, todo still created)");
+                // Don't throw - tag inheritance failure shouldn't prevent todo creation
             }
         }
     }

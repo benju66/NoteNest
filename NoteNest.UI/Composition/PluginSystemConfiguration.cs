@@ -54,7 +54,7 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<ITodoBackupService>(provider => 
                 new TodoBackupService(connectionString, provider.GetRequiredService<IAppLogger>()));
             
-            // ✨ TAG MVP: Tag Management Services
+            // ✨ TAG MVP: Tag Management Services (Legacy - path-based auto-tagging)
             services.AddSingleton<ITodoTagRepository>(provider => 
                 new TodoTagRepository(connectionString, provider.GetRequiredService<IAppLogger>()));
                 
@@ -62,6 +62,11 @@ namespace NoteNest.UI.Composition
                 new GlobalTagRepository(connectionString, provider.GetRequiredService<IAppLogger>()));
                 
             services.AddSingleton<ITagGeneratorService, TagGeneratorService>();
+            
+            // ✨ HYBRID FOLDER TAGGING: User-controlled folder tag system
+            // Note: FolderTagRepository uses tree.db connection string, registered in DatabaseServiceConfiguration
+            services.AddSingleton<ITagInheritanceService, NoteNest.UI.Plugins.TodoPlugin.Services.TagInheritanceService>();
+            services.AddSingleton<IFolderTagSuggestionService, NoteNest.UI.Plugins.TodoPlugin.Services.FolderTagSuggestionService>();
             
             // =================================================================
             // TODO PLUGIN RTF INTEGRATION

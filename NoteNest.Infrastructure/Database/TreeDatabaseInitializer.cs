@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Dapper;
@@ -293,13 +294,57 @@ namespace NoteNest.Infrastructure.Database
         
         private int GetLatestSchemaVersion()
         {
-            return 1; // Current schema version
+            return 3; // Updated to include folder_tags migration
         }
         
         private Migration[] GetMigrations()
         {
-            // Future migrations would be added here
-            return new Migration[0];
+            // Load migrations from embedded resources
+            var migrations = new[]
+            {
+                new Migration
+                {
+                    Version = 2,
+                    Description = "Create note_tags table for note tagging feature",
+                    UpgradeSql = LoadEmbeddedMigration("TreeDatabase_Migration_002_CreateNoteTags.sql"),
+                    RollbackSql = "DROP TABLE IF EXISTS note_tags;"
+                },
+                new Migration
+                {
+                    Version = 3,
+                    Description = "Create folder_tags table for hybrid folder tagging feature",
+                    UpgradeSql = LoadEmbeddedMigration("TreeDatabase_Migration_003_CreateFolderTags.sql"),
+                    RollbackSql = "DROP TABLE IF EXISTS folder_tags;"
+                }
+            };
+            
+            return migrations;
+        }
+        
+        private string LoadEmbeddedMigration(string fileName)
+        {
+            try
+            {
+                var assembly = Assembly.GetExecutingAssembly();
+                var resourceName = $"NoteNest.Infrastructure.Migrations.{fileName}";
+                
+                _logger.Debug($"Loading embedded migration: {resourceName}");
+                
+                using var stream = assembly.GetManifestResourceStream(resourceName);
+                if (stream == null)
+                {
+                    _logger.Error($"Embedded resource not found: {resourceName}");
+                    throw new FileNotFoundException($"Migration file not found: {fileName}");
+                }
+                
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to load migration {fileName}");
+                throw;
+            }
         }
         
         private string GetFullSchemaScript()

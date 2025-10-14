@@ -1449,6 +1449,7 @@
           "FluentValidation.DependencyInjectionExtensions": "12.0.0",
           "MediatR": "13.0.0",
           "MediatR.Extensions.Microsoft.DependencyInjection": "11.1.0",
+          "NoteNest.Core": "1.0.0",
           "NoteNest.Domain": "1.0.0"
         },
         "compile": {

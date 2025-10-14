@@ -21,4 +21,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\NoteNest.Database\Migrations\TreeDatabase_Migration_002_CreateNoteTags.sql" Link="Migrations\TreeDatabase_Migration_002_CreateNoteTags.sql" />
+    <EmbeddedResource Include="..\NoteNest.Database\Migrations\TreeDatabase_Migration_003_CreateFolderTags.sql" Link="Migrations\TreeDatabase_Migration_003_CreateFolderTags.sql" />
+  </ItemGroup>
+
 </Project>

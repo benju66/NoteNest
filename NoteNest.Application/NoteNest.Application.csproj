@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NoteNest.Domain\NoteNest.Domain.csproj" />
+    <ProjectReference Include="..\NoteNest.Core\NoteNest.Core.csproj" />
   </ItemGroup>
 
 </Project>

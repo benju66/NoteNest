@@ -7,6 +7,8 @@ using Microsoft.Data.Sqlite;
 using NoteNest.Core.Services.Logging;
 using System.Threading;
 using System.Threading.Tasks;
+using NoteNest.Application.FolderTags.Repositories;
+using NoteNest.Infrastructure.Repositories;
 
 namespace NoteNest.Infrastructure.Database
 {
@@ -75,6 +77,12 @@ namespace NoteNest.Infrastructure.Database
                     treeConnectionString, 
                     provider.GetRequiredService<IAppLogger>(), 
                     notesRootPath));
+            
+            // ✨ HYBRID FOLDER TAGGING: Folder tag repository (uses tree.db)
+            services.AddSingleton<IFolderTagRepository>(provider =>
+                new FolderTagRepository(
+                    treeConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
             
             // =============================================================================
             // SUPPORTING SERVICES
