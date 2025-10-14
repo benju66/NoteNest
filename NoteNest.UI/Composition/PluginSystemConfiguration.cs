@@ -54,6 +54,15 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<ITodoBackupService>(provider => 
                 new TodoBackupService(connectionString, provider.GetRequiredService<IAppLogger>()));
             
+            // ✨ TAG MVP: Tag Management Services
+            services.AddSingleton<ITodoTagRepository>(provider => 
+                new TodoTagRepository(connectionString, provider.GetRequiredService<IAppLogger>()));
+                
+            services.AddSingleton<IGlobalTagRepository>(provider => 
+                new GlobalTagRepository(connectionString, provider.GetRequiredService<IAppLogger>()));
+                
+            services.AddSingleton<ITagGeneratorService, TagGeneratorService>();
+            
             // =================================================================
             // TODO PLUGIN RTF INTEGRATION
             // =================================================================

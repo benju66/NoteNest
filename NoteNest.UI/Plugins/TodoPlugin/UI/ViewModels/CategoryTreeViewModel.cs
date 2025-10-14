@@ -8,6 +8,7 @@ using MediatR;
 using NoteNest.Core.Commands;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Collections;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 using NoteNest.UI.ViewModels.Common;
@@ -22,6 +23,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
     {
         private readonly ICategoryStore _categoryStore;
         private readonly ITodoStore _todoStore;
+        private readonly ITodoTagRepository _todoTagRepository;
         private readonly IMediator _mediator;
         private readonly IAppLogger _logger;
         private bool _disposed = false;
@@ -38,11 +40,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public CategoryTreeViewModel(
             ICategoryStore categoryStore,
             ITodoStore todoStore,
+            ITodoTagRepository todoTagRepository,
             IMediator mediator,
             IAppLogger logger)
         {
             _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
+            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
@@ -372,7 +376,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 foreach (var todo in categoryTodos)
                 {
                     _logger.Debug($"[CategoryTree]   - Todo: '{todo.Text}' (Id: {todo.Id}, CategoryId: {todo.CategoryId})");
-                    var todoVm = new TodoItemViewModel(todo, _todoStore, _mediator, _logger);
+                    var todoVm = new TodoItemViewModel(todo, _todoStore, _todoTagRepository, _mediator, _logger);
                     // Wire up todo events to bubble up to category level
                     todoVm.OpenRequested += nodeVm.OnTodoOpenRequested;
                     todoVm.SelectionRequested += nodeVm.OnTodoSelectionRequested;
@@ -438,7 +442,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             // Add uncategorized todos to the node
             foreach (var todo in uncategorizedTodos)
             {
-                var todoVm = new TodoItemViewModel(todo, _todoStore, _mediator, _logger);
+                var todoVm = new TodoItemViewModel(todo, _todoStore, _todoTagRepository, _mediator, _logger);
                 // Wire up todo events to bubble up to category level
                 todoVm.OpenRequested += nodeVm.OnTodoOpenRequested;
                 todoVm.SelectionRequested += nodeVm.OnTodoSelectionRequested;

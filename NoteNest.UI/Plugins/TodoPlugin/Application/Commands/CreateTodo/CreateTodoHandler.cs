@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -8,6 +10,7 @@ using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
+using NoteNest.UI.Plugins.TodoPlugin.Services;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
 {
@@ -21,15 +24,27 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
     public class CreateTodoHandler : IRequestHandler<CreateTodoCommand, Result<CreateTodoResult>>
     {
         private readonly ITodoRepository _repository;
+        private readonly ITodoTagRepository _todoTagRepository;
+        private readonly IGlobalTagRepository _globalTagRepository;
+        private readonly ITagGeneratorService _tagGenerator;
+        private readonly NoteNest.Infrastructure.Database.ITreeDatabaseRepository _treeRepository;
         private readonly IEventBus _eventBus;
         private readonly IAppLogger _logger;
 
         public CreateTodoHandler(
             ITodoRepository repository,
+            ITodoTagRepository todoTagRepository,
+            IGlobalTagRepository globalTagRepository,
+            ITagGeneratorService tagGenerator,
+            NoteNest.Infrastructure.Database.ITreeDatabaseRepository treeRepository,
             IEventBus eventBus,
             IAppLogger logger)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
+            _globalTagRepository = globalTagRepository ?? throw new ArgumentNullException(nameof(globalTagRepository));
+            _tagGenerator = tagGenerator ?? throw new ArgumentNullException(nameof(tagGenerator));
+            _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
             _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -101,6 +116,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                 _logger.Info($"[CreateTodoHandler] ✅ All {aggregate.DomainEvents.Count} domain events published");
                 aggregate.ClearDomainEvents();
                 
+                // ✨ TAG MVP: Generate auto-tags for the new todo
+                await GenerateAutoTagsAsync(todoItem.Id, request);
+                
                 return Result.Ok(new CreateTodoResult
                 {
                     TodoId = todoItem.Id,
@@ -113,6 +131,62 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
             {
                 _logger.Error(ex, $"[CreateTodoHandler] Exception creating todo");
                 return Result.Fail<CreateTodoResult>($"Error creating todo: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Generate auto-tags for newly created todo based on source (note or category).
+        /// Tags are generated from folder structure following 2-tag project-only strategy.
+        /// </summary>
+        private async Task GenerateAutoTagsAsync(Guid todoId, CreateTodoCommand command)
+        {
+            try
+            {
+                List<string> autoTags = new List<string>();
+                
+                // Case 1: Todo extracted from note (bracket in RTF)
+                // TODO: Once NoteTagRepository exists, inherit tags from source note
+                // For now, generate from category path if available
+                
+                // Case 2: Todo created via quick-add or has category
+                if (command.CategoryId.HasValue)
+                {
+                    // Get category from tree database
+                    var category = await _treeRepository.GetNodeByIdAsync(command.CategoryId.Value);
+                    if (category != null)
+                    {
+                        // Generate auto-tags from category path
+                        autoTags = _tagGenerator.GenerateFromPath(category.DisplayPath);
+                        _logger.Debug($"[CreateTodoHandler] Generated {autoTags.Count} auto-tags from category path: {category.DisplayPath}");
+                    }
+                }
+                
+                // Add tags to database
+                foreach (var tag in autoTags)
+                {
+                    var todoTag = new Infrastructure.Persistence.Models.TodoTag
+                    {
+                        TodoId = todoId,
+                        Tag = tag,
+                        IsAuto = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    
+                    await _todoTagRepository.AddAsync(todoTag);
+                    
+                    // Update global tag registry
+                    await _globalTagRepository.IncrementUsageAsync(tag);
+                }
+                
+                if (autoTags.Any())
+                {
+                    _logger.Info($"[CreateTodoHandler] ✅ Added {autoTags.Count} auto-tags: {string.Join(", ", autoTags)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[CreateTodoHandler] Failed to generate auto-tags (non-fatal, todo still created)");
+                // Don't throw - tag generation failure shouldn't prevent todo creation
             }
         }
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -213,5 +214,193 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
 
             return null;
         }
+        
+        #region Tag Management (✨ TAG MVP)
+        
+        /// <summary>
+        /// Handle Add Tag menu click - show input dialog and add tag to selected todo.
+        /// </summary>
+        private void AddTag_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _logger.Info("[TodoPanelView] AddTag_Click");
+                
+                // Get the todo from the menu item's DataContext
+                var menuItem = sender as MenuItem;
+                var todoVm = menuItem?.DataContext as TodoItemViewModel;
+                
+                if (todoVm == null)
+                {
+                    _logger.Info("[TodoPanelView] AddTag_Click: No todo selected");
+                    return;
+                }
+                
+                // Show input dialog for tag name
+                var dialog = new Window
+                {
+                    Title = "Add Tag",
+                    Width = 300,
+                    Height = 150,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = Window.GetWindow(this)
+                };
+                
+                var stackPanel = new StackPanel { Margin = new Thickness(10) };
+                stackPanel.Children.Add(new TextBlock 
+                { 
+                    Text = "Enter tag name:", 
+                    Margin = new Thickness(0, 0, 0, 5) 
+                });
+                
+                var textBox = new TextBox 
+                { 
+                    Margin = new Thickness(0, 0, 0, 10) 
+                };
+                stackPanel.Children.Add(textBox);
+                
+                var buttonPanel = new StackPanel 
+                { 
+                    Orientation = Orientation.Horizontal, 
+                    HorizontalAlignment = HorizontalAlignment.Right 
+                };
+                
+                var okButton = new Button 
+                { 
+                    Content = "OK", 
+                    Width = 75, 
+                    Margin = new Thickness(0, 0, 5, 0),
+                    IsDefault = true
+                };
+                okButton.Click += (s, args) => dialog.DialogResult = true;
+                
+                var cancelButton = new Button 
+                { 
+                    Content = "Cancel", 
+                    Width = 75,
+                    IsCancel = true
+                };
+                cancelButton.Click += (s, args) => dialog.DialogResult = false;
+                
+                buttonPanel.Children.Add(okButton);
+                buttonPanel.Children.Add(cancelButton);
+                stackPanel.Children.Add(buttonPanel);
+                
+                dialog.Content = stackPanel;
+                
+                textBox.Focus();
+                
+                if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(textBox.Text))
+                {
+                    var tagName = textBox.Text.Trim();
+                    _logger.Info($"[TodoPanelView] Adding tag '{tagName}' to todo {todoVm.Id}");
+                    
+                    // Execute AddTag command
+                    if (todoVm.AddTagCommand.CanExecute(tagName))
+                    {
+                        todoVm.AddTagCommand.Execute(tagName);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoPanelView] Error in AddTag_Click");
+            }
+        }
+        
+        /// <summary>
+        /// Handle Remove Tag menu click - show list of tags and remove selected one.
+        /// </summary>
+        private void RemoveTag_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                _logger.Info("[TodoPanelView] RemoveTag_Click");
+                
+                // Get the todo from the menu item's DataContext
+                var menuItem = sender as MenuItem;
+                var todoVm = menuItem?.DataContext as TodoItemViewModel;
+                
+                if (todoVm == null || !todoVm.HasTags)
+                {
+                    _logger.Info("[TodoPanelView] RemoveTag_Click: No todo selected or no tags");
+                    return;
+                }
+                
+                var tags = todoVm.Tags.ToList();
+                
+                // Show dialog to select tag to remove
+                var dialog = new Window
+                {
+                    Title = "Remove Tag",
+                    Width = 300,
+                    Height = 200,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    Owner = Window.GetWindow(this)
+                };
+                
+                var stackPanel = new StackPanel { Margin = new Thickness(10) };
+                stackPanel.Children.Add(new TextBlock 
+                { 
+                    Text = "Select tag to remove:", 
+                    Margin = new Thickness(0, 0, 0, 5) 
+                });
+                
+                var listBox = new ListBox 
+                { 
+                    Margin = new Thickness(0, 0, 0, 10),
+                    Height = 100,
+                    ItemsSource = tags
+                };
+                stackPanel.Children.Add(listBox);
+                
+                var buttonPanel = new StackPanel 
+                { 
+                    Orientation = Orientation.Horizontal, 
+                    HorizontalAlignment = HorizontalAlignment.Right 
+                };
+                
+                var okButton = new Button 
+                { 
+                    Content = "Remove", 
+                    Width = 75, 
+                    Margin = new Thickness(0, 0, 5, 0),
+                    IsDefault = true
+                };
+                okButton.Click += (s, args) => dialog.DialogResult = true;
+                
+                var cancelButton = new Button 
+                { 
+                    Content = "Cancel", 
+                    Width = 75,
+                    IsCancel = true
+                };
+                cancelButton.Click += (s, args) => dialog.DialogResult = false;
+                
+                buttonPanel.Children.Add(okButton);
+                buttonPanel.Children.Add(cancelButton);
+                stackPanel.Children.Add(buttonPanel);
+                
+                dialog.Content = stackPanel;
+                
+                if (dialog.ShowDialog() == true && listBox.SelectedItem != null)
+                {
+                    var tagName = listBox.SelectedItem.ToString();
+                    _logger.Info($"[TodoPanelView] Removing tag '{tagName}' from todo {todoVm.Id}");
+                    
+                    // Execute RemoveTag command
+                    if (todoVm.RemoveTagCommand.CanExecute(tagName))
+                    {
+                        todoVm.RemoveTagCommand.Execute(tagName);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoPanelView] Error in RemoveTag_Click");
+            }
+        }
+        
+        #endregion
     }
 }

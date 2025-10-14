@@ -1,11 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using MediatR;
 using NoteNest.Core.Commands;
 using NoteNest.Core.Services.Logging;
+using NoteNest.UI.Plugins.TodoPlugin.Application.Commands.AddTag;
+using NoteNest.UI.Plugins.TodoPlugin.Application.Commands.RemoveTag;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.Models;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 using NoteNest.UI.ViewModels.Common;
@@ -19,23 +24,32 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
     {
         private readonly TodoItem _todoItem;
         private readonly ITodoStore _todoStore;
+        private readonly ITodoTagRepository _todoTagRepository;
         private readonly IMediator _mediator;
         private readonly IAppLogger _logger;
         
         private bool _isEditing;
         private string _editingText;
         private bool _isVisible = true;
+        private List<TodoTag> _loadedTags = new();
 
-        public TodoItemViewModel(TodoItem todoItem, ITodoStore todoStore, IMediator mediator, IAppLogger logger)
+        public TodoItemViewModel(
+            TodoItem todoItem, 
+            ITodoStore todoStore, 
+            ITodoTagRepository todoTagRepository,
+            IMediator mediator, 
+            IAppLogger logger)
         {
             _todoItem = todoItem ?? throw new ArgumentNullException(nameof(todoItem));
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
+            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _editingText = _todoItem.Text;
             
             InitializeCommands();
+            _ = LoadTagsAsync(); // Load tags asynchronously
         }
 
         #region Properties
@@ -83,6 +97,48 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public bool IsFavorite => _todoItem.IsFavorite;
         
         public IReadOnlyList<string> Tags => _todoItem.Tags;
+        
+        /// <summary>
+        /// ✨ TAG MVP: Check if todo has any tags
+        /// </summary>
+        public bool HasTags => Tags.Any();
+        
+        /// <summary>
+        /// ✨ TAG MVP: Get only auto-generated tags
+        /// </summary>
+        public IEnumerable<string> AutoTags => _loadedTags.Where(t => t.IsAuto).Select(t => t.Tag);
+        
+        /// <summary>
+        /// ✨ TAG MVP: Get only manual tags
+        /// </summary>
+        public IEnumerable<string> ManualTags => _loadedTags.Where(t => !t.IsAuto).Select(t => t.Tag);
+        
+        /// <summary>
+        /// ✨ TAG MVP: Tooltip showing tags with distinction between auto and manual
+        /// </summary>
+        public string TagsTooltip
+        {
+            get
+            {
+                if (!HasTags) return "No tags";
+                
+                var autoTagsList = AutoTags.ToList();
+                var manualTagsList = ManualTags.ToList();
+                var parts = new List<string>();
+                
+                if (autoTagsList.Any())
+                {
+                    parts.Add($"Auto: {string.Join(", ", autoTagsList)}");
+                }
+                
+                if (manualTagsList.Any())
+                {
+                    parts.Add($"Manual: {string.Join(", ", manualTagsList)}");
+                }
+                
+                return string.Join("\n", parts);
+            }
+        }
         
         public bool IsOverdue => _todoItem.IsOverdue();
         
@@ -207,11 +263,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         public ICommand DeleteCommand { get; private set; }
         public ICommand OpenCommand { get; private set; }
         public ICommand SelectCommand { get; private set; }
+        
+        // ✨ TAG MVP: Tag management commands
+        public ICommand AddTagCommand { get; private set; }
+        public ICommand RemoveTagCommand { get; private set; }
 
         private void InitializeCommands()
         {
             ToggleCompletionCommand = new AsyncRelayCommand(ToggleCompletionAsync);
             ToggleFavoriteCommand = new AsyncRelayCommand(ToggleFavoriteAsync);
+            
+            // ✨ TAG MVP: Initialize tag commands
+            AddTagCommand = new AsyncRelayCommand<string>(AddTagAsync);
+            RemoveTagCommand = new AsyncRelayCommand<string>(RemoveTagAsync);
             StartEditCommand = new RelayCommand(StartEdit);
             SaveEditCommand = new AsyncRelayCommand(SaveEdit);
             CancelEditCommand = new RelayCommand(CancelEdit);
@@ -443,6 +507,105 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         }
 
         #endregion
+        
+        #region Tag Management (✨ TAG MVP)
+        
+        /// <summary>
+        /// Load tag details from repository to distinguish auto vs manual tags.
+        /// </summary>
+        private async Task LoadTagsAsync()
+        {
+            try
+            {
+                _loadedTags = await _todoTagRepository.GetByTodoIdAsync(Id);
+                
+                // Notify tag-related properties
+                OnPropertyChanged(nameof(Tags));
+                OnPropertyChanged(nameof(HasTags));
+                OnPropertyChanged(nameof(AutoTags));
+                OnPropertyChanged(nameof(ManualTags));
+                OnPropertyChanged(nameof(TagsTooltip));
+                OnPropertyChanged(nameof(TagsDisplay));
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoItemViewModel] Failed to load tags for todo {Id}");
+            }
+        }
+        
+        /// <summary>
+        /// Add a tag to this todo (manual tag).
+        /// </summary>
+        private async Task AddTagAsync(string tag)
+        {
+            if (string.IsNullOrWhiteSpace(tag)) return;
+            
+            try
+            {
+                _logger.Info($"[TodoItemViewModel] Adding tag '{tag}' to todo {Id}");
+                
+                var command = new AddTagCommand
+                {
+                    TodoId = Id,
+                    TagName = tag
+                };
+                
+                var result = await _mediator.Send(command);
+                
+                if (!result.IsSuccess)
+                {
+                    _logger.Error($"[TodoItemViewModel] AddTag failed: {result.Error}");
+                    return;
+                }
+                
+                // Reload tags to update UI
+                await LoadTagsAsync();
+                
+                _logger.Info($"[TodoItemViewModel] ✅ Tag '{tag}' added successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoItemViewModel] Error adding tag '{tag}'");
+            }
+        }
+        
+        /// <summary>
+        /// Remove a tag from this todo.
+        /// </summary>
+        private async Task RemoveTagAsync(string tag)
+        {
+            if (string.IsNullOrWhiteSpace(tag)) return;
+            
+            try
+            {
+                _logger.Info($"[TodoItemViewModel] Removing tag '{tag}' from todo {Id}");
+                
+                var command = new RemoveTagCommand
+                {
+                    TodoId = Id,
+                    TagName = tag
+                };
+                
+                var result = await _mediator.Send(command);
+                
+                if (!result.IsSuccess)
+                {
+                    _logger.Error($"[TodoItemViewModel] RemoveTag failed: {result.Error}");
+                    return;
+                }
+                
+                // Reload tags to update UI
+                await LoadTagsAsync();
+                
+                _logger.Info($"[TodoItemViewModel] ✅ Tag '{tag}' removed successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoItemViewModel] Error removing tag '{tag}'");
+            }
+        }
+        
+        #endregion
 
         /// <summary>
         /// Refreshes all properties from the underlying todo item.
@@ -466,6 +629,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             OnPropertyChanged(nameof(IsDueTomorrow));
             OnPropertyChanged(nameof(DueDateDisplay));
             OnPropertyChanged(nameof(TagsDisplay));
+            
+            // ✨ TAG MVP: Reload tags when model refreshes
+            _ = LoadTagsAsync();
         }
     }
 }

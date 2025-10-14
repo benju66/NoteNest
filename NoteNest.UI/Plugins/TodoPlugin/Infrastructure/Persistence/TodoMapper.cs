@@ -57,7 +57,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 CompletedDate = aggregate.CompletedDate,
                 DueDate = aggregate.DueDate?.Value,
                 ReminderDate = aggregate.ReminderDate,
-                Priority = (Models.Priority)aggregate.Priority,
+                Priority = (NoteNest.UI.Plugins.TodoPlugin.Models.Priority)aggregate.Priority,
                 IsFavorite = aggregate.IsFavorite,
                 Order = aggregate.Order,
                 CreatedDate = aggregate.CreatedAt,

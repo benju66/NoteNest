@@ -6,6 +6,7 @@ using System.Windows.Input;
 using MediatR;
 using NoteNest.Core.Commands;
 using NoteNest.Core.Services.Logging;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 using NoteNest.UI.ViewModels.Common;
@@ -18,6 +19,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
     public class TodoListViewModel : ViewModelBase
     {
         private readonly ITodoStore _todoStore;
+        private readonly ITodoTagRepository _todoTagRepository;
         private readonly IMediator _mediator;
         private readonly IAppLogger _logger;
         
@@ -31,10 +33,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
         public TodoListViewModel(
             ITodoStore todoStore,
+            ITodoTagRepository todoTagRepository,
             IMediator mediator,
             IAppLogger logger)
         {
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
+            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
@@ -331,7 +335,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 Todos.Clear();
                 foreach (var todo in todos)
                 {
-                    var vm = new TodoItemViewModel(todo, _todoStore, _mediator, _logger);
+                    var vm = new TodoItemViewModel(todo, _todoStore, _todoTagRepository, _mediator, _logger);
                     Todos.Add(vm);
                 }
                 
