@@ -31,9 +31,8 @@ END;
 -- Note: todos_fts_insert and todos_fts_update already exist and handle
 -- the todos table changes. These new triggers handle todo_tags table changes.
 
--- Update schema version
-UPDATE schema_version SET version = 3 WHERE version = 2;
-INSERT INTO schema_version (version, applied_at, description)
+-- Update schema version (idempotent - safe to run multiple times)
+INSERT OR REPLACE INTO schema_version (version, applied_at, description)
 VALUES (3, strftime('%s', 'now'), 'Added FTS5 triggers for todo_tags table');
 
 COMMIT;

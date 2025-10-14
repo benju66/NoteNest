@@ -23,6 +23,12 @@
     </None>
   </ItemGroup>
 
+  <!-- ✨ TAG MVP: Embed migration SQL files as resources -->
+  <ItemGroup>
+    <EmbeddedResource Include="Plugins\TodoPlugin\Infrastructure\Persistence\Migrations\Migration_002_AddIsAutoToTodoTags.sql" />
+    <EmbeddedResource Include="Plugins\TodoPlugin\Infrastructure\Persistence\Migrations\Migration_003_AddTagFtsTriggers.sql" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="MediatR" Version="13.0.0" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="9.0.9" />

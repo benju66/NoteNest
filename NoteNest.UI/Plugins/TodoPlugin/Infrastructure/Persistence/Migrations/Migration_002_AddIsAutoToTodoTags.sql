@@ -17,9 +17,8 @@ CREATE INDEX IF NOT EXISTS idx_todo_tags_auto ON todo_tags(is_auto);
 -- Step 3: Create composite index for common query pattern
 CREATE INDEX IF NOT EXISTS idx_todo_tags_todo_auto ON todo_tags(todo_id, is_auto);
 
--- Step 4: Update schema version
-UPDATE schema_version SET version = 2 WHERE version = 1;
-INSERT INTO schema_version (version, applied_at, description)
+-- Step 4: Update schema version (idempotent - safe to run multiple times)
+INSERT OR REPLACE INTO schema_version (version, applied_at, description)
 VALUES (2, strftime('%s', 'now'), 'Added is_auto column to todo_tags for auto-tagging feature');
 
 COMMIT;

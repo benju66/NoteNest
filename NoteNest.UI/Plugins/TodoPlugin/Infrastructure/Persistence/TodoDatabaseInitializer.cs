@@ -56,6 +56,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 {
                     var version = await GetCurrentSchemaVersionAsync(connection);
                     _logger.Info($"[TodoPlugin] Database already initialized (version {version})");
+                    
+                    // Close connection before migration runner (it opens its own)
+                    connection.Close();
+                    
+                    // ✨ TAG MVP: Apply pending migrations
+                    var migrationRunner = new Migrations.MigrationRunner(_connectionString, _logger);
+                    migrationRunner.ApplyMigrations();
+                    
                     return true;
                 }
                 
@@ -69,6 +77,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 if (await VerifySchemaAsync(connection))
                 {
                     _logger.Info("[TodoPlugin] Database schema created successfully");
+                    
+                    // Close connection before migration runner
+                    connection.Close();
+                    
+                    // ✨ TAG MVP: Apply initial migrations to new database
+                    var migrationRunner = new Migrations.MigrationRunner(_connectionString, _logger);
+                    migrationRunner.ApplyMigrations();
+                    
                     return true;
                 }
                 else

@@ -26,6 +26,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                 InitializeComponent();
                 _logger.Info("🎨 [TodoPanelView] InitializeComponent completed");
                 
+                // ✨ TAG MVP: Initialize context menu for dynamic tag list
+                InitializeContextMenus();
+                
                 DataContext = viewModel;
                 _logger.Info($"🎨 [TodoPanelView] DataContext set: {viewModel != null}");
                 _logger.Info($"🎨 [TodoPanelView] CategoryTree not null: {viewModel?.CategoryTree != null}");
@@ -216,6 +219,140 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
         }
         
         #region Tag Management (✨ TAG MVP)
+        
+        /// <summary>
+        /// Initialize context menu event handlers for dynamic tag population.
+        /// </summary>
+        private void InitializeContextMenus()
+        {
+            try
+            {
+                var contextMenu = (ContextMenu)this.Resources["TodoContextMenu"];
+                if (contextMenu != null)
+                {
+                    contextMenu.Opened += TodoContextMenu_Opened;
+                    _logger.Info("[TodoPanelView] ✅ Context menu event wired for dynamic tags");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoPanelView] Failed to initialize context menus");
+            }
+        }
+        
+        /// <summary>
+        /// Dynamically populate tag list in context menu when opened.
+        /// Shows auto-tags (read-only, italic) and manual tags (clickable to remove).
+        /// </summary>
+        private void TodoContextMenu_Opened(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menu = sender as ContextMenu;
+                var todoVm = menu?.DataContext as TodoItemViewModel;
+                
+                if (todoVm == null || !todoVm.HasTags)
+                {
+                    _logger.Info("[TodoPanelView] Context menu opened but no tags to display");
+                    return;
+                }
+                
+                // Find the Tags submenu (we named it in XAML)
+                var tagsMenuItem = menu.Items.OfType<MenuItem>().FirstOrDefault(m => m.Header?.ToString() == "_Tags");
+                if (tagsMenuItem == null)
+                {
+                    _logger.Info("[TodoPanelView] Tags menu item not found");
+                    return;
+                }
+                
+                // Remove any existing dynamic tag items (from previous opens)
+                var itemsToRemove = tagsMenuItem.Items.OfType<MenuItem>()
+                    .Where(m => m.Tag?.ToString() == "DynamicTag").ToList();
+                foreach (var item in itemsToRemove)
+                {
+                    tagsMenuItem.Items.Remove(item);
+                }
+                
+                // Find the separator and make it visible if we have tags
+                var separator = tagsMenuItem.Items.OfType<Separator>()
+                    .FirstOrDefault(s => s.Name == "TagListSeparator");
+                
+                // Insert dynamic items after "Add Tag..." menu item (index 1)
+                int insertIndex = 1;
+                
+                // Add auto-tags section
+                var autoTags = todoVm.AutoTags.ToList();
+                if (autoTags.Any())
+                {
+                    if (separator != null) separator.Visibility = Visibility.Visible;
+                    
+                    var autoHeader = new MenuItem 
+                    { 
+                        Header = "Auto-tags:",
+                        IsEnabled = false,
+                        Tag = "DynamicTag",
+                        FontStyle = FontStyles.Italic,
+                        Foreground = System.Windows.Media.Brushes.Gray
+                    };
+                    tagsMenuItem.Items.Insert(insertIndex++, autoHeader);
+                    
+                    foreach (var tag in autoTags)
+                    {
+                        var tagItem = new MenuItem 
+                        { 
+                            Header = $"  • {tag}",
+                            IsEnabled = false,
+                            Tag = "DynamicTag",
+                            FontStyle = FontStyles.Italic,
+                            Foreground = System.Windows.Media.Brushes.Gray,
+                            ToolTip = "Auto-generated from folder path (read-only)"
+                        };
+                        tagsMenuItem.Items.Insert(insertIndex++, tagItem);
+                    }
+                }
+                
+                // Add manual tags section
+                var manualTags = todoVm.ManualTags.ToList();
+                if (manualTags.Any())
+                {
+                    if (separator != null) separator.Visibility = Visibility.Visible;
+                    
+                    if (autoTags.Any())
+                    {
+                        // Add separator between auto and manual sections
+                        var sectionSeparator = new Separator { Tag = "DynamicTag" };
+                        tagsMenuItem.Items.Insert(insertIndex++, sectionSeparator);
+                    }
+                    
+                    var manualHeader = new MenuItem 
+                    { 
+                        Header = "Manual tags:",
+                        IsEnabled = false,
+                        Tag = "DynamicTag"
+                    };
+                    tagsMenuItem.Items.Insert(insertIndex++, manualHeader);
+                    
+                    foreach (var tag in manualTags)
+                    {
+                        var tagItem = new MenuItem 
+                        { 
+                            Header = $"  • {tag}",
+                            Tag = "DynamicTag",
+                            ToolTip = "Click to remove this tag",
+                            Command = todoVm.RemoveTagCommand,
+                            CommandParameter = tag
+                        };
+                        tagsMenuItem.Items.Insert(insertIndex++, tagItem);
+                    }
+                }
+                
+                _logger.Info($"[TodoPanelView] Populated tag menu: {autoTags.Count} auto, {manualTags.Count} manual");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoPanelView] Error populating tag menu");
+            }
+        }
         
         /// <summary>
         /// Handle Add Tag menu click - show input dialog and add tag to selected todo.

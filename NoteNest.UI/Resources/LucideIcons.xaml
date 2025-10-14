@@ -204,6 +204,25 @@
         </Viewbox>
     </ControlTemplate>
     
+    <!-- 🏷️ TAG - Tag/label indicator (✨ TAG MVP) -->
+    <ControlTemplate x:Key="LucideTag">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <!-- Lucide "tag" icon - stroke only -->
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/>
+                <!-- Center dot (tag hole) -->
+                <Ellipse Canvas.Left="7" Canvas.Top="7" Width="1" Height="1" 
+                         Fill="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
     <!-- 🔍 SEARCH - Search functionality -->
     <ControlTemplate x:Key="LucideSearch">
         <Viewbox Stretch="Uniform" ClipToBounds="False">

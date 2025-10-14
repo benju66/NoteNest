@@ -98,15 +98,17 @@
                             <MenuItem Header="Toggle _Favorite" Command="{Binding ToggleFavoriteCommand}"/>
                             <!-- ✨ TAG MVP: Tag management menu -->
                             <Separator/>
-                            <MenuItem Header="_Tags">
+                            <MenuItem Header="_Tags" x:Name="TagsMenuItem">
                                 <MenuItem Header="Add Tag..." Click="AddTag_Click">
                                     <MenuItem.Icon>
-                                        <TextBlock Text="🏷️" FontSize="12"/>
+                                        <ContentControl Template="{StaticResource LucideTag}"
+                                                        Width="12" Height="12"
+                                                        Foreground="{DynamicResource AppAccentBrush}"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
-                                <Separator/>
-                                <MenuItem Header="Current Tags:" IsEnabled="False" Visibility="{Binding HasTags, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                                <!-- Auto tags submenu placeholder - will be populated dynamically -->
+                                <!-- Dynamic tag items will be inserted here by code-behind -->
+                                <Separator x:Name="TagListSeparator" Visibility="Collapsed"/>
+                                <Separator Visibility="{Binding HasTags, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                 <MenuItem Header="Remove Tag..." Click="RemoveTag_Click" Visibility="{Binding HasTags, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                             </MenuItem>
                         </ContextMenu>
@@ -257,12 +259,14 @@
                                                    Visibility="{Binding IsFavorite, Converter={StaticResource BooleanToVisibilityConverter}}"/>
                                         
                                         <!-- ✨ TAG MVP: Tag Indicator -->
-                                        <TextBlock Text="🏷️" 
-                                                   FontSize="10" 
-                                                   Margin="0,0,2,0"
-                                                   VerticalAlignment="Center"
-                                                   Visibility="{Binding HasTags, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                                   ToolTip="{Binding TagsTooltip}"/>
+                                        <ContentControl Template="{StaticResource LucideTag}"
+                                                        Width="12" 
+                                                        Height="12"
+                                                        Margin="0,0,2,0"
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                                        Visibility="{Binding HasTags, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                                        ToolTip="{Binding TagsTooltip}"/>
                                     </StackPanel>
                                 </Grid>
                             </Border>

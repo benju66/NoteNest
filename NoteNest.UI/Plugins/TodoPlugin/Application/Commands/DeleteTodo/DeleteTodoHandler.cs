@@ -42,7 +42,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.DeleteTodo
                     return Result.Fail<DeleteTodoResult>("Failed to delete todo from database");
                 
                 // Publish deletion event (TodoStore will remove from UI)
-                await _eventBus.PublishAsync(new TodoDeletedEvent(Domain.ValueObjects.TodoId.From(request.TodoId)));
+                // ✨ CRITICAL: Cast to IDomainEvent to match TodoStore subscription
+                var deletedEvent = new TodoDeletedEvent(Domain.ValueObjects.TodoId.From(request.TodoId));
+                await _eventBus.PublishAsync<Domain.Common.IDomainEvent>(deletedEvent);
                 
                 _logger.Info($"[DeleteTodoHandler] ✅ Todo deleted: {request.TodoId}");
                 
