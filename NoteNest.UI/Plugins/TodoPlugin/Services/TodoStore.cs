@@ -375,22 +375,85 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         
         /// <summary>
         /// Subscribe to category events for automatic orphaned todo management.
+        /// Subscribe to todo domain events for CQRS event-driven UI updates.
+        /// 
+        /// CRITICAL: Subscribe to IDomainEvent (base interface) because handlers publish
+        /// events as IDomainEvent type (variable type inference), not concrete type.
+        /// Then use pattern matching to dispatch to correct handler.
         /// </summary>
         private void SubscribeToEvents()
         {
-            // Category events
+            // Category events (not IDomainEvent - keep separate)
             _eventBus.Subscribe<CategoryDeletedEvent>(async e => await HandleCategoryDeletedAsync(e));
             
-            // Todo CQRS events (event-driven UI updates)
-            _eventBus.Subscribe<Domain.Events.TodoCreatedEvent>(async e => await HandleTodoCreatedAsync(e));
-            _eventBus.Subscribe<Domain.Events.TodoDeletedEvent>(async e => await HandleTodoDeletedAsync(e));
-            _eventBus.Subscribe<Domain.Events.TodoCompletedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
-            _eventBus.Subscribe<Domain.Events.TodoUncompletedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
-            _eventBus.Subscribe<Domain.Events.TodoTextUpdatedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
-            _eventBus.Subscribe<Domain.Events.TodoDueDateChangedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
-            _eventBus.Subscribe<Domain.Events.TodoPriorityChangedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
-            _eventBus.Subscribe<Domain.Events.TodoFavoritedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
-            _eventBus.Subscribe<Domain.Events.TodoUnfavoritedEvent>(async e => await HandleTodoUpdatedAsync(e.TodoId));
+            // Todo CQRS domain events - subscribe to base interface to match published type
+            // Handlers publish as: PublishAsync<IDomainEvent>(domainEvent)
+            // So we must subscribe to: Subscribe<IDomainEvent>
+            _eventBus.Subscribe<Domain.Common.IDomainEvent>(async domainEvent =>
+            {
+                try
+                {
+                    _logger.Debug($"[TodoStore] 📬 Received domain event: {domainEvent.GetType().Name}");
+                    
+                    // Pattern match on runtime type to dispatch to appropriate handler
+                    switch (domainEvent)
+                    {
+                        case Domain.Events.TodoCreatedEvent e:
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoCreatedAsync");
+                            await HandleTodoCreatedAsync(e);
+                            break;
+                            
+                        case Domain.Events.TodoDeletedEvent e:
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoDeletedAsync");
+                            await HandleTodoDeletedAsync(e);
+                            break;
+                            
+                        case Domain.Events.TodoCompletedEvent e:
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (Completed)");
+                            await HandleTodoUpdatedAsync(e.TodoId);
+                            break;
+                            
+                        case Domain.Events.TodoUncompletedEvent e:
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (Uncompleted)");
+                            await HandleTodoUpdatedAsync(e.TodoId);
+                            break;
+                            
+                        case Domain.Events.TodoTextUpdatedEvent e:
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (TextUpdated)");
+                            await HandleTodoUpdatedAsync(e.TodoId);
+                            break;
+                            
+                        case Domain.Events.TodoDueDateChangedEvent e:
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (DueDateChanged)");
+                            await HandleTodoUpdatedAsync(e.TodoId);
+                            break;
+                            
+                        case Domain.Events.TodoPriorityChangedEvent e:
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (PriorityChanged)");
+                            await HandleTodoUpdatedAsync(e.TodoId);
+                            break;
+                            
+                        case Domain.Events.TodoFavoritedEvent e:
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (Favorited)");
+                            await HandleTodoUpdatedAsync(e.TodoId);
+                            break;
+                            
+                        case Domain.Events.TodoUnfavoritedEvent e:
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (Unfavorited)");
+                            await HandleTodoUpdatedAsync(e.TodoId);
+                            break;
+                            
+                        default:
+                            _logger.Debug($"[TodoStore] ⚠️ Unhandled domain event type: {domainEvent.GetType().Name}");
+                            break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"[TodoStore] ❌ Error handling domain event: {domainEvent.GetType().Name}");
+                    // Don't throw - event handler failures shouldn't crash the application
+                }
+            });
         }
         
         /// <summary>
@@ -440,26 +503,50 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         {
             try
             {
-                _logger.Info($"[TodoStore] Handling TodoCreatedEvent: {e.TodoId.Value}");
+                _logger.Info($"[TodoStore] 🎯 HandleTodoCreatedAsync STARTED for TodoId: {e.TodoId.Value}");
+                _logger.Debug($"[TodoStore] Event details - Text: '{e.Text}', CategoryId: {e.CategoryId}");
                 
                 // Load fresh todo from database
+                _logger.Debug($"[TodoStore] Calling Repository.GetByIdAsync({e.TodoId.Value})...");
                 var todo = await _repository.GetByIdAsync(e.TodoId.Value);
+                
                 if (todo == null)
                 {
-                    _logger.Warning($"[TodoStore] Todo not found in database after creation: {e.TodoId.Value}");
+                    _logger.Error($"[TodoStore] ❌ CRITICAL: Todo not found in database after creation: {e.TodoId.Value}");
+                    _logger.Error($"[TodoStore] This means Repository.InsertAsync succeeded but GetByIdAsync failed");
+                    _logger.Error($"[TodoStore] Possible timing/transaction/cache issue");
                     return;
                 }
                 
+                _logger.Info($"[TodoStore] ✅ Todo loaded from database: '{todo.Text}', CategoryId: {todo.CategoryId}");
+                
                 // Add to UI collection (on UI thread)
+                _logger.Debug($"[TodoStore] About to invoke on UI thread (Dispatcher.InvokeAsync)...");
+                _logger.Debug($"[TodoStore] Current _todos count BEFORE add: {_todos.Count}");
+                
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 {
+                    _logger.Debug($"[TodoStore] ✅ Dispatcher.InvokeAsync lambda executing on UI thread");
+                    
                     // Check if already exists (prevent duplicates)
-                    if (!_todos.Any(t => t.Id == todo.Id))
+                    var exists = _todos.Any(t => t.Id == todo.Id);
+                    _logger.Debug($"[TodoStore] Duplicate check - Todo already exists: {exists}");
+                    
+                    if (!exists)
                     {
+                        _logger.Info($"[TodoStore] ➕ Adding todo to _todos collection...");
                         _todos.Add(todo);
-                        _logger.Info($"[TodoStore] ✅ Added todo to UI collection: {todo.Text}");
+                        _logger.Info($"[TodoStore] ✅ Todo added to _todos collection: '{todo.Text}'");
+                        _logger.Info($"[TodoStore] Collection count after add: {_todos.Count}");
+                        _logger.Info($"[TodoStore] This should fire CollectionChanged event...");
+                    }
+                    else
+                    {
+                        _logger.Warning($"[TodoStore] ⚠️ Todo already in collection, skipping add (duplicate)");
                     }
                 });
+                
+                _logger.Info($"[TodoStore] 🏁 HandleTodoCreatedAsync COMPLETED for TodoId: {e.TodoId.Value}");
             }
             catch (Exception ex)
             {
@@ -484,6 +571,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                     {
                         _todos.Remove(existing);
                         _logger.Info($"[TodoStore] ✅ Removed todo from UI collection: {e.TodoId.Value}");
+                        _logger.Debug($"[TodoStore] Collection count after remove: {_todos.Count}");
                     }
                 });
             }

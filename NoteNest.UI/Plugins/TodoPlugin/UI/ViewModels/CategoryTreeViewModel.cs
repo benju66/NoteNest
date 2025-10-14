@@ -359,19 +359,29 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             }
             
             // Load todos for this category
+            _logger.Debug($"[CategoryTree] Calling GetByCategory({category.Id}) for '{category.Name}'...");
+            _logger.Debug($"[CategoryTree] TodoStore.AllTodos count at this moment: {_todoStore.AllTodos.Count}");
+            
             var categoryTodos = _todoStore.GetByCategory(category.Id);
-            if (categoryTodos != null && categoryTodos.Count > 0)
+            
+            _logger.Debug($"[CategoryTree] GetByCategory returned {categoryTodos.Count} todos for '{category.Name}'");
+            if (categoryTodos.Count > 0)
             {
-                _logger.Debug($"[CategoryTree] Loading {categoryTodos.Count} todos for category: {category.Name}");
+                _logger.Info($"[CategoryTree] Loading {categoryTodos.Count} todos into category node '{category.Name}':");
                 
                 foreach (var todo in categoryTodos)
                 {
+                    _logger.Debug($"[CategoryTree]   - Todo: '{todo.Text}' (Id: {todo.Id}, CategoryId: {todo.CategoryId})");
                     var todoVm = new TodoItemViewModel(todo, _todoStore, _mediator, _logger);
                     // Wire up todo events to bubble up to category level
                     todoVm.OpenRequested += nodeVm.OnTodoOpenRequested;
                     todoVm.SelectionRequested += nodeVm.OnTodoSelectionRequested;
                     nodeVm.Todos.Add(todoVm);
                 }
+            }
+            else
+            {
+                _logger.Debug($"[CategoryTree] No todos for category '{category.Name}'");
             }
             
             return nodeVm;
@@ -400,8 +410,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             // 2. IsOrphaned = true (source deleted, user soft-deleted)
             // 3. category_id not in CategoryStore (category removed from todo panel)
             // Exclude completed todos (they go to "Completed" smart list)
+            _logger.Debug($"[CategoryTree] Creating 'Uncategorized' node...");
+            _logger.Debug($"[CategoryTree] TodoStore.AllTodos count: {_todoStore.AllTodos.Count}");
+            _logger.Debug($"[CategoryTree] CategoryStore.Categories count: {_categoryStore.Categories.Count}");
+            
             var allTodos = _todoStore.AllTodos;
             var categoryIds = _categoryStore.Categories.Select(c => c.Id).ToHashSet();
+            
+            _logger.Debug($"[CategoryTree] Known category IDs: [{string.Join(", ", categoryIds)}]");
             
             var uncategorizedTodos = allTodos
                 .Where(t => (t.CategoryId == null || 
@@ -410,7 +426,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                             !t.IsCompleted)
                 .ToList();
             
-            _logger.Debug($"[CategoryTree] Found {uncategorizedTodos.Count} uncategorized/orphaned todos");
+            _logger.Info($"[CategoryTree] Found {uncategorizedTodos.Count} uncategorized/orphaned todos");
+            if (uncategorizedTodos.Count > 0)
+            {
+                foreach (var t in uncategorizedTodos)
+                {
+                    _logger.Debug($"[CategoryTree]   Uncategorized: '{t.Text}' (CategoryId: {t.CategoryId}, IsOrphaned: {t.IsOrphaned})");
+                }
+            }
             
             // Add uncategorized todos to the node
             foreach (var todo in uncategorizedTodos)
@@ -488,10 +511,30 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             if (_disposed) return;
             
+            _logger.Info($"[CategoryTree] 🔄 TodoStore.AllTodos CollectionChanged! Action={e.Action}, Count={_todoStore.AllTodos.Count}");
+            
+            // Log what changed
+            if (e.NewItems != null)
+            {
+                foreach (Models.TodoItem item in e.NewItems)
+                {
+                    _logger.Info($"[CategoryTree] ➕ New todo: {item.Text} (CategoryId: {item.CategoryId})");
+                }
+            }
+            
+            if (e.OldItems != null)
+            {
+                foreach (Models.TodoItem item in e.OldItems)
+                {
+                    _logger.Info($"[CategoryTree] ➖ Removed todo: {item.Text}");
+                }
+            }
+            
             System.Windows.Application.Current?.Dispatcher.InvokeAsync(async () =>
             {
-                _logger.Debug("[CategoryTree] TodoStore changed, refreshing tree");
+                _logger.Info("[CategoryTree] 🔄 Refreshing tree after TodoStore change...");
                 await LoadCategoriesAsync();
+                _logger.Info("[CategoryTree] ✅ Tree refresh complete");
             });
         }
         

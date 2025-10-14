@@ -90,12 +90,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                 _logger.Info($"[CreateTodoHandler] ✅ Todo persisted: {todoItem.Id}");
                 
                 // Publish domain events (TodoStore will subscribe and update UI)
+                _logger.Info($"[CreateTodoHandler] 📢 About to publish {aggregate.DomainEvents.Count} domain events");
                 foreach (var domainEvent in aggregate.DomainEvents)
                 {
+                    _logger.Info($"[CreateTodoHandler] 📢 Publishing: {domainEvent.GetType().Name} for TodoId={todoItem.Id}");
                     await _eventBus.PublishAsync(domainEvent);
-                    _logger.Debug($"[CreateTodoHandler] Published event: {domainEvent.GetType().Name}");
+                    _logger.Info($"[CreateTodoHandler] ✅ Event published successfully: {domainEvent.GetType().Name}");
                 }
                 
+                _logger.Info($"[CreateTodoHandler] ✅ All {aggregate.DomainEvents.Count} domain events published");
                 aggregate.ClearDomainEvents();
                 
                 return Result.Ok(new CreateTodoResult
