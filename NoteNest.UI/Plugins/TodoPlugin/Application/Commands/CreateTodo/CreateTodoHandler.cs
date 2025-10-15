@@ -113,8 +113,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                 _logger.Info($"[CreateTodoHandler] ✅ All {aggregate.DomainEvents.Count} domain events published");
                 aggregate.ClearDomainEvents();
                 
-                // ✨ HYBRID FOLDER TAGGING: Apply folder-inherited tags to the new todo
-                await ApplyFolderTagsAsync(todoItem.Id, request.CategoryId);
+                // ✨ HYBRID FOLDER TAGGING: Apply folder + note inherited tags to the new todo
+                await ApplyAllTagsAsync(todoItem.Id, request.CategoryId, request.SourceNoteId);
                 
                 return Result.Ok(new CreateTodoResult
                 {
@@ -132,27 +132,21 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
         }
         
         /// <summary>
-        /// Apply folder-inherited tags to newly created todo.
-        /// Uses Hybrid Folder Tagging system - tags come from user-set folder tags.
+        /// Apply folder + note inherited tags to newly created todo.
+        /// Uses Hybrid Tagging system - tags come from user-set folder AND note tags.
         /// </summary>
-        private async Task ApplyFolderTagsAsync(Guid todoId, Guid? categoryId)
+        private async Task ApplyAllTagsAsync(Guid todoId, Guid? categoryId, Guid? sourceNoteId)
         {
             try
             {
-                if (!categoryId.HasValue || categoryId.Value == Guid.Empty)
-                {
-                    _logger.Debug($"[CreateTodoHandler] No category for todo {todoId}, skipping folder tag inheritance");
-                    return;
-                }
+                // Use TagInheritanceService to apply folder + note tags
+                await _tagInheritanceService.UpdateTodoTagsAsync(todoId, null, categoryId, sourceNoteId);
                 
-                // Use TagInheritanceService to apply folder tags
-                await _tagInheritanceService.UpdateTodoTagsAsync(todoId, null, categoryId.Value);
-                
-                _logger.Info($"[CreateTodoHandler] ✅ Applied folder-inherited tags to todo {todoId}");
+                _logger.Info($"[CreateTodoHandler] ✅ Applied folder + note inherited tags to todo {todoId}");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[CreateTodoHandler] Failed to apply folder tags (non-fatal, todo still created)");
+                _logger.Error(ex, "[CreateTodoHandler] Failed to apply tags (non-fatal, todo still created)");
                 // Don't throw - tag inheritance failure shouldn't prevent todo creation
             }
         }

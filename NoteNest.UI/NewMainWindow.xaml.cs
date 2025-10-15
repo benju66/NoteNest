@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NoteNest.UI.Windows;
 using NoteNest.Core.Services;
 using NoteNest.UI.ViewModels.Categories;
+using static NoteNest.UI.ViewModels.Categories.CategoryViewModel;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.ViewModels.Shell;
 using NoteNest.UI.Services;
@@ -351,7 +352,7 @@ namespace NoteNest.UI
             }
         }
 
-        // ✨ HYBRID FOLDER TAGGING: Context menu handlers
+        // ✨ HYBRID FOLDER TAGGING: Folder context menu handlers
         private async void SetFolderTags_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -433,6 +434,91 @@ namespace NoteNest.UI
             catch (Exception ex)
             {
                 MessageBox.Show($"Error removing folder tags: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // ✨ NOTE TAGGING: Note context menu handlers
+        private async void SetNoteTags_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var note = menuItem?.Tag as NoteItemViewModel;
+                
+                if (note == null)
+                    return;
+
+                var app = (App)System.Windows.Application.Current;
+                var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
+                var noteTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.NoteTags.Repositories.INoteTagRepository>();
+                var logger = app.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+
+                if (mediator == null || noteTagRepo == null || logger == null)
+                {
+                    MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var dialog = new NoteTagDialog(Guid.Parse(note.Id), note.Title, mediator, noteTagRepo, logger)
+                {
+                    Owner = this
+                };
+
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error opening note tag dialog: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void RemoveNoteTags_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var note = menuItem?.Tag as NoteItemViewModel;
+                
+                if (note == null)
+                    return;
+
+                var result = MessageBox.Show(
+                    $"Remove all tags from note '{note.Title}'?",
+                    "Confirm Remove Tags",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result != MessageBoxResult.Yes)
+                    return;
+
+                var app = (App)System.Windows.Application.Current;
+                var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
+                
+                if (mediator == null)
+                {
+                    MessageBox.Show("Mediator service not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var command = new NoteNest.Application.NoteTags.Commands.RemoveNoteTag.RemoveNoteTagCommand
+                {
+                    NoteId = Guid.Parse(note.Id)
+                };
+
+                var commandResult = await mediator.Send(command);
+                
+                if (commandResult.Success)
+                {
+                    MessageBox.Show("Note tags removed successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show($"Failed to remove tags: {commandResult.Error}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error removing note tags: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

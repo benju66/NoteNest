@@ -144,6 +144,12 @@ namespace NoteNest.UI.Composition
                     treeConnectionString,
                     provider.GetRequiredService<IAppLogger>()));
             
+            // ✨ NOTE TAGGING: Note tag repository (uses tree.db, note_tags table)
+            services.AddSingleton<NoteNest.Application.NoteTags.Repositories.INoteTagRepository>(provider =>
+                new NoteNest.Infrastructure.Repositories.NoteTagRepository(
+                    treeConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
             services.AddSingleton<ITreePopulationService, TreePopulationService>();
             
             // 🎯 DATABASE-ONLY REPOSITORIES (No duplicate registrations)

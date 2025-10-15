@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Application.FolderTags.Repositories;
+using NoteNest.Application.NoteTags.Repositories;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Services;
@@ -21,10 +22,10 @@ public interface ITagInheritanceService
     
     /// <summary>
     /// Update tags for a todo when it's created or moved.
-    /// Removes old folder auto-tags, adds new folder tags.
+    /// Removes old folder/note auto-tags, adds new folder/note tags.
     /// Preserves manual tags.
     /// </summary>
-    Task UpdateTodoTagsAsync(Guid todoId, Guid? oldFolderId, Guid? newFolderId);
+    Task UpdateTodoTagsAsync(Guid todoId, Guid? oldFolderId, Guid? newFolderId, Guid? noteId = null);
     
     /// <summary>
     /// Bulk update all todos in a folder with folder's tags.
@@ -46,17 +47,20 @@ public interface ITagInheritanceService
 public class TagInheritanceService : ITagInheritanceService
 {
     private readonly IFolderTagRepository _folderTagRepository;
+    private readonly INoteTagRepository _noteTagRepository;
     private readonly ITodoTagRepository _todoTagRepository;
     private readonly ITodoRepository _todoRepository;
     private readonly IAppLogger _logger;
 
     public TagInheritanceService(
         IFolderTagRepository folderTagRepository,
+        INoteTagRepository noteTagRepository,
         ITodoTagRepository todoTagRepository,
         ITodoRepository todoRepository,
         IAppLogger logger)
     {
         _folderTagRepository = folderTagRepository ?? throw new ArgumentNullException(nameof(folderTagRepository));
+        _noteTagRepository = noteTagRepository ?? throw new ArgumentNullException(nameof(noteTagRepository));
         _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
         _todoRepository = todoRepository ?? throw new ArgumentNullException(nameof(todoRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -86,11 +90,11 @@ public class TagInheritanceService : ITagInheritanceService
         }
     }
 
-    public async Task UpdateTodoTagsAsync(Guid todoId, Guid? oldFolderId, Guid? newFolderId)
+    public async Task UpdateTodoTagsAsync(Guid todoId, Guid? oldFolderId, Guid? newFolderId, Guid? noteId = null)
     {
         try
         {
-            _logger.Info($"Updating todo {todoId} tags: moving from {oldFolderId} to {newFolderId}");
+            _logger.Info($"Updating todo {todoId} tags: moving from {oldFolderId} to {newFolderId}, noteId: {noteId}");
 
             // Step 1: Remove old folder's auto-tags (if any)
             if (oldFolderId.HasValue && oldFolderId.Value != Guid.Empty)
@@ -98,29 +102,43 @@ public class TagInheritanceService : ITagInheritanceService
                 await RemoveInheritedTagsAsync(todoId, oldFolderId.Value);
             }
 
-            // Step 2: Add new folder's tags (if any)
+            // Step 2: Get tags from folder (if any)
+            var folderTags = new List<string>();
             if (newFolderId.HasValue && newFolderId.Value != Guid.Empty)
             {
-                var applicableTags = await GetApplicableTagsAsync(newFolderId.Value);
-                
-                foreach (var tag in applicableTags)
-                {
-                    // Add as auto-tag (is_auto = 1) so we can remove it later if needed
-                    var existingTags = await _todoTagRepository.GetByTodoIdAsync(todoId);
-                    if (!existingTags.Any(t => t.Tag.Equals(tag, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        await _todoTagRepository.AddAsync(new Infrastructure.Persistence.Models.TodoTag
-                        {
-                            TodoId = todoId,
-                            Tag = tag,
-                            IsAuto = true,
-                            CreatedAt = DateTime.UtcNow
-                        });
-                    }
-                }
-
-                _logger.Info($"Added {applicableTags.Count} inherited tags to todo {todoId}");
+                folderTags = await GetApplicableTagsAsync(newFolderId.Value);
             }
+
+            // Step 3: Get tags from note (if any)
+            var noteTags = new List<string>();
+            if (noteId.HasValue && noteId.Value != Guid.Empty)
+            {
+                var noteTagList = await _noteTagRepository.GetNoteTagsAsync(noteId.Value);
+                noteTags = noteTagList.Select(t => t.Tag).ToList();
+                _logger.Info($"Found {noteTags.Count} tags on source note {noteId.Value}");
+            }
+
+            // Step 4: Merge folder and note tags (union - no duplicates)
+            var allTags = folderTags.Union(noteTags, StringComparer.OrdinalIgnoreCase).ToList();
+            
+            // Step 5: Apply all tags to todo
+            foreach (var tag in allTags)
+            {
+                // Add as auto-tag (is_auto = 1) so we can remove it later if needed
+                var existingTags = await _todoTagRepository.GetByTodoIdAsync(todoId);
+                if (!existingTags.Any(t => t.Tag.Equals(tag, StringComparison.OrdinalIgnoreCase)))
+                {
+                    await _todoTagRepository.AddAsync(new Infrastructure.Persistence.Models.TodoTag
+                    {
+                        TodoId = todoId,
+                        Tag = tag,
+                        IsAuto = true,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            _logger.Info($"Added {allTags.Count} inherited tags to todo {todoId} (folder: {folderTags.Count}, note: {noteTags.Count})");
         }
         catch (Exception ex)
         {

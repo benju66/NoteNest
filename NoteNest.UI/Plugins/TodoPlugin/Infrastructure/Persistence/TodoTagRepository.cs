@@ -32,7 +32,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 await connection.OpenAsync();
 
                 var sql = @"
-                    SELECT todo_id as TodoId, tag as Tag, is_auto as IsAuto, created_at as CreatedAt
+                    SELECT 
+                        todo_id as TodoId, 
+                        tag as Tag, 
+                        is_auto as IsAuto, 
+                        datetime(created_at, 'unixepoch', 'localtime') as CreatedAt
                     FROM todo_tags
                     WHERE todo_id = @TodoId
                     ORDER BY is_auto DESC, tag ASC";
@@ -58,7 +62,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 await connection.OpenAsync();
 
                 var sql = @"
-                    SELECT todo_id as TodoId, tag as Tag, is_auto as IsAuto, created_at as CreatedAt
+                    SELECT 
+                        todo_id as TodoId, 
+                        tag as Tag, 
+                        is_auto as IsAuto, 
+                        datetime(created_at, 'unixepoch', 'localtime') as CreatedAt
                     FROM todo_tags
                     WHERE todo_id = @TodoId AND is_auto = 1
                     ORDER BY tag ASC";
@@ -81,7 +89,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 await connection.OpenAsync();
 
                 var sql = @"
-                    SELECT todo_id as TodoId, tag as Tag, is_auto as IsAuto, created_at as CreatedAt
+                    SELECT 
+                        todo_id as TodoId, 
+                        tag as Tag, 
+                        is_auto as IsAuto, 
+                        datetime(created_at, 'unixepoch', 'localtime') as CreatedAt
                     FROM todo_tags
                     WHERE todo_id = @TodoId AND is_auto = 0
                     ORDER BY tag ASC";
