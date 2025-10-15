@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
 using NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels;
+using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
 {
@@ -361,7 +362,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
         {
             try
             {
-                _logger.Info("[TodoPanelView] AddTag_Click");
+                _logger.Info("[TodoPanelView] AddTag_Click - Opening TodoTagDialog");
                 
                 // Get the todo from the menu item's DataContext
                 var menuItem = sender as MenuItem;
@@ -373,71 +374,29 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                     return;
                 }
                 
-                // Show input dialog for tag name
-                var dialog = new Window
+                var app = (App)System.Windows.Application.Current;
+                var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
+                var todoTagRepo = app.ServiceProvider?.GetService<ITodoTagRepository>();
+                
+                if (mediator == null || todoTagRepo == null)
                 {
-                    Title = "Add Tag",
-                    Width = 300,
-                    Height = 150,
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+                
+                // Show full tag management dialog (consistent with folder/note dialogs)
+                var dialog = new NoteNest.UI.Windows.TodoTagDialog(
+                    todoVm.Id, 
+                    todoVm.Text, 
+                    mediator, 
+                    todoTagRepo, 
+                    _logger)
+                {
                     Owner = Window.GetWindow(this)
                 };
                 
-                var stackPanel = new StackPanel { Margin = new Thickness(10) };
-                stackPanel.Children.Add(new TextBlock 
-                { 
-                    Text = "Enter tag name:", 
-                    Margin = new Thickness(0, 0, 0, 5) 
-                });
-                
-                var textBox = new TextBox 
-                { 
-                    Margin = new Thickness(0, 0, 0, 10) 
-                };
-                stackPanel.Children.Add(textBox);
-                
-                var buttonPanel = new StackPanel 
-                { 
-                    Orientation = Orientation.Horizontal, 
-                    HorizontalAlignment = HorizontalAlignment.Right 
-                };
-                
-                var okButton = new Button 
-                { 
-                    Content = "OK", 
-                    Width = 75, 
-                    Margin = new Thickness(0, 0, 5, 0),
-                    IsDefault = true
-                };
-                okButton.Click += (s, args) => dialog.DialogResult = true;
-                
-                var cancelButton = new Button 
-                { 
-                    Content = "Cancel", 
-                    Width = 75,
-                    IsCancel = true
-                };
-                cancelButton.Click += (s, args) => dialog.DialogResult = false;
-                
-                buttonPanel.Children.Add(okButton);
-                buttonPanel.Children.Add(cancelButton);
-                stackPanel.Children.Add(buttonPanel);
-                
-                dialog.Content = stackPanel;
-                
-                textBox.Focus();
-                
-                if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(textBox.Text))
-                {
-                    var tagName = textBox.Text.Trim();
-                    _logger.Info($"[TodoPanelView] Adding tag '{tagName}' to todo {todoVm.Id}");
-                    
-                    // Execute AddTag command
-                    if (todoVm.AddTagCommand.CanExecute(tagName))
-                    {
-                        todoVm.AddTagCommand.Execute(tagName);
-                    }
-                }
+                dialog.ShowDialog();
+                _logger.Info("[TodoPanelView] TodoTagDialog closed");
             }
             catch (Exception ex)
             {

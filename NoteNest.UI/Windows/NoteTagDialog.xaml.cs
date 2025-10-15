@@ -23,12 +23,17 @@ namespace NoteNest.UI.Windows
         private readonly INoteTagRepository _noteTagRepository;
         private readonly IAppLogger _logger;
         private readonly ObservableCollection<string> _tags;
+        private readonly ObservableCollection<string> _inheritedTags;
+        private readonly NoteNest.Application.FolderTags.Repositories.IFolderTagRepository _folderTagRepository;
+        private readonly NoteNest.Infrastructure.Database.ITreeDatabaseRepository _treeRepository;
 
         public NoteTagDialog(
             Guid noteId, 
             string noteTitle,
             IMediator mediator,
             INoteTagRepository noteTagRepository,
+            NoteNest.Application.FolderTags.Repositories.IFolderTagRepository folderTagRepository,
+            NoteNest.Infrastructure.Database.ITreeDatabaseRepository treeRepository,
             IAppLogger logger)
         {
             InitializeComponent();
@@ -37,10 +42,14 @@ namespace NoteNest.UI.Windows
             _noteTitle = noteTitle;
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _noteTagRepository = noteTagRepository ?? throw new ArgumentNullException(nameof(noteTagRepository));
+            _folderTagRepository = folderTagRepository ?? throw new ArgumentNullException(nameof(folderTagRepository));
+            _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _tags = new ObservableCollection<string>();
+            _inheritedTags = new ObservableCollection<string>();
             TagsListBox.ItemsSource = _tags;
+            InheritedTagsListBox.ItemsSource = _inheritedTags;
             
             NotePathText.Text = $"Note: {noteTitle}";
             
@@ -58,6 +67,7 @@ namespace NoteNest.UI.Windows
         {
             try
             {
+                // Load this note's own tags
                 var noteTags = await _noteTagRepository.GetNoteTagsAsync(_noteId);
                 _tags.Clear();
                 foreach (var tag in noteTags)
@@ -65,7 +75,20 @@ namespace NoteNest.UI.Windows
                     _tags.Add(tag.Tag);
                 }
                 
-                _logger.Info($"Loaded {noteTags.Count} tags for note {_noteId}");
+                // Load inherited tags from parent folder
+                _inheritedTags.Clear();
+                var noteNode = await _treeRepository.GetNodeByIdAsync(_noteId);
+                if (noteNode?.ParentId != null)
+                {
+                    var folderTags = await _folderTagRepository.GetInheritedTagsAsync(noteNode.ParentId.Value);
+                    foreach (var folderTag in folderTags)
+                    {
+                        _inheritedTags.Add(folderTag.Tag);
+                    }
+                    _logger.Info($"Loaded {_inheritedTags.Count} inherited folder tags for note {_noteId}");
+                }
+                
+                _logger.Info($"Loaded {noteTags.Count} own tags and {_inheritedTags.Count} inherited tags for note {_noteId}");
             }
             catch (Exception ex)
             {

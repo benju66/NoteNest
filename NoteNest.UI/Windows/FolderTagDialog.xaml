@@ -35,16 +35,44 @@
                        Foreground="{DynamicResource AppTextSecondaryBrush}"/>
         </StackPanel>
         
-        <!-- Current tags list -->
+        <!-- Tags display -->
         <StackPanel Grid.Row="1" Margin="0,0,0,12">
-            <TextBlock Text="Current Tags:" FontWeight="SemiBold" Margin="0,0,0,4"/>
             <TextBlock Text="Add or remove tags below, then click Save to apply changes." 
                        FontSize="11" 
                        Foreground="{DynamicResource AppTextSecondaryBrush}"
                        Margin="0,0,0,8"
                        TextWrapping="Wrap"/>
+            
+            <!-- Inherited tags from parent folders (read-only) -->
+            <TextBlock Text="Inherited from Parent Folders:" 
+                       FontWeight="SemiBold" 
+                       Margin="0,0,0,4"
+                       Visibility="{Binding ElementName=InheritedTagsListBox, Path=HasItems, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            <ListBox x:Name="InheritedTagsListBox"
+                     MaxHeight="60"
+                     Background="{DynamicResource AppSurfaceBrush}"
+                     BorderBrush="{DynamicResource AppBorderBrush}"
+                     Foreground="{DynamicResource AppTextSecondaryBrush}"
+                     Margin="0,0,0,8"
+                     IsEnabled="False">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl Template="{StaticResource LucideArrowDown}"
+                                            Width="12" Height="12" 
+                                            Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding}" VerticalAlignment="Center" FontStyle="Italic"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            
+            <!-- This folder's own tags (editable) -->
+            <TextBlock Text="This Folder's Tags:" FontWeight="SemiBold" Margin="0,0,0,4"/>
             <ListBox x:Name="TagsListBox"
-                     Height="150"
+                     Height="120"
                      Background="{DynamicResource AppSurfaceBrush}"
                      BorderBrush="{DynamicResource AppBorderBrush}"
                      Foreground="{DynamicResource AppTextPrimaryBrush}">

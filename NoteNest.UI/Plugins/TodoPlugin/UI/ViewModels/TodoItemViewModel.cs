@@ -100,8 +100,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         
         /// <summary>
         /// ✨ TAG MVP: Check if todo has any tags
+        /// Uses _loadedTags for accurate real-time status after async loading
         /// </summary>
-        public bool HasTags => Tags.Any();
+        public bool HasTags => _loadedTags.Any();
         
         /// <summary>
         /// ✨ TAG MVP: Get only auto-generated tags
@@ -519,13 +520,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             {
                 _loadedTags = await _todoTagRepository.GetByTodoIdAsync(Id);
                 
-                // Notify tag-related properties
+                // Sync model's Tags with loaded tags for consistency
+                _todoItem.Tags = _loadedTags.Select(t => t.Tag).ToList();
+                
+                // Notify ALL tag-related properties to ensure UI updates
                 OnPropertyChanged(nameof(Tags));
                 OnPropertyChanged(nameof(HasTags));
                 OnPropertyChanged(nameof(AutoTags));
                 OnPropertyChanged(nameof(ManualTags));
                 OnPropertyChanged(nameof(TagsTooltip));
                 OnPropertyChanged(nameof(TagsDisplay));
+                
+                _logger.Debug($"[TodoItemViewModel] Loaded {_loadedTags.Count} tags for todo {Id}, UI refreshed");
             }
             catch (Exception ex)
             {

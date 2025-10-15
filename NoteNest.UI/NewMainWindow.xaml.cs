@@ -451,15 +451,17 @@ namespace NoteNest.UI
                 var app = (App)System.Windows.Application.Current;
                 var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
                 var noteTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.NoteTags.Repositories.INoteTagRepository>();
+                var folderTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>();
+                var treeRepo = app.ServiceProvider?.GetService<NoteNest.Infrastructure.Database.ITreeDatabaseRepository>();
                 var logger = app.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
 
-                if (mediator == null || noteTagRepo == null || logger == null)
+                if (mediator == null || noteTagRepo == null || folderTagRepo == null || treeRepo == null || logger == null)
                 {
                     MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
-                var dialog = new NoteTagDialog(Guid.Parse(note.Id), note.Title, mediator, noteTagRepo, logger)
+                var dialog = new NoteTagDialog(Guid.Parse(note.Id), note.Title, mediator, noteTagRepo, folderTagRepo, treeRepo, logger)
                 {
                     Owner = this
                 };

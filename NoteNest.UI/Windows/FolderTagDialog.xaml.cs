@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -23,6 +24,7 @@ namespace NoteNest.UI.Windows
         private readonly IFolderTagRepository _folderTagRepository;
         private readonly IAppLogger _logger;
         private readonly ObservableCollection<string> _tags;
+        private readonly ObservableCollection<string> _inheritedTags;
 
         public FolderTagDialog(
             Guid folderId, 
@@ -40,7 +42,9 @@ namespace NoteNest.UI.Windows
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _tags = new ObservableCollection<string>();
+            _inheritedTags = new ObservableCollection<string>();
             TagsListBox.ItemsSource = _tags;
+            InheritedTagsListBox.ItemsSource = _inheritedTags;
             
             FolderPathText.Text = $"Folder: {folderPath}";
             
@@ -58,6 +62,7 @@ namespace NoteNest.UI.Windows
         {
             try
             {
+                // Load this folder's own tags
                 var folderTags = await _folderTagRepository.GetFolderTagsAsync(_folderId);
                 _tags.Clear();
                 foreach (var tag in folderTags)
@@ -65,7 +70,18 @@ namespace NoteNest.UI.Windows
                     _tags.Add(tag.Tag);
                 }
                 
-                _logger.Info($"Loaded {folderTags.Count} tags for folder {_folderId}");
+                // Load inherited tags from parent folders
+                var allInheritedTags = await _folderTagRepository.GetInheritedTagsAsync(_folderId);
+                _inheritedTags.Clear();
+                
+                // Filter to only show tags from ancestors (not this folder's own tags)
+                var ownTagSet = new HashSet<string>(folderTags.Select(t => t.Tag), StringComparer.OrdinalIgnoreCase);
+                foreach (var inheritedTag in allInheritedTags.Where(t => !ownTagSet.Contains(t.Tag)))
+                {
+                    _inheritedTags.Add(inheritedTag.Tag);
+                }
+                
+                _logger.Info($"Loaded {folderTags.Count} own tags and {_inheritedTags.Count} inherited tags for folder {_folderId}");
             }
             catch (Exception ex)
             {
