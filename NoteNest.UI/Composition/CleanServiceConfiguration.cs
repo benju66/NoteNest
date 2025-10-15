@@ -138,6 +138,12 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<ITreeDatabaseRepository>(provider => 
                 new TreeDatabaseRepository(treeConnectionString, provider.GetRequiredService<IAppLogger>(), notesRootPath));
             
+            // ✨ HYBRID FOLDER TAGGING: Folder tag repository (uses tree.db)
+            services.AddSingleton<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>(provider =>
+                new NoteNest.Infrastructure.Repositories.FolderTagRepository(
+                    treeConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
             services.AddSingleton<ITreePopulationService, TreePopulationService>();
             
             // 🎯 DATABASE-ONLY REPOSITORIES (No duplicate registrations)

@@ -6,8 +6,8 @@
 -- Date: 2025-10-14
 -- Author: Hybrid Folder Tagging Implementation
 -- ============================================================================
-
-BEGIN TRANSACTION;
+-- NOTE: C# ApplyMigrationAsync handles transaction - do not nest!
+-- ============================================================================
 
 -- Create folder_tags table
 CREATE TABLE IF NOT EXISTS folder_tags (
@@ -41,15 +41,8 @@ CREATE INDEX IF NOT EXISTS idx_folder_tags_suggested ON folder_tags(is_auto_sugg
 -- Index 4: Find folders with inheritable tags (for tree walking)
 CREATE INDEX IF NOT EXISTS idx_folder_tags_inherit ON folder_tags(inherit_to_children);
 
--- ============================================================================
--- UPDATE SCHEMA VERSION
--- ============================================================================
-
--- Update schema version (idempotent - safe to run multiple times)
-INSERT OR REPLACE INTO schema_version (version, applied_at, description)
-VALUES (3, strftime('%s', 'now'), 'Added folder_tags table for hybrid folder tagging feature');
-
-COMMIT;
+-- Schema version is updated by ApplyMigrationAsync in C# code
+-- (Migration framework handles version tracking)
 
 -- ============================================================================
 -- Verification Queries (run after migration)

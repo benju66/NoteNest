@@ -6,8 +6,8 @@
 -- Date: 2025-10-14
 -- Author: Tag MVP Implementation
 -- ============================================================================
-
-BEGIN TRANSACTION;
+-- NOTE: C# ApplyMigrationAsync handles transaction - do not nest!
+-- ============================================================================
 
 -- Create note_tags table
 CREATE TABLE IF NOT EXISTS note_tags (
@@ -35,12 +35,8 @@ CREATE INDEX IF NOT EXISTS idx_note_tags_auto ON note_tags(is_auto);
 -- Index 4: Combined index for "find all auto tags for note"
 CREATE INDEX IF NOT EXISTS idx_note_tags_note_auto ON note_tags(note_id, is_auto);
 
--- Update schema version
-UPDATE schema_version SET version = 2 WHERE version = 1;
-INSERT INTO schema_version (version, applied_at, description)
-VALUES (2, strftime('%s', 'now'), 'Added note_tags table for note tagging feature');
-
-COMMIT;
+-- Schema version is updated by ApplyMigrationAsync in C# code
+-- (Migration framework handles version tracking)
 
 -- ============================================================================
 -- Verification Queries (run after migration)

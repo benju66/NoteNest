@@ -5,11 +5,11 @@ namespace NoteNest.Application.FolderTags.Commands.RemoveFolderTag;
 
 /// <summary>
 /// Command to remove tags from a folder.
+/// Existing items keep their tags (tags are not retroactively removed).
 /// </summary>
 public class RemoveFolderTagCommand : IRequest<Result<RemoveFolderTagResult>>
 {
     public Guid FolderId { get; set; }
-    public bool RemoveFromExistingItems { get; set; } = false;
 }
 
 /// <summary>
@@ -18,6 +18,6 @@ public class RemoveFolderTagCommand : IRequest<Result<RemoveFolderTagResult>>
 public class RemoveFolderTagResult
 {
     public Guid FolderId { get; set; }
-    public int TodosUpdated { get; set; }
+    public bool Success { get; set; }
 }
 

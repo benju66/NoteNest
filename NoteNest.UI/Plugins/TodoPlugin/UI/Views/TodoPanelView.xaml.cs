@@ -539,5 +539,107 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
         }
         
         #endregion
+
+        #region Folder Tagging (✨ HYBRID FOLDER TAGGING)
+
+        private async void SetFolderTags_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var category = menuItem?.Tag as CategoryNodeViewModel;
+                
+                if (category == null)
+                {
+                    _logger.Warning("[TodoPanelView] SetFolderTags_Click: Category is null");
+                    return;
+                }
+
+                var app = (App)System.Windows.Application.Current;
+                var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
+                var folderTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>();
+
+                if (mediator == null || folderTagRepo == null)
+                {
+                    MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var dialog = new NoteNest.UI.Windows.FolderTagDialog(
+                    category.CategoryId, 
+                    category.DisplayPath, 
+                    mediator, 
+                    folderTagRepo, 
+                    _logger)
+                {
+                    Owner = Window.GetWindow(this)
+                };
+
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoPanelView] Error in SetFolderTags_Click");
+                MessageBox.Show($"Error opening folder tag dialog: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void RemoveFolderTags_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var category = menuItem?.Tag as CategoryNodeViewModel;
+                
+                if (category == null)
+                {
+                    _logger.Warning("[TodoPanelView] RemoveFolderTags_Click: Category is null");
+                    return;
+                }
+
+                var result = MessageBox.Show(
+                    $"Remove all tags from folder '{category.Name}'?\n\nExisting todos will keep their tags.",
+                    "Confirm Remove Tags",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result != MessageBoxResult.Yes)
+                    return;
+
+                var app = (App)System.Windows.Application.Current;
+                var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
+                
+                if (mediator == null)
+                {
+                    MessageBox.Show("Mediator service not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var command = new NoteNest.Application.FolderTags.Commands.RemoveFolderTag.RemoveFolderTagCommand
+                {
+                    FolderId = category.CategoryId
+                };
+
+                var commandResult = await mediator.Send(command);
+                
+                if (commandResult.Success)
+                {
+                    _logger.Info($"[TodoPanelView] Folder tags removed successfully for category {category.CategoryId}");
+                    MessageBox.Show("Folder tags removed successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    _logger.Error($"[TodoPanelView] Failed to remove tags: {commandResult.Error}");
+                    MessageBox.Show($"Failed to remove tags: {commandResult.Error}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[TodoPanelView] Error in RemoveFolderTags_Click");
+                MessageBox.Show($"Error removing folder tags: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        #endregion
     }
 }

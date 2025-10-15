@@ -33,26 +33,25 @@ public class RemoveFolderTagHandler : IRequestHandler<RemoveFolderTagCommand, Re
         {
             _logger.Info($"Removing tags from folder {request.FolderId}");
 
-            // Get tags before removal (for event)
+            // Get tags before removal (for event and logging)
             var tagsToRemove = await _folderTagRepository.GetFolderTagsAsync(request.FolderId);
 
             // Remove tags from folder
             await _folderTagRepository.RemoveFolderTagsAsync(request.FolderId);
 
-            // Publish event (UI layer event handler will update todos if needed)
+            // Publish event (UI layer can refresh visual indicators)
             var untaggedEvent = new FolderUntaggedEvent(
                 request.FolderId, 
-                tagsToRemove.Select(t => t.Tag).ToList(), 
-                request.RemoveFromExistingItems);
+                tagsToRemove.Select(t => t.Tag).ToList());
             await _eventBus.PublishAsync<IDomainEvent>(untaggedEvent);
 
             var result = new RemoveFolderTagResult
             {
                 FolderId = request.FolderId,
-                TodosUpdated = 0 // UI layer event handler will update this
+                Success = true
             };
 
-            _logger.Info($"Successfully removed tags from folder {request.FolderId}");
+            _logger.Info($"Successfully removed {tagsToRemove.Count} tags from folder {request.FolderId}. Existing items keep their tags.");
             return Result<RemoveFolderTagResult>.Ok(result);
         }
         catch (Exception ex)

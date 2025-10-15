@@ -443,6 +443,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                             await HandleTodoUpdatedAsync(e.TodoId);
                             break;
                             
+                        // Folder tagging events (from Application layer)
+                        case NoteNest.Application.FolderTags.Events.FolderTaggedEvent e:
+                            _logger.Info($"[TodoStore] Folder {e.FolderId} tagged with {e.Tags.Count} tags: {string.Join(", ", e.Tags)}. New todos will inherit these tags.");
+                            // No UI update needed - new todos will automatically get tags via CreateTodoHandler
+                            break;
+                            
+                        case NoteNest.Application.FolderTags.Events.FolderUntaggedEvent e:
+                            _logger.Info($"[TodoStore] Folder {e.FolderId} untagged. Removed {e.RemovedTags.Count} tags. Existing todos keep their tags.");
+                            // No UI update needed - existing todos keep their tags
+                            break;
+                            
                         default:
                             _logger.Debug($"[TodoStore] ⚠️ Unhandled domain event type: {domainEvent.GetType().Name}");
                             break;

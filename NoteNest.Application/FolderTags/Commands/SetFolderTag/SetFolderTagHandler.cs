@@ -41,18 +41,18 @@ public class SetFolderTagHandler : IRequestHandler<SetFolderTagCommand, Result<S
                 request.InheritToChildren
             );
 
-            // Publish event (UI layer event handlers will update todos if needed)
-            var taggedEvent = new FolderTaggedEvent(request.FolderId, request.Tags, request.ApplyToExistingItems);
+            // Publish event (UI layer can refresh visual indicators)
+            var taggedEvent = new FolderTaggedEvent(request.FolderId, request.Tags);
             await _eventBus.PublishAsync<IDomainEvent>(taggedEvent);
 
             var result = new SetFolderTagResult
             {
                 FolderId = request.FolderId,
                 AppliedTags = request.Tags,
-                TodosUpdated = 0 // UI layer event handler will update this
+                Success = true
             };
 
-            _logger.Info($"Successfully set tags on folder {request.FolderId}");
+            _logger.Info($"Successfully set {request.Tags.Count} tags on folder {request.FolderId}. New items will inherit these tags.");
             return Result<SetFolderTagResult>.Ok(result);
         }
         catch (Exception ex)

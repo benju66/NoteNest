@@ -591,6 +591,26 @@
                                                         Foreground="{DynamicResource AppAccentBrush}"/>
                                     </MenuItem.Icon>
                                 </MenuItem>
+                                <Separator/>
+                                <!-- NEW: Folder Tagging -->
+                                <MenuItem Header="Set Folder _Tags..." 
+                                          Click="SetFolderTags_Click"
+                                          Tag="{Binding}">
+                                    <MenuItem.Icon>
+                                        <ContentControl Template="{StaticResource LucideTag}"
+                                                        Width="12" Height="12"
+                                                        Foreground="{DynamicResource AppAccentBrush}"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Remove Folder Tags" 
+                                          Click="RemoveFolderTags_Click"
+                                          Tag="{Binding}">
+                                    <MenuItem.Icon>
+                                        <ContentControl Template="{StaticResource LucideTag}"
+                                                        Width="12" Height="12"
+                                                        Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
                             </ContextMenu>
                             
                             <!-- 📄 Note Context Menu (PlacementTarget binding for proper DataContext) -->

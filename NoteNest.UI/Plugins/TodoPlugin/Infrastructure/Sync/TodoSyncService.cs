@@ -434,8 +434,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                 category.ParentId = null;
                 // OriginalParentId already set by CategorySyncService
                 
-                // Auto-add to CategoryStore
-                _categoryStore.Add(category);
+                // Auto-add to CategoryStore (properly awaited to prevent race conditions)
+                await _categoryStore.AddAsync(category);
                 _logger.Info($"[TodoSync] ✅ Auto-added category to todo panel: {displayPath} (for RTF todos)");
             }
             catch (Exception ex)

@@ -345,9 +345,94 @@ namespace NoteNest.UI
             if (viewModel != null)
             {
                 // Call the existing event handler we updated
-                viewModel.GetType().GetMethod("OnSearchResultSelected", 
+                viewModel.GetType().GetMethod("OnSearchResultSelected",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                     ?.Invoke(viewModel, new object[] { sender, e });
+            }
+        }
+
+        // ✨ HYBRID FOLDER TAGGING: Context menu handlers
+        private async void SetFolderTags_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var category = menuItem?.Tag as CategoryViewModel;
+                
+                if (category == null)
+                    return;
+
+                var app = (App)System.Windows.Application.Current;
+                var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
+                var folderTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>();
+                var logger = app.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
+
+                if (mediator == null || folderTagRepo == null || logger == null)
+                {
+                    MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var dialog = new FolderTagDialog(Guid.Parse(category.Id), category.BreadcrumbPath, mediator, folderTagRepo, logger)
+                {
+                    Owner = this
+                };
+
+                dialog.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error opening folder tag dialog: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void RemoveFolderTags_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var category = menuItem?.Tag as CategoryViewModel;
+                
+                if (category == null)
+                    return;
+
+                var result = MessageBox.Show(
+                    $"Remove all tags from folder '{category.Name}'?\n\nExisting items will keep their tags.",
+                    "Confirm Remove Tags",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+                if (result != MessageBoxResult.Yes)
+                    return;
+
+                var app = (App)System.Windows.Application.Current;
+                var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
+                
+                if (mediator == null)
+                {
+                    MessageBox.Show("Mediator service not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var command = new NoteNest.Application.FolderTags.Commands.RemoveFolderTag.RemoveFolderTagCommand
+                {
+                    FolderId = Guid.Parse(category.Id)
+                };
+
+                var commandResult = await mediator.Send(command);
+                
+                if (commandResult.Success)
+                {
+                    MessageBox.Show("Folder tags removed successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show($"Failed to remove tags: {commandResult.Error}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error removing folder tags: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

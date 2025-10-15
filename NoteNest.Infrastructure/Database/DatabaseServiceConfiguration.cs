@@ -78,11 +78,8 @@ namespace NoteNest.Infrastructure.Database
                     provider.GetRequiredService<IAppLogger>(), 
                     notesRootPath));
             
-            // ✨ HYBRID FOLDER TAGGING: Folder tag repository (uses tree.db)
-            services.AddSingleton<IFolderTagRepository>(provider =>
-                new FolderTagRepository(
-                    treeConnectionString,
-                    provider.GetRequiredService<IAppLogger>()));
+            // NOTE: IFolderTagRepository is now registered in CleanServiceConfiguration.cs
+            // (This file's AddTreeDatabaseServices method is not currently used)
             
             // =============================================================================
             // SUPPORTING SERVICES

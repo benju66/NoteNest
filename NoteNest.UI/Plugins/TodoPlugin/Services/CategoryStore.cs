@@ -159,7 +159,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             return _categories.FirstOrDefault(c => c.Id == id);
         }
 
-        public void Add(Category category)
+        public async Task AddAsync(Category category)
         {
             if (category == null) throw new ArgumentNullException(nameof(category));
             
@@ -167,13 +167,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             
             _categories.Add(category);
             
-            // Auto-save to database
-            _ = SaveToDatabaseAsync();
+            // Auto-save to database (properly awaited)
+            await SaveToDatabaseAsync();
             
-            // Publish event for loose coupling
-            _ = _eventBus.PublishAsync(new CategoryAddedEvent(category.Id, category.Name));
+            // Publish event for loose coupling (properly awaited)
+            await _eventBus.PublishAsync(new CategoryAddedEvent(category.Id, category.Name));
             
             _logger.Info($"[CategoryStore] ✅ Category added: {category.Name} (Count: {_categories.Count})");
+        }
+        
+        // Legacy synchronous wrapper for backward compatibility
+        public void Add(Category category)
+        {
+            _ = AddAsync(category);
         }
 
         public void Update(Category category)

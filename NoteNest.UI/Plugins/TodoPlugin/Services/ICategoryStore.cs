@@ -13,7 +13,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
     {
         ObservableCollection<Category> Categories { get; }
         Category? GetById(Guid id);
+        
+        /// <summary>
+        /// Add a category asynchronously (properly waits for DB save and event publish).
+        /// Use this for new code to avoid race conditions.
+        /// </summary>
+        Task AddAsync(Category category);
+        
+        /// <summary>
+        /// Add a category synchronously (legacy - uses fire-and-forget).
+        /// Prefer AddAsync for new code.
+        /// </summary>
         void Add(Category category);
+        
         void Update(Category category);
         void Delete(Guid id);
         
