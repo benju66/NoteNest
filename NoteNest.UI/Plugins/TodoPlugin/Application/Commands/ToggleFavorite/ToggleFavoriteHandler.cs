@@ -2,26 +2,23 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.ToggleFavorite
 {
     public class ToggleFavoriteHandler : IRequestHandler<ToggleFavoriteCommand, Result<ToggleFavoriteResult>>
     {
-        private readonly ITodoRepository _repository;
-        private readonly IEventBus _eventBus;
+        private readonly IEventStore _eventStore;
         private readonly IAppLogger _logger;
 
         public ToggleFavoriteHandler(
-            ITodoRepository repository,
-            IEventBus eventBus,
+            IEventStore eventStore,
             IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -29,36 +26,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.ToggleFavorite
         {
             try
             {
-                var todo = await _repository.GetByIdAsync(request.TodoId);
-                if (todo == null)
+                // Load from event store
+                var aggregate = await _eventStore.LoadAsync<TodoAggregate>(request.TodoId);
+                if (aggregate == null)
                     return Result.Fail<ToggleFavoriteResult>("Todo not found");
-
-                var aggregate = todo.ToAggregate();
                 
-                // Set favorite state
-                // If already in desired state, no-op
+                // Toggle favorite if needed
                 if (aggregate.IsFavorite != request.IsFavorite)
                 {
                     aggregate.ToggleFavorite();
                 }
                 
-                var updatedTodo = Models.TodoItem.FromAggregate(aggregate);
-                
-                var success = await _repository.UpdateAsync(updatedTodo);
-                if (!success)
-                    return Result.Fail<ToggleFavoriteResult>("Failed to update todo in database");
-                
-                // Publish events
-                foreach (var domainEvent in aggregate.DomainEvents)
-                {
-                    await _eventBus.PublishAsync(domainEvent);
-                }
-                aggregate.ClearDomainEvents();
+                // Save to event store
+                await _eventStore.SaveAsync(aggregate);
                 
                 return Result.Ok(new ToggleFavoriteResult
                 {
-                    TodoId = updatedTodo.Id,
-                    IsFavorite = updatedTodo.IsFavorite,
+                    TodoId = request.TodoId,
+                    IsFavorite = aggregate.IsFavorite,
                     Success = true
                 });
             }
@@ -70,4 +55,3 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.ToggleFavorite
         }
     }
 }
-

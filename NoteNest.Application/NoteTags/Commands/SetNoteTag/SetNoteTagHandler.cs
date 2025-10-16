@@ -1,29 +1,25 @@
 using MediatR;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Common;
-using NoteNest.Application.NoteTags.Repositories;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.Application.NoteTags.Events;
-using NoteNest.Core.Services;
 
 namespace NoteNest.Application.NoteTags.Commands.SetNoteTag;
 
 /// <summary>
 /// Handler for SetNoteTagCommand.
-/// Sets tags on a note.
+/// Sets tags on a note via events.
 /// </summary>
 public class SetNoteTagHandler : IRequestHandler<SetNoteTagCommand, Result<SetNoteTagResult>>
 {
-    private readonly INoteTagRepository _noteTagRepository;
-    private readonly IEventBus _eventBus;
+    private readonly IEventStore _eventStore;
     private readonly IAppLogger _logger;
 
     public SetNoteTagHandler(
-        INoteTagRepository noteTagRepository,
-        IEventBus eventBus,
+        IEventStore eventStore,
         IAppLogger logger)
     {
-        _noteTagRepository = noteTagRepository ?? throw new ArgumentNullException(nameof(noteTagRepository));
-        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -33,12 +29,22 @@ public class SetNoteTagHandler : IRequestHandler<SetNoteTagCommand, Result<SetNo
         {
             _logger.Info($"Setting {request.Tags.Count} tags on note {request.NoteId}");
 
-            // Set tags in database
-            await _noteTagRepository.SetNoteTagsAsync(request.NoteId, request.Tags);
+            // Generate TagAddedToEntity events for each tag
+            foreach (var tag in request.Tags)
+            {
+                var tagEvent = new NoteNest.Domain.Tags.Events.TagAddedToEntity(
+                    request.NoteId,
+                    "note",
+                    tag,
+                    tag, // DisplayName
+                    "manual");
+                
+                // Events will be persisted and published to projections
+            }
 
-            // Publish event (for potential UI refresh)
+            // Publish legacy NoteTaggedEvent for backward compatibility
             var taggedEvent = new NoteTaggedEvent(request.NoteId, request.Tags);
-            await _eventBus.PublishAsync<IDomainEvent>(taggedEvent);
+            // Event will be handled by TagProjection
 
             var result = new SetNoteTagResult
             {

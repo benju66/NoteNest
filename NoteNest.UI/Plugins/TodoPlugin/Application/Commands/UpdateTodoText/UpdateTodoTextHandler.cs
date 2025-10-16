@@ -2,26 +2,23 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.UpdateTodoText
 {
     public class UpdateTodoTextHandler : IRequestHandler<UpdateTodoTextCommand, Result<UpdateTodoTextResult>>
     {
-        private readonly ITodoRepository _repository;
-        private readonly IEventBus _eventBus;
+        private readonly IEventStore _eventStore;
         private readonly IAppLogger _logger;
 
         public UpdateTodoTextHandler(
-            ITodoRepository repository,
-            IEventBus eventBus,
+            IEventStore eventStore,
             IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -29,34 +26,23 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.UpdateTodoText
         {
             try
             {
-                var todo = await _repository.GetByIdAsync(request.TodoId);
-                if (todo == null)
+                // Load from event store
+                var aggregate = await _eventStore.LoadAsync<TodoAggregate>(request.TodoId);
+                if (aggregate == null)
                     return Result.Fail<UpdateTodoTextResult>("Todo not found");
-
-                var aggregate = todo.ToAggregate();
                 
-                // Update text
+                // Update text (domain logic)
                 var updateResult = aggregate.UpdateText(request.NewText);
                 if (updateResult.IsFailure)
                     return Result.Fail<UpdateTodoTextResult>(updateResult.Error);
                 
-                var updatedTodo = Models.TodoItem.FromAggregate(aggregate);
-                
-                var success = await _repository.UpdateAsync(updatedTodo);
-                if (!success)
-                    return Result.Fail<UpdateTodoTextResult>("Failed to update todo in database");
-                
-                // Publish events
-                foreach (var domainEvent in aggregate.DomainEvents)
-                {
-                    await _eventBus.PublishAsync(domainEvent);
-                }
-                aggregate.ClearDomainEvents();
+                // Save to event store
+                await _eventStore.SaveAsync(aggregate);
                 
                 return Result.Ok(new UpdateTodoTextResult
                 {
-                    TodoId = updatedTodo.Id,
-                    NewText = updatedTodo.Text,
+                    TodoId = request.TodoId,
+                    NewText = request.NewText,
                     Success = true
                 });
             }

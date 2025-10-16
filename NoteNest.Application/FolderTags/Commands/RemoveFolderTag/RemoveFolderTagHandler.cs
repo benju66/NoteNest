@@ -1,29 +1,26 @@
 using MediatR;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Common;
-using NoteNest.Application.FolderTags.Repositories;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.Application.FolderTags.Events;
-using NoteNest.Core.Services;
+using NoteNest.Domain.Tags.Events;
 
 namespace NoteNest.Application.FolderTags.Commands.RemoveFolderTag;
 
 /// <summary>
 /// Handler for RemoveFolderTagCommand.
-/// Removes all tags from a folder. Publishes event for UI layer to handle item updates.
+/// Removes a tag from a folder via events.
 /// </summary>
 public class RemoveFolderTagHandler : IRequestHandler<RemoveFolderTagCommand, Result<RemoveFolderTagResult>>
 {
-    private readonly IFolderTagRepository _folderTagRepository;
-    private readonly IEventBus _eventBus;
+    private readonly IEventStore _eventStore;
     private readonly IAppLogger _logger;
 
     public RemoveFolderTagHandler(
-        IFolderTagRepository folderTagRepository,
-        IEventBus eventBus,
+        IEventStore eventStore,
         IAppLogger logger)
     {
-        _folderTagRepository = folderTagRepository ?? throw new ArgumentNullException(nameof(folderTagRepository));
-        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -31,34 +28,32 @@ public class RemoveFolderTagHandler : IRequestHandler<RemoveFolderTagCommand, Re
     {
         try
         {
-            _logger.Info($"Removing tags from folder {request.FolderId}");
+            _logger.Info($"Removing tag '{request.TagName}' from folder {request.FolderId}");
 
-            // Get tags before removal (for event and logging)
-            var tagsToRemove = await _folderTagRepository.GetFolderTagsAsync(request.FolderId);
+            // Generate TagRemovedFromEntity event
+            var tagEvent = new TagRemovedFromEntity(
+                request.FolderId,
+                "folder",
+                request.TagName);
 
-            // Remove tags from folder
-            await _folderTagRepository.RemoveFolderTagsAsync(request.FolderId);
-
-            // Publish event (UI layer can refresh visual indicators)
-            var untaggedEvent = new FolderUntaggedEvent(
-                request.FolderId, 
-                tagsToRemove.Select(t => t.Tag).ToList());
-            await _eventBus.PublishAsync<IDomainEvent>(untaggedEvent);
+            // Publish legacy FolderUntaggedEvent for backward compatibility
+            var untaggedEvent = new FolderUntaggedEvent(request.FolderId, new List<string> { request.TagName });
+            // Event will be handled by TagProjection
 
             var result = new RemoveFolderTagResult
             {
                 FolderId = request.FolderId,
+                RemovedTag = request.TagName,
                 Success = true
             };
 
-            _logger.Info($"Successfully removed {tagsToRemove.Count} tags from folder {request.FolderId}. Existing items keep their tags.");
+            _logger.Info($"Successfully removed tag '{request.TagName}' from folder {request.FolderId}");
             return Result<RemoveFolderTagResult>.Ok(result);
         }
         catch (Exception ex)
         {
-            _logger.Error($"Failed to remove folder tags for {request.FolderId}", ex);
-            return Result<RemoveFolderTagResult>.Fail($"Failed to remove folder tags: {ex.Message}");
+            _logger.Error($"Failed to remove folder tag for {request.FolderId}", ex);
+            return Result<RemoveFolderTagResult>.Fail($"Failed to remove folder tag: {ex.Message}");
         }
     }
 }
-

@@ -16,33 +16,33 @@ namespace NoteNest.Application.Categories.Commands.DeleteCategory
     /// </summary>
     public class DeleteCategoryHandler : IRequestHandler<DeleteCategoryCommand, Result<DeleteCategoryResult>>
     {
+        private readonly IEventStore _eventStore;
         private readonly ICategoryRepository _categoryRepository;
         private readonly ITreeRepository _treeRepository;
         private readonly IFileService _fileService;
-        private readonly IEventBus _eventBus;
 
         public DeleteCategoryHandler(
+            IEventStore eventStore,
             ICategoryRepository categoryRepository,
             ITreeRepository treeRepository,
-            IFileService fileService,
-            IEventBus eventBus)
+            IFileService fileService)
         {
+            _eventStore = eventStore;
             _categoryRepository = categoryRepository;
             _treeRepository = treeRepository;
             _fileService = fileService;
-            _eventBus = eventBus;
         }
 
         public async Task<Result<DeleteCategoryResult>> Handle(DeleteCategoryCommand request, CancellationToken cancellationToken)
         {
-            // Get category from repository
+            // Get category for path info
             var categoryId = CategoryId.From(request.CategoryId);
             var category = await _categoryRepository.GetByIdAsync(categoryId);
             
             if (category == null)
                 return Result.Fail<DeleteCategoryResult>("Category not found");
 
-            // Get all descendants (for count and database cleanup)
+            // Get descendants count
             Guid categoryGuid;
             if (!Guid.TryParse(request.CategoryId, out categoryGuid))
                 return Result.Fail<DeleteCategoryResult>("Invalid category ID format");
@@ -50,25 +50,16 @@ namespace NoteNest.Application.Categories.Commands.DeleteCategory
             var descendants = await _treeRepository.GetNodeDescendantsAsync(categoryGuid);
             var descendantCount = descendants.Count;
 
-            // Soft-delete in database (category + all descendants)
-            // This allows recovery if needed
-            try
+            // Load CategoryAggregate and delete
+            var categoryAggregate = await _eventStore.LoadAsync<NoteNest.Domain.Categories.CategoryAggregate>(categoryGuid);
+            if (categoryAggregate != null)
             {
-                // Soft-delete all descendants first
-                foreach (var descendant in descendants)
-                {
-                    await _treeRepository.DeleteNodeAsync(descendant.Id, softDelete: true);
-                }
-                
-                // Soft-delete the category itself
-                var deleteResult = await _categoryRepository.DeleteAsync(categoryId);
-                if (deleteResult.IsFailure)
-                    return Result.Fail<DeleteCategoryResult>(deleteResult.Error);
+                categoryAggregate.Delete();
+                await _eventStore.SaveAsync(categoryAggregate);
             }
-            catch (Exception ex)
-            {
-                return Result.Fail<DeleteCategoryResult>($"Failed to delete category from database: {ex.Message}");
-            }
+            
+            // Delete descendants (TODO: Handle via events in future)
+            // For now, projection will handle cascade delete when it sees CategoryDeleted event
 
             // Delete physical directory if requested
             if (request.DeleteFiles)
@@ -82,17 +73,14 @@ namespace NoteNest.Application.Categories.Commands.DeleteCategory
                 }
                 catch (Exception ex)
                 {
-                    // Directory delete failed, but database is already updated
-                    // This is acceptable - user can manually delete directory
-                    // Don't rollback database (files can be orphaned, that's OK)
+                    // Directory delete failed but event persisted
                     return Result.Fail<DeleteCategoryResult>(
-                        $"Category deleted from database, but failed to delete directory: {ex.Message}. " +
+                        $"Category deleted from event store, but failed to delete directory: {ex.Message}. " +
                         $"You may need to manually delete: {category.Path}");
                 }
             }
 
-            // Note: Category domain model doesn't have DomainEvents yet
-            // Event publishing can be added later if needed
+            // Events automatically published to projections
             
             return Result.Ok(new DeleteCategoryResult
             {

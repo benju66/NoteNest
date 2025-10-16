@@ -10,20 +10,17 @@ namespace NoteNest.Application.Notes.Commands.CreateNote
 {
     public class CreateNoteHandler : IRequestHandler<CreateNoteCommand, Result<CreateNoteResult>>
     {
-        private readonly INoteRepository _noteRepository;
+        private readonly IEventStore _eventStore;
         private readonly ICategoryRepository _categoryRepository;
-        private readonly IEventBus _eventBus;
         private readonly IFileService _fileService;
 
         public CreateNoteHandler(
-            INoteRepository noteRepository,
+            IEventStore eventStore,
             ICategoryRepository categoryRepository,
-            IEventBus eventBus,
             IFileService fileService)
         {
-            _noteRepository = noteRepository;
+            _eventStore = eventStore;
             _categoryRepository = categoryRepository;
-            _eventBus = eventBus;
             _fileService = fileService;
         }
 
@@ -35,9 +32,8 @@ namespace NoteNest.Application.Notes.Commands.CreateNote
             if (category == null)
                 return Result.Fail<CreateNoteResult>("Category not found");
 
-            // Check for duplicate title in category
-            if (await _noteRepository.TitleExistsInCategoryAsync(categoryId, request.Title))
-                return Result.Fail<CreateNoteResult>($"A note with title '{request.Title}' already exists in this category");
+            // TODO: Check for duplicate title - will need query service
+            // For now, skip this check during event sourcing migration
 
             // Create domain model
             var note = new Note(categoryId, request.Title, request.InitialContent);
@@ -46,24 +42,19 @@ namespace NoteNest.Application.Notes.Commands.CreateNote
             var filePath = _fileService.GenerateNoteFilePath(category.Path, request.Title);
             note.SetFilePath(filePath);
 
-            // Save to repository
-            var saveResult = await _noteRepository.CreateAsync(note);
-            if (saveResult.IsFailure)
-                return Result.Fail<CreateNoteResult>(saveResult.Error);
+            // Save to event store (persists events + publishes to projections)
+            await _eventStore.SaveAsync(note);
 
-            // Write to file system
+            // Write to file system (RTF files remain source of truth)
             await _fileService.WriteNoteAsync(filePath, request.InitialContent);
 
-            // Publish domain events
-            foreach (var domainEvent in note.DomainEvents)
-            {
-                await _eventBus.PublishAsync(domainEvent);
-            }
-            note.ClearDomainEvents();
+            // Events automatically published to event bus for UI updates
+            // Projections automatically updated
+            // No manual event publishing needed!
 
             return Result.Ok(new CreateNoteResult
             {
-                NoteId = note.Id.Value,
+                NoteId = note.NoteId.Value,
                 FilePath = note.FilePath,
                 Title = note.Title
             });

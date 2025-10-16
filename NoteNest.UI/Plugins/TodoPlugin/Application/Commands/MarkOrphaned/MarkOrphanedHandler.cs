@@ -2,26 +2,23 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MarkOrphaned
 {
     public class MarkOrphanedHandler : IRequestHandler<MarkOrphanedCommand, Result<MarkOrphanedResult>>
     {
-        private readonly ITodoRepository _repository;
-        private readonly IEventBus _eventBus;
+        private readonly IEventStore _eventStore;
         private readonly IAppLogger _logger;
 
         public MarkOrphanedHandler(
-            ITodoRepository repository,
-            IEventBus eventBus,
+            IEventStore eventStore,
             IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -29,38 +26,26 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MarkOrphaned
         {
             try
             {
-                var todo = await _repository.GetByIdAsync(request.TodoId);
-                if (todo == null)
+                // Load from event store
+                var aggregate = await _eventStore.LoadAsync<TodoAggregate>(request.TodoId);
+                if (aggregate == null)
                     return Result.Fail<MarkOrphanedResult>("Todo not found");
-
-                var aggregate = todo.ToAggregate();
                 
-                // Mark as orphaned
+                // Mark as orphaned (domain logic)
                 if (request.IsOrphaned && !aggregate.IsOrphaned)
                 {
                     aggregate.MarkAsOrphaned();
                 }
-                // Note: No method to un-orphan (once orphaned, stays orphaned)
                 
-                var updatedTodo = Models.TodoItem.FromAggregate(aggregate);
-                
-                var success = await _repository.UpdateAsync(updatedTodo);
-                if (!success)
-                    return Result.Fail<MarkOrphanedResult>("Failed to update todo in database");
-                
-                // Publish events
-                foreach (var domainEvent in aggregate.DomainEvents)
-                {
-                    await _eventBus.PublishAsync(domainEvent);
-                }
-                aggregate.ClearDomainEvents();
+                // Save to event store
+                await _eventStore.SaveAsync(aggregate);
                 
                 _logger.Info($"[MarkOrphanedHandler] Todo marked as orphaned: {request.TodoId}");
                 
                 return Result.Ok(new MarkOrphanedResult
                 {
-                    TodoId = updatedTodo.Id,
-                    IsOrphaned = updatedTodo.IsOrphaned,
+                    TodoId = request.TodoId,
+                    IsOrphaned = aggregate.IsOrphaned,
                     Success = true
                 });
             }
@@ -72,4 +57,3 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MarkOrphaned
         }
     }
 }
-

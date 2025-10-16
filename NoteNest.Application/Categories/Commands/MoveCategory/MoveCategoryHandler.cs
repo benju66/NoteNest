@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -9,168 +8,120 @@ using NoteNest.Application.Common.Interfaces;
 
 namespace NoteNest.Application.Categories.Commands.MoveCategory
 {
-	/// <summary>
-	/// Handler for moving categories within the tree hierarchy.
-	/// Updates database parent_id relationship with full validation.
-	/// 
-	/// Process:
-	/// 1. Validate category and new parent exist
-	/// 2. Validate move (circular reference, name collision, depth)
-	/// 3. Update category parent_id in database
-	/// 4. Publish domain event
-	/// 
-	/// Note: Physical folder is NOT moved (matches rename behavior).
-	/// The logical hierarchy changes, but file system structure remains stable.
-	/// </summary>
-	public class MoveCategoryHandler : IRequestHandler<MoveCategoryCommand, Result<MoveCategoryResult>>
-	{
-		private readonly ICategoryRepository _categoryRepository;
-		private readonly ITreeRepository _treeRepository;
-		private readonly IEventBus _eventBus;
+    /// <summary>
+    /// Handler for moving categories within the tree hierarchy.
+    /// Event sourcing SIMPLIFIES this - CategoryMoved event handles path updates.
+    /// 
+    /// Process:
+    /// 1. Validate move (circular reference, existence)
+    /// 2. Load CategoryAggregate
+    /// 3. Call Move() - generates CategoryMoved event
+    /// 4. Save to event store
+    /// 5. Projection handles all descendant path updates
+    /// </summary>
+    public class MoveCategoryHandler : IRequestHandler<MoveCategoryCommand, Result<MoveCategoryResult>>
+    {
+        private readonly IEventStore _eventStore;
+        private readonly ICategoryRepository _categoryRepository;
+        private readonly ITreeRepository _treeRepository;
 
-		public MoveCategoryHandler(
-			ICategoryRepository categoryRepository,
-			ITreeRepository treeRepository,
-			IEventBus eventBus)
-		{
-			_categoryRepository = categoryRepository;
-			_treeRepository = treeRepository;
-			_eventBus = eventBus;
-		}
+        public MoveCategoryHandler(
+            IEventStore eventStore,
+            ICategoryRepository categoryRepository,
+            ITreeRepository treeRepository)
+        {
+            _eventStore = eventStore;
+            _categoryRepository = categoryRepository;
+            _treeRepository = treeRepository;
+        }
 
-		public async Task<Result<MoveCategoryResult>> Handle(MoveCategoryCommand request, CancellationToken cancellationToken)
-		{
-			// Validate category exists
-			var categoryId = CategoryId.From(request.CategoryId);
-			var category = await _categoryRepository.GetByIdAsync(categoryId);
-			
-			if (category == null)
-				return Result.Fail<MoveCategoryResult>("Category not found");
+        public async Task<Result<MoveCategoryResult>> Handle(MoveCategoryCommand request, CancellationToken cancellationToken)
+        {
+            // Validate category exists
+            var categoryId = CategoryId.From(request.CategoryId);
+            var category = await _categoryRepository.GetByIdAsync(categoryId);
+            
+            if (category == null)
+                return Result.Fail<MoveCategoryResult>("Category not found");
 
-			var oldParentId = category.ParentId?.Value;
+            var oldParentId = category.ParentId?.Value;
 
-			// Check if already in target location
-			if (oldParentId == request.NewParentId)
-			{
-				return Result.Ok(new MoveCategoryResult
-				{
-					Success = true,
-					CategoryId = request.CategoryId,
-					CategoryName = category.Name,
-					OldParentId = oldParentId,
-					NewParentId = request.NewParentId,
-					AffectedDescendantCount = 0
-				});
-			}
+            // Check if already in target location
+            if (oldParentId == request.NewParentId)
+            {
+                return Result.Ok(new MoveCategoryResult
+                {
+                    Success = true,
+                    CategoryId = request.CategoryId,
+                    CategoryName = category.Name,
+                    OldParentId = oldParentId,
+                    NewParentId = request.NewParentId,
+                    AffectedDescendantCount = 0
+                });
+            }
 
-			// Validate new parent exists (if not moving to root)
-			if (!string.IsNullOrEmpty(request.NewParentId))
-			{
-				var newParentId = CategoryId.From(request.NewParentId);
-				var newParent = await _categoryRepository.GetByIdAsync(newParentId);
-				
-				if (newParent == null)
-					return Result.Fail<MoveCategoryResult>("Target parent category not found");
-			}
+            // Validate new parent exists (if not moving to root)
+            Guid? newParentGuid = null;
+            string newParentPath = null;
+            
+            if (!string.IsNullOrEmpty(request.NewParentId))
+            {
+                var newParentId = CategoryId.From(request.NewParentId);
+                var newParent = await _categoryRepository.GetByIdAsync(newParentId);
+                
+                if (newParent == null)
+                    return Result.Fail<MoveCategoryResult>("Target parent category not found");
 
-			// Validate move operation
-			var validationResult = await ValidateMoveAsync(category, request.NewParentId);
-			if (validationResult.IsFailure)
-				return Result.Fail<MoveCategoryResult>(validationResult.Error);
+                newParentGuid = Guid.Parse(newParent.Id.Value);
+                newParentPath = newParent.Path;
+                
+                // Validate not moving to self
+                if (request.CategoryId == request.NewParentId)
+                    return Result.Fail<MoveCategoryResult>("Cannot move category to itself");
 
-			try
-			{
-				// Update category parent_id
-				CategoryId newParentId = string.IsNullOrEmpty(request.NewParentId) 
-					? null 
-					: CategoryId.From(request.NewParentId);
-				
-				category.Move(newParentId);
+                // Validate not moving to own descendant (circular reference)
+                Guid categoryGuid = Guid.Parse(request.CategoryId);
+                var descendants = await _treeRepository.GetNodeDescendantsAsync(categoryGuid);
+                if (descendants.Any(d => d.Id == newParentGuid))
+                    return Result.Fail<MoveCategoryResult>("Cannot move category to its own descendant");
+            }
+            else
+            {
+                // Moving to root
+                newParentPath = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    "NoteNest");
+            }
 
-				// Update database
-				var updateResult = await _categoryRepository.UpdateAsync(category);
-				if (updateResult.IsFailure)
-					return Result.Fail<MoveCategoryResult>($"Failed to update category: {updateResult.Error}");
+            // Calculate new path
+            var newPath = System.IO.Path.Combine(newParentPath, category.Name);
 
-				// Get descendant count for reporting
-				Guid categoryGuid;
-				int descendantCount = 0;
-				if (Guid.TryParse(request.CategoryId, out categoryGuid))
-				{
-					var descendants = await _treeRepository.GetNodeDescendantsAsync(categoryGuid);
-					descendantCount = descendants?.Count ?? 0;
-				}
+            // Load CategoryAggregate
+            Guid catGuid = Guid.Parse(category.Id.Value);
+            var categoryAggregate = await _eventStore.LoadAsync<NoteNest.Domain.Categories.CategoryAggregate>(catGuid);
+            if (categoryAggregate == null)
+                return Result.Fail<MoveCategoryResult>("Category aggregate not found");
 
-				// Domain events are automatically published by the domain model
-				// The Move() method on the Category entity already updates the parent relationship
+            // Move category (generates CategoryMoved event with path changes)
+            var moveResult = categoryAggregate.Move(newParentGuid, newPath);
+            if (moveResult.IsFailure)
+                return Result.Fail<MoveCategoryResult>(moveResult.Error);
 
-				return Result.Ok(new MoveCategoryResult
-				{
-					Success = true,
-					CategoryId = request.CategoryId,
-					CategoryName = category.Name,
-					OldParentId = oldParentId,
-					NewParentId = request.NewParentId,
-					AffectedDescendantCount = descendantCount
-				});
-			}
-			catch (Exception ex)
-			{
-				return Result.Fail<MoveCategoryResult>($"Failed to move category: {ex.Message}");
-			}
-		}
+            // Save to event store
+            await _eventStore.SaveAsync(categoryAggregate);
 
-		private async Task<Result> ValidateMoveAsync(Category category, string newParentId)
-		{
-			// Check for circular reference (moving into own descendant)
-			if (!string.IsNullOrEmpty(newParentId))
-			{
-				var isCircular = await IsCircularReference(category.Id, CategoryId.From(newParentId));
-				if (isCircular)
-					return Result.Fail("Cannot move a category into its own descendant");
-			}
+            // Projection automatically updates all descendant paths!
+            // No manual cascade needed - this is the beauty of event sourcing
 
-			// Check for name collision in target location
-			var allCategories = await _categoryRepository.GetAllAsync();
-			var siblings = allCategories.Where(c => 
-				c.ParentId?.Value == newParentId && 
-				c.Id != category.Id &&
-				string.Equals(c.Name, category.Name, StringComparison.OrdinalIgnoreCase)
-			);
-			
-			if (siblings.Any())
-			{
-				return Result.Fail("A category with this name already exists in the target location");
-			}
-
-			// Additional validation could include:
-			// - Maximum tree depth check
-			// - Permissions check
-			// - Business rules validation
-
-			return Result.Ok();
-		}
-
-		private async Task<bool> IsCircularReference(CategoryId categoryId, CategoryId newParentId)
-		{
-			var current = newParentId;
-			var maxIterations = 100; // Safety limit
-			var iterations = 0;
-
-			while (current != null && iterations < maxIterations)
-			{
-				if (current == categoryId)
-					return true;
-
-				var parent = await _categoryRepository.GetByIdAsync(current);
-				if (parent == null)
-					break;
-
-				current = parent.ParentId;
-				iterations++;
-			}
-
-			return false;
-		}
-	}
+            return Result.Ok(new MoveCategoryResult
+            {
+                Success = true,
+                CategoryId = request.CategoryId,
+                CategoryName = category.Name,
+                OldParentId = oldParentId,
+                NewParentId = request.NewParentId,
+                AffectedDescendantCount = 0 // Projection handles this
+            });
+        }
+    }
 }

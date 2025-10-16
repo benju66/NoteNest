@@ -9,25 +9,23 @@ namespace NoteNest.Application.Notes.Commands.SaveNote
 {
     public class SaveNoteHandler : IRequestHandler<SaveNoteCommand, Result<SaveNoteResult>>
     {
-        private readonly INoteRepository _noteRepository;
+        private readonly IEventStore _eventStore;
         private readonly IFileService _fileService;
-        private readonly IEventBus _eventBus;
 
         public SaveNoteHandler(
-            INoteRepository noteRepository,
-            IFileService fileService,
-            IEventBus eventBus)
+            IEventStore eventStore,
+            IFileService fileService)
         {
-            _noteRepository = noteRepository;
+            _eventStore = eventStore;
             _fileService = fileService;
-            _eventBus = eventBus;
         }
 
         public async Task<Result<SaveNoteResult>> Handle(SaveNoteCommand request, CancellationToken cancellationToken)
         {
-            // Get note from repository
+            // Load note from event store
             var noteId = NoteId.From(request.NoteId);
-            var note = await _noteRepository.GetByIdAsync(noteId);
+            var noteGuid = Guid.Parse(noteId.Value);
+            var note = await _eventStore.LoadAsync<Note>(noteGuid);
             if (note == null)
                 return Result.Fail<SaveNoteResult>("Note not found");
 
@@ -36,20 +34,13 @@ namespace NoteNest.Application.Notes.Commands.SaveNote
             if (updateResult.IsFailure)
                 return Result.Fail<SaveNoteResult>(updateResult.Error);
 
-            // Save to repository
-            var saveResult = await _noteRepository.UpdateAsync(note);
-            if (saveResult.IsFailure)
-                return Result.Fail<SaveNoteResult>(saveResult.Error);
+            // Save to event store (persists events + updates projections)
+            await _eventStore.SaveAsync(note);
 
-            // Write to file system
+            // Write to file system (RTF files remain source of truth)
             await _fileService.WriteNoteAsync(note.FilePath, request.Content);
 
-            // Publish domain events
-            foreach (var domainEvent in note.DomainEvents)
-            {
-                await _eventBus.PublishAsync(domainEvent);
-            }
-            note.ClearDomainEvents();
+            // Events automatically published for UI updates and projections
 
             return Result.Ok(new SaveNoteResult
             {

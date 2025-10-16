@@ -2,26 +2,23 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.SetDueDate
 {
     public class SetDueDateHandler : IRequestHandler<SetDueDateCommand, Result<SetDueDateResult>>
     {
-        private readonly ITodoRepository _repository;
-        private readonly IEventBus _eventBus;
+        private readonly IEventStore _eventStore;
         private readonly IAppLogger _logger;
 
         public SetDueDateHandler(
-            ITodoRepository repository,
-            IEventBus eventBus,
+            IEventStore eventStore,
             IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -29,34 +26,23 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.SetDueDate
         {
             try
             {
-                var todo = await _repository.GetByIdAsync(request.TodoId);
-                if (todo == null)
+                // Load from event store
+                var aggregate = await _eventStore.LoadAsync<TodoAggregate>(request.TodoId);
+                if (aggregate == null)
                     return Result.Fail<SetDueDateResult>("Todo not found");
-
-                var aggregate = todo.ToAggregate();
                 
-                // Set due date (null = clear)
+                // Set due date (domain logic)
                 var setDueDateResult = aggregate.SetDueDate(request.DueDate);
                 if (setDueDateResult.IsFailure)
                     return Result.Fail<SetDueDateResult>(setDueDateResult.Error);
                 
-                var updatedTodo = Models.TodoItem.FromAggregate(aggregate);
-                
-                var success = await _repository.UpdateAsync(updatedTodo);
-                if (!success)
-                    return Result.Fail<SetDueDateResult>("Failed to update todo in database");
-                
-                // Publish events
-                foreach (var domainEvent in aggregate.DomainEvents)
-                {
-                    await _eventBus.PublishAsync(domainEvent);
-                }
-                aggregate.ClearDomainEvents();
+                // Save to event store
+                await _eventStore.SaveAsync(aggregate);
                 
                 return Result.Ok(new SetDueDateResult
                 {
-                    TodoId = updatedTodo.Id,
-                    DueDate = updatedTodo.DueDate,
+                    TodoId = request.TodoId,
+                    DueDate = request.DueDate,
                     Success = true
                 });
             }

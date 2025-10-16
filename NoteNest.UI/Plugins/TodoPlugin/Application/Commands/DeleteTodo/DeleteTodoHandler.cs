@@ -2,27 +2,25 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Events;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.ValueObjects;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.DeleteTodo
 {
     public class DeleteTodoHandler : IRequestHandler<DeleteTodoCommand, Result<DeleteTodoResult>>
     {
-        private readonly ITodoRepository _repository;
-        private readonly IEventBus _eventBus;
+        private readonly IEventStore _eventStore;
         private readonly IAppLogger _logger;
 
         public DeleteTodoHandler(
-            ITodoRepository repository,
-            IEventBus eventBus,
+            IEventStore eventStore,
             IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -30,23 +28,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.DeleteTodo
         {
             try
             {
-                // Verify todo exists before deleting
-                var todo = await _repository.GetByIdAsync(request.TodoId);
-                if (todo == null)
+                // Load aggregate from event store
+                var aggregate = await _eventStore.LoadAsync<TodoAggregate>(request.TodoId);
+                if (aggregate == null)
                     return Result.Fail<DeleteTodoResult>("Todo not found");
-
-                // Delete from database
-                var success = await _repository.DeleteAsync(request.TodoId);
                 
-                if (!success)
-                    return Result.Fail<DeleteTodoResult>("Failed to delete todo from database");
+                // Raise deletion event
+                var todoId = TodoId.From(request.TodoId.ToString());
+                aggregate.AddDomainEvent(new TodoDeletedEvent(todoId));
                 
-                // Publish deletion event (TodoStore will remove from UI)
-                // ✨ CRITICAL: Cast to IDomainEvent to match TodoStore subscription
-                var deletedEvent = new TodoDeletedEvent(Domain.ValueObjects.TodoId.From(request.TodoId));
-                await _eventBus.PublishAsync<Domain.Common.IDomainEvent>(deletedEvent);
+                // Save to event store (TodoDeletedEvent will be persisted)
+                await _eventStore.SaveAsync(aggregate);
                 
-                _logger.Info($"[DeleteTodoHandler] ✅ Todo deleted: {request.TodoId}");
+                _logger.Info($"[DeleteTodoHandler] ✅ Todo deleted via events: {request.TodoId}");
                 
                 return Result.Ok(new DeleteTodoResult
                 {
@@ -62,4 +56,3 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.DeleteTodo
         }
     }
 }
-

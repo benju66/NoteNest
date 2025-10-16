@@ -22,28 +22,26 @@ namespace NoteNest.Application.Notes.Commands.MoveNote
 	/// </summary>
 	public class MoveNoteHandler : IRequestHandler<MoveNoteCommand, Result<MoveNoteResult>>
 	{
-		private readonly INoteRepository _noteRepository;
+		private readonly IEventStore _eventStore;
 		private readonly ICategoryRepository _categoryRepository;
 		private readonly IFileService _fileService;
-		private readonly IEventBus _eventBus;
 
 		public MoveNoteHandler(
-			INoteRepository noteRepository,
+			IEventStore eventStore,
 			ICategoryRepository categoryRepository,
-			IFileService fileService,
-			IEventBus eventBus)
+			IFileService fileService)
 		{
-			_noteRepository = noteRepository;
+			_eventStore = eventStore;
 			_categoryRepository = categoryRepository;
 			_fileService = fileService;
-			_eventBus = eventBus;
 		}
 
 		public async Task<Result<MoveNoteResult>> Handle(MoveNoteCommand request, CancellationToken cancellationToken)
 		{
-			// Validate note exists
+			// Load note from event store
 			var noteId = NoteId.From(request.NoteId);
-			var note = await _noteRepository.GetByIdAsync(noteId);
+			var noteGuid = Guid.Parse(noteId.Value);
+			var note = await _eventStore.LoadAsync<Note>(noteGuid);
 			
 			if (note == null)
 				return Result.Fail<MoveNoteResult>("Note not found");
@@ -111,25 +109,10 @@ namespace NoteNest.Application.Notes.Commands.MoveNote
 				// Update note domain model
 				note.Move(targetCategoryId, newPath);
 
-				// Update database
-				var updateResult = await _noteRepository.UpdateAsync(note);
-				if (updateResult.IsFailure)
-				{
-					// Rollback: move file back
-					try
-					{
-						if (await _fileService.FileExistsAsync(newPath))
-						{
-							await _fileService.MoveFileAsync(newPath, oldPath);
-						}
-					}
-					catch { /* Best effort rollback */ }
-					
-					return Result.Fail<MoveNoteResult>($"Failed to update note in database: {updateResult.Error}");
-				}
-
-				// Domain events are automatically published by the domain model
-				// The Move() method on the Note entity already adds a domain event
+				// Save to event store (persists move event)
+				await _eventStore.SaveAsync(note);
+				
+				// Events automatically published to projections and UI
 
 				return Result.Ok(new MoveNoteResult
 				{

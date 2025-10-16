@@ -7,7 +7,8 @@ namespace NoteNest.Domain.Notes
 {
     public class Note : AggregateRoot
     {
-        public NoteId Id { get; private set; }
+        public NoteId NoteId { get; private set; }
+        public override Guid Id => Guid.Parse(NoteId.Value);
         public CategoryId CategoryId { get; private set; }
         public string Title { get; private set; }
         public string Content { get; private set; }
@@ -15,17 +16,17 @@ namespace NoteNest.Domain.Notes
         public bool IsPinned { get; private set; }
         public int Position { get; private set; }
 
-        private Note() { } // For serialization
+        public Note() { } // Public for event sourcing
 
         public Note(CategoryId categoryId, string title, string content = "")
         {
-            Id = NoteId.Create();
+            NoteId = NoteId.Create();
             CategoryId = categoryId ?? throw new ArgumentNullException(nameof(categoryId));
             Title = title ?? throw new ArgumentNullException(nameof(title));
             Content = content ?? string.Empty;
             CreatedAt = UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new NoteCreatedEvent(Id, CategoryId, Title));
+            AddDomainEvent(new NoteCreatedEvent(NoteId, CategoryId, Title));
         }
         
         /// <summary>
@@ -36,7 +37,7 @@ namespace NoteNest.Domain.Notes
         {
             var note = new Note
             {
-                Id = NoteId.Create(),
+                NoteId = NoteId.Create(),
                 CategoryId = CategoryId.Create(), // Placeholder - will be loaded from database if needed
                 Title = title ?? throw new ArgumentNullException(nameof(title)),
                 Content = string.Empty, // Content loaded from file by workspace
@@ -59,7 +60,7 @@ namespace NoteNest.Domain.Notes
             Title = newTitle;
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new NoteRenamedEvent(Id, oldTitle, newTitle));
+            AddDomainEvent(new NoteRenamedEvent(NoteId, oldTitle, newTitle));
             return Result.Ok();
         }
 
@@ -68,7 +69,7 @@ namespace NoteNest.Domain.Notes
             Content = newContent ?? string.Empty;
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new NoteContentUpdatedEvent(Id));
+            AddDomainEvent(new NoteContentUpdatedEvent(NoteId));
             return Result.Ok();
         }
 
@@ -81,7 +82,7 @@ namespace NoteNest.Domain.Notes
             CategoryId = newCategoryId;
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new NoteMovedEvent(Id, oldCategoryId, newCategoryId));
+            AddDomainEvent(new NoteMovedEvent(NoteId, oldCategoryId, newCategoryId));
             return Result.Ok();
         }
 
@@ -102,7 +103,7 @@ namespace NoteNest.Domain.Notes
             FilePath = newFilePath;
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new NoteMovedEvent(Id, oldCategoryId, newCategoryId));
+            AddDomainEvent(new NoteMovedEvent(NoteId, oldCategoryId, newCategoryId));
             return Result.Ok();
         }
 
@@ -121,7 +122,7 @@ namespace NoteNest.Domain.Notes
             if (!IsPinned)
             {
                 IsPinned = true;
-                AddDomainEvent(new NotePinnedEvent(Id));
+                AddDomainEvent(new NotePinnedEvent(NoteId));
             }
         }
 
@@ -130,8 +131,50 @@ namespace NoteNest.Domain.Notes
             if (IsPinned)
             {
                 IsPinned = false;
-                AddDomainEvent(new NoteUnpinnedEvent(Id));
+                AddDomainEvent(new NoteUnpinnedEvent(NoteId));
+            }
+        }
+        
+        /// <summary>
+        /// Apply event to rebuild aggregate state from event stream.
+        /// </summary>
+        public override void Apply(IDomainEvent @event)
+        {
+            switch (@event)
+            {
+                case NoteCreatedEvent e:
+                    NoteId = e.NoteId;
+                    CategoryId = e.CategoryId;
+                    Title = e.Title;
+                    Content = string.Empty;
+                    FilePath = string.Empty;
+                    CreatedAt = e.OccurredAt;
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case NoteContentUpdatedEvent e:
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case NoteRenamedEvent e:
+                    Title = e.NewTitle;
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case NoteMovedEvent e:
+                    CategoryId = e.ToCategoryId;  // Fixed: ToCategoryId not NewCategoryId
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case NotePinnedEvent e:
+                    IsPinned = true;
+                    break;
+                    
+                case NoteUnpinnedEvent e:
+                    IsPinned = false;
+                    break;
             }
         }
     }
 }
+

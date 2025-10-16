@@ -2,33 +2,24 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.Models;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
+using NoteNest.Domain.Tags.Events;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.AddTag
 {
     public class AddTagHandler : IRequestHandler<AddTagCommand, Result<AddTagResult>>
     {
-        private readonly ITodoTagRepository _todoTagRepository;
-        private readonly IGlobalTagRepository _globalTagRepository;
-        private readonly ITodoRepository _todoRepository;
-        private readonly IEventBus _eventBus;
+        private readonly IEventStore _eventStore;
         private readonly IAppLogger _logger;
 
         public AddTagHandler(
-            ITodoTagRepository todoTagRepository,
-            IGlobalTagRepository globalTagRepository,
-            ITodoRepository todoRepository,
-            IEventBus eventBus,
+            IEventStore eventStore,
             IAppLogger logger)
         {
-            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
-            _globalTagRepository = globalTagRepository ?? throw new ArgumentNullException(nameof(globalTagRepository));
-            _todoRepository = todoRepository ?? throw new ArgumentNullException(nameof(todoRepository));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -38,34 +29,32 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.AddTag
             {
                 _logger.Info($"[AddTagHandler] Adding tag '{request.TagName}' to todo {request.TodoId}");
 
-                // Verify todo exists
-                var todo = await _todoRepository.GetByIdAsync(request.TodoId);
-                if (todo == null)
+                // Load todo aggregate
+                var aggregate = await _eventStore.LoadAsync<TodoAggregate>(request.TodoId);
+                if (aggregate == null)
                     return Result.Fail<AddTagResult>("Todo not found");
 
                 // Check if tag already exists
-                var exists = await _todoTagRepository.ExistsAsync(request.TodoId, request.TagName);
-                if (exists)
+                if (aggregate.Tags.Contains(request.TagName, StringComparer.OrdinalIgnoreCase))
                     return Result.Fail<AddTagResult>($"Tag '{request.TagName}' already exists on this todo");
 
-                // Add tag
-                var todoTag = new TodoTag
-                {
-                    TodoId = request.TodoId,
-                    Tag = request.TagName,
-                    IsAuto = false,  // Manual tag!
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                await _todoTagRepository.AddAsync(todoTag);
+                // Add tag (domain logic)
+                aggregate.AddTag(request.TagName);
+                
+                // Generate TagAddedToEntity event
+                var tagEvent = new TagAddedToEntity(
+                    request.TodoId,
+                    "todo",
+                    request.TagName,
+                    request.TagName, // DisplayName
+                    "manual");
+                
+                aggregate.AddDomainEvent(tagEvent);
+                
+                // Save to event store (persists both tag add and tag event)
+                await _eventStore.SaveAsync(aggregate);
+                
                 _logger.Info($"[AddTagHandler] ✅ Tag '{request.TagName}' added to todo");
-
-                // Update global_tags usage count
-                await _globalTagRepository.IncrementUsageAsync(request.TagName);
-
-                // Publish domain event (for UI updates)
-                // Note: We can add TodoTagAddedEvent if needed
-                // For now, relying on repository to trigger any necessary updates
 
                 return Result.Ok(new AddTagResult
                 {
@@ -82,4 +71,3 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.AddTag
         }
     }
 }
-

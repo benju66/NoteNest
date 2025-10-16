@@ -8,7 +8,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
 {
     public class TodoAggregate : AggregateRoot
     {
-        public TodoId Id { get; private set; }
+        public TodoId TodoId { get; private set; }
+        public override Guid Id => Guid.Parse(TodoId.Value);
         public TodoText Text { get; private set; }
         public string Description { get; private set; }
         public bool IsCompleted { get; private set; }
@@ -32,7 +33,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
         public int? SourceCharOffset { get; private set; }
         public bool IsOrphaned { get; private set; }
 
-        private TodoAggregate() 
+        public TodoAggregate() // Public for event sourcing
         {
             Tags = new List<string>();
         }
@@ -52,7 +53,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
 
             var aggregate = new TodoAggregate
             {
-                Id = TodoId.Create(),
+                TodoId = TodoId.Create(),
                 Text = textResult.Value,
                 CategoryId = categoryId,
                 IsCompleted = false,
@@ -63,7 +64,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
                 Tags = new List<string>()
             };
 
-            aggregate.AddDomainEvent(new TodoCreatedEvent(aggregate.Id, text, categoryId));
+            aggregate.AddDomainEvent(new TodoCreatedEvent(aggregate.TodoId, text, categoryId));
             return Result.Ok(aggregate);
         }
 
@@ -97,7 +98,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
                 Tags = new List<string>()
             };
 
-            aggregate.AddDomainEvent(new TodoCreatedEvent(aggregate.Id, text, null));
+            aggregate.AddDomainEvent(new TodoCreatedEvent(aggregate.TodoId, text, null));
             return Result.Ok(aggregate);
         }
 
@@ -132,7 +133,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
 
             return new TodoAggregate
             {
-                Id = TodoId.From(id),
+                TodoId = TodoId.From(id),
                 Text = textResult.Value,
                 Description = description,
                 IsCompleted = isCompleted,
@@ -168,7 +169,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
             CompletedDate = DateTime.UtcNow;
             ModifiedDate = DateTime.UtcNow;
 
-            AddDomainEvent(new TodoCompletedEvent(Id));
+            AddDomainEvent(new TodoCompletedEvent(TodoId));
             return Result.Ok();
         }
 
@@ -181,7 +182,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
             CompletedDate = null;
             ModifiedDate = DateTime.UtcNow;
 
-            AddDomainEvent(new TodoUncompletedEvent(Id));
+            AddDomainEvent(new TodoUncompletedEvent(TodoId));
             return Result.Ok();
         }
 
@@ -194,7 +195,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
             Text = textResult.Value;
             ModifiedDate = DateTime.UtcNow;
 
-            AddDomainEvent(new TodoTextUpdatedEvent(Id, newText));
+            AddDomainEvent(new TodoTextUpdatedEvent(TodoId, newText));
             return Result.Ok();
         }
 
@@ -213,7 +214,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
             }
 
             ModifiedDate = DateTime.UtcNow;
-            AddDomainEvent(new TodoDueDateChangedEvent(Id, dueDate));
+            AddDomainEvent(new TodoDueDateChangedEvent(TodoId, dueDate));
             return Result.Ok();
         }
 
@@ -221,7 +222,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
         {
             Priority = priority;
             ModifiedDate = DateTime.UtcNow;
-            AddDomainEvent(new TodoPriorityChangedEvent(Id, (int)priority));
+            AddDomainEvent(new TodoPriorityChangedEvent(TodoId, (int)priority));
         }
 
         public void ToggleFavorite()
@@ -230,9 +231,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
             ModifiedDate = DateTime.UtcNow;
             
             if (IsFavorite)
-                AddDomainEvent(new TodoFavoritedEvent(Id));
+                AddDomainEvent(new TodoFavoritedEvent(TodoId));
             else
-                AddDomainEvent(new TodoUnfavoritedEvent(Id));
+                AddDomainEvent(new TodoUnfavoritedEvent(TodoId));
         }
 
         public void SetDescription(string description)
@@ -268,6 +269,72 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
         {
             IsOrphaned = true;
             ModifiedDate = DateTime.UtcNow;
+        }
+
+        // =============================================================================
+        // EVENT SOURCING
+        // =============================================================================
+        
+        /// <summary>
+        /// Apply event to rebuild aggregate state from event stream.
+        /// </summary>
+        public override void Apply(IDomainEvent @event)
+        {
+            switch (@event)
+            {
+                case TodoCreatedEvent e:
+                    TodoId = e.TodoId;
+                    Text = TodoText.Create(e.Text).Value;
+                    CategoryId = e.CategoryId;
+                    IsCompleted = false;
+                    Priority = Priority.Normal;
+                    Order = 0;
+                    Tags = new List<string>();
+                    CreatedAt = e.OccurredAt;
+                    ModifiedDate = e.OccurredAt;
+                    break;
+                    
+                case TodoCompletedEvent e:
+                    IsCompleted = true;
+                    CompletedDate = e.OccurredAt;
+                    ModifiedDate = e.OccurredAt;
+                    break;
+                    
+                case TodoUncompletedEvent e:
+                    IsCompleted = false;
+                    CompletedDate = null;
+                    ModifiedDate = e.OccurredAt;
+                    break;
+                    
+                case TodoTextUpdatedEvent e:
+                    Text = TodoText.Create(e.NewText).Value;
+                    ModifiedDate = e.OccurredAt;
+                    break;
+                    
+                case TodoDueDateChangedEvent e:
+                    DueDate = e.NewDueDate.HasValue ? DueDate.Create(e.NewDueDate.Value).Value : null;
+                    ModifiedDate = e.OccurredAt;
+                    break;
+                    
+                case TodoPriorityChangedEvent e:
+                    Priority = (Priority)e.NewPriority;
+                    ModifiedDate = e.OccurredAt;
+                    break;
+                    
+                case TodoFavoritedEvent e:
+                    IsFavorite = true;
+                    ModifiedDate = e.OccurredAt;
+                    break;
+                    
+                case TodoUnfavoritedEvent e:
+                    IsFavorite = false;
+                    ModifiedDate = e.OccurredAt;
+                    break;
+                    
+                case TodoDeletedEvent e:
+                    ModifiedDate = e.OccurredAt;
+                    break;
+            }
         }
 
         // =============================================================================

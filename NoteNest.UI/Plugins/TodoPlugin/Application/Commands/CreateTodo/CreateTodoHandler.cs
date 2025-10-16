@@ -1,48 +1,33 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
-using NoteNest.UI.Plugins.TodoPlugin.Models;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
 {
     /// <summary>
     /// Handler for creating new todos.
-    /// Implements event-driven CQRS pattern:
-    /// - Saves to repository (write side)
-    /// - Publishes domain events
-    /// - TodoStore subscribes to events and updates UI (read side)
+    /// Event sourcing implementation - persists todo creation as events.
+    /// Tag inheritance handled via events (TagAddedToEntity).
     /// </summary>
     public class CreateTodoHandler : IRequestHandler<CreateTodoCommand, Result<CreateTodoResult>>
     {
-        private readonly ITodoRepository _repository;
-        private readonly ITodoTagRepository _todoTagRepository;
-        private readonly IGlobalTagRepository _globalTagRepository;
+        private readonly IEventStore _eventStore;
         private readonly ITagInheritanceService _tagInheritanceService;
-        private readonly IEventBus _eventBus;
         private readonly IAppLogger _logger;
 
         public CreateTodoHandler(
-            ITodoRepository repository,
-            ITodoTagRepository todoTagRepository,
-            IGlobalTagRepository globalTagRepository,
+            IEventStore eventStore,
             ITagInheritanceService tagInheritanceService,
-            IEventBus eventBus,
             IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
-            _globalTagRepository = globalTagRepository ?? throw new ArgumentNullException(nameof(globalTagRepository));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _tagInheritanceService = tagInheritanceService ?? throw new ArgumentNullException(nameof(tagInheritanceService));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -87,40 +72,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                     aggregate = result.Value;
                 }
                 
-                // Convert to UI model for persistence
-                var todoItem = TodoItem.FromAggregate(aggregate);
+                // Save to event store (persists TodoCreated event)
+                await _eventStore.SaveAsync(aggregate);
                 
-                // Persist to database
-                var success = await _repository.InsertAsync(todoItem);
+                _logger.Info($"[CreateTodoHandler] ✅ Todo persisted to event store: {aggregate.Id}");
                 
-                if (!success)
-                {
-                    _logger.Error($"[CreateTodoHandler] Failed to insert todo to database");
-                    return Result.Fail<CreateTodoResult>("Failed to save todo to database");
-                }
-                
-                _logger.Info($"[CreateTodoHandler] ✅ Todo persisted: {todoItem.Id}");
-                
-                // Publish domain events (TodoStore will subscribe and update UI)
-                _logger.Info($"[CreateTodoHandler] 📢 About to publish {aggregate.DomainEvents.Count} domain events");
-                foreach (var domainEvent in aggregate.DomainEvents)
-                {
-                    _logger.Info($"[CreateTodoHandler] 📢 Publishing: {domainEvent.GetType().Name} for TodoId={todoItem.Id}");
-                    await _eventBus.PublishAsync(domainEvent);
-                    _logger.Info($"[CreateTodoHandler] ✅ Event published successfully: {domainEvent.GetType().Name}");
-                }
-                
-                _logger.Info($"[CreateTodoHandler] ✅ All {aggregate.DomainEvents.Count} domain events published");
-                aggregate.ClearDomainEvents();
-                
-                // ✨ HYBRID FOLDER TAGGING: Apply folder + note inherited tags to the new todo
-                await ApplyAllTagsAsync(todoItem.Id, request.CategoryId, request.SourceNoteId);
+                // Apply folder + note inherited tags
+                // TODO: This will be event-driven in future via TodoCreated event subscription
+                await ApplyAllTagsAsync(aggregate.Id, request.CategoryId, request.SourceNoteId);
                 
                 return Result.Ok(new CreateTodoResult
                 {
-                    TodoId = todoItem.Id,
-                    Text = todoItem.Text,
-                    CategoryId = todoItem.CategoryId,
+                    TodoId = aggregate.Id,
+                    Text = request.Text,
+                    CategoryId = request.CategoryId,
                     Success = true
                 });
             }
@@ -133,7 +98,6 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
         
         /// <summary>
         /// Apply folder + note inherited tags to newly created todo.
-        /// Uses Hybrid Tagging system - tags come from user-set folder AND note tags.
         /// </summary>
         private async Task ApplyAllTagsAsync(Guid todoId, Guid? categoryId, Guid? sourceNoteId)
         {
@@ -142,14 +106,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                 // Use TagInheritanceService to apply folder + note tags
                 await _tagInheritanceService.UpdateTodoTagsAsync(todoId, null, categoryId, sourceNoteId);
                 
-                _logger.Info($"[CreateTodoHandler] ✅ Applied folder + note inherited tags to todo {todoId}");
+                _logger.Info($"[CreateTodoHandler] ✅ Applied inherited tags to todo {todoId}");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[CreateTodoHandler] Failed to apply tags (non-fatal, todo still created)");
-                // Don't throw - tag inheritance failure shouldn't prevent todo creation
+                _logger.Error(ex, "[CreateTodoHandler] Failed to apply tags (non-fatal)");
+                // Tag inheritance failure shouldn't prevent todo creation
             }
         }
     }
 }
-

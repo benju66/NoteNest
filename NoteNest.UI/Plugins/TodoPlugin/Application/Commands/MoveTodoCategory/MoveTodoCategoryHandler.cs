@@ -1,33 +1,28 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MoveTodoCategory
 {
     public class MoveTodoCategoryHandler : IRequestHandler<MoveTodoCategoryCommand, Result<MoveTodoCategoryResult>>
     {
-        private readonly ITodoRepository _repository;
+        private readonly IEventStore _eventStore;
         private readonly ITagInheritanceService _tagInheritanceService;
-        private readonly IEventBus _eventBus;
         private readonly IAppLogger _logger;
 
         public MoveTodoCategoryHandler(
-            ITodoRepository repository,
+            IEventStore eventStore,
             ITagInheritanceService tagInheritanceService,
-            IEventBus eventBus,
             IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _tagInheritanceService = tagInheritanceService ?? throw new ArgumentNullException(nameof(tagInheritanceService));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -35,52 +30,42 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MoveTodoCategory
         {
             try
             {
-                var todo = await _repository.GetByIdAsync(request.TodoId);
-                if (todo == null)
+                // Load from event store
+                var aggregate = await _eventStore.LoadAsync<TodoAggregate>(request.TodoId);
+                if (aggregate == null)
                     return Result.Fail<MoveTodoCategoryResult>("Todo not found");
 
-                var oldCategoryId = todo.CategoryId;
+                var oldCategoryId = aggregate.CategoryId;
                 
                 // Check if already in target category
                 if (oldCategoryId == request.TargetCategoryId)
                 {
                     return Result.Ok(new MoveTodoCategoryResult
                     {
-                        TodoId = todo.Id,
+                        TodoId = request.TodoId,
                         OldCategoryId = oldCategoryId,
                         NewCategoryId = request.TargetCategoryId,
                         Success = true
                     });
                 }
-
-                var aggregate = todo.ToAggregate();
                 
-                // Move to new category (null = uncategorized)
+                // Move to new category (domain logic)
                 aggregate.SetCategory(request.TargetCategoryId);
                 
-                var updatedTodo = Models.TodoItem.FromAggregate(aggregate);
-                
-                var success = await _repository.UpdateAsync(updatedTodo);
-                if (!success)
-                    return Result.Fail<MoveTodoCategoryResult>("Failed to update todo in database");
-                
-                // Publish events
-                foreach (var domainEvent in aggregate.DomainEvents)
-                {
-                    await _eventBus.PublishAsync(domainEvent);
-                }
-                aggregate.ClearDomainEvents();
+                // Save to event store
+                await _eventStore.SaveAsync(aggregate);
                 
                 _logger.Info($"[MoveTodoCategoryHandler] Moved todo {request.TodoId} from {oldCategoryId} to {request.TargetCategoryId}");
                 
-                // ✨ HYBRID FOLDER TAGGING: Update folder-inherited tags based on new location
+                // Update inherited tags based on new location
+                // TODO: This will be event-driven in future (CategoryMoved event triggers tag recalculation)
                 await _tagInheritanceService.UpdateTodoTagsAsync(request.TodoId, oldCategoryId, request.TargetCategoryId);
                 
                 return Result.Ok(new MoveTodoCategoryResult
                 {
-                    TodoId = updatedTodo.Id,
+                    TodoId = request.TodoId,
                     OldCategoryId = oldCategoryId,
-                    NewCategoryId = updatedTodo.CategoryId,
+                    NewCategoryId = request.TargetCategoryId,
                     Success = true
                 });
             }
@@ -92,4 +77,3 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MoveTodoCategory
         }
     }
 }
-

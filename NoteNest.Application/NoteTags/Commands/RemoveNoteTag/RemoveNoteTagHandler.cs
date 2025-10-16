@@ -1,29 +1,26 @@
 using MediatR;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Common;
-using NoteNest.Application.NoteTags.Repositories;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.Application.NoteTags.Events;
-using NoteNest.Core.Services;
+using NoteNest.Domain.Tags.Events;
 
 namespace NoteNest.Application.NoteTags.Commands.RemoveNoteTag;
 
 /// <summary>
 /// Handler for RemoveNoteTagCommand.
-/// Removes all tags from a note.
+/// Removes a tag from a note via events.
 /// </summary>
 public class RemoveNoteTagHandler : IRequestHandler<RemoveNoteTagCommand, Result<RemoveNoteTagResult>>
 {
-    private readonly INoteTagRepository _noteTagRepository;
-    private readonly IEventBus _eventBus;
+    private readonly IEventStore _eventStore;
     private readonly IAppLogger _logger;
 
     public RemoveNoteTagHandler(
-        INoteTagRepository noteTagRepository,
-        IEventBus eventBus,
+        IEventStore eventStore,
         IAppLogger logger)
     {
-        _noteTagRepository = noteTagRepository ?? throw new ArgumentNullException(nameof(noteTagRepository));
-        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -31,34 +28,32 @@ public class RemoveNoteTagHandler : IRequestHandler<RemoveNoteTagCommand, Result
     {
         try
         {
-            _logger.Info($"Removing tags from note {request.NoteId}");
+            _logger.Info($"Removing tag '{request.TagName}' from note {request.NoteId}");
 
-            // Get tags before removal (for event and logging)
-            var tagsToRemove = await _noteTagRepository.GetNoteTagsAsync(request.NoteId);
+            // Generate TagRemovedFromEntity event
+            var tagEvent = new TagRemovedFromEntity(
+                request.NoteId,
+                "note",
+                request.TagName);
 
-            // Remove tags from note
-            await _noteTagRepository.RemoveNoteTagsAsync(request.NoteId);
-
-            // Publish event (for potential UI refresh)
-            var untaggedEvent = new NoteUntaggedEvent(
-                request.NoteId, 
-                tagsToRemove.Select(t => t.Tag).ToList());
-            await _eventBus.PublishAsync<IDomainEvent>(untaggedEvent);
+            // Publish legacy NoteUntaggedEvent for backward compatibility
+            var untaggedEvent = new NoteUntaggedEvent(request.NoteId, new List<string> { request.TagName });
+            // Event will be handled by TagProjection
 
             var result = new RemoveNoteTagResult
             {
                 NoteId = request.NoteId,
+                RemovedTag = request.TagName,
                 Success = true
             };
 
-            _logger.Info($"Successfully removed {tagsToRemove.Count} tags from note {request.NoteId}");
+            _logger.Info($"Successfully removed tag '{request.TagName}' from note {request.NoteId}");
             return Result<RemoveNoteTagResult>.Ok(result);
         }
         catch (Exception ex)
         {
-            _logger.Error($"Failed to remove note tags for {request.NoteId}", ex);
-            return Result<RemoveNoteTagResult>.Fail($"Failed to remove note tags: {ex.Message}");
+            _logger.Error($"Failed to remove note tag for {request.NoteId}", ex);
+            return Result<RemoveNoteTagResult>.Fail($"Failed to remove note tag: {ex.Message}");
         }
     }
 }
-

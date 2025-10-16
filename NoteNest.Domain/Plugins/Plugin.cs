@@ -12,7 +12,16 @@ namespace NoteNest.Domain.Plugins
     /// </summary>
     public class Plugin : AggregateRoot
     {
-        public PluginId Id { get; private set; }
+        public PluginId PluginId { get; private set; }
+        // Generate stable Guid from plugin ID string
+        public override Guid Id => GenerateDeterministicGuid(PluginId.Value);
+        
+        private static Guid GenerateDeterministicGuid(string value)
+        {
+            using var md5 = System.Security.Cryptography.MD5.Create();
+            var hash = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes($"plugin:{value}"));
+            return new Guid(hash);
+        }
         public PluginMetadata Metadata { get; private set; }
         public PluginStatus Status { get; private set; }
         public DateTime? LoadedAt { get; private set; }
@@ -24,11 +33,11 @@ namespace NoteNest.Domain.Plugins
         public IReadOnlyList<string> RequestedCapabilities => _requestedCapabilities.AsReadOnly();
         public IReadOnlyList<string> GrantedCapabilities => _grantedCapabilities.AsReadOnly();
 
-        private Plugin() { } // For serialization
+        public Plugin() { } // Public for event sourcing
 
         public Plugin(PluginId id, PluginMetadata metadata, IReadOnlyList<string> requestedCapabilities)
         {
-            Id = id ?? throw new ArgumentNullException(nameof(id));
+            PluginId = id ?? throw new ArgumentNullException(nameof(id));
             Metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
             Status = PluginStatus.Discovered;
             
@@ -39,7 +48,7 @@ namespace NoteNest.Domain.Plugins
 
             CreatedAt = UpdatedAt = DateTime.UtcNow;
             
-            AddDomainEvent(new PluginDiscoveredEvent(Id, Metadata.Name));
+            AddDomainEvent(new PluginDiscoveredEvent(PluginId, Metadata.Name));
         }
 
         public Result Load(IReadOnlyList<string> grantedCapabilities)
@@ -64,7 +73,7 @@ namespace NoteNest.Domain.Plugins
             LoadedAt = DateTime.UtcNow;
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new PluginLoadedEvent(Id, Metadata.Name, LoadedAt.Value));
+            AddDomainEvent(new PluginLoadedEvent(PluginId, Metadata.Name, LoadedAt.Value));
             return Result.Ok();
         }
 
@@ -77,7 +86,7 @@ namespace NoteNest.Domain.Plugins
             UnloadedAt = DateTime.UtcNow;
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new PluginUnloadedEvent(Id, Metadata.Name, UnloadedAt.Value));
+            AddDomainEvent(new PluginUnloadedEvent(PluginId, Metadata.Name, UnloadedAt.Value));
             return Result.Ok();
         }
 
@@ -89,7 +98,7 @@ namespace NoteNest.Domain.Plugins
             Status = PluginStatus.Paused;
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new PluginPausedEvent(Id, Metadata.Name));
+            AddDomainEvent(new PluginPausedEvent(PluginId, Metadata.Name));
             return Result.Ok();
         }
 
@@ -101,7 +110,7 @@ namespace NoteNest.Domain.Plugins
             Status = PluginStatus.Active;
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new PluginResumedEvent(Id, Metadata.Name));
+            AddDomainEvent(new PluginResumedEvent(PluginId, Metadata.Name));
             return Result.Ok();
         }
 
@@ -110,7 +119,7 @@ namespace NoteNest.Domain.Plugins
             Status = PluginStatus.Error;
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new PluginErrorEvent(Id, Metadata.Name, errorMessage));
+            AddDomainEvent(new PluginErrorEvent(PluginId, Metadata.Name, errorMessage));
             return Result.Ok();
         }
 
@@ -125,7 +134,7 @@ namespace NoteNest.Domain.Plugins
             _grantedCapabilities.Add(capability);
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new PluginCapabilityGrantedEvent(Id, capability));
+            AddDomainEvent(new PluginCapabilityGrantedEvent(PluginId, capability));
             return Result.Ok();
         }
 
@@ -137,13 +146,67 @@ namespace NoteNest.Domain.Plugins
             _grantedCapabilities.Remove(capability);
             UpdatedAt = DateTime.UtcNow;
 
-            AddDomainEvent(new PluginCapabilityRevokedEvent(Id, capability));
+            AddDomainEvent(new PluginCapabilityRevokedEvent(PluginId, capability));
             return Result.Ok();
         }
 
         public bool HasCapability(string capability)
         {
             return _grantedCapabilities.Contains(capability);
+        }
+        
+        /// <summary>
+        /// Apply event to rebuild aggregate state from event stream.
+        /// </summary>
+        public override void Apply(IDomainEvent @event)
+        {
+            switch (@event)
+            {
+                case PluginDiscoveredEvent e:
+                    PluginId = e.PluginId;
+                    Status = PluginStatus.Discovered;
+                    CreatedAt = e.OccurredAt;
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case PluginLoadedEvent e:
+                    Status = PluginStatus.Active;
+                    LoadedAt = e.LoadedAt;
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case PluginUnloadedEvent e:
+                    Status = PluginStatus.Unloading;
+                    UnloadedAt = e.UnloadedAt;
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case PluginPausedEvent e:
+                    Status = PluginStatus.Paused;
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case PluginResumedEvent e:
+                    Status = PluginStatus.Active;
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case PluginErrorEvent e:
+                    Status = PluginStatus.Error;
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case PluginCapabilityGrantedEvent e:
+                    if (!_grantedCapabilities.Contains(e.Capability))
+                        _grantedCapabilities.Add(e.Capability);
+                    UpdatedAt = e.OccurredAt;
+                    break;
+                    
+                case PluginCapabilityRevokedEvent e:
+                    _grantedCapabilities.Remove(e.Capability);
+                    UpdatedAt = e.OccurredAt;
+                    break;
+            }
         }
     }
 

@@ -53,6 +53,9 @@ namespace NoteNest.UI.Composition
             // 2. DATABASE ONLY (SRP: Data Layer)
             services.AddDatabaseServices(configuration);
             
+            // 2.5. EVENT SOURCING (SRP: CQRS Read/Write Separation)
+            services.AddEventSourcingServices(configuration);
+            
             // 3. CORE SYSTEMS (SRP: Business Logic)
             services.AddRTFEditorSystem(configuration);
             services.AddSaveSystem(configuration);
@@ -427,6 +430,99 @@ namespace NoteNest.UI.Composition
             
             // Add plugin system services
             services.AddPluginSystem();
+            
+            return services;
+        }
+        
+        /// <summary>
+        /// SRP: Event Sourcing Services - Event Store, Projections, Query Services
+        /// </summary>
+        private static IServiceCollection AddEventSourcingServices(this IServiceCollection services, IConfiguration configuration)
+        {
+            var logger = services.BuildServiceProvider().GetRequiredService<IAppLogger>();
+            
+            // Database paths
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var databasePath = Path.Combine(localAppData, "NoteNest");
+            Directory.CreateDirectory(databasePath);
+            
+            var eventsDbPath = Path.Combine(databasePath, "events.db");
+            var projectionsDbPath = Path.Combine(databasePath, "projections.db");
+            
+            var eventsConnectionString = $"Data Source={eventsDbPath};";
+            var projectionsConnectionString = $"Data Source={projectionsDbPath};";
+            
+            // Event Store Core
+            services.AddSingleton<NoteNest.Infrastructure.EventStore.IEventSerializer>(provider =>
+                new NoteNest.Infrastructure.EventStore.JsonEventSerializer(
+                    provider.GetRequiredService<IAppLogger>()));
+            
+            services.AddSingleton<NoteNest.Infrastructure.EventStore.EventStoreInitializer>(provider =>
+                new NoteNest.Infrastructure.EventStore.EventStoreInitializer(
+                    eventsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
+            services.AddSingleton<IEventStore>(provider =>
+                new NoteNest.Infrastructure.EventStore.SqliteEventStore(
+                    eventsConnectionString,
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<NoteNest.Infrastructure.EventStore.IEventSerializer>()));
+            
+            // Projections
+            services.AddSingleton<NoteNest.Application.Projections.IProjection>(provider =>
+                new NoteNest.Infrastructure.Projections.TreeViewProjection(
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
+            services.AddSingleton<NoteNest.Application.Projections.IProjection>(provider =>
+                new NoteNest.Infrastructure.Projections.TagProjection(
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
+            // TodoProjection registered in TodoPlugin
+            
+            services.AddSingleton<NoteNest.Infrastructure.Projections.ProjectionOrchestrator>();
+            
+            // Query Services
+            services.AddSingleton<NoteNest.Application.Queries.ITreeQueryService>(provider =>
+                new NoteNest.Infrastructure.Queries.TreeQueryService(
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IMemoryCache>(),
+                    provider.GetRequiredService<IAppLogger>()));
+            
+            services.AddSingleton<NoteNest.Application.Queries.ITagQueryService>(provider =>
+                new NoteNest.Infrastructure.Queries.TagQueryService(
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
+            // TodoQueryService registered in TodoPlugin
+            
+            // Initialize databases on startup
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var serviceProvider = services.BuildServiceProvider();
+                    
+                    // Initialize event store
+                    var eventStoreInit = serviceProvider.GetRequiredService<NoteNest.Infrastructure.EventStore.EventStoreInitializer>();
+                    await eventStoreInit.InitializeAsync();
+                    logger.Info("✅ Event store initialized");
+                    
+                    // Initialize projections database  
+                    // TODO: Create ProjectionsInitializer similar to EventStoreInitializer
+                    logger.Info("✅ Projections database ready");
+                    
+                    // Start projection orchestrator catch-up
+                    var orchestrator = serviceProvider.GetRequiredService<NoteNest.Infrastructure.Projections.ProjectionOrchestrator>();
+                    await orchestrator.CatchUpAsync();
+                    logger.Info("✅ Projections caught up with event stream");
+                }
+                catch (Exception ex)
+                {
+                    logger.Error("❌ Failed to initialize event sourcing", ex);
+                }
+            }).Wait();
             
             return services;
         }

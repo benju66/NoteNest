@@ -8,23 +8,22 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using MediatR;
 using NoteNest.Application.FolderTags.Commands.SetFolderTag;
-using NoteNest.Application.FolderTags.Repositories;
-using NoteNest.Application.Tags.Services;
+using NoteNest.Application.Queries;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.Windows
 {
     /// <summary>
     /// Dialog for managing folder tags.
+    /// Event-sourced version - uses ITagQueryService.
     /// </summary>
     public partial class FolderTagDialog : Window
     {
         private readonly Guid _folderId;
         private readonly string _folderPath;
-    private readonly IMediator _mediator;
-    private readonly IFolderTagRepository _folderTagRepository;
-    private readonly IUnifiedTagViewService _unifiedTagViewService;
-    private readonly IAppLogger _logger;
+	private readonly IMediator _mediator;
+	private readonly ITagQueryService _tagQueryService;
+	private readonly IAppLogger _logger;
         private readonly ObservableCollection<string> _tags;
         private readonly ObservableCollection<string> _inheritedTags;
 
@@ -32,8 +31,7 @@ namespace NoteNest.UI.Windows
             Guid folderId, 
             string folderPath,
             IMediator mediator,
-            IFolderTagRepository folderTagRepository,
-            IUnifiedTagViewService unifiedTagViewService,
+            ITagQueryService tagQueryService,
             IAppLogger logger)
         {
             InitializeComponent();
@@ -41,8 +39,7 @@ namespace NoteNest.UI.Windows
             _folderId = folderId;
             _folderPath = folderPath;
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
-            _folderTagRepository = folderTagRepository ?? throw new ArgumentNullException(nameof(folderTagRepository));
-            _unifiedTagViewService = unifiedTagViewService ?? throw new ArgumentNullException(nameof(unifiedTagViewService));
+            _tagQueryService = tagQueryService ?? throw new ArgumentNullException(nameof(tagQueryService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _tags = new ObservableCollection<string>();
@@ -66,9 +63,12 @@ namespace NoteNest.UI.Windows
         {
             try
             {
-                // Load data on background thread (this is fine)
-                var folderTags = await _folderTagRepository.GetFolderTagsAsync(_folderId);
-                var allInheritedTags = await _folderTagRepository.GetInheritedTagsAsync(_folderId);
+                // Load tags from projection via query service
+                var folderTags = await _tagQueryService.GetTagsForEntityAsync(_folderId, "folder");
+                
+                // TODO: Implement inherited tags via recursive query
+                // For now, just load direct tags
+                var allInheritedTags = new List<NoteNest.Application.Queries.TagDto>();
                 
                 // Update UI collections on UI thread (required for thread safety)
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
@@ -76,13 +76,13 @@ namespace NoteNest.UI.Windows
                     _tags.Clear();
                     foreach (var tag in folderTags)
                     {
-                        _tags.Add(tag.Tag);
+                        _tags.Add(tag.DisplayName);
                     }
                     
                     _inheritedTags.Clear();
                     
                     // Filter to only show tags from ancestors (not this folder's own tags)
-                    var ownTagSet = new HashSet<string>(folderTags.Select(t => t.Tag), StringComparer.OrdinalIgnoreCase);
+                    var ownTagSet = new HashSet<string>(folderTags.Select(t => t.DisplayName), StringComparer.OrdinalIgnoreCase);
                     foreach (var inheritedTag in allInheritedTags.Where(t => !ownTagSet.Contains(t.Tag)))
                     {
                         _inheritedTags.Add(inheritedTag.Tag);

@@ -2,26 +2,23 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CompleteTodo
 {
     public class CompleteTodoHandler : IRequestHandler<CompleteTodoCommand, Result<CompleteTodoResult>>
     {
-        private readonly ITodoRepository _repository;
-        private readonly IEventBus _eventBus;
+        private readonly IEventStore _eventStore;
         private readonly IAppLogger _logger;
 
         public CompleteTodoHandler(
-            ITodoRepository repository,
-            IEventBus eventBus,
+            IEventStore eventStore,
             IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -29,15 +26,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CompleteTodo
         {
             try
             {
-                // Get existing todo
-                var todo = await _repository.GetByIdAsync(request.TodoId);
-                if (todo == null)
+                // Load aggregate from event store
+                var aggregate = await _eventStore.LoadAsync<TodoAggregate>(request.TodoId);
+                if (aggregate == null)
                     return Result.Fail<CompleteTodoResult>("Todo not found");
-
-                // Convert to aggregate
-                var aggregate = todo.ToAggregate();
                 
-                // Toggle completion
+                // Toggle completion (domain logic)
                 if (request.IsCompleted)
                 {
                     var result = aggregate.Complete();
@@ -51,28 +45,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CompleteTodo
                         return Result.Fail<CompleteTodoResult>(result.Error);
                 }
                 
-                // Convert back to UI model
-                var updatedTodo = Models.TodoItem.FromAggregate(aggregate);
-                
-                // Persist
-                var success = await _repository.UpdateAsync(updatedTodo);
-                
-                if (!success)
-                    return Result.Fail<CompleteTodoResult>("Failed to update todo in database");
-                
-                // Publish domain events
-                foreach (var domainEvent in aggregate.DomainEvents)
-                {
-                    await _eventBus.PublishAsync(domainEvent);
-                }
-                
-                aggregate.ClearDomainEvents();
+                // Save to event store (persists events, updates projections)
+                await _eventStore.SaveAsync(aggregate);
                 
                 return Result.Ok(new CompleteTodoResult
                 {
-                    TodoId = updatedTodo.Id,
-                    IsCompleted = updatedTodo.IsCompleted,
-                    CompletedDate = updatedTodo.CompletedDate,
+                    TodoId = request.TodoId,
+                    IsCompleted = request.IsCompleted,
+                    CompletedDate = aggregate.CompletedDate,
                     Success = true
                 });
             }

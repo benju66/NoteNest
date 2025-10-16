@@ -3,29 +3,24 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
+using NoteNest.Domain.Tags.Events;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.RemoveTag
 {
     public class RemoveTagHandler : IRequestHandler<RemoveTagCommand, Result<RemoveTagResult>>
     {
-        private readonly ITodoTagRepository _todoTagRepository;
-        private readonly IGlobalTagRepository _globalTagRepository;
-        private readonly IEventBus _eventBus;
+        private readonly IEventStore _eventStore;
         private readonly IAppLogger _logger;
 
         public RemoveTagHandler(
-            ITodoTagRepository todoTagRepository,
-            IGlobalTagRepository globalTagRepository,
-            IEventBus eventBus,
+            IEventStore eventStore,
             IAppLogger logger)
         {
-            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
-            _globalTagRepository = globalTagRepository ?? throw new ArgumentNullException(nameof(globalTagRepository));
-            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -35,26 +30,30 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.RemoveTag
             {
                 _logger.Info($"[RemoveTagHandler] Removing tag '{request.TagName}' from todo {request.TodoId}");
 
-                // Check if tag exists
-                var tags = await _todoTagRepository.GetByTodoIdAsync(request.TodoId);
-                var tag = tags.FirstOrDefault(t => t.Tag == request.TagName);
+                // Load aggregate
+                var aggregate = await _eventStore.LoadAsync<TodoAggregate>(request.TodoId);
+                if (aggregate == null)
+                    return Result.Fail<RemoveTagResult>("Todo not found");
 
-                if (tag == null)
+                // Check if tag exists
+                if (!aggregate.Tags.Contains(request.TagName, StringComparer.OrdinalIgnoreCase))
                     return Result.Fail<RemoveTagResult>($"Tag '{request.TagName}' not found on this todo");
 
-                // Check if auto-tag (cannot remove auto-generated tags manually)
-                if (tag.IsAuto)
-                    return Result.Fail<RemoveTagResult>("Cannot remove auto-generated tags. Move todo to change auto-tags.");
-
-                // Remove tag
-                await _todoTagRepository.DeleteAsync(request.TodoId, request.TagName);
+                // Remove tag (domain logic)
+                aggregate.RemoveTag(request.TagName);
+                
+                // Generate TagRemovedFromEntity event
+                var tagEvent = new TagRemovedFromEntity(
+                    request.TodoId,
+                    "todo",
+                    request.TagName);
+                
+                aggregate.AddDomainEvent(tagEvent);
+                
+                // Save to event store
+                await _eventStore.SaveAsync(aggregate);
+                
                 _logger.Info($"[RemoveTagHandler] ✅ Tag '{request.TagName}' removed from todo");
-
-                // Update global_tags usage count
-                await _globalTagRepository.DecrementUsageAsync(request.TagName);
-
-                // Publish domain event (for UI updates)
-                // Note: We can add TodoTagRemovedEvent if needed
 
                 return Result.Ok(new RemoveTagResult
                 {
@@ -71,4 +70,3 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.RemoveTag
         }
     }
 }
-

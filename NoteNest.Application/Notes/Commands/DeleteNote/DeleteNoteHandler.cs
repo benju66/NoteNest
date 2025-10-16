@@ -9,35 +9,34 @@ namespace NoteNest.Application.Notes.Commands.DeleteNote
 {
     public class DeleteNoteHandler : IRequestHandler<DeleteNoteCommand, Result<DeleteNoteResult>>
     {
-        private readonly INoteRepository _noteRepository;
+        private readonly IEventStore _eventStore;
         private readonly IFileService _fileService;
-        private readonly IEventBus _eventBus;
 
         public DeleteNoteHandler(
-            INoteRepository noteRepository,
-            IFileService fileService,
-            IEventBus eventBus)
+            IEventStore eventStore,
+            IFileService fileService)
         {
-            _noteRepository = noteRepository;
+            _eventStore = eventStore;
             _fileService = fileService;
-            _eventBus = eventBus;
         }
 
         public async Task<Result<DeleteNoteResult>> Handle(DeleteNoteCommand request, CancellationToken cancellationToken)
         {
-            // Get note from repository
+            // Load note from event store
             var noteId = NoteId.From(request.NoteId);
-            var note = await _noteRepository.GetByIdAsync(noteId);
+            var noteGuid = Guid.Parse(noteId.Value);
+            var note = await _eventStore.LoadAsync<Note>(noteGuid);
             if (note == null)
                 return Result.Fail<DeleteNoteResult>("Note not found");
 
             var noteTitle = note.Title;
             var filePath = note.FilePath;
 
-            // Delete from repository
-            var deleteResult = await _noteRepository.DeleteAsync(noteId);
-            if (deleteResult.IsFailure)
-                return Result.Fail<DeleteNoteResult>(deleteResult.Error);
+            // Raise deletion event
+            note.AddDomainEvent(new NoteNest.Domain.Notes.Events.NoteDeletedEvent(noteId, note.CategoryId));
+            
+            // Save to event store (persists deletion event)
+            await _eventStore.SaveAsync(note);
 
             // Delete file if requested
             string fileDeleteWarning = null;
@@ -49,18 +48,13 @@ namespace NoteNest.Application.Notes.Commands.DeleteNote
                 }
                 catch (System.Exception ex)
                 {
-                    // Log but don't fail - metadata is already deleted
-                    // Could implement a cleanup service for orphaned files
+                    // Note deleted from event store but file deletion failed
                     System.Diagnostics.Debug.WriteLine($"Failed to delete file {filePath}: {ex.Message}");
-                    fileDeleteWarning = $"Note removed from database but file could not be deleted: {ex.Message}. You may need to manually delete the file.";
+                    fileDeleteWarning = $"Note removed but file could not be deleted: {ex.Message}. You may need to manually delete the file.";
                 }
             }
 
-            // Publish domain events
-            foreach (var domainEvent in note.DomainEvents)
-            {
-                await _eventBus.PublishAsync(domainEvent);
-            }
+            // Events automatically published to projections
 
             return Result.Ok(new DeleteNoteResult
             {

@@ -16,18 +16,18 @@ namespace NoteNest.Application.Categories.Commands.CreateCategory
     /// </summary>
     public class CreateCategoryHandler : IRequestHandler<CreateCategoryCommand, Result<CreateCategoryResult>>
     {
+        private readonly IEventStore _eventStore;
         private readonly ICategoryRepository _categoryRepository;
         private readonly IFileService _fileService;
-        private readonly IEventBus _eventBus;
 
         public CreateCategoryHandler(
+            IEventStore eventStore,
             ICategoryRepository categoryRepository,
-            IFileService fileService,
-            IEventBus eventBus)
+            IFileService fileService)
         {
+            _eventStore = eventStore;
             _categoryRepository = categoryRepository;
             _fileService = fileService;
-            _eventBus = eventBus;
         }
 
         public async Task<Result<CreateCategoryResult>> Handle(CreateCategoryCommand request, CancellationToken cancellationToken)
@@ -39,6 +39,7 @@ namespace NoteNest.Application.Categories.Commands.CreateCategory
             // Get parent category if specified
             Category parentCategory = null;
             string parentPath = null;
+            Guid? parentGuid = null;
             
             if (!string.IsNullOrEmpty(request.ParentCategoryId))
             {
@@ -49,11 +50,11 @@ namespace NoteNest.Application.Categories.Commands.CreateCategory
                     return Result.Fail<CreateCategoryResult>("Parent category not found");
                 
                 parentPath = parentCategory.Path;
+                parentGuid = Guid.Parse(parentCategory.Id.Value);
             }
             else
             {
                 // Root category - use notes root path
-                // This should come from configuration, but we'll use a sensible default
                 parentPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     "NoteNest");
@@ -66,13 +67,14 @@ namespace NoteNest.Application.Categories.Commands.CreateCategory
             if (await _fileService.DirectoryExistsAsync(categoryPath))
                 return Result.Fail<CreateCategoryResult>("A category with this name already exists");
 
-            // Create domain model (use parentCategory?.Id to avoid duplicate variable)
-            var category = Category.Create(request.Name, categoryPath, parentCategory?.Id);
+            // Create CategoryAggregate
+            var categoryAggregate = NoteNest.Domain.Categories.CategoryAggregate.Create(
+                parentGuid,
+                request.Name,
+                categoryPath);
 
-            // Save to repository (updates database - tree_nodes table)
-            var saveResult = await _categoryRepository.CreateAsync(category);
-            if (saveResult.IsFailure)
-                return Result.Fail<CreateCategoryResult>(saveResult.Error);
+            // Save to event store (persists CategoryCreated event)
+            await _eventStore.SaveAsync(categoryAggregate);
 
             // Create physical directory
             try
@@ -81,19 +83,18 @@ namespace NoteNest.Application.Categories.Commands.CreateCategory
             }
             catch (Exception ex)
             {
-                // Rollback: Delete from database if directory creation fails
-                await _categoryRepository.DeleteAsync(category.Id);
+                // Directory creation failed - event already persisted
+                // TODO: Implement compensating transaction or manual cleanup
                 return Result.Fail<CreateCategoryResult>($"Failed to create directory: {ex.Message}");
             }
 
-            // Note: Category domain model doesn't have DomainEvents yet
-            // Event publishing can be added later if needed
+            // Events automatically published to projections
             
             return Result.Ok(new CreateCategoryResult
             {
-                CategoryId = category.Id.Value,
-                CategoryPath = category.Path,
-                Name = category.Name
+                CategoryId = categoryAggregate.Id.ToString(),
+                CategoryPath = categoryAggregate.Path,
+                Name = categoryAggregate.Name
             });
         }
     }
