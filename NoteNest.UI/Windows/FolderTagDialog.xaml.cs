@@ -55,42 +55,51 @@ namespace NoteNest.UI.Windows
             };
             
             // Load existing tags
-            Loaded += async (s, e) => await LoadTagsAsync();
+            Loaded += (s, e) => _ = LoadTagsAsync();
         }
 
         private async Task LoadTagsAsync()
         {
             try
             {
-                // Load this folder's own tags
+                // Load data on background thread (this is fine)
                 var folderTags = await _folderTagRepository.GetFolderTagsAsync(_folderId);
-                _tags.Clear();
-                foreach (var tag in folderTags)
-                {
-                    _tags.Add(tag.Tag);
-                }
-                
-                // Load inherited tags from parent folders
                 var allInheritedTags = await _folderTagRepository.GetInheritedTagsAsync(_folderId);
-                _inheritedTags.Clear();
                 
-                // Filter to only show tags from ancestors (not this folder's own tags)
-                var ownTagSet = new HashSet<string>(folderTags.Select(t => t.Tag), StringComparer.OrdinalIgnoreCase);
-                foreach (var inheritedTag in allInheritedTags.Where(t => !ownTagSet.Contains(t.Tag)))
+                // Update UI collections on UI thread (required for thread safety)
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    _inheritedTags.Add(inheritedTag.Tag);
-                }
+                    _tags.Clear();
+                    foreach (var tag in folderTags)
+                    {
+                        _tags.Add(tag.Tag);
+                    }
+                    
+                    _inheritedTags.Clear();
+                    
+                    // Filter to only show tags from ancestors (not this folder's own tags)
+                    var ownTagSet = new HashSet<string>(folderTags.Select(t => t.Tag), StringComparer.OrdinalIgnoreCase);
+                    foreach (var inheritedTag in allInheritedTags.Where(t => !ownTagSet.Contains(t.Tag)))
+                    {
+                        _inheritedTags.Add(inheritedTag.Tag);
+                    }
+                });
                 
                 _logger.Info($"Loaded {folderTags.Count} own tags and {_inheritedTags.Count} inherited tags for folder {_folderId}");
             }
             catch (Exception ex)
             {
                 _logger.Error($"Failed to load folder tags", ex);
-                MessageBox.Show(
-                    $"Failed to load existing tags: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                
+                // MessageBox must also be shown on UI thread
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show(
+                        $"Failed to load existing tags: {ex.Message}",
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                });
             }
         }
 

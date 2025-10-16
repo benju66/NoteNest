@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -60,44 +61,58 @@ namespace NoteNest.UI.Windows
             };
             
             // Load existing tags
-            Loaded += async (s, e) => await LoadTagsAsync();
+            Loaded += (s, e) => _ = LoadTagsAsync();
         }
 
         private async Task LoadTagsAsync()
         {
             try
             {
-                // Load this note's own tags
+                // Load data on background thread (this is fine)
                 var noteTags = await _noteTagRepository.GetNoteTagsAsync(_noteId);
-                _tags.Clear();
-                foreach (var tag in noteTags)
-                {
-                    _tags.Add(tag.Tag);
-                }
-                
-                // Load inherited tags from parent folder
-                _inheritedTags.Clear();
                 var noteNode = await _treeRepository.GetNodeByIdAsync(_noteId);
+                
+                List<NoteNest.Application.FolderTags.Models.FolderTag> folderTags = new List<NoteNest.Application.FolderTags.Models.FolderTag>();
                 if (noteNode?.ParentId != null)
                 {
-                    var folderTags = await _folderTagRepository.GetInheritedTagsAsync(noteNode.ParentId.Value);
-                    foreach (var folderTag in folderTags)
-                    {
-                        _inheritedTags.Add(folderTag.Tag);
-                    }
-                    _logger.Info($"Loaded {_inheritedTags.Count} inherited folder tags for note {_noteId}");
+                    folderTags = await _folderTagRepository.GetInheritedTagsAsync(noteNode.ParentId.Value);
                 }
+                
+                // Update UI collections on UI thread (required for thread safety)
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    _tags.Clear();
+                    foreach (var tag in noteTags)
+                    {
+                        _tags.Add(tag.Tag);
+                    }
+                    
+                    _inheritedTags.Clear();
+                    if (folderTags.Count > 0)
+                    {
+                        foreach (var folderTag in folderTags)
+                        {
+                            _inheritedTags.Add(folderTag.Tag);
+                        }
+                        _logger.Info($"Loaded {_inheritedTags.Count} inherited folder tags for note {_noteId}");
+                    }
+                });
                 
                 _logger.Info($"Loaded {noteTags.Count} own tags and {_inheritedTags.Count} inherited tags for note {_noteId}");
             }
             catch (Exception ex)
             {
                 _logger.Error($"Failed to load note tags", ex);
-                MessageBox.Show(
-                    $"Failed to load existing tags: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                
+                // MessageBox must also be shown on UI thread
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show(
+                        $"Failed to load existing tags: {ex.Message}",
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                });
             }
         }
 

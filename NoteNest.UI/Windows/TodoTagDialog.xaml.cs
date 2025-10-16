@@ -55,40 +55,50 @@ namespace NoteNest.UI.Windows
             };
             
             // Load existing tags
-            Loaded += async (s, e) => await LoadTagsAsync();
+            Loaded += (s, e) => _ = LoadTagsAsync();
         }
 
         private async Task LoadTagsAsync()
         {
             try
             {
+                // Load data on background thread (this is fine)
                 var allTags = await _todoTagRepository.GetByTodoIdAsync(_todoId);
                 
-                _autoTags.Clear();
-                _manualTags.Clear();
-                
-                foreach (var tag in allTags)
+                // Update UI collections on UI thread (required for thread safety)
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    if (tag.IsAuto)
+                    _autoTags.Clear();
+                    _manualTags.Clear();
+                    
+                    foreach (var tag in allTags)
                     {
-                        _autoTags.Add(tag.Tag);
+                        if (tag.IsAuto)
+                        {
+                            _autoTags.Add(tag.Tag);
+                        }
+                        else
+                        {
+                            _manualTags.Add(tag.Tag);
+                        }
                     }
-                    else
-                    {
-                        _manualTags.Add(tag.Tag);
-                    }
-                }
+                });
                 
                 _logger.Info($"Loaded {_autoTags.Count} auto tags and {_manualTags.Count} manual tags for todo {_todoId}");
             }
             catch (Exception ex)
             {
                 _logger.Error($"Failed to load todo tags", ex);
-                MessageBox.Show(
-                    $"Failed to load tags: {ex.Message}",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                
+                // MessageBox must also be shown on UI thread
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show(
+                        $"Failed to load tags: {ex.Message}",
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                });
             }
         }
 
