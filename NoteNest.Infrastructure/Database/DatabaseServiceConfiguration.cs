@@ -8,7 +8,7 @@ using NoteNest.Core.Services.Logging;
 using System.Threading;
 using System.Threading.Tasks;
 using NoteNest.Application.FolderTags.Repositories;
-using NoteNest.Infrastructure.Repositories;
+// Repositories namespace removed - using event-sourced query services instead
 
 namespace NoteNest.Infrastructure.Database
 {

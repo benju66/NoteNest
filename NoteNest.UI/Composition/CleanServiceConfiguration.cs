@@ -141,46 +141,13 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<ITreeDatabaseRepository>(provider => 
                 new TreeDatabaseRepository(treeConnectionString, provider.GetRequiredService<IAppLogger>(), notesRootPath));
             
-            // ✨ UNIFIED TAG VIEW: Respects database isolation
-            services.AddSingleton<NoteNest.Application.Tags.Services.IUnifiedTagViewService>(provider =>
-            {
-                // Get todos.db connection string for cross-database operations
-                var todosDbPath = Path.Combine(databasePath, ".plugins", "NoteNest.TodoPlugin", "todos.db");
-                var todosConnectionString = $"Data Source={todosDbPath};";
-                
-                return new NoteNest.Infrastructure.Services.UnifiedTagViewService(
-                    treeConnectionString,
-                    todosConnectionString,
-                    provider.GetRequiredService<IAppLogger>());
-            });
-
-            // ✨ HYBRID FOLDER TAGGING: Folder tag repository (uses tree.db)
-            services.AddSingleton<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>(provider =>
-                new NoteNest.Infrastructure.Repositories.FolderTagRepository(
-                    treeConnectionString,
-                    provider.GetRequiredService<IAppLogger>()));
-            
-            // ✨ NOTE TAGGING: Note tag repository (uses tree.db, note_tags table)
-            services.AddSingleton<NoteNest.Application.NoteTags.Repositories.INoteTagRepository>(provider =>
-                new NoteNest.Infrastructure.Repositories.NoteTagRepository(
-                    treeConnectionString,
-                    provider.GetRequiredService<IAppLogger>()));
+            // Legacy tag services removed - replaced by TagQueryService
+            // Legacy repositories removed - replaced by EventStore + Query Services
             
             services.AddSingleton<ITreePopulationService, TreePopulationService>();
             
-            // 🎯 DATABASE-ONLY REPOSITORIES (No duplicate registrations)
-            services.AddScoped<ICategoryRepository>(provider => 
-                new CategoryTreeDatabaseService(
-                    provider.GetRequiredService<ITreeDatabaseRepository>(),
-                    provider.GetRequiredService<IAppLogger>(),
-                    provider.GetRequiredService<IMemoryCache>(),
-                    notesRootPath));
-            
-            services.AddScoped<INoteRepository>(provider => 
-                new NoteTreeDatabaseService(
-                    provider.GetRequiredService<ITreeDatabaseRepository>(),
-                    provider.GetRequiredService<IAppLogger>(),
-                    provider.GetRequiredService<IMemoryCache>()));
+            // ICategoryRepository and INoteRepository removed - using event sourcing now
+            // Queries use ITreeQueryService instead
             
             // Tree repository for category operations (descendants, bulk updates)
             services.AddScoped<ITreeRepository>(provider =>
@@ -501,46 +468,8 @@ namespace NoteNest.UI.Composition
             // TodoQueryService registered in TodoPlugin
             
             // Initialize databases on startup
-            Task.Run(async () =>
-            {
-                try
-                {
-                    var serviceProvider = services.BuildServiceProvider();
-                    
-                    // Initialize event store
-                    var eventStoreInit = serviceProvider.GetRequiredService<NoteNest.Infrastructure.EventStore.EventStoreInitializer>();
-                    await eventStoreInit.InitializeAsync();
-                    logger.Info("✅ Event store initialized");
-                    
-                    // Initialize projections database
-                    var projectionsInit = serviceProvider.GetRequiredService<NoteNest.Infrastructure.Projections.ProjectionsInitializer>();
-                    await projectionsInit.InitializeAsync();
-                    logger.Info("✅ Projections database initialized");
-                    
-                    // Verify projections health
-                    var isHealthy = await projectionsInit.IsHealthyAsync();
-                    if (!isHealthy)
-                    {
-                        logger.Warning("⚠️ Projections database health check failed");
-                    }
-                    
-                    // Start projection orchestrator catch-up
-                    var orchestrator = serviceProvider.GetRequiredService<NoteNest.Infrastructure.Projections.ProjectionOrchestrator>();
-                    await orchestrator.CatchUpAsync();
-                    logger.Info("✅ Projections caught up with event stream");
-                    
-                    // Log projection stats
-                    var stats = await projectionsInit.GetStatsAsync();
-                    logger.Info($"📊 Projection Stats:");
-                    logger.Info($"   TreeView: {stats.TreeViewCount} nodes");
-                    logger.Info($"   Tags: {stats.TagVocabularyCount} unique, {stats.EntityTagsCount} associations");
-                    logger.Info($"   Todos: {stats.TodoViewCount} items");
-                }
-                catch (Exception ex)
-                {
-                    logger.Error("❌ Failed to initialize event sourcing", ex);
-                }
-            }).Wait();
+            // Note: Initialization happens during first service resolution
+            // EventStoreInitializer and ProjectionsInitializer registered as singletons above
             
             return services;
         }

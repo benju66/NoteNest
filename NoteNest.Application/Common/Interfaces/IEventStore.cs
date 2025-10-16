@@ -8,23 +8,24 @@ namespace NoteNest.Application.Common.Interfaces
     /// <summary>
     /// Event store for persisting domain events.
     /// Core of the event sourcing implementation.
+    /// Uses IAggregateRoot to support aggregates from different namespaces (main + plugins).
     /// </summary>
     public interface IEventStore
     {
         /// <summary>
         /// Save aggregate's uncommitted events to the event store.
         /// </summary>
-        Task SaveAsync(AggregateRoot aggregate);
+        Task SaveAsync(IAggregateRoot aggregate);
         
         /// <summary>
         /// Save aggregate with expected version for optimistic concurrency.
         /// </summary>
-        Task SaveAsync(AggregateRoot aggregate, int expectedVersion);
+        Task SaveAsync(IAggregateRoot aggregate, int expectedVersion);
         
         /// <summary>
         /// Load aggregate from event stream.
         /// </summary>
-        Task<T> LoadAsync<T>(Guid aggregateId) where T : AggregateRoot, new();
+        Task<T> LoadAsync<T>(Guid aggregateId) where T : IAggregateRoot, new();
         
         /// <summary>
         /// Get all events for an aggregate.
@@ -49,7 +50,7 @@ namespace NoteNest.Application.Common.Interfaces
         /// <summary>
         /// Create a snapshot for performance.
         /// </summary>
-        Task SaveSnapshotAsync(AggregateRoot aggregate);
+        Task SaveSnapshotAsync(IAggregateRoot aggregate);
         
         /// <summary>
         /// Load snapshot if available.

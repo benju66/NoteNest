@@ -1,12 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Common
 {
-    public abstract class AggregateRoot : Entity
+    /// <summary>
+    /// TodoPlugin's AggregateRoot - implements shared IAggregateRoot interface.
+    /// This allows TodoAggregate to use the main IEventStore while maintaining plugin isolation.
+    /// </summary>
+    public abstract class AggregateRoot : Entity, NoteNest.Domain.Common.IAggregateRoot
     {
         private readonly List<IDomainEvent> _domainEvents = new();
-        public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
+        public IReadOnlyList<NoteNest.Domain.Common.IDomainEvent> DomainEvents => _domainEvents.Cast<NoteNest.Domain.Common.IDomainEvent>().ToList().AsReadOnly();
         
         // Version for optimistic concurrency
         public int Version { get; protected set; }
@@ -38,6 +43,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Common
         /// Implemented by each aggregate to handle its specific events.
         /// </summary>
         public abstract void Apply(IDomainEvent @event);
+        
+        /// <summary>
+        /// Apply shared interface method - delegates to local Apply.
+        /// </summary>
+        void NoteNest.Domain.Common.IAggregateRoot.Apply(NoteNest.Domain.Common.IDomainEvent @event)
+        {
+            // Cast to local IDomainEvent and apply
+            if (@event is IDomainEvent localEvent)
+            {
+                Apply(localEvent);
+            }
+        }
     }
 
     public abstract class Entity

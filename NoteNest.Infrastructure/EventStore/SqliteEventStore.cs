@@ -31,12 +31,12 @@ namespace NoteNest.Infrastructure.EventStore
             _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         }
         
-        public async Task SaveAsync(AggregateRoot aggregate)
+        public async Task SaveAsync(IAggregateRoot aggregate)
         {
             await SaveAsync(aggregate, expectedVersion: -1); // No version check
         }
         
-        public async Task SaveAsync(AggregateRoot aggregate, int expectedVersion)
+        public async Task SaveAsync(IAggregateRoot aggregate, int expectedVersion)
         {
             var events = aggregate.DomainEvents;
             if (!events.Any())
@@ -123,7 +123,7 @@ namespace NoteNest.Infrastructure.EventStore
             }
         }
         
-        public async Task<T> LoadAsync<T>(Guid aggregateId) where T : AggregateRoot, new()
+        public async Task<T> LoadAsync<T>(Guid aggregateId) where T : IAggregateRoot, new()
         {
             // Try to load from snapshot first
             var snapshot = await LoadSnapshotAsync(aggregateId);
@@ -150,7 +150,7 @@ namespace NoteNest.Infrastructure.EventStore
             if (!events.Any() && snapshot == null)
             {
                 _logger.Debug($"No events found for aggregate {aggregateId}");
-                return null; // Aggregate doesn't exist
+                return default(T); // Aggregate doesn't exist
             }
             
             // Apply events to rebuild state
@@ -222,7 +222,7 @@ namespace NoteNest.Infrastructure.EventStore
             return storedEvents.Select(dto => dto.ToStoredEvent()).ToList();
         }
         
-        public async Task SaveSnapshotAsync(AggregateRoot aggregate)
+        public async Task SaveSnapshotAsync(IAggregateRoot aggregate)
         {
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
