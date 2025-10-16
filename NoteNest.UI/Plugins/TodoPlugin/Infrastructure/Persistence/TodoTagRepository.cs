@@ -10,8 +10,8 @@ using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.Models;
 namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
 {
     /// <summary>
-    /// Repository for managing todo tags.
-    /// Follows TodoRepository patterns for consistency.
+    /// Repository for managing todo tags locally in todos.db.
+    /// Respects database isolation - no cross-database operations.
     /// </summary>
     public class TodoTagRepository : ITodoTagRepository
     {
@@ -31,26 +31,25 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                var sql = @"
-                    SELECT 
-                        todo_id as TodoId, 
-                        tag as Tag, 
-                        is_auto as IsAuto, 
-                        datetime(created_at, 'unixepoch', 'localtime') as CreatedAt
-                    FROM todo_tags
-                    WHERE todo_id = @TodoId
-                    ORDER BY is_auto DESC, tag ASC";
+                var sql = @"SELECT 
+                    todo_id as TodoId,
+                    display_name as Tag,
+                    CASE WHEN source != 'manual' THEN 1 ELSE 0 END as IsAuto,
+                    created_at as CreatedAt
+                FROM todo_tags
+                WHERE todo_id = @TodoId
+                ORDER BY display_name";
 
-                var results = await connection.QueryAsync<TodoTag>(sql, new { TodoId = todoId.ToString() });
-                var tags = results.ToList();
+                var tags = await connection.QueryAsync<TodoTag>(sql, new { TodoId = todoId.ToString() });
+                var todoTags = tags.ToList();
 
-                _logger.Debug($"[TodoTagRepository] Loaded {tags.Count} tags for todo {todoId}");
-                return tags;
+                _logger.Debug($"[TodoTagRepository] Loaded {todoTags.Count} tags for todo {todoId}");
+                return todoTags;
             }
             catch (Exception ex)
             {
-                _logger.Error($"[TodoTagRepository] GetByTodoIdAsync failed: {ex.Message}");
-                throw;
+                _logger.Error($"[TodoTagRepository] Failed to get tags for todo {todoId}", ex);
+                return new List<TodoTag>();
             }
         }
 
@@ -61,23 +60,22 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                var sql = @"
-                    SELECT 
-                        todo_id as TodoId, 
-                        tag as Tag, 
-                        is_auto as IsAuto, 
-                        datetime(created_at, 'unixepoch', 'localtime') as CreatedAt
-                    FROM todo_tags
-                    WHERE todo_id = @TodoId AND is_auto = 1
-                    ORDER BY tag ASC";
+                var sql = @"SELECT 
+                    todo_id as TodoId,
+                    display_name as Tag,
+                    1 as IsAuto,
+                    created_at as CreatedAt
+                FROM todo_tags
+                WHERE todo_id = @TodoId AND source != 'manual'
+                ORDER BY display_name";
 
-                var results = await connection.QueryAsync<TodoTag>(sql, new { TodoId = todoId.ToString() });
-                return results.ToList();
+                var tags = await connection.QueryAsync<TodoTag>(sql, new { TodoId = todoId.ToString() });
+                return tags.ToList();
             }
             catch (Exception ex)
             {
-                _logger.Error($"[TodoTagRepository] GetAutoTagsAsync failed: {ex.Message}");
-                throw;
+                _logger.Error($"[TodoTagRepository] Failed to get auto tags for todo {todoId}", ex);
+                return new List<TodoTag>();
             }
         }
 
@@ -88,23 +86,22 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                var sql = @"
-                    SELECT 
-                        todo_id as TodoId, 
-                        tag as Tag, 
-                        is_auto as IsAuto, 
-                        datetime(created_at, 'unixepoch', 'localtime') as CreatedAt
-                    FROM todo_tags
-                    WHERE todo_id = @TodoId AND is_auto = 0
-                    ORDER BY tag ASC";
+                var sql = @"SELECT 
+                    todo_id as TodoId,
+                    display_name as Tag,
+                    0 as IsAuto,
+                    created_at as CreatedAt
+                FROM todo_tags
+                WHERE todo_id = @TodoId AND source = 'manual'
+                ORDER BY display_name";
 
-                var results = await connection.QueryAsync<TodoTag>(sql, new { TodoId = todoId.ToString() });
-                return results.ToList();
+                var tags = await connection.QueryAsync<TodoTag>(sql, new { TodoId = todoId.ToString() });
+                return tags.ToList();
             }
             catch (Exception ex)
             {
-                _logger.Error($"[TodoTagRepository] GetManualTagsAsync failed: {ex.Message}");
-                throw;
+                _logger.Error($"[TodoTagRepository] Failed to get manual tags for todo {todoId}", ex);
+                return new List<TodoTag>();
             }
         }
 
@@ -115,23 +112,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                var sql = @"
-                    SELECT COUNT(*)
-                    FROM todo_tags
-                    WHERE todo_id = @TodoId AND tag = @Tag";
-
-                var count = await connection.ExecuteScalarAsync<int>(sql, new 
-                { 
-                    TodoId = todoId.ToString(), 
-                    Tag = tagName 
-                });
+                var count = await connection.ExecuteScalarAsync<int>(
+                    "SELECT COUNT(*) FROM todo_tags WHERE todo_id = @TodoId AND tag = @Tag",
+                    new { TodoId = todoId.ToString(), Tag = tagName.ToLower().Trim() }
+                );
 
                 return count > 0;
             }
             catch (Exception ex)
             {
-                _logger.Error($"[TodoTagRepository] ExistsAsync failed: {ex.Message}");
-                throw;
+                _logger.Error($"[TodoTagRepository] Failed to check if tag '{tagName}' exists for todo {todoId}", ex);
+                return false;
             }
         }
 
@@ -142,23 +133,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                var sql = @"
-                    INSERT INTO todo_tags (todo_id, tag, is_auto, created_at)
-                    VALUES (@TodoId, @Tag, @IsAuto, @CreatedAt)";
+                var sql = @"INSERT OR REPLACE INTO todo_tags 
+                    (todo_id, tag, display_name, source, created_at)
+                    VALUES (@TodoId, @Tag, @DisplayName, @Source, @CreatedAt)";
 
                 await connection.ExecuteAsync(sql, new
                 {
                     TodoId = tag.TodoId.ToString(),
-                    Tag = tag.Tag,
-                    IsAuto = tag.IsAuto ? 1 : 0,
-                    CreatedAt = ((DateTimeOffset)tag.CreatedAt).ToUnixTimeSeconds()
+                    Tag = tag.Tag.ToLower().Trim(),
+                    DisplayName = tag.Tag.Trim(),
+                    Source = tag.IsAuto ? "auto-inherit" : "manual",
+                    CreatedAt = tag.CreatedAt
                 });
 
                 _logger.Debug($"[TodoTagRepository] Added tag '{tag.Tag}' to todo {tag.TodoId} (is_auto={tag.IsAuto})");
             }
             catch (Exception ex)
             {
-                _logger.Error($"[TodoTagRepository] AddAsync failed: {ex.Message}");
+                _logger.Error($"[TodoTagRepository] Failed to add tag '{tag.Tag}' to todo {tag.TodoId}", ex);
                 throw;
             }
         }
@@ -170,21 +162,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                var sql = @"
-                    DELETE FROM todo_tags
-                    WHERE todo_id = @TodoId AND tag = @Tag";
+                await connection.ExecuteAsync(
+                    "DELETE FROM todo_tags WHERE todo_id = @TodoId AND tag = @Tag",
+                    new { TodoId = todoId.ToString(), Tag = tagName.ToLower().Trim() }
+                );
 
-                var rowsAffected = await connection.ExecuteAsync(sql, new
-                {
-                    TodoId = todoId.ToString(),
-                    Tag = tagName
-                });
-
-                _logger.Debug($"[TodoTagRepository] Deleted tag '{tagName}' from todo {todoId} ({rowsAffected} rows)");
+                _logger.Debug($"[TodoTagRepository] Deleted tag '{tagName}' from todo {todoId}");
             }
             catch (Exception ex)
             {
-                _logger.Error($"[TodoTagRepository] DeleteAsync failed: {ex.Message}");
+                _logger.Error($"[TodoTagRepository] Failed to delete tag '{tagName}' from todo {todoId}", ex);
                 throw;
             }
         }
@@ -196,20 +183,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                var sql = @"
-                    DELETE FROM todo_tags
-                    WHERE todo_id = @TodoId AND is_auto = 1";
+                var deletedCount = await connection.ExecuteAsync(
+                    "DELETE FROM todo_tags WHERE todo_id = @TodoId AND source != 'manual'",
+                    new { TodoId = todoId.ToString() }
+                );
 
-                var rowsAffected = await connection.ExecuteAsync(sql, new
-                {
-                    TodoId = todoId.ToString()
-                });
-
-                _logger.Debug($"[TodoTagRepository] Deleted {rowsAffected} auto-tags from todo {todoId}");
+                _logger.Debug($"[TodoTagRepository] Deleted {deletedCount} auto-tags from todo {todoId}");
             }
             catch (Exception ex)
             {
-                _logger.Error($"[TodoTagRepository] DeleteAutoTagsAsync failed: {ex.Message}");
+                _logger.Error($"[TodoTagRepository] Failed to delete auto tags from todo {todoId}", ex);
                 throw;
             }
         }
@@ -221,23 +204,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                var sql = @"
-                    DELETE FROM todo_tags
-                    WHERE todo_id = @TodoId";
+                await connection.ExecuteAsync(
+                    "DELETE FROM todo_tags WHERE todo_id = @TodoId",
+                    new { TodoId = todoId.ToString() }
+                );
 
-                var rowsAffected = await connection.ExecuteAsync(sql, new
-                {
-                    TodoId = todoId.ToString()
-                });
-
-                _logger.Debug($"[TodoTagRepository] Deleted {rowsAffected} tags from todo {todoId}");
+                _logger.Debug($"[TodoTagRepository] Deleted all tags from todo {todoId}");
             }
             catch (Exception ex)
             {
-                _logger.Error($"[TodoTagRepository] DeleteAllAsync failed: {ex.Message}");
+                _logger.Error($"[TodoTagRepository] Failed to delete all tags from todo {todoId}", ex);
                 throw;
             }
         }
     }
 }
-

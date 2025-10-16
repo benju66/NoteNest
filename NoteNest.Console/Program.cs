@@ -13,6 +13,13 @@ namespace NoteNest.Console
     {
         static async Task Main(string[] args)
         {
+            // Check if we have a specific command to run
+            if (args.Length > 0 && args[0].Equals("CheckTagMigration", StringComparison.OrdinalIgnoreCase))
+            {
+                await CheckTagMigration.RunAsync();
+                return;
+            }
+
             System.Console.WriteLine("🚀 Testing Clean Architecture with CQRS...\n");
 
             try

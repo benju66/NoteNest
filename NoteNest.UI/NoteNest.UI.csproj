@@ -27,6 +27,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Plugins\TodoPlugin\Infrastructure\Persistence\Migrations\Migration_002_AddIsAutoToTodoTags.sql" />
     <EmbeddedResource Include="Plugins\TodoPlugin\Infrastructure\Persistence\Migrations\Migration_003_AddTagFtsTriggers.sql" />
+    <EmbeddedResource Include="Plugins\TodoPlugin\Infrastructure\Persistence\Migrations\Migration_005_LocalTodoTags.sql" />
   </ItemGroup>
 
   <ItemGroup>

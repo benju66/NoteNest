@@ -294,7 +294,7 @@ namespace NoteNest.Infrastructure.Database
         
         private int GetLatestSchemaVersion()
         {
-            return 3; // Updated to include folder_tags migration
+            return 3; // Folder tags is the latest
         }
         
         private Migration[] GetMigrations()
@@ -315,7 +315,7 @@ namespace NoteNest.Infrastructure.Database
                     Description = "Create folder_tags table for hybrid folder tagging feature",
                     UpgradeSql = LoadEmbeddedMigration("TreeDatabase_Migration_003_CreateFolderTags.sql"),
                     RollbackSql = "DROP TABLE IF EXISTS folder_tags;"
-                }
+                },
             };
             
             return migrations;

@@ -12,7 +12,7 @@ namespace NoteNest.Infrastructure.Repositories;
 
 /// <summary>
 /// Repository for managing note tags in the tree database.
-/// Follows same pattern as FolderTagRepository.
+/// Uses the existing note_tags table in tree.db.
 /// </summary>
 public class NoteTagRepository : INoteTagRepository
 {
@@ -32,19 +32,16 @@ public class NoteTagRepository : INoteTagRepository
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
-            var tags = await connection.QueryAsync<NoteTagDto>(
-                @"SELECT 
-                    note_id, 
-                    tag, 
-                    is_auto, 
-                    datetime(created_at, 'unixepoch', 'localtime') as created_at
-                  FROM note_tags
-                  WHERE note_id = @NoteId
-                  ORDER BY created_at ASC",
-                new { NoteId = noteId.ToString() }
-            );
+            var sql = @"SELECT 
+                note_id as NoteId,
+                tag as Tag,
+                created_at as CreatedAt
+            FROM note_tags
+            WHERE note_id = @NoteId
+            ORDER BY tag";
 
-            return tags.Select(MapFromDto).ToList();
+            var tags = await connection.QueryAsync<NoteTag>(sql, new { NoteId = noteId.ToString() });
+            return tags.ToList();
         }
         catch (Exception ex)
         {
@@ -53,8 +50,11 @@ public class NoteTagRepository : INoteTagRepository
         }
     }
 
-    public async Task SetNoteTagsAsync(Guid noteId, List<string> tags, bool isAuto = false)
+    public async Task SetNoteTagsAsync(Guid noteId, List<string> tagNames, bool isAuto = false)
     {
+        if (tagNames == null)
+            tagNames = new List<string>();
+
         try
         {
             using var connection = new SqliteConnection(_connectionString);
@@ -62,50 +62,41 @@ public class NoteTagRepository : INoteTagRepository
 
             using var transaction = connection.BeginTransaction();
 
-            try
+            // Remove existing tags
+            await connection.ExecuteAsync(
+                "DELETE FROM note_tags WHERE note_id = @NoteId",
+                new { NoteId = noteId.ToString() },
+                transaction
+            );
+
+            // Add new tags
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            foreach (var tagName in tagNames.Where(t => !string.IsNullOrWhiteSpace(t)))
             {
-                // Remove existing tags
                 await connection.ExecuteAsync(
-                    "DELETE FROM note_tags WHERE note_id = @NoteId",
-                    new { NoteId = noteId.ToString() },
+                    @"INSERT INTO note_tags (note_id, tag, created_at)
+                      VALUES (@NoteId, @Tag, @CreatedAt)",
+                    new 
+                    { 
+                        NoteId = noteId.ToString(),
+                        Tag = tagName.Trim(),
+                        CreatedAt = now
+                    },
                     transaction
                 );
-
-                // Insert new tags
-                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                foreach (var tag in tags.Where(t => !string.IsNullOrWhiteSpace(t)))
-                {
-                    await connection.ExecuteAsync(
-                        @"INSERT INTO note_tags (note_id, tag, is_auto, created_at)
-                          VALUES (@NoteId, @Tag, @IsAuto, @CreatedAt)",
-                        new
-                        {
-                            NoteId = noteId.ToString(),
-                            Tag = tag.Trim(),
-                            IsAuto = isAuto ? 1 : 0,
-                            CreatedAt = now
-                        },
-                        transaction
-                    );
-                }
-
-                transaction.Commit();
-                _logger.Info($"Set {tags.Count} tags for note {noteId}");
             }
-            catch
-            {
-                transaction.Rollback();
-                throw;
-            }
+
+            transaction.Commit();
+            _logger.Info($"Set {tagNames.Count} tags for note {noteId}");
         }
         catch (Exception ex)
         {
-            _logger.Error($"Failed to set note tags for {noteId}", ex);
+            _logger.Error($"Failed to set tags for note {noteId}", ex);
             throw;
         }
     }
 
-    public async Task AddNoteTagAsync(Guid noteId, string tag, bool isAuto = false)
+    public async Task AddNoteTagAsync(Guid noteId, string tagName, bool isAuto = false)
     {
         try
         {
@@ -113,23 +104,23 @@ public class NoteTagRepository : INoteTagRepository
             await connection.OpenAsync();
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
             await connection.ExecuteAsync(
-                @"INSERT OR REPLACE INTO note_tags (note_id, tag, is_auto, created_at)
-                  VALUES (@NoteId, @Tag, @IsAuto, @CreatedAt)",
-                new
-                {
+                @"INSERT OR REPLACE INTO note_tags (note_id, tag, created_at)
+                  VALUES (@NoteId, @Tag, @CreatedAt)",
+                new 
+                { 
                     NoteId = noteId.ToString(),
-                    Tag = tag.Trim(),
-                    IsAuto = isAuto ? 1 : 0,
+                    Tag = tagName.Trim(),
                     CreatedAt = now
                 }
             );
 
-            _logger.Info($"Added tag '{tag}' to note {noteId}");
+            _logger.Info($"Added tag '{tagName}' to note {noteId}");
         }
         catch (Exception ex)
         {
-            _logger.Error($"Failed to add tag '{tag}' to note {noteId}", ex);
+            _logger.Error($"Failed to add tag '{tagName}' to note {noteId}", ex);
             throw;
         }
     }
@@ -141,21 +132,21 @@ public class NoteTagRepository : INoteTagRepository
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
-            var count = await connection.ExecuteAsync(
+            await connection.ExecuteAsync(
                 "DELETE FROM note_tags WHERE note_id = @NoteId",
                 new { NoteId = noteId.ToString() }
             );
 
-            _logger.Info($"Removed {count} tags from note {noteId}");
+            _logger.Info($"Removed all tags from note {noteId}");
         }
         catch (Exception ex)
         {
-            _logger.Error($"Failed to remove note tags for {noteId}", ex);
+            _logger.Error($"Failed to remove tags from note {noteId}", ex);
             throw;
         }
     }
 
-    public async Task RemoveNoteTagAsync(Guid noteId, string tag)
+    public async Task RemoveNoteTagAsync(Guid noteId, string tagName)
     {
         try
         {
@@ -164,14 +155,18 @@ public class NoteTagRepository : INoteTagRepository
 
             await connection.ExecuteAsync(
                 "DELETE FROM note_tags WHERE note_id = @NoteId AND tag = @Tag",
-                new { NoteId = noteId.ToString(), Tag = tag }
+                new 
+                { 
+                    NoteId = noteId.ToString(),
+                    Tag = tagName.Trim()
+                }
             );
 
-            _logger.Info($"Removed tag '{tag}' from note {noteId}");
+            _logger.Info($"Removed tag '{tagName}' from note {noteId}");
         }
         catch (Exception ex)
         {
-            _logger.Error($"Failed to remove tag '{tag}' from note {noteId}", ex);
+            _logger.Error($"Failed to remove tag '{tagName}' from note {noteId}", ex);
             throw;
         }
     }
@@ -196,26 +191,4 @@ public class NoteTagRepository : INoteTagRepository
             return false;
         }
     }
-
-    // Helper method to map from DTO to domain model
-    private static NoteTag MapFromDto(NoteTagDto dto)
-    {
-        return new NoteTag
-        {
-            NoteId = Guid.Parse(dto.note_id),
-            Tag = dto.tag,
-            IsAuto = dto.is_auto == 1,
-            CreatedAt = DateTime.Parse(dto.created_at) // SQLite datetime() returns string
-        };
-    }
-
-    // DTO for Dapper mapping (matches SQLite column names)
-    private class NoteTagDto
-    {
-        public string note_id { get; set; } = string.Empty;
-        public string tag { get; set; } = string.Empty;
-        public int is_auto { get; set; }
-        public string created_at { get; set; } = string.Empty; // datetime() returns string
-    }
 }
-

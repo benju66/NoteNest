@@ -38,7 +38,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.Migrations
             var migrations = new[]
             {
                 new Migration { Version = 2, Name = "Migration_002_AddIsAutoToTodoTags.sql" },
-                new Migration { Version = 3, Name = "Migration_003_AddTagFtsTriggers.sql" }
+                new Migration { Version = 3, Name = "Migration_003_AddTagFtsTriggers.sql" },
+                new Migration { Version = 5, Name = "Migration_005_LocalTodoTags.sql" }
             };
 
             foreach (var migration in migrations)

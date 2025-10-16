@@ -9,6 +9,7 @@ using MediatR;
 using NoteNest.UI.Plugins.TodoPlugin.Application.Commands.AddTag;
 using NoteNest.UI.Plugins.TodoPlugin.Application.Commands.RemoveTag;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.Application.Tags.Services;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.Windows
@@ -22,6 +23,7 @@ namespace NoteNest.UI.Windows
         private readonly string _todoText;
         private readonly IMediator _mediator;
         private readonly ITodoTagRepository _todoTagRepository;
+        private readonly IUnifiedTagViewService _unifiedTagViewService;
         private readonly IAppLogger _logger;
         private readonly ObservableCollection<string> _autoTags;
         private readonly ObservableCollection<string> _manualTags;
@@ -31,6 +33,7 @@ namespace NoteNest.UI.Windows
             string todoText,
             IMediator mediator,
             ITodoTagRepository todoTagRepository,
+            IUnifiedTagViewService unifiedTagViewService,
             IAppLogger logger)
         {
             InitializeComponent();
@@ -39,6 +42,7 @@ namespace NoteNest.UI.Windows
             _todoText = todoText;
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
+            _unifiedTagViewService = unifiedTagViewService ?? throw new ArgumentNullException(nameof(unifiedTagViewService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _autoTags = new ObservableCollection<string>();

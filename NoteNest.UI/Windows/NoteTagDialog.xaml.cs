@@ -9,6 +9,7 @@ using System.Windows.Input;
 using MediatR;
 using NoteNest.Application.NoteTags.Commands.SetNoteTag;
 using NoteNest.Application.NoteTags.Repositories;
+using NoteNest.Application.Tags.Services;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.Windows
@@ -27,6 +28,7 @@ namespace NoteNest.UI.Windows
         private readonly ObservableCollection<string> _inheritedTags;
         private readonly NoteNest.Application.FolderTags.Repositories.IFolderTagRepository _folderTagRepository;
         private readonly NoteNest.Infrastructure.Database.ITreeDatabaseRepository _treeRepository;
+        private readonly IUnifiedTagViewService _unifiedTagViewService;
 
         public NoteTagDialog(
             Guid noteId, 
@@ -35,6 +37,7 @@ namespace NoteNest.UI.Windows
             INoteTagRepository noteTagRepository,
             NoteNest.Application.FolderTags.Repositories.IFolderTagRepository folderTagRepository,
             NoteNest.Infrastructure.Database.ITreeDatabaseRepository treeRepository,
+            IUnifiedTagViewService unifiedTagViewService,
             IAppLogger logger)
         {
             InitializeComponent();
@@ -45,6 +48,7 @@ namespace NoteNest.UI.Windows
             _noteTagRepository = noteTagRepository ?? throw new ArgumentNullException(nameof(noteTagRepository));
             _folderTagRepository = folderTagRepository ?? throw new ArgumentNullException(nameof(folderTagRepository));
             _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
+            _unifiedTagViewService = unifiedTagViewService ?? throw new ArgumentNullException(nameof(unifiedTagViewService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _tags = new ObservableCollection<string>();

@@ -9,6 +9,7 @@ using System.Windows.Input;
 using MediatR;
 using NoteNest.Application.FolderTags.Commands.SetFolderTag;
 using NoteNest.Application.FolderTags.Repositories;
+using NoteNest.Application.Tags.Services;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.Windows
@@ -20,9 +21,10 @@ namespace NoteNest.UI.Windows
     {
         private readonly Guid _folderId;
         private readonly string _folderPath;
-        private readonly IMediator _mediator;
-        private readonly IFolderTagRepository _folderTagRepository;
-        private readonly IAppLogger _logger;
+    private readonly IMediator _mediator;
+    private readonly IFolderTagRepository _folderTagRepository;
+    private readonly IUnifiedTagViewService _unifiedTagViewService;
+    private readonly IAppLogger _logger;
         private readonly ObservableCollection<string> _tags;
         private readonly ObservableCollection<string> _inheritedTags;
 
@@ -31,6 +33,7 @@ namespace NoteNest.UI.Windows
             string folderPath,
             IMediator mediator,
             IFolderTagRepository folderTagRepository,
+            IUnifiedTagViewService unifiedTagViewService,
             IAppLogger logger)
         {
             InitializeComponent();
@@ -39,6 +42,7 @@ namespace NoteNest.UI.Windows
             _folderPath = folderPath;
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _folderTagRepository = folderTagRepository ?? throw new ArgumentNullException(nameof(folderTagRepository));
+            _unifiedTagViewService = unifiedTagViewService ?? throw new ArgumentNullException(nameof(unifiedTagViewService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _tags = new ObservableCollection<string>();

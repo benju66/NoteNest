@@ -138,6 +138,19 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<ITreeDatabaseRepository>(provider => 
                 new TreeDatabaseRepository(treeConnectionString, provider.GetRequiredService<IAppLogger>(), notesRootPath));
             
+            // ✨ UNIFIED TAG VIEW: Respects database isolation
+            services.AddSingleton<NoteNest.Application.Tags.Services.IUnifiedTagViewService>(provider =>
+            {
+                // Get todos.db connection string for cross-database operations
+                var todosDbPath = Path.Combine(databasePath, ".plugins", "NoteNest.TodoPlugin", "todos.db");
+                var todosConnectionString = $"Data Source={todosDbPath};";
+                
+                return new NoteNest.Infrastructure.Services.UnifiedTagViewService(
+                    treeConnectionString,
+                    todosConnectionString,
+                    provider.GetRequiredService<IAppLogger>());
+            });
+
             // ✨ HYBRID FOLDER TAGGING: Folder tag repository (uses tree.db)
             services.AddSingleton<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>(provider =>
                 new NoteNest.Infrastructure.Repositories.FolderTagRepository(

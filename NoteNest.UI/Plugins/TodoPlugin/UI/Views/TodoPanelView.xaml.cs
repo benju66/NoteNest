@@ -377,8 +377,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                 var app = (App)System.Windows.Application.Current;
                 var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
                 var todoTagRepo = app.ServiceProvider?.GetService<ITodoTagRepository>();
+                var unifiedTagViewService = app.ServiceProvider?.GetService<NoteNest.Application.Tags.Services.IUnifiedTagViewService>();
                 
-                if (mediator == null || todoTagRepo == null)
+                if (mediator == null || todoTagRepo == null || unifiedTagViewService == null)
                 {
                     MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
@@ -390,6 +391,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                     todoVm.Text, 
                     mediator, 
                     todoTagRepo, 
+                    unifiedTagViewService,
                     _logger)
                 {
                     Owner = Window.GetWindow(this)
@@ -517,8 +519,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                 var app = (App)System.Windows.Application.Current;
                 var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
                 var folderTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>();
+                var unifiedTagViewService = app.ServiceProvider?.GetService<NoteNest.Application.Tags.Services.IUnifiedTagViewService>();
 
-                if (mediator == null || folderTagRepo == null)
+                if (mediator == null || folderTagRepo == null || unifiedTagViewService == null)
                 {
                     MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
@@ -529,6 +532,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                     category.DisplayPath, 
                     mediator, 
                     folderTagRepo, 
+                    unifiedTagViewService,
                     _logger)
                 {
                     Owner = Window.GetWindow(this)
