@@ -33,9 +33,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.DeleteTodo
                 if (aggregate == null)
                     return Result.Fail<DeleteTodoResult>("Todo not found");
                 
-                // Raise deletion event
-                var todoId = TodoId.From(request.TodoId.ToString());
-                aggregate.AddDomainEvent(new TodoDeletedEvent(todoId));
+                // Raise deletion event (aggregate has its own TodoId)
+                var todoDeletedEvent = new TodoDeletedEvent(aggregate.TodoId);
+                aggregate.AddDomainEvent(todoDeletedEvent);
                 
                 // Save to event store (TodoDeletedEvent will be persisted)
                 await _eventStore.SaveAsync(aggregate);

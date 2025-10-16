@@ -88,7 +88,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                var todayEnd = DateTimeOffset.UtcNow.Date.AddDays(1).AddSeconds(-1).ToUnixTimeSeconds();
+                var todayEnd = new DateTimeOffset(DateTimeOffset.UtcNow.Date.AddDays(1).AddSeconds(-1)).ToUnixTimeSeconds();
 
                 var sql = type switch
                 {
@@ -98,13 +98,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                     Models.SmartListType.Overdue => 
                         $"SELECT * FROM todo_view WHERE is_completed = 0 AND due_date < {now} ORDER BY due_date",
                     
-                    Models.SmartListType.Upcoming => 
+                    Models.SmartListType.ThisWeek => 
                         $"SELECT * FROM todo_view WHERE is_completed = 0 AND due_date > {todayEnd} ORDER BY due_date LIMIT 50",
                     
                     Models.SmartListType.Completed => 
                         "SELECT * FROM todo_view WHERE is_completed = 1 ORDER BY completed_date DESC LIMIT 100",
                     
-                    Models.SmartListType.Favorite => 
+                    Models.SmartListType.Favorites => 
                         "SELECT * FROM todo_view WHERE is_favorite = 1 AND is_completed = 0 ORDER BY priority DESC, due_date",
                     
                     _ => "SELECT * FROM todo_view WHERE is_completed = 0 ORDER BY sort_order, created_at"
@@ -200,10 +200,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                         ? DateTimeOffset.FromUnixTimeSeconds(dto.CompletedDate.Value).DateTime 
                         : (DateTime?)null,
                     CategoryId = string.IsNullOrEmpty(dto.CategoryId) ? null : Guid.Parse(dto.CategoryId),
-                    CategoryName = dto.CategoryName,
                     ParentId = string.IsNullOrEmpty(dto.ParentId) ? null : Guid.Parse(dto.ParentId),
-                    SortOrder = dto.SortOrder,
-                    Priority = dto.Priority,
+                    Order = dto.SortOrder,
+                    Priority = (Models.Priority)dto.Priority,
                     IsFavorite = dto.IsFavorite == 1,
                     DueDate = dto.DueDate.HasValue 
                         ? DateTimeOffset.FromUnixTimeSeconds(dto.DueDate.Value).DateTime 
@@ -211,12 +210,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                     ReminderDate = dto.ReminderDate.HasValue 
                         ? DateTimeOffset.FromUnixTimeSeconds(dto.ReminderDate.Value).DateTime 
                         : (DateTime?)null,
-                    SourceType = dto.SourceType,
                     SourceNoteId = string.IsNullOrEmpty(dto.SourceNoteId) ? null : Guid.Parse(dto.SourceNoteId),
                     SourceFilePath = dto.SourceFilePath,
+                    SourceLineNumber = dto.SourceLineNumber,
+                    SourceCharOffset = dto.SourceCharOffset,
                     IsOrphaned = dto.IsOrphaned == 1,
-                    CreatedAt = DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt).DateTime,
-                    ModifiedAt = DateTimeOffset.FromUnixTimeSeconds(dto.ModifiedAt).DateTime,
+                    CreatedDate = DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt).DateTime,
+                    ModifiedDate = DateTimeOffset.FromUnixTimeSeconds(dto.ModifiedAt).DateTime,
                     Tags = new List<string>() // Tags loaded separately if needed
                 };
             }
@@ -246,6 +246,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
             public string SourceType { get; set; }
             public string SourceNoteId { get; set; }
             public string SourceFilePath { get; set; }
+            public int? SourceLineNumber { get; set; }
+            public int? SourceCharOffset { get; set; }
             public int IsOrphaned { get; set; }
             public long CreatedAt { get; set; }
             public long ModifiedAt { get; set; }

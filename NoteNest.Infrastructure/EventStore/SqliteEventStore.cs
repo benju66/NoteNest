@@ -51,11 +51,17 @@ namespace NoteNest.Infrastructure.EventStore
             
             try
             {
-                // Get current version from database
-                var currentVersion = await connection.ExecuteScalarAsync<int?>(
+                // Get current version from database (handle SQLite type conversions)
+                var currentVersionObj = await connection.ExecuteScalarAsync(
                     "SELECT MAX(sequence_number) FROM events WHERE aggregate_id = @AggregateId",
                     new { AggregateId = aggregate.Id.ToString() },
-                    transaction) ?? 0;
+                    transaction);
+                
+                int currentVersion = 0;
+                if (currentVersionObj != null && currentVersionObj is not DBNull)
+                {
+                    currentVersion = Convert.ToInt32(currentVersionObj);
+                }
                 
                 // Optimistic concurrency check
                 if (expectedVersion >= 0 && currentVersion != expectedVersion)
@@ -63,10 +69,24 @@ namespace NoteNest.Infrastructure.EventStore
                     throw new ConcurrencyException(aggregate.Id, expectedVersion, currentVersion);
                 }
                 
-                // Get next stream position
-                var streamPosition = await connection.ExecuteScalarAsync<long>(
+                // Get next stream position (initialize if doesn't exist)
+                var streamPositionObj = await connection.ExecuteScalarAsync(
                     "SELECT current_position FROM stream_position WHERE id = 1",
                     transaction: transaction);
+                
+                long streamPosition;
+                if (streamPositionObj == null || streamPositionObj is DBNull)
+                {
+                    // Initialize stream position
+                    streamPosition = 0;
+                    await connection.ExecuteAsync(
+                        "INSERT OR REPLACE INTO stream_position (id, current_position) VALUES (1, 0)",
+                        transaction: transaction);
+                }
+                else
+                {
+                    streamPosition = Convert.ToInt64(streamPositionObj);
+                }
                 
                 // Save each event
                 int sequenceNumber = currentVersion;

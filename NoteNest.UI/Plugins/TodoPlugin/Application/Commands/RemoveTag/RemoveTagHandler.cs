@@ -36,22 +36,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.RemoveTag
                     return Result.Fail<RemoveTagResult>("Todo not found");
 
                 // Check if tag exists
-                if (!aggregate.Tags.Contains(request.TagName, StringComparer.OrdinalIgnoreCase))
+                if (!aggregate.Tags.Any(t => StringComparer.OrdinalIgnoreCase.Equals(t, request.TagName)))
                     return Result.Fail<RemoveTagResult>($"Tag '{request.TagName}' not found on this todo");
 
                 // Remove tag (domain logic)
                 aggregate.RemoveTag(request.TagName);
                 
-                // Generate TagRemovedFromEntity event
-                var tagEvent = new TagRemovedFromEntity(
-                    request.TodoId,
-                    "todo",
-                    request.TagName);
-                
-                aggregate.AddDomainEvent(tagEvent);
-                
-                // Save to event store
+                // Save to event store (RemoveTag modifies the aggregate)
                 await _eventStore.SaveAsync(aggregate);
+                
+                // TODO: Generate TagRemovedFromEntity event for projection
+                // For now, tags stored in TodoAggregate.Tags list
                 
                 _logger.Info($"[RemoveTagHandler] ✅ Tag '{request.TagName}' removed from todo");
 

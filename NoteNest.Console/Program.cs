@@ -13,17 +13,25 @@ namespace NoteNest.Console
     {
         static async Task Main(string[] args)
         {
-            // Check if we have a specific command to run
-            if (args.Length > 0 && args[0].Equals("CheckTagMigration", StringComparison.OrdinalIgnoreCase))
+            System.Console.WriteLine($"DEBUG: Received {args.Length} arguments");
+            if (args.Length > 0)
             {
-                await CheckTagMigration.RunAsync();
+                System.Console.WriteLine($"DEBUG: First arg = '{args[0]}'");
+            }
+            
+            // Check if we have a specific command to run
+            if (args.Length > 0 && args[0].Equals("MigrateEventStore", StringComparison.OrdinalIgnoreCase))
+            {
+                System.Console.WriteLine("DEBUG: Calling MigrationRunner...");
+                var exitCode = await MigrationRunner.RunMigrationAsync();
+                System.Console.WriteLine($"DEBUG: Migration returned exit code: {exitCode}");
+                Environment.Exit(exitCode);
                 return;
             }
             
-            if (args.Length > 0 && args[0].Equals("MigrateEventStore", StringComparison.OrdinalIgnoreCase))
+            if (args.Length > 0 && args[0].Equals("VerifyProjections", StringComparison.OrdinalIgnoreCase))
             {
-                var exitCode = await MigrationRunner.RunMigrationAsync();
-                Environment.Exit(exitCode);
+                await VerifyProjections.RunAsync();
                 return;
             }
 
@@ -40,7 +48,7 @@ namespace NoteNest.Console
                     .ConfigureServices(services =>
                     {
                         // Use our Clean Architecture service configuration
-                        NoteNest.UI.Composition.ServiceConfiguration.ConfigureServices(services, config);
+                        NoteNest.UI.Composition.CleanServiceConfiguration.ConfigureCleanArchitecture(services, config);
                     })
                     .Build();
 
@@ -91,12 +99,12 @@ namespace NoteNest.Console
                 var shellVM = serviceProvider.GetService<NoteNest.UI.ViewModels.Shell.MainShellViewModel>();
                 var noteOpsVM = serviceProvider.GetService<NoteNest.UI.ViewModels.Notes.NoteOperationsViewModel>();
                 var categoryOpsVM = serviceProvider.GetService<NoteNest.UI.ViewModels.Categories.CategoryOperationsViewModel>();
-                var workspaceVM = serviceProvider.GetService<NoteNest.UI.ViewModels.Workspace.ModernWorkspaceViewModel>();
+                var workspaceVM = serviceProvider.GetService<NoteNest.UI.ViewModels.Workspace.WorkspaceViewModel>();
 
                 System.Console.WriteLine($"✅ MainShellViewModel: {shellVM != null}");
                 System.Console.WriteLine($"✅ NoteOperationsViewModel: {noteOpsVM != null}");  
                 System.Console.WriteLine($"✅ CategoryOperationsViewModel: {categoryOpsVM != null}");
-                System.Console.WriteLine($"✅ ModernWorkspaceViewModel: {workspaceVM != null}");
+                System.Console.WriteLine($"✅ WorkspaceViewModel: {workspaceVM != null}");
 
                 if (shellVM != null)
                 {

@@ -9,14 +9,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
     public class TodoAggregate : AggregateRoot
     {
         public TodoId TodoId { get; private set; }
-        public override Guid Id
-        {
-            get
-            {
-                if (TodoId == null) return Guid.Empty;
-                return Guid.TryParse(TodoId.Value, out var guid) ? guid : Guid.Empty;
-            }
-        }
+        public override Guid Id => TodoId?.Value ?? Guid.Empty;
         public TodoText Text { get; private set; }
         public string Description { get; private set; }
         public bool IsCompleted { get; private set; }
@@ -91,7 +84,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
 
             var aggregate = new TodoAggregate
             {
-                Id = TodoId.Create(),
+                TodoId = TodoId.Create(),
                 Text = textResult.Value,
                 SourceNoteId = sourceNoteId,
                 SourceFilePath = sourceFilePath,

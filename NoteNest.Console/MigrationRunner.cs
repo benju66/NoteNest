@@ -19,15 +19,19 @@ namespace NoteNest.Console
     {
         public static async Task<int> RunMigrationAsync()
         {
-            var logger = AppLogger.Instance;
-            
             try
             {
-                logger.Info("═══════════════════════════════════════════════════════");
-                logger.Info("   EVENT SOURCING MIGRATION");
-                logger.Info("   Importing legacy data to event store...");
-                logger.Info("═══════════════════════════════════════════════════════");
-                logger.Info("");
+                System.Console.WriteLine("═══════════════════════════════════════════════════════");
+                System.Console.WriteLine("   EVENT SOURCING MIGRATION");
+                System.Console.WriteLine("   Importing legacy data to event store...");
+                System.Console.WriteLine("═══════════════════════════════════════════════════════");
+                System.Console.WriteLine("");
+                
+                var logger = AppLogger.Instance;
+                System.Console.WriteLine("✅ Logger initialized");
+            
+                try
+                {
                 
                 // Database paths
                 var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -38,27 +42,28 @@ namespace NoteNest.Console
                 var eventsDbPath = Path.Combine(databasePath, "events.db");
                 var projectionsDbPath = Path.Combine(databasePath, "projections.db");
                 
-                var notesRootPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                    "NoteNest");
+                // Use actual notes path for this user (the Notes subfolder has the actual structure)
+                var notesRootPath = @"C:\Users\Burness\MyNotes\Notes";
                 
-                logger.Info($"📂 Database Paths:");
-                logger.Info($"   Tree DB: {treeDbPath}");
-                logger.Info($"   Todos DB: {todosDbPath}");
-                logger.Info($"   Events DB: {eventsDbPath}");
-                logger.Info($"   Projections DB: {projectionsDbPath}");
-                logger.Info($"   Notes Root: {notesRootPath}");
-                logger.Info("");
+                System.Console.WriteLine($"📂 Database Paths:");
+                System.Console.WriteLine($"   Tree DB: {treeDbPath}");
+                System.Console.WriteLine($"   Todos DB: {todosDbPath}");
+                System.Console.WriteLine($"   Events DB: {eventsDbPath}");
+                System.Console.WriteLine($"   Projections DB: {projectionsDbPath}");
+                System.Console.WriteLine($"   Notes Root: {notesRootPath}");
+                System.Console.WriteLine("");
                 
                 // Verify source databases exist
                 if (!File.Exists(treeDbPath))
                 {
-                    logger.Error($"❌ Source database not found: {treeDbPath}");
-                    logger.Info("💡 The tree.db file doesn't exist yet.");
-                    logger.Info("   This is normal for a fresh installation.");
-                    logger.Info("   The event-sourced system will start fresh.");
+                    System.Console.WriteLine($"❌ Source database not found: {treeDbPath}");
+                    System.Console.WriteLine("💡 The tree.db file doesn't exist yet.");
+                    System.Console.WriteLine("   This is normal for a fresh installation.");
+                    System.Console.WriteLine("   The event-sourced system will start fresh.");
                     return 0;
                 }
+                
+                System.Console.WriteLine($"✅ Found tree.db at: {treeDbPath}");
                 
                 if (!File.Exists(todosDbPath))
                 {
@@ -67,79 +72,141 @@ namespace NoteNest.Console
                 }
                 
                 // Initialize event store
-                logger.Info("🔧 Initializing event store...");
+                System.Console.WriteLine("🔧 Initializing event store...");
                 var eventsConnection = $"Data Source={eventsDbPath};";
                 var eventSerializer = new JsonEventSerializer(logger);
                 var eventStoreInit = new EventStoreInitializer(eventsConnection, logger);
                 
+                System.Console.WriteLine("   Created EventStoreInitializer");
+                
                 if (!await eventStoreInit.InitializeAsync())
                 {
-                    logger.Error("❌ Failed to initialize event store");
+                    System.Console.WriteLine("❌ Failed to initialize event store");
                     return 1;
                 }
                 
-                var eventStore = new SqliteEventStore(eventsConnection, logger, eventSerializer);
-                logger.Info("✅ Event store initialized");
-                logger.Info("");
+                System.Console.WriteLine("   EventStore initialized successfully");
+                
+                SqliteEventStore eventStore;
+                try
+                {
+                    eventStore = new SqliteEventStore(eventsConnection, logger, eventSerializer);
+                    System.Console.WriteLine("   Created SqliteEventStore instance");
+                }
+                catch (Exception esEx)
+                {
+                    System.Console.WriteLine($"❌ Failed to create SqliteEventStore: {esEx.Message}");
+                    return 1;
+                }
+                
+                System.Console.WriteLine("✅ Event store initialized");
+                System.Console.WriteLine("");
                 
                 // Initialize projections
-                logger.Info("🔧 Initializing projections database...");
+                System.Console.WriteLine("🔧 Initializing projections database...");
                 var projectionsConnection = $"Data Source={projectionsDbPath};";
                 var projectionsInit = new ProjectionsInitializer(projectionsConnection, logger);
                 
+                System.Console.WriteLine("   Created ProjectionsInitializer");
+                
                 if (!await projectionsInit.InitializeAsync())
                 {
-                    logger.Error("❌ Failed to initialize projections database");
+                    System.Console.WriteLine("❌ Failed to initialize projections database");
                     return 1;
                 }
                 
-                logger.Info("✅ Projections database initialized");
-                logger.Info("");
+                System.Console.WriteLine("✅ Projections database initialized");
+                System.Console.WriteLine("");
                 
                 // Check if migration already run
+                System.Console.WriteLine("Checking if migration already ran...");
                 var currentEventCount = await eventStoreInit.GetEventCountAsync();
+                System.Console.WriteLine($"   Current event count: {currentEventCount}");
+                
                 if (currentEventCount > 0)
                 {
-                    logger.Warning($"⚠️ Event store already has {currentEventCount} events");
-                    logger.Info("   Migration may have already been run.");
-                    logger.Info("   To re-migrate, delete events.db and projections.db first.");
-                    logger.Info("");
-                    logger.Info("❓ Continue anyway? (will append to existing events)");
-                    
-                    // For hands-off mode, skip if events exist
-                    logger.Info("   Skipping migration (events already exist)");
+                    System.Console.WriteLine($"⚠️ Event store already has {currentEventCount} events");
+                    System.Console.WriteLine("   Migration may have already been run.");
+                    System.Console.WriteLine("   To re-migrate, delete events.db and projections.db first.");
+                    System.Console.WriteLine("");
+                    System.Console.WriteLine("   Skipping migration (events already exist)");
                     return 0;
                 }
                 
-                // Set up projections
-                logger.Info("🔧 Setting up projections...");
-                var projections = new System.Collections.Generic.List<IProjection>
-                {
-                    new TreeViewProjection(projectionsConnection, logger),
-                    new TagProjection(projectionsConnection, logger)
-                    // TodoProjection would be here but it's in UI layer
-                };
+                System.Console.WriteLine("✅ No existing events, proceeding with migration...");
                 
-                var orchestrator = new ProjectionOrchestrator(eventStore, projections, logger);
-                logger.Info("✅ Projection orchestrator ready");
-                logger.Info("");
+                // Set up projections
+                System.Console.WriteLine("🔧 Setting up projections...");
+                
+                System.Collections.Generic.List<IProjection> projections;
+                try
+                {
+                    projections = new System.Collections.Generic.List<IProjection>
+                    {
+                        new TreeViewProjection(projectionsConnection, logger),
+                        new TagProjection(projectionsConnection, logger)
+                        // TodoProjection would be here but it's in UI layer
+                    };
+                    System.Console.WriteLine($"   Created {projections.Count} projections");
+                }
+                catch (Exception projEx)
+                {
+                    System.Console.WriteLine($"❌ Failed to create projections: {projEx.Message}");
+                    return 1;
+                }
+                
+                ProjectionOrchestrator orchestrator;
+                try
+                {
+                    orchestrator = new ProjectionOrchestrator(eventStore, projections, logger);
+                    System.Console.WriteLine("   Created ProjectionOrchestrator");
+                }
+                catch (Exception orchEx)
+                {
+                    System.Console.WriteLine($"❌ Failed to create orchestrator: {orchEx.Message}");
+                    return 1;
+                }
+                
+                System.Console.WriteLine("✅ Projection orchestrator ready");
+                System.Console.WriteLine("");
                 
                 // Run migration
-                logger.Info("🚀 Starting migration...");
-                logger.Info("");
+                System.Console.WriteLine("🚀 Starting migration...");
+                System.Console.WriteLine("");
                 
                 var treeConnection = $"Data Source={treeDbPath};";
                 var todosConnection = $"Data Source={todosDbPath};";
                 
-                var migrator = new LegacyDataMigrator(
-                    treeConnection,
-                    todosConnection,
-                    notesRootPath,
-                    eventStore,
-                    orchestrator,
-                    logger);
+                System.Console.WriteLine("Creating FileSystemMigrator (scans actual RTF files)...");
+                FileSystemMigrator migrator;
+                try
+                {
+                    migrator = new FileSystemMigrator(
+                        notesRootPath,
+                        eventStore,
+                        orchestrator,
+                        logger);
+                    System.Console.WriteLine("   Migrator created successfully");
+                }
+                catch (Exception migEx)
+                {
+                    System.Console.WriteLine($"❌ Failed to create migrator: {migEx.Message}");
+                    return 1;
+                }
                 
-                var result = await migrator.MigrateAsync();
+                System.Console.WriteLine("Calling migrator.MigrateAsync()...");
+                MigrationResult result;
+                try
+                {
+                    result = await migrator.MigrateAsync();
+                    System.Console.WriteLine("   Migration method returned");
+                }
+                catch (Exception migrateEx)
+                {
+                    System.Console.WriteLine($"❌ Migration threw exception: {migrateEx.Message}");
+                    System.Console.WriteLine($"   Stack: {migrateEx.StackTrace}");
+                    return 1;
+                }
                 
                 logger.Info("");
                 logger.Info("═══════════════════════════════════════════════════════");
@@ -188,13 +255,20 @@ namespace NoteNest.Console
                 logger.Info("═══════════════════════════════════════════════════════");
                 
                 return result.Success ? 0 : 1;
+                }
+                catch (Exception ex)
+                {
+                    System.Console.WriteLine("❌ MIGRATION EXCEPTION (Inner)");
+                    System.Console.WriteLine($"   Error: {ex.Message}");
+                    System.Console.WriteLine($"   Stack: {ex.StackTrace}");
+                    return 1;
+                }
             }
             catch (Exception ex)
             {
-                logger.Error("❌ MIGRATION EXCEPTION", ex);
-                logger.Info("");
-                logger.Info("💡 Your original databases are unchanged.");
-                logger.Info("   You can safely try again after fixing the issue.");
+                System.Console.WriteLine("❌ MIGRATION EXCEPTION (Outer)");
+                System.Console.WriteLine($"   Error: {ex.Message}");
+                System.Console.WriteLine($"   Stack: {ex.StackTrace}");
                 return 1;
             }
         }

@@ -266,7 +266,7 @@ namespace NoteNest.UI.ViewModels.Workspace
                 // Convert to NoteModel
                 var noteModel = new NoteModel
                 {
-                    Id = domainNote.Id.Value,
+                    Id = domainNote.NoteId.Value,
                     Title = domainNote.Title,
                     Content = noteContent,
                     FilePath = domainNote.FilePath ?? "",
@@ -296,7 +296,7 @@ namespace NoteNest.UI.ViewModels.Workspace
                 tabVm.RequestContentLoad();
                 
                 StatusMessage = $"Opened {noteModel.Title}";
-                NoteOpened?.Invoke(domainNote.Id.Value);
+                NoteOpened?.Invoke(domainNote.NoteId.Value);
                 
                 _logger.Info($"Tab opened: {noteModel.Title} (ID: {noteId})");
                 

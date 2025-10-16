@@ -179,6 +179,7 @@ CREATE VIRTUAL TABLE search_fts USING fts5(
 
 CREATE TABLE projection_metadata (
     projection_name TEXT PRIMARY KEY,
+    last_processed_position INTEGER DEFAULT 0,
     last_rebuilt_at INTEGER,
     last_updated_at INTEGER NOT NULL,
     event_count INTEGER DEFAULT 0,

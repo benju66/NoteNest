@@ -48,15 +48,20 @@ namespace NoteNest.Infrastructure.Migrations
 
         public async Task<MigrationResult> MigrateAsync()
         {
+            System.Console.WriteLine("📍 LegacyDataMigrator.MigrateAsync() called");
             var result = new MigrationResult { StartedAt = DateTime.UtcNow };
             
             try
             {
+                System.Console.WriteLine("🔄 Starting legacy data migration to event store...");
                 _logger.Info("🔄 Starting legacy data migration to event store...");
 
                 // STEP 1: Read existing tree.db data
+                System.Console.WriteLine("📖 Reading existing tree data...");
                 _logger.Info("📖 Reading existing tree data...");
+                
                 var treeNodes = await ReadTreeNodesAsync();
+                System.Console.WriteLine($"   Read {treeNodes.Count} nodes from tree.db");
                 result.CategoriesFound = treeNodes.Count(n => n.NodeType == TreeNodeType.Category);
                 result.NotesFound = treeNodes.Count(n => n.NodeType == TreeNodeType.Note);
                 
@@ -158,8 +163,21 @@ namespace NoteNest.Infrastructure.Migrations
                 result.EventsGenerated = eventCount;
 
                 // STEP 5: Rebuild all projections from events
+                System.Console.WriteLine("🔨 Rebuilding all projections from events...");
                 _logger.Info("🔨 Rebuilding all projections from events...");
-                await _projectionOrchestrator.RebuildAllAsync();
+                
+                try
+                {
+                    await _projectionOrchestrator.RebuildAllAsync();
+                    System.Console.WriteLine("✅ Projection rebuild completed");
+                }
+                catch (Exception rebuildEx)
+                {
+                    System.Console.WriteLine($"❌ Projection rebuild failed: {rebuildEx.Message}");
+                    throw;
+                }
+                
+                System.Console.WriteLine("✅ All projections rebuilt");
                 _logger.Info("✅ All projections rebuilt");
 
                 // STEP 6: Validation
@@ -171,17 +189,24 @@ namespace NoteNest.Infrastructure.Migrations
                 result.CompletedAt = DateTime.UtcNow;
                 
                 var duration = (result.CompletedAt.Value - result.StartedAt).TotalMinutes;
+                System.Console.WriteLine($"🎉 Migration complete in {duration:F1} minutes!");
+                System.Console.WriteLine($"   Categories: {result.CategoriesFound}");
+                System.Console.WriteLine($"   Notes: {result.NotesFound}");
+                System.Console.WriteLine($"   Tags: {result.TagsFound}");
+                System.Console.WriteLine($"   Todos: {result.TodosFound}");
+                System.Console.WriteLine($"   Events: {result.EventsGenerated}");
+                
                 _logger.Info($"🎉 Migration complete in {duration:F1} minutes!");
-                _logger.Info($"   Categories: {result.CategoriesFound}");
-                _logger.Info($"   Notes: {result.NotesFound}");
-                _logger.Info($"   Tags: {result.TagsFound}");
-                _logger.Info($"   Todos: {result.TodosFound}");
-                _logger.Info($"   Events: {result.EventsGenerated}");
 
                 return result;
             }
             catch (Exception ex)
             {
+                System.Console.WriteLine($"❌ EXCEPTION in LegacyDataMigrator.MigrateAsync()");
+                System.Console.WriteLine($"   Error: {ex.Message}");
+                System.Console.WriteLine($"   Type: {ex.GetType().Name}");
+                System.Console.WriteLine($"   Stack: {ex.StackTrace}");
+                
                 result.Success = false;
                 result.Error = ex.Message;
                 result.CompletedAt = DateTime.UtcNow;
@@ -192,8 +217,21 @@ namespace NoteNest.Infrastructure.Migrations
 
         private async Task<List<TreeNode>> ReadTreeNodesAsync()
         {
+            System.Console.WriteLine($"   Opening connection to: {_treeDbConnection}");
             using var connection = new SqliteConnection(_treeDbConnection);
             await connection.OpenAsync();
+            System.Console.WriteLine("   Connection opened");
+
+            // Check if table exists
+            var tableExists = await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='tree_nodes'");
+            System.Console.WriteLine($"   tree_nodes table exists: {tableExists > 0}");
+            
+            if (tableExists == 0)
+            {
+                System.Console.WriteLine("   ⚠️ tree_nodes table doesn't exist in tree.db!");
+                return new List<TreeNode>();
+            }
 
             var nodes = await connection.QueryAsync<TreeNodeRow>(
                 @"SELECT id, parent_id, canonical_path, display_path, absolute_path,
@@ -202,8 +240,13 @@ namespace NoteNest.Infrastructure.Migrations
                   FROM tree_nodes
                   WHERE is_deleted = 0
                   ORDER BY canonical_path");
+            
+            System.Console.WriteLine($"   Query returned {nodes.Count()} rows");
 
-            return nodes.Select(MapToTreeNode).Where(n => n != null).ToList();
+            var treeNodes = nodes.Select(MapToTreeNode).Where(n => n != null).ToList();
+            System.Console.WriteLine($"   Mapped to {treeNodes.Count} TreeNode objects");
+            
+            return treeNodes;
         }
 
         private async Task<List<FolderTagRow>> ReadFolderTagsAsync()
@@ -285,6 +328,8 @@ namespace NoteNest.Infrastructure.Migrations
             }
             catch (Exception ex)
             {
+                System.Console.WriteLine($"      ❌ Failed to map node '{row?.Name}': {ex.Message}");
+                System.Console.WriteLine($"         Row.Id='{row?.Id}', NodeType='{row?.NodeType}'");
                 _logger.Error($"Failed to map tree node: {row?.Name}", ex);
                 return null;
             }

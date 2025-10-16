@@ -131,8 +131,9 @@ namespace NoteNest.UI.Composition
                 DefaultTimeout = 30
             }.ToString();
             
+            // Use actual notes path for this user
             var notesRootPath = configuration.GetValue<string>("NotesPath") 
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
+                ?? @"C:\Users\Burness\MyNotes\Notes";
             
             // Core database services
             services.AddSingleton<ITreeDatabaseInitializer>(provider => 
@@ -179,8 +180,9 @@ namespace NoteNest.UI.Composition
         /// </summary>
         private static IServiceCollection AddRTFEditorSystem(this IServiceCollection services, IConfiguration configuration)
         {
+            // Use actual notes path for this user
             var notesRootPath = configuration.GetValue<string>("NotesPath") 
-                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
+                ?? @"C:\Users\Burness\MyNotes\Notes";
             
             // RTF Save Manager (proven working system)
             services.AddSingleton<ISaveManager>(provider =>

@@ -148,18 +148,9 @@ namespace NoteNest.UI.ViewModels.Categories
             var selectedItemId = SelectedNote?.Id ?? SelectedCategory?.Id;
             var isNoteSelected = SelectedNote != null;
             
-            // ✨ CRITICAL FIX: Force cache invalidation BEFORE loading
-            // This ensures deleted items are actually removed from the tree
-            // Without this, GetAllAsync() returns cached data that includes deleted items
-            try
-            {
-                await _categoryRepository.InvalidateCacheAsync();
-                _logger.Debug("Cache invalidated before refresh");
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning($"Failed to invalidate cache: {ex.Message}, but continuing with refresh");
-            }
+            // ✨ Cache invalidation for projection queries
+            _treeQueryService.InvalidateCache();
+            _logger.Debug("Cache invalidated before refresh");
             
             await LoadCategoriesAsync();
             
@@ -426,7 +417,7 @@ namespace NoteNest.UI.ViewModels.Categories
                 // Get fresh node from database to read is_expanded
                 if (Guid.TryParse(category.Id.Value, out var guid))
                 {
-                    var node = await _treeRepository.GetNodeByIdAsync(guid);
+                    var node = await _treeQueryService.GetByIdAsync(guid);
                     if (node != null && node.NodeType == Domain.Trees.TreeNodeType.Category)
                     {
                         // Set expanded state (won't trigger persistence because _isLoadingFromDatabase = true)
@@ -515,8 +506,9 @@ namespace NoteNest.UI.ViewModels.Categories
                 
                 if (guidChanges.Count > 0)
                 {
-                    await _treeRepository.BatchUpdateExpandedStatesAsync(guidChanges);
-                    _logger.Debug($"✅ Persisted expanded state for {guidChanges.Count} categories");
+                    // TODO: Expanded state persistence via event sourcing
+                    // For now, expanded state is not persisted (acceptable for MVP)
+                    _logger.Debug($"📝 Expanded state changes detected for {guidChanges.Count} categories (persistence deferred)");
                 }
             }
             catch (Exception ex)

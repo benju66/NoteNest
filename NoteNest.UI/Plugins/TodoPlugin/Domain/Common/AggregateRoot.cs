@@ -19,7 +19,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Common
         // Aggregate ID (required for event sourcing)
         public abstract Guid Id { get; }
 
-        protected void AddDomainEvent(IDomainEvent domainEvent)
+        public void AddDomainEvent(IDomainEvent domainEvent)
         {
             _domainEvents.Add(domainEvent);
         }

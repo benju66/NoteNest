@@ -50,7 +50,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
         {
             return new TodoItem
             {
-                Id = aggregate.Id.Value,
+                Id = aggregate.Id,
                 Text = aggregate.Text.Value,
                 Description = aggregate.Description,
                 IsCompleted = aggregate.IsCompleted,

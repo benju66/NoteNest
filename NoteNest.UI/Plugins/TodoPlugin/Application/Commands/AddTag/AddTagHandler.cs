@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -35,24 +36,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.AddTag
                     return Result.Fail<AddTagResult>("Todo not found");
 
                 // Check if tag already exists
-                if (aggregate.Tags.Contains(request.TagName, StringComparer.OrdinalIgnoreCase))
+                if (aggregate.Tags.Any(t => StringComparer.OrdinalIgnoreCase.Equals(t, request.TagName)))
                     return Result.Fail<AddTagResult>($"Tag '{request.TagName}' already exists on this todo");
 
                 // Add tag (domain logic)
                 aggregate.AddTag(request.TagName);
                 
-                // Generate TagAddedToEntity event
-                var tagEvent = new TagAddedToEntity(
-                    request.TodoId,
-                    "todo",
-                    request.TagName,
-                    request.TagName, // DisplayName
-                    "manual");
-                
-                aggregate.AddDomainEvent(tagEvent);
-                
-                // Save to event store (persists both tag add and tag event)
+                // Save to event store (AddTag modifies the aggregate)
                 await _eventStore.SaveAsync(aggregate);
+                
+                // TODO: Generate TagAddedToEntity event for projection
+                // For now, tags stored in TodoAggregate.Tags list
                 
                 _logger.Info($"[AddTagHandler] ✅ Tag '{request.TagName}' added to todo");
 

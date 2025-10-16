@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -228,9 +229,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 
             try
             {
-                // ✨ CQRS: Delegate to TodoItemViewModel (it has the command logic)
-                // Or use command directly:
-                var todo = _todoStore.GetById(todoVm.Id);
+                // Query from projection
+                var todo = await _todoQueryService.GetByIdAsync(todoVm.Id);
                 if (todo != null)
                 {
                     var command = new Application.Commands.CompleteTodo.CompleteTodoCommand

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
@@ -55,12 +56,29 @@ namespace NoteNest.Infrastructure.EventStore
                 // Create schema from embedded resource
                 var schema = LoadSchemaFromResource();
                 
-                // Execute schema creation
+                // Split PRAGMA statements from CREATE statements
+                var lines = schema.Split('\n');
+                var pragmas = lines.Where(l => l.Trim().StartsWith("PRAGMA", StringComparison.OrdinalIgnoreCase)).ToList();
+                var createStatements = string.Join("\n", lines.Where(l => !l.Trim().StartsWith("PRAGMA", StringComparison.OrdinalIgnoreCase)));
+                
+                // Execute PRAGMA statements FIRST (outside transaction - WAL mode requires this)
+                foreach (var pragma in pragmas)
+                {
+                    if (!string.IsNullOrWhiteSpace(pragma) && !pragma.Trim().StartsWith("--"))
+                    {
+                        await connection.ExecuteAsync(pragma);
+                    }
+                }
+                
+                System.Console.WriteLine("   PRAGMA statements executed");
+                
+                // Execute CREATE statements in transaction
                 using var transaction = connection.BeginTransaction();
                 try
                 {
-                    await connection.ExecuteAsync(schema, transaction: transaction);
+                    await connection.ExecuteAsync(createStatements, transaction: transaction);
                     transaction.Commit();
+                    System.Console.WriteLine("   Schema created successfully");
                     _logger.Info("Event store database schema created successfully");
                 }
                 catch
@@ -73,6 +91,12 @@ namespace NoteNest.Infrastructure.EventStore
             }
             catch (Exception ex)
             {
+                System.Console.WriteLine($"❌ EventStore Init Exception: {ex.Message}");
+                System.Console.WriteLine($"   Type: {ex.GetType().Name}");
+                if (ex.InnerException != null)
+                {
+                    System.Console.WriteLine($"   Inner: {ex.InnerException.Message}");
+                }
                 _logger.Error("Failed to initialize event store database", ex);
                 return false;
             }

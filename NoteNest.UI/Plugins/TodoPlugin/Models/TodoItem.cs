@@ -88,7 +88,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Models
         {
             return new TodoItem
             {
-                Id = aggregate.Id.Value,
+                Id = aggregate.Id,
                 CategoryId = aggregate.CategoryId,
                 ParentId = aggregate.ParentId,
                 Text = aggregate.Text.Value,

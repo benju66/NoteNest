@@ -300,7 +300,7 @@ namespace NoteNest.UI.ViewModels.Categories
             SelectCommand = new RelayCommand(() => OnSelectionRequested());
         }
 
-        public string Id => _note.Id.Value;
+        public string Id => _note.NoteId.Value;
         public string Title => _note.Title;
         public string FilePath => _note.FilePath;
         public bool IsPinned => _note.IsPinned;

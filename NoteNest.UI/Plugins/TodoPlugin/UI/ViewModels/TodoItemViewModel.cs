@@ -41,8 +41,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             IAppLogger logger)
         {
             _todoItem = todoItem ?? throw new ArgumentNullException(nameof(todoItem));
-            _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
-            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
+            _todoStore = todoStore; // Can be null in event-sourced version
+            _todoTagRepository = todoTagRepository; // Can be null in event-sourced version
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
