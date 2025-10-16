@@ -38,7 +38,7 @@ namespace NoteNest.Infrastructure.EventStore
         
         public async Task SaveAsync(AggregateRoot aggregate, int expectedVersion)
         {
-            var events = aggregate.GetUncommittedEvents();
+            var events = aggregate.DomainEvents;
             if (!events.Any())
             {
                 _logger.Debug($"No uncommitted events for aggregate {aggregate.GetType().Name}");

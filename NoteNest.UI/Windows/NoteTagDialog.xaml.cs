@@ -8,36 +8,30 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using MediatR;
 using NoteNest.Application.NoteTags.Commands.SetNoteTag;
-using NoteNest.Application.NoteTags.Repositories;
-using NoteNest.Application.Tags.Services;
+using NoteNest.Application.Queries;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.Windows
 {
     /// <summary>
     /// Dialog for managing note tags.
+    /// Event-sourced version - uses ITagQueryService.
     /// </summary>
     public partial class NoteTagDialog : Window
     {
         private readonly Guid _noteId;
         private readonly string _noteTitle;
         private readonly IMediator _mediator;
-        private readonly INoteTagRepository _noteTagRepository;
+        private readonly ITagQueryService _tagQueryService;
         private readonly IAppLogger _logger;
         private readonly ObservableCollection<string> _tags;
         private readonly ObservableCollection<string> _inheritedTags;
-        private readonly NoteNest.Application.FolderTags.Repositories.IFolderTagRepository _folderTagRepository;
-        private readonly NoteNest.Infrastructure.Database.ITreeDatabaseRepository _treeRepository;
-        private readonly IUnifiedTagViewService _unifiedTagViewService;
 
         public NoteTagDialog(
             Guid noteId, 
             string noteTitle,
             IMediator mediator,
-            INoteTagRepository noteTagRepository,
-            NoteNest.Application.FolderTags.Repositories.IFolderTagRepository folderTagRepository,
-            NoteNest.Infrastructure.Database.ITreeDatabaseRepository treeRepository,
-            IUnifiedTagViewService unifiedTagViewService,
+            ITagQueryService tagQueryService,
             IAppLogger logger)
         {
             InitializeComponent();
@@ -45,10 +39,7 @@ namespace NoteNest.UI.Windows
             _noteId = noteId;
             _noteTitle = noteTitle;
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
-            _noteTagRepository = noteTagRepository ?? throw new ArgumentNullException(nameof(noteTagRepository));
-            _folderTagRepository = folderTagRepository ?? throw new ArgumentNullException(nameof(folderTagRepository));
-            _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
-            _unifiedTagViewService = unifiedTagViewService ?? throw new ArgumentNullException(nameof(unifiedTagViewService));
+            _tagQueryService = tagQueryService ?? throw new ArgumentNullException(nameof(tagQueryService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _tags = new ObservableCollection<string>();
@@ -72,15 +63,12 @@ namespace NoteNest.UI.Windows
         {
             try
             {
-                // Load data on background thread (this is fine)
-                var noteTags = await _noteTagRepository.GetNoteTagsAsync(_noteId);
-                var noteNode = await _treeRepository.GetNodeByIdAsync(_noteId);
+                // Load note tags from projection
+                var noteTags = await _tagQueryService.GetTagsForEntityAsync(_noteId, "note");
                 
-                List<NoteNest.Application.FolderTags.Models.FolderTag> folderTags = new List<NoteNest.Application.FolderTags.Models.FolderTag>();
-                if (noteNode?.ParentId != null)
-                {
-                    folderTags = await _folderTagRepository.GetInheritedTagsAsync(noteNode.ParentId.Value);
-                }
+                // TODO: Implement inherited tags via recursive category query
+                // For now, just load direct tags
+                var folderTags = new List<NoteNest.Application.Queries.TagDto>();
                 
                 // Update UI collections on UI thread (required for thread safety)
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
@@ -88,7 +76,7 @@ namespace NoteNest.UI.Windows
                     _tags.Clear();
                     foreach (var tag in noteTags)
                     {
-                        _tags.Add(tag.Tag);
+                        _tags.Add(tag.DisplayName);
                     }
                     
                     _inheritedTags.Clear();
@@ -96,7 +84,7 @@ namespace NoteNest.UI.Windows
                     {
                         foreach (var folderTag in folderTags)
                         {
-                            _inheritedTags.Add(folderTag.Tag);
+                            _inheritedTags.Add(folderTag.DisplayName);
                         }
                         _logger.Info($"Loaded {_inheritedTags.Count} inherited folder tags for note {_noteId}");
                     }

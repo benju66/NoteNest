@@ -19,6 +19,13 @@ namespace NoteNest.Console
                 await CheckTagMigration.RunAsync();
                 return;
             }
+            
+            if (args.Length > 0 && args[0].Equals("MigrateEventStore", StringComparison.OrdinalIgnoreCase))
+            {
+                var exitCode = await MigrationRunner.RunMigrationAsync();
+                Environment.Exit(exitCode);
+                return;
+            }
 
             System.Console.WriteLine("🚀 Testing Clean Architecture with CQRS...\n");
 

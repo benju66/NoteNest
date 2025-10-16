@@ -8,6 +8,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Queries
     /// <summary>
     /// Query service for todo projection.
     /// Provides optimized queries for todo data.
+    /// Uses SmartListType from Models namespace.
     /// </summary>
     public interface ITodoQueryService
     {
@@ -40,16 +41,6 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Queries
         /// Get all todos.
         /// </summary>
         Task<List<TodoItem>> GetAllAsync(bool includeCompleted = true);
-    }
-    
-    public enum SmartListType
-    {
-        All,
-        Today,
-        Overdue,
-        Upcoming,
-        Completed,
-        Favorite
     }
 }
 

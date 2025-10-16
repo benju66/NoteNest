@@ -376,22 +376,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                 
                 var app = (App)System.Windows.Application.Current;
                 var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
-                var todoTagRepo = app.ServiceProvider?.GetService<ITodoTagRepository>();
-                var unifiedTagViewService = app.ServiceProvider?.GetService<NoteNest.Application.Tags.Services.IUnifiedTagViewService>();
+                var tagQueryService = app.ServiceProvider?.GetService<NoteNest.Application.Queries.ITagQueryService>();
                 
-                if (mediator == null || todoTagRepo == null || unifiedTagViewService == null)
+                if (mediator == null || tagQueryService == null)
                 {
                     MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
                 
-                // Show full tag management dialog (consistent with folder/note dialogs)
+                // Show full tag management dialog (event-sourced version)
                 var dialog = new NoteNest.UI.Windows.TodoTagDialog(
                     todoVm.Id, 
                     todoVm.Text, 
                     mediator, 
-                    todoTagRepo, 
-                    unifiedTagViewService,
+                    tagQueryService,
                     _logger)
                 {
                     Owner = Window.GetWindow(this)
@@ -518,10 +516,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
 
                 var app = (App)System.Windows.Application.Current;
                 var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
-                var folderTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>();
-                var unifiedTagViewService = app.ServiceProvider?.GetService<NoteNest.Application.Tags.Services.IUnifiedTagViewService>();
+                var tagQueryService = app.ServiceProvider?.GetService<NoteNest.Application.Queries.ITagQueryService>();
 
-                if (mediator == null || folderTagRepo == null || unifiedTagViewService == null)
+                if (mediator == null || tagQueryService == null)
                 {
                     MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
@@ -531,8 +528,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                     category.CategoryId, 
                     category.DisplayPath, 
                     mediator, 
-                    folderTagRepo, 
-                    unifiedTagViewService,
+                    tagQueryService,
                     _logger)
                 {
                     Owner = Window.GetWindow(this)

@@ -273,7 +273,7 @@ namespace NoteNest.Infrastructure.Database.Services
                 
                 if (success)
                 {
-                    InvalidateCacheForNote(note.Id);
+                    InvalidateCacheForNote(note.NoteId);
                     InvalidateCacheForCategory(note.CategoryId);
                     _logger.Info($"Updated note in database: {note.Title}");
                     return Result.Ok();
@@ -366,7 +366,7 @@ namespace NoteNest.Infrastructure.Database.Services
                 var notesInCategory = await GetByCategoryAsync(categoryId);
                 return notesInCategory.Any(n => 
                     string.Equals(n.Title, title, StringComparison.OrdinalIgnoreCase) &&
-                    (excludeId == null || n.Id.Value != excludeId.Value));
+                    (excludeId == null || n.NoteId.Value != excludeId.Value));
             }
             catch (Exception ex)
             {
@@ -422,7 +422,7 @@ namespace NoteNest.Infrastructure.Database.Services
 
         private async Task<TreeNode> ConvertNoteToTreeNode(Note note)
         {
-            var noteGuid = Guid.TryParse(note.Id.Value, out var id) ? id : Guid.NewGuid();
+            var noteGuid = Guid.TryParse(note.NoteId.Value, out var id) ? id : Guid.NewGuid();
             var parentId = Guid.TryParse(note.CategoryId.Value, out var catGuid) ? (Guid?)catGuid : null;
 
             return TreeNode.CreateFromDatabase(

@@ -344,12 +344,10 @@ namespace NoteNest.UI.Composition
         /// </summary>
         private static IServiceCollection AddCleanViewModels(this IServiceCollection services)
         {
-            // Tree view (database-backed) - with expanded state persistence
+            // Tree view (event-sourced) - queries projections via ITreeQueryService
             services.AddTransient<CategoryTreeViewModel>(provider =>
                 new CategoryTreeViewModel(
-                    provider.GetRequiredService<ICategoryRepository>(),
-                    provider.GetRequiredService<INoteRepository>(),
-                    provider.GetRequiredService<ITreeRepository>(),
+                    provider.GetRequiredService<NoteNest.Application.Queries.ITreeQueryService>(),
                     provider.GetRequiredService<IAppLogger>()));
             
             // Search view (database-backed)
@@ -462,6 +460,11 @@ namespace NoteNest.UI.Composition
                     eventsConnectionString,
                     provider.GetRequiredService<IAppLogger>()));
             
+            services.AddSingleton<NoteNest.Infrastructure.Projections.ProjectionsInitializer>(provider =>
+                new NoteNest.Infrastructure.Projections.ProjectionsInitializer(
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
             services.AddSingleton<IEventStore>(provider =>
                 new NoteNest.Infrastructure.EventStore.SqliteEventStore(
                     eventsConnectionString,
@@ -509,14 +512,29 @@ namespace NoteNest.UI.Composition
                     await eventStoreInit.InitializeAsync();
                     logger.Info("✅ Event store initialized");
                     
-                    // Initialize projections database  
-                    // TODO: Create ProjectionsInitializer similar to EventStoreInitializer
-                    logger.Info("✅ Projections database ready");
+                    // Initialize projections database
+                    var projectionsInit = serviceProvider.GetRequiredService<NoteNest.Infrastructure.Projections.ProjectionsInitializer>();
+                    await projectionsInit.InitializeAsync();
+                    logger.Info("✅ Projections database initialized");
+                    
+                    // Verify projections health
+                    var isHealthy = await projectionsInit.IsHealthyAsync();
+                    if (!isHealthy)
+                    {
+                        logger.Warning("⚠️ Projections database health check failed");
+                    }
                     
                     // Start projection orchestrator catch-up
                     var orchestrator = serviceProvider.GetRequiredService<NoteNest.Infrastructure.Projections.ProjectionOrchestrator>();
                     await orchestrator.CatchUpAsync();
                     logger.Info("✅ Projections caught up with event stream");
+                    
+                    // Log projection stats
+                    var stats = await projectionsInit.GetStatsAsync();
+                    logger.Info($"📊 Projection Stats:");
+                    logger.Info($"   TreeView: {stats.TreeViewCount} nodes");
+                    logger.Info($"   Tags: {stats.TagVocabularyCount} unique, {stats.EntityTagsCount} associations");
+                    logger.Info($"   Todos: {stats.TodoViewCount} items");
                 }
                 catch (Exception ex)
                 {

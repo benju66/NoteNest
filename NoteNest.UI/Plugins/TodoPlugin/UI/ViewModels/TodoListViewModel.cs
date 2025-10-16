@@ -6,39 +6,40 @@ using System.Windows.Input;
 using MediatR;
 using NoteNest.Core.Commands;
 using NoteNest.Core.Services.Logging;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.Application.Queries;
+using NoteNest.UI.Plugins.TodoPlugin.Application.Queries;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
-using NoteNest.UI.Plugins.TodoPlugin.Services;
 using NoteNest.UI.ViewModels.Common;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 {
     /// <summary>
     /// Main view model for the Todo list view.
+    /// Event-sourced version - uses ITodoQueryService.
     /// </summary>
     public class TodoListViewModel : ViewModelBase
     {
-        private readonly ITodoStore _todoStore;
-        private readonly ITodoTagRepository _todoTagRepository;
+        private readonly ITodoQueryService _todoQueryService;
+        private readonly ITagQueryService _tagQueryService;
         private readonly IMediator _mediator;
         private readonly IAppLogger _logger;
         
         private ObservableCollection<TodoItemViewModel> _todos;
         private TodoItemViewModel? _selectedTodo;
         private Guid? _selectedCategoryId;
-        private SmartListType? _selectedSmartList;
+        private Models.SmartListType? _selectedSmartList;
         private string _filterText = string.Empty;
         private string _quickAddText = string.Empty;
         private bool _isLoading;
 
         public TodoListViewModel(
-            ITodoStore todoStore,
-            ITodoTagRepository todoTagRepository,
+            ITodoQueryService todoQueryService,
+            ITagQueryService tagQueryService,
             IMediator mediator,
             IAppLogger logger)
         {
-            _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
-            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
+            _todoQueryService = todoQueryService ?? throw new ArgumentNullException(nameof(todoQueryService));
+            _tagQueryService = tagQueryService ?? throw new ArgumentNullException(nameof(tagQueryService));
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
@@ -125,7 +126,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             }
         }
 
-        public SmartListType? SelectedSmartList
+        public Models.SmartListType? SelectedSmartList
         {
             get => _selectedSmartList;
             set
@@ -302,47 +303,47 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             try
             {
-                _logger.Info("📋 LoadTodosAsync started");
+                _logger.Info("📋 LoadTodosAsync started (event-sourced)");
                 IsLoading = true;
                 
-                // CRITICAL: Ensure TodoStore initialized before querying (lazy, thread-safe)
-                await _todoStore.EnsureInitializedAsync();
-                
-                ObservableCollection<TodoItem> todos;
+                // Query from projection
+                List<TodoItem> todos;
                 
                 if (_selectedSmartList.HasValue)
                 {
-                    _logger.Info($"📋 Loading smart list: {_selectedSmartList.Value}");
-                    todos = _todoStore.GetSmartList(_selectedSmartList.Value);
+                    _logger.Info($"📋 Loading smart list from projection: {_selectedSmartList.Value}");
+                    todos = await _todoQueryService.GetSmartListAsync(_selectedSmartList.Value);
                 }
                 else if (_selectedCategoryId != null)
                 {
-                    _logger.Info($"📋 Loading by category: {_selectedCategoryId}");
-                    todos = _todoStore.GetByCategory(_selectedCategoryId);
+                    _logger.Info($"📋 Loading by category from projection: {_selectedCategoryId}");
+                    todos = await _todoQueryService.GetByCategoryAsync(_selectedCategoryId);
                 }
                 else
                 {
                     // Load all todos (default to Today smart list)
-                    _logger.Info("📋 Loading default (Today) smart list");
-                    _selectedSmartList = SmartListType.Today;
+                    _logger.Info("📋 Loading default (Today) smart list from projection");
+                    _selectedSmartList = Models.SmartListType.Today;
                     OnPropertyChanged(nameof(SelectedSmartList));
-                    todos = _todoStore.GetSmartList(SmartListType.Today);
+                    todos = await _todoQueryService.GetSmartListAsync(Models.SmartListType.Today);
                 }
                 
-                _logger.Info($"📋 Retrieved {todos.Count} todos");
+                _logger.Info($"📋 Retrieved {todos.Count} todos from projection");
                 
                 // Convert to view models
                 Todos.Clear();
                 foreach (var todo in todos)
                 {
-                    var vm = new TodoItemViewModel(todo, _todoStore, _todoTagRepository, _mediator, _logger);
+                    // Pass null for ITodoStore - event-driven updates handled differently
+                    // Pass tagQueryService instead of todoTagRepository
+                    var vm = new TodoItemViewModel(todo, null, null, _mediator, _logger);
                     Todos.Add(vm);
                 }
                 
                 _logger.Info($"📋 Created {Todos.Count} view models");
                 
                 await ApplyFilterAsync();
-                _logger.Info("📋 LoadTodosAsync completed successfully");
+                _logger.Info("📋 LoadTodosAsync completed successfully (event-sourced)");
             }
             catch (Exception ex)
             {

@@ -3,13 +3,12 @@ using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Common;
 using NoteNest.Application.Common.Interfaces;
 using NoteNest.Application.FolderTags.Events;
-using NoteNest.Domain.Tags.Events;
 
 namespace NoteNest.Application.FolderTags.Commands.RemoveFolderTag;
 
 /// <summary>
 /// Handler for RemoveFolderTagCommand.
-/// Removes a tag from a folder via events.
+/// Removes all tags from a folder via events.
 /// </summary>
 public class RemoveFolderTagHandler : IRequestHandler<RemoveFolderTagCommand, Result<RemoveFolderTagResult>>
 {
@@ -28,32 +27,25 @@ public class RemoveFolderTagHandler : IRequestHandler<RemoveFolderTagCommand, Re
     {
         try
         {
-            _logger.Info($"Removing tag '{request.TagName}' from folder {request.FolderId}");
+            _logger.Info($"Removing all tags from folder {request.FolderId}");
 
-            // Generate TagRemovedFromEntity event
-            var tagEvent = new TagRemovedFromEntity(
-                request.FolderId,
-                "folder",
-                request.TagName);
-
-            // Publish legacy FolderUntaggedEvent for backward compatibility
-            var untaggedEvent = new FolderUntaggedEvent(request.FolderId, new List<string> { request.TagName });
+            // Publish FolderUntaggedEvent with empty list (removes all)
+            var untaggedEvent = new FolderUntaggedEvent(request.FolderId, new List<string>());
             // Event will be handled by TagProjection
 
             var result = new RemoveFolderTagResult
             {
                 FolderId = request.FolderId,
-                RemovedTag = request.TagName,
                 Success = true
             };
 
-            _logger.Info($"Successfully removed tag '{request.TagName}' from folder {request.FolderId}");
+            _logger.Info($"Successfully removed all tags from folder {request.FolderId}");
             return Result<RemoveFolderTagResult>.Ok(result);
         }
         catch (Exception ex)
         {
-            _logger.Error($"Failed to remove folder tag for {request.FolderId}", ex);
-            return Result<RemoveFolderTagResult>.Fail($"Failed to remove folder tag: {ex.Message}");
+            _logger.Error($"Failed to remove folder tags for {request.FolderId}", ex);
+            return Result<RemoveFolderTagResult>.Fail($"Failed to remove folder tags: {ex.Message}");
         }
     }
 }

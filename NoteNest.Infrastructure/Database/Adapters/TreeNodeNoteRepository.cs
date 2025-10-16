@@ -193,7 +193,7 @@ namespace NoteNest.Infrastructure.Database.Adapters
                 var notesInCategory = await GetByCategoryAsync(categoryId);
                 return notesInCategory.Any(n => 
                     string.Equals(n.Title, title, StringComparison.OrdinalIgnoreCase) &&
-                    (excludeId == null || n.Id.Value != excludeId.Value));
+                    (excludeId == null || n.NoteId.Value != excludeId.Value));
             }
             catch (Exception ex)
             {
@@ -252,7 +252,7 @@ namespace NoteNest.Infrastructure.Database.Adapters
         private async Task<TreeNode> ConvertNoteToTreeNode(Note note)
         {
             // If the note already exists as a TreeNode, get it first to preserve metadata
-            if (Guid.TryParse(note.Id.Value, out var existingGuid))
+            if (Guid.TryParse(note.NoteId.Value, out var existingGuid))
             {
                 var existingNode = await _treeRepository.GetNodeByIdAsync(existingGuid);
                 if (existingNode != null)
@@ -291,7 +291,7 @@ namespace NoteNest.Infrastructure.Database.Adapters
             }
 
             // Create new TreeNode
-            var newGuid = Guid.TryParse(note.Id.Value, out var noteGuid) ? noteGuid : Guid.NewGuid();
+            var newGuid = Guid.TryParse(note.NoteId.Value, out var noteGuid) ? noteGuid : Guid.NewGuid();
             var parentId = Guid.TryParse(note.CategoryId.Value, out var catGuid) ? (Guid?)catGuid : null;
 
             var newNode = TreeNode.CreateFromDatabase(

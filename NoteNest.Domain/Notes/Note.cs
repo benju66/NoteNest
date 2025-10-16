@@ -135,6 +135,11 @@ namespace NoteNest.Domain.Notes
             }
         }
         
+        public void Delete()
+        {
+            AddDomainEvent(new NoteDeletedEvent(NoteId, CategoryId));
+        }
+        
         /// <summary>
         /// Apply event to rebuild aggregate state from event stream.
         /// </summary>

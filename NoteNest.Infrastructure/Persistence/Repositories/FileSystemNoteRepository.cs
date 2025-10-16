@@ -169,17 +169,17 @@ namespace NoteNest.Infrastructure.Persistence.Repositories
             try
             {
                 var metadata = MapToMetadata(note);
-                var metadataFile = Path.Combine(_metadataPath, $"{note.Id.Value}.json");
+                var metadataFile = Path.Combine(_metadataPath, $"{note.NoteId.Value}.json");
                 
                 var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
                 await File.WriteAllTextAsync(metadataFile, json);
                 
-                _logger.Debug($"Created note metadata: {note.Id.Value}");
+                _logger.Debug($"Created note metadata: {note.NoteId.Value}");
                 return Result.Ok();
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Failed to create note {note.Id.Value}");
+                _logger.Error(ex, $"Failed to create note {note.NoteId.Value}");
                 return Result.Fail($"Failed to create note: {ex.Message}");
             }
         }
@@ -189,17 +189,17 @@ namespace NoteNest.Infrastructure.Persistence.Repositories
             try
             {
                 var metadata = MapToMetadata(note);
-                var metadataFile = Path.Combine(_metadataPath, $"{note.Id.Value}.json");
+                var metadataFile = Path.Combine(_metadataPath, $"{note.NoteId.Value}.json");
                 
                 var json = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
                 await File.WriteAllTextAsync(metadataFile, json);
                 
-                _logger.Debug($"Updated note metadata: {note.Id.Value}");
+                _logger.Debug($"Updated note metadata: {note.NoteId.Value}");
                 return Result.Ok();
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Failed to update note {note.Id.Value}");
+                _logger.Error(ex, $"Failed to update note {note.NoteId.Value}");
                 return Result.Fail($"Failed to update note: {ex.Message}");
             }
         }
@@ -260,7 +260,7 @@ namespace NoteNest.Infrastructure.Persistence.Repositories
         {
             return new NoteMetadata
             {
-                Id = note.Id.Value,
+                Id = note.NoteId.Value,
                 CategoryId = note.CategoryId.Value,
                 Title = note.Title,
                 Content = note.Content,

@@ -57,13 +57,13 @@ namespace NoteNest.Infrastructure.Plugins
             if (plugin == null)
                 return Result.Fail("Plugin cannot be null");
 
-            if (_plugins.ContainsKey(plugin.Id.Value))
+            if (_plugins.ContainsKey(plugin.PluginId.Value))
             {
-                return Result.Fail($"Plugin already exists: {plugin.Id.Value}");
+                return Result.Fail($"Plugin already exists: {plugin.PluginId.Value}");
             }
 
-            _plugins[plugin.Id.Value] = plugin;
-            _logger.Info($"Added plugin to repository: {plugin.Id.Value}");
+            _plugins[plugin.PluginId.Value] = plugin;
+            _logger.Info($"Added plugin to repository: {plugin.PluginId.Value}");
             
             return Result.Ok();
         }
@@ -75,13 +75,13 @@ namespace NoteNest.Infrastructure.Plugins
             if (plugin == null)
                 return Result.Fail("Plugin cannot be null");
 
-            if (!_plugins.ContainsKey(plugin.Id.Value))
+            if (!_plugins.ContainsKey(plugin.PluginId.Value))
             {
-                return Result.Fail($"Plugin not found: {plugin.Id.Value}");
+                return Result.Fail($"Plugin not found: {plugin.PluginId.Value}");
             }
 
-            _plugins[plugin.Id.Value] = plugin;
-            _logger.Debug($"Updated plugin in repository: {plugin.Id.Value}");
+            _plugins[plugin.PluginId.Value] = plugin;
+            _logger.Debug($"Updated plugin in repository: {plugin.PluginId.Value}");
             
             return Result.Ok();
         }

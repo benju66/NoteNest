@@ -80,7 +80,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
             }
         }
 
-        public async Task<List<TodoItem>> GetSmartListAsync(SmartListType type)
+        public async Task<List<TodoItem>> GetSmartListAsync(Models.SmartListType type)
         {
             try
             {
@@ -92,19 +92,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
 
                 var sql = type switch
                 {
-                    SmartListType.Today => 
+                    Models.SmartListType.Today => 
                         $"SELECT * FROM todo_view WHERE is_completed = 0 AND (due_date IS NULL OR due_date <= {todayEnd}) ORDER BY priority DESC, due_date",
                     
-                    SmartListType.Overdue => 
+                    Models.SmartListType.Overdue => 
                         $"SELECT * FROM todo_view WHERE is_completed = 0 AND due_date < {now} ORDER BY due_date",
                     
-                    SmartListType.Upcoming => 
+                    Models.SmartListType.Upcoming => 
                         $"SELECT * FROM todo_view WHERE is_completed = 0 AND due_date > {todayEnd} ORDER BY due_date LIMIT 50",
                     
-                    SmartListType.Completed => 
+                    Models.SmartListType.Completed => 
                         "SELECT * FROM todo_view WHERE is_completed = 1 ORDER BY completed_date DESC LIMIT 100",
                     
-                    SmartListType.Favorite => 
+                    Models.SmartListType.Favorite => 
                         "SELECT * FROM todo_view WHERE is_favorite = 1 AND is_completed = 0 ORDER BY priority DESC, due_date",
                     
                     _ => "SELECT * FROM todo_view WHERE is_completed = 0 ORDER BY sort_order, created_at"

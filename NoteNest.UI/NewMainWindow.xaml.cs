@@ -365,17 +365,16 @@ namespace NoteNest.UI
 
                 var app = (App)System.Windows.Application.Current;
                 var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
-                var folderTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>();
-                var unifiedTagViewService = app.ServiceProvider?.GetService<NoteNest.Application.Tags.Services.IUnifiedTagViewService>();
+                var tagQueryService = app.ServiceProvider?.GetService<NoteNest.Application.Queries.ITagQueryService>();
                 var logger = app.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
 
-                if (mediator == null || folderTagRepo == null || unifiedTagViewService == null || logger == null)
+                if (mediator == null || tagQueryService == null || logger == null)
                 {
                     MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
-                var dialog = new FolderTagDialog(Guid.Parse(category.Id), category.BreadcrumbPath, mediator, folderTagRepo, unifiedTagViewService, logger)
+                var dialog = new FolderTagDialog(Guid.Parse(category.Id), category.BreadcrumbPath, mediator, tagQueryService, logger)
                 {
                     Owner = this
                 };
@@ -451,19 +450,16 @@ namespace NoteNest.UI
 
                 var app = (App)System.Windows.Application.Current;
                 var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
-                var noteTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.NoteTags.Repositories.INoteTagRepository>();
-                var folderTagRepo = app.ServiceProvider?.GetService<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>();
-                var treeRepo = app.ServiceProvider?.GetService<NoteNest.Infrastructure.Database.ITreeDatabaseRepository>();
-                var unifiedTagViewService = app.ServiceProvider?.GetService<NoteNest.Application.Tags.Services.IUnifiedTagViewService>();
+                var tagQueryService = app.ServiceProvider?.GetService<NoteNest.Application.Queries.ITagQueryService>();
                 var logger = app.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
 
-                if (mediator == null || noteTagRepo == null || folderTagRepo == null || treeRepo == null || unifiedTagViewService == null || logger == null)
+                if (mediator == null || tagQueryService == null || logger == null)
                 {
                     MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
-                var dialog = new NoteTagDialog(Guid.Parse(note.Id), note.Title, mediator, noteTagRepo, folderTagRepo, treeRepo, unifiedTagViewService, logger)
+                var dialog = new NoteTagDialog(Guid.Parse(note.Id), note.Title, mediator, tagQueryService, logger)
                 {
                     Owner = this
                 };

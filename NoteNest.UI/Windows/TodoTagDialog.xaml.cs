@@ -8,22 +8,21 @@ using System.Windows.Input;
 using MediatR;
 using NoteNest.UI.Plugins.TodoPlugin.Application.Commands.AddTag;
 using NoteNest.UI.Plugins.TodoPlugin.Application.Commands.RemoveTag;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
-using NoteNest.Application.Tags.Services;
+using NoteNest.Application.Queries;
 using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.Windows
 {
     /// <summary>
     /// Dialog for managing todo tags (both auto and manual).
+    /// Event-sourced version - uses ITagQueryService.
     /// </summary>
     public partial class TodoTagDialog : Window
     {
         private readonly Guid _todoId;
         private readonly string _todoText;
         private readonly IMediator _mediator;
-        private readonly ITodoTagRepository _todoTagRepository;
-        private readonly IUnifiedTagViewService _unifiedTagViewService;
+        private readonly ITagQueryService _tagQueryService;
         private readonly IAppLogger _logger;
         private readonly ObservableCollection<string> _autoTags;
         private readonly ObservableCollection<string> _manualTags;
@@ -32,8 +31,7 @@ namespace NoteNest.UI.Windows
             Guid todoId, 
             string todoText,
             IMediator mediator,
-            ITodoTagRepository todoTagRepository,
-            IUnifiedTagViewService unifiedTagViewService,
+            ITagQueryService tagQueryService,
             IAppLogger logger)
         {
             InitializeComponent();
@@ -41,8 +39,7 @@ namespace NoteNest.UI.Windows
             _todoId = todoId;
             _todoText = todoText;
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
-            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
-            _unifiedTagViewService = unifiedTagViewService ?? throw new ArgumentNullException(nameof(unifiedTagViewService));
+            _tagQueryService = tagQueryService ?? throw new ArgumentNullException(nameof(tagQueryService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _autoTags = new ObservableCollection<string>();
@@ -66,8 +63,8 @@ namespace NoteNest.UI.Windows
         {
             try
             {
-                // Load data on background thread (this is fine)
-                var allTags = await _todoTagRepository.GetByTodoIdAsync(_todoId);
+                // Load todo tags from projection
+                var allTags = await _tagQueryService.GetTagsForEntityAsync(_todoId, "todo");
                 
                 // Update UI collections on UI thread (required for thread safety)
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
@@ -77,13 +74,14 @@ namespace NoteNest.UI.Windows
                     
                     foreach (var tag in allTags)
                     {
-                        if (tag.IsAuto)
+                        // Auto tags have source != "manual"
+                        if (tag.Source != "manual")
                         {
-                            _autoTags.Add(tag.Tag);
+                            _autoTags.Add(tag.DisplayName);
                         }
                         else
                         {
-                            _manualTags.Add(tag.Tag);
+                            _manualTags.Add(tag.DisplayName);
                         }
                     }
                 });

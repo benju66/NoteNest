@@ -32,8 +32,8 @@ namespace NoteNest.Application.Notes.Commands.DeleteNote
             var noteTitle = note.Title;
             var filePath = note.FilePath;
 
-            // Raise deletion event
-            note.AddDomainEvent(new NoteNest.Domain.Notes.Events.NoteDeletedEvent(noteId, note.CategoryId));
+            // Delete note (domain logic raises NoteDeletedEvent)
+            note.Delete();
             
             // Save to event store (persists deletion event)
             await _eventStore.SaveAsync(note);

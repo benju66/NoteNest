@@ -6,8 +6,9 @@ using System.Threading.Tasks;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using MediatR;
-using NoteNest.Application.Common.Interfaces;
+using NoteNest.Application.Queries;
 using NoteNest.Domain.Categories;
+using NoteNest.Domain.Trees;
 using NoteNest.UI.ViewModels.Common;
 using NoteNest.UI.Controls;
 using NoteNest.UI.Collections;
@@ -15,11 +16,13 @@ using NoteNest.Core.Services.Logging;
 
 namespace NoteNest.UI.ViewModels.Categories
 {
+    /// <summary>
+    /// Category tree view model - Event-sourced version.
+    /// Uses ITreeQueryService to read from projections.
+    /// </summary>
     public class CategoryTreeViewModel : ViewModelBase, IDisposable
     {
-        private readonly ICategoryRepository _categoryRepository;
-        private readonly INoteRepository _noteRepository;
-        private readonly ITreeRepository _treeRepository;
+        private readonly ITreeQueryService _treeQueryService;
         private readonly IAppLogger _logger;
         private CategoryViewModel _selectedCategory;
         private NoteItemViewModel _selectedNote;
@@ -37,14 +40,10 @@ namespace NoteNest.UI.ViewModels.Categories
         private TreeViewDragHandler _dragHandler;
 
         public CategoryTreeViewModel(
-            ICategoryRepository categoryRepository, 
-            INoteRepository noteRepository,
-            ITreeRepository treeRepository,
+            ITreeQueryService treeQueryService,
             IAppLogger logger)
         {
-            _categoryRepository = categoryRepository;
-            _noteRepository = noteRepository;
-            _treeRepository = treeRepository;
+            _treeQueryService = treeQueryService;
             _logger = logger;
             
             Categories = new SmartObservableCollection<CategoryViewModel>();
@@ -306,7 +305,7 @@ namespace NoteNest.UI.ViewModels.Categories
             try
             {
                 IsLoading = true;
-                _logger.Info("Loading categories from repository...");
+                _logger.Info("Loading categories from projection...");
                 
                 // Retry mechanism for database initialization timing issues
                 var maxRetries = 3;
@@ -317,17 +316,24 @@ namespace NoteNest.UI.ViewModels.Categories
                 {
                     try
                     {
-                        var allCategories = await _categoryRepository.GetAllAsync();
-                        var rootCategories = await _categoryRepository.GetRootCategoriesAsync();
+                        // Load from event-sourced projection
+                        var allNodes = await _treeQueryService.GetAllNodesAsync();
+                        var categoryNodes = allNodes.Where(n => n.NodeType == TreeNodeType.Category).ToList();
+                        var rootNodes = await _treeQueryService.GetRootNodesAsync();
+                        var rootCategories = rootNodes.Where(n => n.NodeType == TreeNodeType.Category).ToList();
                         
-                        // If we get here successfully, continue with normal processing
-                        await ProcessLoadedCategories(allCategories, rootCategories);
+                        // Convert TreeNodes to Category domain objects
+                        var allCategories = categoryNodes.Select(ConvertTreeNodeToCategory).Where(c => c != null).ToList();
+                        var rootCategoryList = rootCategories.Select(ConvertTreeNodeToCategory).Where(c => c != null).ToList();
+                        
+                        // Process with existing logic
+                        await ProcessLoadedCategories(allCategories, rootCategoryList);
                         return; // Success - exit retry loop
                     }
                     catch (Microsoft.Data.Sqlite.SqliteException ex) when (ex.Message.Contains("no such table"))
                     {
                         lastException = ex;
-                        _logger.Warning($"Database not ready on attempt {attempt}/{maxRetries}, retrying in {retryDelay.TotalSeconds}s...");
+                        _logger.Warning($"Projection database not ready on attempt {attempt}/{maxRetries}, retrying in {retryDelay.TotalSeconds}s...");
                         
                         if (attempt < maxRetries)
                         {
@@ -341,7 +347,7 @@ namespace NoteNest.UI.ViewModels.Categories
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to load categories");
+                _logger.Error(ex, "Failed to load categories from projection");
             }
             finally
             {
@@ -365,7 +371,8 @@ namespace NoteNest.UI.ViewModels.Categories
                     
                     foreach (var category in rootCategories)
                     {
-                        var categoryViewModel = new CategoryViewModel(category, _noteRepository, this, _logger);
+                        // Pass null for INoteRepository - note loading will be added later via query service
+                        var categoryViewModel = new CategoryViewModel(category, null, this, _logger);
                         
                         // Wire up note events to bubble up
                         categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
@@ -397,7 +404,8 @@ namespace NoteNest.UI.ViewModels.Categories
             
             foreach (var child in children)
             {
-                var childViewModel = new CategoryViewModel(child, _noteRepository, this, _logger);
+                // Pass null for INoteRepository - note loading via query service will be added later
+                var childViewModel = new CategoryViewModel(child, null, this, _logger);
                 
                 // Wire up note events for child categories too
                 childViewModel.NoteOpenRequested += OnNoteOpenRequested;
@@ -812,6 +820,33 @@ namespace NoteNest.UI.ViewModels.Categories
             }
 
             return null;
+        }
+        
+        /// <summary>
+        /// Convert TreeNode from projection to Category domain object.
+        /// </summary>
+        private Category ConvertTreeNodeToCategory(TreeNode treeNode)
+        {
+            if (treeNode?.NodeType != TreeNodeType.Category)
+                return null;
+
+            try
+            {
+                var categoryId = CategoryId.From(treeNode.Id.ToString());
+                var parentId = treeNode.ParentId.HasValue 
+                    ? CategoryId.From(treeNode.ParentId.Value.ToString())
+                    : null;
+
+                // Use the absolute path from tree node as the category path
+                var path = treeNode.AbsolutePath ?? treeNode.DisplayPath;
+
+                return new Category(categoryId, treeNode.Name, path, parentId);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to convert TreeNode to Category: {treeNode.Name}");
+                return null;
+            }
         }
     }
 }
