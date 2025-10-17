@@ -38,4 +38,9 @@ namespace NoteNest.Domain.Notes.Events
     {
         public DateTime OccurredAt { get; } = DateTime.UtcNow;
     }
+
+    public record NoteTagsSet(NoteId NoteId, List<string> Tags) : IDomainEvent
+    {
+        public DateTime OccurredAt { get; } = DateTime.UtcNow;
+    }
 }

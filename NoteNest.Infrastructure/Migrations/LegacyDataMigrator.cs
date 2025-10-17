@@ -126,34 +126,71 @@ namespace NoteNest.Infrastructure.Migrations
                 
                 _logger.Info($"✅ Migrated {notes.Count} notes");
 
-                // Tags third
-                foreach (var tag in folderTags)
+                // Tags third - Group folder tags by folder and set them on CategoryAggregate
+                _logger.Info("📖 Migrating folder tags...");
+                var folderTagGroups = folderTags.GroupBy(t => t.FolderId).ToList();
+                foreach (var group in folderTagGroups)
                 {
-                    var tagEvent = new TagAddedToEntity(
-                        tag.FolderId,
-                        "folder",
-                        tag.Tag,
-                        tag.Tag,
-                        "manual");
-                    
-                    // Generate a simple aggregate to carry the event
-                    // TODO: This is a workaround - in future, tags should be on Category aggregate
-                    eventCount++;
+                    try
+                    {
+                        var folderId = group.Key;
+                        var tags = group.Select(t => t.Tag).Distinct().ToList();
+                        
+                        // Load category aggregate
+                        var categoryAggregate = await _eventStore.LoadAsync<Domain.Categories.CategoryAggregate>(folderId);
+                        if (categoryAggregate == null)
+                        {
+                            _logger.Warning($"Category {folderId} not found, skipping tags");
+                            continue;
+                        }
+                        
+                        // Set tags (generates CategoryTagsSet event)
+                        categoryAggregate.SetTags(tags, true);
+                        
+                        // Save to event store
+                        await _eventStore.SaveAsync(categoryAggregate);
+                        eventCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error($"Failed to migrate tags for folder {group.Key}: {ex.Message}");
+                    }
                 }
                 
-                foreach (var tag in noteTags)
+                _logger.Info($"✅ Migrated {folderTagGroups.Count} folder tag sets");
+                
+                // Note tags - Group by note and set them on Note aggregate
+                _logger.Info("📖 Migrating note tags...");
+                var noteTagGroups = noteTags.GroupBy(t => t.NoteId).ToList();
+                foreach (var group in noteTagGroups)
                 {
-                    var tagEvent = new TagAddedToEntity(
-                        tag.NoteId,
-                        "note",
-                        tag.Tag,
-                        tag.Tag,
-                        "manual");
-                    
-                    eventCount++;
+                    try
+                    {
+                        var noteId = group.Key;
+                        var tags = group.Select(t => t.Tag).Distinct().ToList();
+                        
+                        // Load note aggregate
+                        var noteAggregate = await _eventStore.LoadAsync<Domain.Notes.Note>(noteId);
+                        if (noteAggregate == null)
+                        {
+                            _logger.Warning($"Note {noteId} not found, skipping tags");
+                            continue;
+                        }
+                        
+                        // Set tags (generates NoteTagsSet event)
+                        noteAggregate.SetTags(tags);
+                        
+                        // Save to event store
+                        await _eventStore.SaveAsync(noteAggregate);
+                        eventCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error($"Failed to migrate tags for note {group.Key}: {ex.Message}");
+                    }
                 }
                 
-                _logger.Info($"✅ Generated {folderTags.Count + noteTags.Count} tag events");
+                _logger.Info($"✅ Migrated {noteTagGroups.Count} note tag sets");
 
                 // TODO: Todo migration
                 // Todos are handled by TodoPlugin's own migration

@@ -490,6 +490,10 @@ namespace NoteNest.UI.Composition
                     provider.GetServices<NoteNest.Application.Projections.IProjection>(),
                     provider.GetRequiredService<NoteNest.Infrastructure.EventStore.IEventSerializer>(),
                     provider.GetRequiredService<IAppLogger>()));
+                    
+            // Register interface that maps to concrete implementation (for Clean Architecture)
+            services.AddSingleton<NoteNest.Application.Common.Interfaces.IProjectionOrchestrator>(provider =>
+                provider.GetRequiredService<NoteNest.Infrastructure.Projections.ProjectionOrchestrator>());
             
             // Background service for continuous projection updates (safety net)
             services.AddHostedService<NoteNest.Infrastructure.Projections.ProjectionHostedService>();

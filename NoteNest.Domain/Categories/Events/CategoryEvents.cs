@@ -36,5 +36,10 @@ namespace NoteNest.Domain.Categories.Events
     {
         public DateTime OccurredAt { get; } = DateTime.UtcNow;
     }
+    
+    public record CategoryTagsSet(Guid CategoryId, List<string> Tags, bool InheritToChildren) : IDomainEvent
+    {
+        public DateTime OccurredAt { get; } = DateTime.UtcNow;
+    }
 }
 

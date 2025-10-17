@@ -110,6 +110,12 @@ namespace NoteNest.Infrastructure.Repositories
             {
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
+                
+                // CRITICAL: Disable foreign keys temporarily
+                // Folder IDs come from projections.db but folder_tags is in tree.db
+                // After migration, categories only exist in projections, not tree.db
+                await connection.ExecuteAsync("PRAGMA foreign_keys = OFF", transaction: null);
+                
                 using var transaction = connection.BeginTransaction();
 
                 try
@@ -145,6 +151,11 @@ namespace NoteNest.Infrastructure.Repositories
                 {
                     transaction.Rollback();
                     throw;
+                }
+                finally
+                {
+                    // Re-enable foreign keys
+                    await connection.ExecuteAsync("PRAGMA foreign_keys = ON", transaction: null);
                 }
             }
             catch (Exception ex)

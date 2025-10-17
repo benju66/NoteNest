@@ -5,6 +5,8 @@ using Dapper;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Common;
 using NoteNest.Domain.Tags.Events;
+using NoteNest.Domain.Categories.Events;
+using NoteNest.Domain.Notes.Events;
 using NoteNest.Application.FolderTags.Events;
 using NoteNest.Application.NoteTags.Events;
 
@@ -74,6 +76,16 @@ namespace NoteNest.Infrastructure.Projections
                     
                 case NoteUntaggedEvent e:
                     await HandleNoteUntaggedAsync(e);
+                    break;
+                    
+                // NEW: Event-sourced category tags
+                case CategoryTagsSet e:
+                    await HandleCategoryTagsSetAsync(e);
+                    break;
+                    
+                // NEW: Event-sourced note tags
+                case NoteTagsSet e:
+                    await HandleNoteTagsSetAsync(e);
                     break;
             }
         }
@@ -223,7 +235,7 @@ namespace NoteNest.Infrastructure.Projections
             
             // First, remove all existing tags for this folder
             await connection.ExecuteAsync(
-                "DELETE FROM entity_tags WHERE entity_id = @EntityId AND entity_type = 'folder'",
+                "DELETE FROM entity_tags WHERE entity_id = @EntityId AND entity_type = 'category'",
                 new { EntityId = e.FolderId.ToString() });
             
             // Add new tags
@@ -249,7 +261,7 @@ namespace NoteNest.Infrastructure.Projections
                     new
                     {
                         EntityId = e.FolderId.ToString(),
-                        EntityType = "folder",
+                        EntityType = "category",
                         Tag = tag.ToLowerInvariant(),
                         DisplayName = tag,
                         Source = "manual",
@@ -371,6 +383,118 @@ namespace NoteNest.Infrastructure.Projections
             }
             
             _logger.Debug($"[{Name}] Note untagged: {e.NoteId}, removed {e.RemovedTags.Count} tags");
+        }
+        
+        // =============================================================================
+        // NEW EVENT-SOURCED TAG HANDLERS
+        // =============================================================================
+        
+        private async Task HandleCategoryTagsSetAsync(CategoryTagsSet e)
+        {
+            using var connection = await OpenConnectionAsync();
+            
+            // First, remove all existing tags for this category
+            await connection.ExecuteAsync(
+                "DELETE FROM entity_tags WHERE entity_id = @EntityId AND entity_type = 'category'",
+                new { EntityId = e.CategoryId.ToString() });
+            
+            // Add new tags
+            foreach (var tag in e.Tags)
+            {
+                // Ensure tag in vocabulary
+                await connection.ExecuteAsync(
+                    @"INSERT OR IGNORE INTO tag_vocabulary 
+                      (tag, display_name, usage_count, first_used_at, last_used_at)
+                      VALUES (@Tag, @DisplayName, 0, @CreatedAt, @CreatedAt)",
+                    new
+                    {
+                        Tag = tag.ToLowerInvariant(),
+                        DisplayName = tag,
+                        CreatedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
+                    });
+                
+                // Add to entity_tags
+                await connection.ExecuteAsync(
+                    @"INSERT OR REPLACE INTO entity_tags 
+                      (entity_id, entity_type, tag, display_name, source, created_at)
+                      VALUES (@EntityId, @EntityType, @Tag, @DisplayName, @Source, @CreatedAt)",
+                    new
+                    {
+                        EntityId = e.CategoryId.ToString(),
+                        EntityType = "category",
+                        Tag = tag.ToLowerInvariant(),
+                        DisplayName = tag,
+                        Source = "manual",
+                        CreatedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
+                    });
+                
+                // Increment usage
+                await connection.ExecuteAsync(
+                    @"UPDATE tag_vocabulary 
+                      SET usage_count = usage_count + 1, last_used_at = @LastUsedAt
+                      WHERE tag = @Tag",
+                    new
+                    {
+                        Tag = tag.ToLowerInvariant(),
+                        LastUsedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
+                    });
+            }
+            
+            _logger.Debug($"[{Name}] ✅ Category tags set: {e.CategoryId} with {e.Tags.Count} tags (event-sourced)");
+        }
+        
+        private async Task HandleNoteTagsSetAsync(NoteTagsSet e)
+        {
+            using var connection = await OpenConnectionAsync();
+            
+            // First, remove all existing tags for this note
+            await connection.ExecuteAsync(
+                "DELETE FROM entity_tags WHERE entity_id = @EntityId AND entity_type = 'note'",
+                new { EntityId = e.NoteId.Value });
+            
+            // Add new tags
+            foreach (var tag in e.Tags)
+            {
+                // Ensure tag in vocabulary
+                await connection.ExecuteAsync(
+                    @"INSERT OR IGNORE INTO tag_vocabulary 
+                      (tag, display_name, usage_count, first_used_at, last_used_at)
+                      VALUES (@Tag, @DisplayName, 0, @CreatedAt, @CreatedAt)",
+                    new
+                    {
+                        Tag = tag.ToLowerInvariant(),
+                        DisplayName = tag,
+                        CreatedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
+                    });
+                
+                // Add to entity_tags
+                await connection.ExecuteAsync(
+                    @"INSERT OR REPLACE INTO entity_tags 
+                      (entity_id, entity_type, tag, display_name, source, created_at)
+                      VALUES (@EntityId, @EntityType, @Tag, @DisplayName, @Source, @CreatedAt)",
+                    new
+                    {
+                        EntityId = e.NoteId.Value,
+                        EntityType = "note",
+                        Tag = tag.ToLowerInvariant(),
+                        DisplayName = tag,
+                        Source = "manual",
+                        CreatedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
+                    });
+                
+                // Increment usage
+                await connection.ExecuteAsync(
+                    @"UPDATE tag_vocabulary 
+                      SET usage_count = usage_count + 1, last_used_at = @LastUsedAt
+                      WHERE tag = @Tag",
+                    new
+                    {
+                        Tag = tag.ToLowerInvariant(),
+                        LastUsedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
+                    });
+            }
+            
+            _logger.Debug($"[{Name}] ✅ Note tags set: {e.NoteId} with {e.Tags.Count} tags (event-sourced)");
         }
     }
 }

@@ -15,6 +15,7 @@ namespace NoteNest.Domain.Notes
         public string FilePath { get; private set; }
         public bool IsPinned { get; private set; }
         public int Position { get; private set; }
+        public List<string> Tags { get; private set; } = new List<string>();
 
         public Note() { } // Public for event sourcing
 
@@ -164,6 +165,26 @@ namespace NoteNest.Domain.Notes
         }
         
         /// <summary>
+        /// Set tags for this note.
+        /// </summary>
+        /// <param name="tags">List of tag names to set</param>
+        public void SetTags(List<string> tags)
+        {
+            if (tags == null)
+                tags = new List<string>();
+                
+            AddDomainEvent(new NoteTagsSet(NoteId, tags));
+        }
+        
+        /// <summary>
+        /// Clear all tags from this note.
+        /// </summary>
+        public void ClearTags()
+        {
+            AddDomainEvent(new NoteTagsSet(NoteId, new List<string>()));
+        }
+        
+        /// <summary>
         /// Apply event to rebuild aggregate state from event stream.
         /// </summary>
         public override void Apply(IDomainEvent @event)
@@ -200,6 +221,11 @@ namespace NoteNest.Domain.Notes
                     
                 case NoteUnpinnedEvent e:
                     IsPinned = false;
+                    break;
+                    
+                case NoteTagsSet e:
+                    Tags = e.Tags?.ToList() ?? new List<string>();
+                    UpdatedAt = e.OccurredAt;
                     break;
             }
         }

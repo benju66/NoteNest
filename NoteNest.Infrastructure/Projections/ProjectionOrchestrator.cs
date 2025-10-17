@@ -14,7 +14,7 @@ namespace NoteNest.Infrastructure.Projections
     /// Orchestrates projection updates from event store.
     /// Handles catch-up, rebuilds, and real-time updates.
     /// </summary>
-    public class ProjectionOrchestrator
+    public class ProjectionOrchestrator : IProjectionOrchestrator
     {
         private readonly IEventStore _eventStore;
         private readonly IEnumerable<IProjection> _projections;

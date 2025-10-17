@@ -18,6 +18,8 @@ namespace NoteNest.Domain.Categories
         public string Path { get; private set; }
         public bool IsPinned { get; private set; }
         public int SortOrder { get; private set; }
+        public List<string> Tags { get; private set; } = new List<string>();
+        public bool InheritTagsToChildren { get; private set; } = true;
         
         public CategoryAggregate() { } // Public for event sourcing
         
@@ -104,6 +106,27 @@ namespace NoteNest.Domain.Categories
         }
         
         /// <summary>
+        /// Set tags for this category.
+        /// </summary>
+        /// <param name="tags">List of tag names to set</param>
+        /// <param name="inheritToChildren">Whether child items should inherit these tags</param>
+        public void SetTags(List<string> tags, bool inheritToChildren = true)
+        {
+            if (tags == null)
+                tags = new List<string>();
+                
+            AddDomainEvent(new CategoryTagsSet(CategoryId, tags, inheritToChildren));
+        }
+        
+        /// <summary>
+        /// Clear all tags from this category.
+        /// </summary>
+        public void ClearTags()
+        {
+            AddDomainEvent(new CategoryTagsSet(CategoryId, new List<string>(), InheritTagsToChildren));
+        }
+        
+        /// <summary>
         /// Apply event to rebuild aggregate state from event stream.
         /// </summary>
         public override void Apply(IDomainEvent @event)
@@ -141,6 +164,12 @@ namespace NoteNest.Domain.Categories
                     
                 case CategoryUnpinned e:
                     IsPinned = false;
+                    break;
+                    
+                case CategoryTagsSet e:
+                    Tags = e.Tags?.ToList() ?? new List<string>();
+                    InheritTagsToChildren = e.InheritToChildren;
+                    UpdatedAt = e.OccurredAt;
                     break;
             }
         }

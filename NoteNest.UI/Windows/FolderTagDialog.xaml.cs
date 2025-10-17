@@ -64,7 +64,7 @@ namespace NoteNest.UI.Windows
             try
             {
                 // Load tags from projection via query service
-                var folderTags = await _tagQueryService.GetTagsForEntityAsync(_folderId, "folder");
+                var folderTags = await _tagQueryService.GetTagsForEntityAsync(_folderId, "category");
                 
                 // TODO: Implement inherited tags via recursive query
                 // For now, just load direct tags
