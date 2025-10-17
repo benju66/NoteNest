@@ -8,19 +8,32 @@ namespace NoteNest.UI.Services
 {
     /// <summary>
     /// WPF implementation of IStatusNotifier that integrates with the existing status system
-    /// Routes status messages through IStateManager to the UI TextBlock
+    /// Supports both IStateManager and direct delegate patterns for maximum flexibility
     /// </summary>
     public class WPFStatusNotifier : IStatusNotifier
     {
-        private readonly IStateManager _stateManager;
+        private readonly Action<string> _setStatusMessage;
         private readonly Dispatcher _dispatcher;
         private Timer? _clearTimer;
         private readonly object _timerLock = new object();
 
-        public WPFStatusNotifier(IStateManager stateManager)
+        /// <summary>
+        /// Create WPFStatusNotifier with direct delegate to status property.
+        /// Use this for simple integration with existing ViewModels.
+        /// </summary>
+        public WPFStatusNotifier(Action<string> setStatusMessage)
         {
-            _stateManager = stateManager ?? throw new ArgumentNullException(nameof(stateManager));
+            _setStatusMessage = setStatusMessage ?? throw new ArgumentNullException(nameof(setStatusMessage));
             _dispatcher = System.Windows.Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+        }
+
+        /// <summary>
+        /// Create WPFStatusNotifier with IStateManager (legacy pattern).
+        /// Maintained for backward compatibility.
+        /// </summary>
+        public WPFStatusNotifier(IStateManager stateManager)
+            : this(msg => stateManager.StatusMessage = msg)
+        {
         }
 
         /// <summary>
@@ -38,7 +51,7 @@ namespace NoteNest.UI.Services
             // Update status on UI thread
             _dispatcher.BeginInvoke(() =>
             {
-                _stateManager.StatusMessage = formattedMessage;
+                _setStatusMessage(formattedMessage);
             });
 
             // Set up auto-clear timer if duration is specified
@@ -79,7 +92,7 @@ namespace NoteNest.UI.Services
                 {
                     _dispatcher.BeginInvoke(() =>
                     {
-                        _stateManager.StatusMessage = "Ready";
+                        _setStatusMessage("Ready");
                     });
 
                     // Clean up timer

@@ -10,6 +10,7 @@ using MediatR;
 using NoteNest.Application.NoteTags.Commands.SetNoteTag;
 using NoteNest.Application.Queries;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Application.Common.Interfaces;
 
 namespace NoteNest.UI.Windows
 {
@@ -23,6 +24,7 @@ namespace NoteNest.UI.Windows
         private readonly string _noteTitle;
         private readonly IMediator _mediator;
         private readonly ITagQueryService _tagQueryService;
+        private readonly ITreeQueryService _treeQueryService;
         private readonly IAppLogger _logger;
         private readonly ObservableCollection<string> _tags;
         private readonly ObservableCollection<string> _inheritedTags;
@@ -32,6 +34,7 @@ namespace NoteNest.UI.Windows
             string noteTitle,
             IMediator mediator,
             ITagQueryService tagQueryService,
+            ITreeQueryService treeQueryService,
             IAppLogger logger)
         {
             InitializeComponent();
@@ -40,6 +43,7 @@ namespace NoteNest.UI.Windows
             _noteTitle = noteTitle;
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _tagQueryService = tagQueryService ?? throw new ArgumentNullException(nameof(tagQueryService));
+            _treeQueryService = treeQueryService ?? throw new ArgumentNullException(nameof(treeQueryService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _tags = new ObservableCollection<string>();
@@ -66,9 +70,8 @@ namespace NoteNest.UI.Windows
                 // Load note tags from projection
                 var noteTags = await _tagQueryService.GetTagsForEntityAsync(_noteId, "note");
                 
-                // TODO: Implement inherited tags via recursive category query
-                // For now, just load direct tags
-                var folderTags = new List<NoteNest.Application.Queries.TagDto>();
+                // Load inherited folder tags
+                var folderTags = await LoadInheritedFolderTagsAsync(_noteId);
                 
                 // Update UI collections on UI thread (required for thread safety)
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
@@ -80,13 +83,9 @@ namespace NoteNest.UI.Windows
                     }
                     
                     _inheritedTags.Clear();
-                    if (folderTags.Count > 0)
+                    foreach (var folderTag in folderTags)
                     {
-                        foreach (var folderTag in folderTags)
-                        {
-                            _inheritedTags.Add(folderTag.DisplayName);
-                        }
-                        _logger.Info($"Loaded {_inheritedTags.Count} inherited folder tags for note {_noteId}");
+                        _inheritedTags.Add(folderTag.DisplayName);
                     }
                 });
                 
@@ -239,6 +238,99 @@ namespace NoteNest.UI.Windows
         {
             DialogResult = false;
             Close();
+        }
+        
+        /// <summary>
+        /// Load inherited folder tags for this note.
+        /// Gets tags from note's parent category and all ancestor categories.
+        /// </summary>
+        private async Task<List<TagDto>> LoadInheritedFolderTagsAsync(Guid noteId)
+        {
+            try
+            {
+                // 1. Get note's parent category from tree_view projection
+                var noteTreeNode = await _treeQueryService.GetByIdAsync(noteId);
+                if (noteTreeNode == null || noteTreeNode.ParentId == null || noteTreeNode.ParentId == Guid.Empty)
+                {
+                    _logger.Debug($"Note {noteId} has no parent category, no inherited tags");
+                    return new List<TagDto>();
+                }
+                
+                var categoryId = noteTreeNode.ParentId.Value;
+                
+                // 2. Get tags for parent category (includes its own tags)
+                var categoryTags = await _tagQueryService.GetTagsForEntityAsync(categoryId, "category");
+                
+                // 3. Recursively get parent category tags
+                var ancestorTags = await GetAncestorCategoryTagsAsync(categoryId);
+                
+                // 4. Merge with deduplication (Union handles case-insensitive via custom comparer)
+                var allInheritedTags = categoryTags
+                    .Union(ancestorTags, new TagDtoDisplayNameComparer())
+                    .ToList();
+                
+                _logger.Info($"Loaded {allInheritedTags.Count} inherited folder tags for note {_noteId}");
+                return allInheritedTags;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to load inherited folder tags for note {noteId}");
+                return new List<TagDto>();
+            }
+        }
+        
+        /// <summary>
+        /// Recursively get tags from ancestor categories.
+        /// </summary>
+        private async Task<List<TagDto>> GetAncestorCategoryTagsAsync(Guid categoryId)
+        {
+            try
+            {
+                var allAncestorTags = new List<TagDto>();
+                
+                // Get parent category
+                var categoryNode = await _treeQueryService.GetByIdAsync(categoryId);
+                if (categoryNode?.ParentId == null || categoryNode.ParentId == Guid.Empty)
+                {
+                    return allAncestorTags; // No parent, done
+                }
+                
+                var parentId = categoryNode.ParentId.Value;
+                
+                // Get parent's tags
+                var parentTags = await _tagQueryService.GetTagsForEntityAsync(parentId, "category");
+                allAncestorTags.AddRange(parentTags);
+                
+                // Recursively get grandparent's tags
+                var grandparentTags = await GetAncestorCategoryTagsAsync(parentId);
+                allAncestorTags.AddRange(grandparentTags);
+                
+                return allAncestorTags;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to get ancestor tags for category {categoryId}");
+                return new List<TagDto>();
+            }
+        }
+        
+        /// <summary>
+        /// Comparer for TagDto that compares by DisplayName (case-insensitive).
+        /// Used for Union deduplication.
+        /// </summary>
+        private class TagDtoDisplayNameComparer : IEqualityComparer<TagDto>
+        {
+            public bool Equals(TagDto x, TagDto y)
+            {
+                if (x == null && y == null) return true;
+                if (x == null || y == null) return false;
+                return string.Equals(x.DisplayName, y.DisplayName, StringComparison.OrdinalIgnoreCase);
+            }
+            
+            public int GetHashCode(TagDto obj)
+            {
+                return obj?.DisplayName?.ToLowerInvariant().GetHashCode() ?? 0;
+            }
         }
     }
 }

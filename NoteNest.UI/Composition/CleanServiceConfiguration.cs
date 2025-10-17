@@ -193,6 +193,7 @@ namespace NoteNest.UI.Composition
                 ?? @"C:\Users\Burness\MyNotes\Notes";
             
             // RTF Save Manager (proven working system)
+            // Uses its own BasicStatusNotifier to avoid DI order issues
             services.AddSingleton<ISaveManager>(provider =>
             {
                 var statusNotifier = new NoteNest.Core.Services.BasicStatusNotifier(provider.GetRequiredService<IAppLogger>());
@@ -341,6 +342,14 @@ namespace NoteNest.UI.Composition
             
             // Main Shell ViewModel (ties everything together)
             services.AddTransient<MainShellViewModel>();
+            
+            // Status notifier for background services and UI feedback
+            // IMPORTANT: Registered AFTER MainShellViewModel so it can access StatusMessage property
+            services.AddSingleton<NoteNest.Core.Interfaces.IStatusNotifier>(provider =>
+            {
+                var mainShell = provider.GetRequiredService<MainShellViewModel>();
+                return new NoteNest.UI.Services.WPFStatusNotifier(msg => mainShell.StatusMessage = msg);
+            });
             
             // UI Services
             services.AddScoped<IDialogService, DialogService>();
@@ -497,6 +506,18 @@ namespace NoteNest.UI.Composition
             
             // Background service for continuous projection updates (safety net)
             services.AddHostedService<NoteNest.Infrastructure.Projections.ProjectionHostedService>();
+            
+            // Background service for tag propagation to child items
+            services.AddHostedService(provider =>
+                new NoteNest.Infrastructure.Services.TagPropagationService(
+                    provider.GetRequiredService<NoteNest.Core.Services.IEventBus>(),
+                    provider.GetRequiredService<IEventStore>(),
+                    provider.GetRequiredService<NoteNest.Application.Queries.ITagQueryService>(),
+                    provider.GetRequiredService<NoteNest.Application.Common.Interfaces.IProjectionOrchestrator>(),
+                    provider.GetRequiredService<NoteNest.Application.Tags.Services.ITagPropagationService>(),
+                    provider.GetRequiredService<IStatusNotifier>(),
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
             
             // Query Services
             services.AddSingleton<NoteNest.Application.Queries.ITreeQueryService>(provider =>

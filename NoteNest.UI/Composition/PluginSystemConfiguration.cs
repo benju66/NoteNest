@@ -68,7 +68,11 @@ namespace NoteNest.UI.Composition
             
             // ✨ HYBRID FOLDER TAGGING: User-controlled folder tag system
             // Note: FolderTagRepository uses tree.db connection string, registered in DatabaseServiceConfiguration
-            services.AddSingleton<ITagInheritanceService, NoteNest.UI.Plugins.TodoPlugin.Services.TagInheritanceService>();
+            services.AddSingleton<NoteNest.UI.Plugins.TodoPlugin.Services.TagInheritanceService>();
+            services.AddSingleton<ITagInheritanceService>(provider => 
+                provider.GetRequiredService<NoteNest.UI.Plugins.TodoPlugin.Services.TagInheritanceService>());
+            services.AddSingleton<NoteNest.Application.Tags.Services.ITagPropagationService>(provider =>
+                provider.GetRequiredService<NoteNest.UI.Plugins.TodoPlugin.Services.TagInheritanceService>());
             services.AddSingleton<IFolderTagSuggestionService, NoteNest.UI.Plugins.TodoPlugin.Services.FolderTagSuggestionService>();
             
             // =================================================================

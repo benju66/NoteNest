@@ -4,7 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Application.FolderTags.Repositories;
-using NoteNest.Application.NoteTags.Repositories;
+using NoteNest.Application.Queries;
+using NoteNest.Application.Tags.Services;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Services;
@@ -43,24 +44,25 @@ public interface ITagInheritanceService
 /// <summary>
 /// Manages tag inheritance from folders to todos.
 /// Follows CQRS patterns - this is a service, not a command handler.
+/// Implements ITagPropagationService for background service integration.
 /// </summary>
-public class TagInheritanceService : ITagInheritanceService
+public class TagInheritanceService : ITagInheritanceService, ITagPropagationService
 {
     private readonly IFolderTagRepository _folderTagRepository;
-    private readonly INoteTagRepository _noteTagRepository;
+    private readonly ITagQueryService _tagQueryService;
     private readonly ITodoTagRepository _todoTagRepository;
     private readonly ITodoRepository _todoRepository;
     private readonly IAppLogger _logger;
 
     public TagInheritanceService(
         IFolderTagRepository folderTagRepository,
-        INoteTagRepository noteTagRepository,
+        ITagQueryService tagQueryService,
         ITodoTagRepository todoTagRepository,
         ITodoRepository todoRepository,
         IAppLogger logger)
     {
         _folderTagRepository = folderTagRepository ?? throw new ArgumentNullException(nameof(folderTagRepository));
-        _noteTagRepository = noteTagRepository ?? throw new ArgumentNullException(nameof(noteTagRepository));
+        _tagQueryService = tagQueryService ?? throw new ArgumentNullException(nameof(tagQueryService));
         _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
         _todoRepository = todoRepository ?? throw new ArgumentNullException(nameof(todoRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -109,12 +111,12 @@ public class TagInheritanceService : ITagInheritanceService
                 folderTags = await GetApplicableTagsAsync(newFolderId.Value);
             }
 
-            // Step 3: Get tags from note (if any)
+            // Step 3: Get tags from note (if any) - now using event-sourced tag query service
             var noteTags = new List<string>();
             if (noteId.HasValue && noteId.Value != Guid.Empty)
             {
-                var noteTagList = await _noteTagRepository.GetNoteTagsAsync(noteId.Value);
-                noteTags = noteTagList.Select(t => t.Tag).ToList();
+                var noteTagDtos = await _tagQueryService.GetTagsForEntityAsync(noteId.Value, "note");
+                noteTags = noteTagDtos.Select(t => t.DisplayName).ToList();
                 _logger.Info($"Found {noteTags.Count} tags on source note {noteId.Value}");
             }
 

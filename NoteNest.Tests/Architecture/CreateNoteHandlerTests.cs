@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -6,6 +7,8 @@ using Moq;
 using NUnit.Framework;
 using NoteNest.Application.Common.Interfaces;
 using NoteNest.Application.Notes.Commands.CreateNote;
+using NoteNest.Application.Queries;
+using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Categories;
 using NoteNest.Domain.Common;
 using NoteNest.Domain.Notes;
@@ -20,6 +23,9 @@ namespace NoteNest.Tests.Architecture
         private Mock<IEventStore> _eventStore;
         private Mock<ICategoryRepository> _categoryRepository;
         private Mock<IFileService> _fileService;
+        private Mock<ITagQueryService> _tagQueryService;
+        private Mock<IProjectionOrchestrator> _projectionOrchestrator;
+        private Mock<IAppLogger> _logger;
 
         [SetUp]
         public void Setup()
@@ -27,11 +33,22 @@ namespace NoteNest.Tests.Architecture
             _eventStore = new Mock<IEventStore>();
             _categoryRepository = new Mock<ICategoryRepository>();
             _fileService = new Mock<IFileService>();
+            _tagQueryService = new Mock<ITagQueryService>();
+            _projectionOrchestrator = new Mock<IProjectionOrchestrator>();
+            _logger = new Mock<IAppLogger>();
+            
+            // Setup default returns
+            _tagQueryService.Setup(x => x.GetTagsForEntityAsync(It.IsAny<Guid>(), It.IsAny<string>()))
+                .ReturnsAsync(new List<TagDto>());
+            _projectionOrchestrator.Setup(x => x.CatchUpAsync()).Returns(Task.CompletedTask);
             
             _handler = new CreateNoteHandler(
                 _eventStore.Object,
                 _categoryRepository.Object,
-                _fileService.Object);
+                _fileService.Object,
+                _tagQueryService.Object,
+                _projectionOrchestrator.Object,
+                _logger.Object);
         }
 
         [Test]

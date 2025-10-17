@@ -451,15 +451,16 @@ namespace NoteNest.UI
                 var app = (App)System.Windows.Application.Current;
                 var mediator = app.ServiceProvider?.GetService<MediatR.IMediator>();
                 var tagQueryService = app.ServiceProvider?.GetService<NoteNest.Application.Queries.ITagQueryService>();
+                var treeQueryService = app.ServiceProvider?.GetService<NoteNest.Application.Queries.ITreeQueryService>();
                 var logger = app.ServiceProvider?.GetService<NoteNest.Core.Services.Logging.IAppLogger>();
 
-                if (mediator == null || tagQueryService == null || logger == null)
+                if (mediator == null || tagQueryService == null || treeQueryService == null || logger == null)
                 {
                     MessageBox.Show("Required services not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
 
-                var dialog = new NoteTagDialog(Guid.Parse(note.Id), note.Title, mediator, tagQueryService, logger)
+                var dialog = new NoteTagDialog(Guid.Parse(note.Id), note.Title, mediator, tagQueryService, treeQueryService, logger)
                 {
                     Owner = this
                 };
