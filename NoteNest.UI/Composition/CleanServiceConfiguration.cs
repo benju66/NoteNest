@@ -160,6 +160,12 @@ namespace NoteNest.UI.Composition
             services.AddScoped<IFileService>(provider =>
                 new NoteNest.Infrastructure.Services.FileService(provider.GetRequiredService<IAppLogger>()));
             
+            // Folder tag repository for TodoPlugin tag inheritance (uses tree.db)
+            services.AddSingleton<NoteNest.Application.FolderTags.Repositories.IFolderTagRepository>(provider =>
+                new NoteNest.Infrastructure.Repositories.FolderTagRepository(
+                    treeConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
             // Auto-start services for database initialization
             services.AddHostedService<TreeNodeInitializationService>();
             

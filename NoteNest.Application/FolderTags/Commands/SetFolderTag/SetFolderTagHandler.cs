@@ -14,14 +14,17 @@ namespace NoteNest.Application.FolderTags.Commands.SetFolderTag;
 /// </summary>
 public class SetFolderTagHandler : IRequestHandler<SetFolderTagCommand, Result<SetFolderTagResult>>
 {
-    private readonly IEventStore _eventStore;
+    private readonly IFolderTagRepository _repository;
+    private readonly NoteNest.Application.Common.Interfaces.IEventBus _eventBus;
     private readonly IAppLogger _logger;
 
     public SetFolderTagHandler(
-        IEventStore eventStore,
+        IFolderTagRepository repository,
+        NoteNest.Application.Common.Interfaces.IEventBus eventBus,
         IAppLogger logger)
     {
-        _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -31,25 +34,16 @@ public class SetFolderTagHandler : IRequestHandler<SetFolderTagCommand, Result<S
         {
             _logger.Info($"Setting {request.Tags.Count} tags on folder {request.FolderId}");
 
-            // Create domain events for each tag
-            // In event sourcing, we raise TagAddedToEntity events
-            foreach (var tag in request.Tags)
-            {
-                var tagAddedEvent = new NoteNest.Domain.Tags.Events.TagAddedToEntity(
-                    request.FolderId,
-                    "folder",
-                    tag,
-                    tag, // DisplayName same as tag for now
-                    request.IsAutoSuggested ? "auto-path" : "manual");
-                
-                // For now, we'll publish directly to event bus
-                // TODO: This should go through a FolderAggregate
-                // But for migration, we support legacy event pattern
-            }
+            // Save tags to database (tree.db folder_tags table)
+            await _repository.SetFolderTagsAsync(
+                request.FolderId,
+                request.Tags,
+                request.IsAutoSuggested,
+                request.InheritToChildren);
 
-            // Publish legacy event for backward compatibility during migration
+            // Publish event for UI refresh and tag inheritance
             var taggedEvent = new FolderTaggedEvent(request.FolderId, request.Tags);
-            // Event will be published by projection orchestrator
+            await _eventBus.PublishAsync(taggedEvent);
 
             var result = new SetFolderTagResult
             {
@@ -58,7 +52,7 @@ public class SetFolderTagHandler : IRequestHandler<SetFolderTagCommand, Result<S
                 Success = true
             };
 
-            _logger.Info($"Successfully set {request.Tags.Count} tags on folder {request.FolderId}. New items will inherit these tags.");
+            _logger.Info($"✅ Successfully set {request.Tags.Count} tags on folder {request.FolderId}. Tags will inherit to new todos.");
             return Result<SetFolderTagResult>.Ok(result);
         }
         catch (Exception ex)

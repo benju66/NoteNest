@@ -436,7 +436,7 @@ namespace NoteNest.UI.ViewModels.Categories
                     ModifiedDate = DateTime.UtcNow
                 };
                 
-                todoCategoryStore.Add(todoCategory);
+                await todoCategoryStore.AddAsync(todoCategory);
                 
                 _logger.Info($"✅ Category added to todos: {categoryViewModel.Name}");
                 

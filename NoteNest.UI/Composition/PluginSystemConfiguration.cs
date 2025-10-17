@@ -48,8 +48,11 @@ namespace NoteNest.UI.Composition
             services.AddSingleton<ITodoDatabaseInitializer>(provider => 
                 new TodoDatabaseInitializer(connectionString, provider.GetRequiredService<IAppLogger>()));
                 
+            // TodoRepository now reads from projections (CQRS pattern - consistent with notes/categories)
             services.AddSingleton<ITodoRepository>(provider => 
-                new TodoRepository(connectionString, provider.GetRequiredService<IAppLogger>()));
+                new NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries.TodoQueryRepository(
+                    provider.GetRequiredService<NoteNest.UI.Plugins.TodoPlugin.Application.Queries.ITodoQueryService>(),
+                    provider.GetRequiredService<IAppLogger>()));
                 
             services.AddSingleton<ITodoBackupService>(provider => 
                 new TodoBackupService(connectionString, provider.GetRequiredService<IAppLogger>()));
