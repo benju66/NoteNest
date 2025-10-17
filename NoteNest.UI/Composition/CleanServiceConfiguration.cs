@@ -452,6 +452,12 @@ namespace NoteNest.UI.Composition
                     notesRootPath,
                     provider.GetRequiredService<IAppLogger>()));
             
+            // Repository for Categories (used by command handlers for validation and path resolution)
+            services.AddSingleton<NoteNest.Application.Common.Interfaces.ICategoryRepository>(provider =>
+                new NoteNest.Infrastructure.Database.Adapters.TreeNodeCategoryRepository(
+                    provider.GetRequiredService<NoteNest.Infrastructure.Database.ITreeDatabaseRepository>(),
+                    provider.GetRequiredService<IAppLogger>()));
+            
             // Projections
             services.AddSingleton<NoteNest.Application.Projections.IProjection>(provider =>
                 new NoteNest.Infrastructure.Projections.TreeViewProjection(
