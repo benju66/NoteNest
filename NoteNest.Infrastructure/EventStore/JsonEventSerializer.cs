@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Common;
+using NoteNest.Infrastructure.EventStore.Converters;
 
 namespace NoteNest.Infrastructure.EventStore
 {
@@ -28,6 +29,11 @@ namespace NoteNest.Infrastructure.EventStore
                 WriteIndented = false,
                 PropertyNameCaseInsensitive = true
             };
+            
+            // Register custom converters for value objects
+            _options.Converters.Add(new NoteIdJsonConverter());
+            _options.Converters.Add(new CategoryIdJsonConverter());
+            _options.Converters.Add(new PluginIdJsonConverter());
             
             DiscoverEventTypes();
         }

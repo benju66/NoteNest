@@ -317,6 +317,7 @@ namespace NoteNest.UI.Composition
             services.AddTransient<CategoryTreeViewModel>(provider =>
                 new CategoryTreeViewModel(
                     provider.GetRequiredService<NoteNest.Application.Queries.ITreeQueryService>(),
+                    provider.GetRequiredService<NoteNest.Application.Common.Interfaces.INoteRepository>(),
                     provider.GetRequiredService<IAppLogger>()));
             
             // Search view (database-backed)
@@ -408,6 +409,10 @@ namespace NoteNest.UI.Composition
         {
             var logger = services.BuildServiceProvider().GetRequiredService<IAppLogger>();
             
+            // Notes root path for file operations
+            var notesRootPath = configuration.GetValue<string>("NotesPath") 
+                ?? @"C:\Users\Burness\MyNotes\Notes";
+            
             // Database paths
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var databasePath = Path.Combine(localAppData, "NoteNest");
@@ -439,6 +444,13 @@ namespace NoteNest.UI.Composition
                     eventsConnectionString,
                     provider.GetRequiredService<IAppLogger>(),
                     provider.GetRequiredService<NoteNest.Infrastructure.EventStore.IEventSerializer>()));
+            
+            // Query Repository for Notes (reads from projections)
+            services.AddSingleton<NoteNest.Application.Common.Interfaces.INoteRepository>(provider =>
+                new NoteNest.Infrastructure.Queries.NoteQueryRepository(
+                    provider.GetRequiredService<NoteNest.Application.Queries.ITreeQueryService>(),
+                    notesRootPath,
+                    provider.GetRequiredService<IAppLogger>()));
             
             // Projections
             services.AddSingleton<NoteNest.Application.Projections.IProjection>(provider =>

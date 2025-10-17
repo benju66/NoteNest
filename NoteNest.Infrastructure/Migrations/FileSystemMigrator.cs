@@ -70,12 +70,18 @@ namespace NoteNest.Infrastructure.Migrations
                 var eventCount = 0;
                 
                 // Create category events (parent folders first)
+                System.Console.WriteLine("\n📝 Creating category events:");
                 foreach (var category in categories.OrderBy(c => c.Path.Count(ch => ch == '\\')))
                 {
+                    System.Console.WriteLine($"   Creating: {category.Name} (ID={category.Id}, ParentID={category.ParentId})");
+                    
                     var catAggregate = CategoryAggregate.Create(
                         category.ParentId,
                         category.Name,
-                        category.Path);
+                        category.Path,
+                        category.Id);  // Pass the pre-generated ID so hierarchy is preserved
+                    
+                    System.Console.WriteLine($"   Aggregate ID after create: {catAggregate.Id}");
                     
                     await _eventStore.SaveAsync(catAggregate);
                     eventCount++;
@@ -142,6 +148,8 @@ namespace NoteNest.Infrastructure.Migrations
                 // Skip hidden directories (start with .)
                 if (dirInfo.Name.StartsWith("."))
                     return;
+                
+                System.Console.WriteLine($"   [SCAN] {dirInfo.Name}: ID={categoryId}, ParentID={parentId}");
                 
                 categories.Add(new CategoryData
                 {

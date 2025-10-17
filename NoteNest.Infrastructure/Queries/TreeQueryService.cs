@@ -51,7 +51,20 @@ namespace NoteNest.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var node = await connection.QueryFirstOrDefaultAsync<TreeNodeDto>(
-                    "SELECT * FROM tree_view WHERE id = @Id",
+                    @"SELECT 
+                        id AS Id,
+                        parent_id AS ParentId,
+                        canonical_path AS CanonicalPath,
+                        display_path AS DisplayPath,
+                        node_type AS NodeType,
+                        name AS Name,
+                        file_extension AS FileExtension,
+                        is_pinned AS IsPinned,
+                        sort_order AS SortOrder,
+                        created_at AS CreatedAt,
+                        modified_at AS ModifiedAt
+                      FROM tree_view 
+                      WHERE id = @Id",
                     new { Id = id.ToString() });
 
                 if (node == null)
@@ -87,7 +100,20 @@ namespace NoteNest.Infrastructure.Queries
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
-                var sql = "SELECT * FROM tree_view ORDER BY canonical_path";
+                var sql = @"SELECT 
+                    id AS Id,
+                    parent_id AS ParentId,
+                    canonical_path AS CanonicalPath,
+                    display_path AS DisplayPath,
+                    node_type AS NodeType,
+                    name AS Name,
+                    file_extension AS FileExtension,
+                    is_pinned AS IsPinned,
+                    sort_order AS SortOrder,
+                    created_at AS CreatedAt,
+                    modified_at AS ModifiedAt
+                  FROM tree_view 
+                  ORDER BY canonical_path";
                 var nodes = await connection.QueryAsync<TreeNodeDto>(sql);
 
                 var treeNodes = nodes.Select(MapToTreeNode).Where(n => n != null).ToList();
@@ -124,14 +150,28 @@ namespace NoteNest.Infrastructure.Queries
                 string sql;
                 object param;
 
+                var selectClause = @"SELECT 
+                    id AS Id,
+                    parent_id AS ParentId,
+                    canonical_path AS CanonicalPath,
+                    display_path AS DisplayPath,
+                    node_type AS NodeType,
+                    name AS Name,
+                    file_extension AS FileExtension,
+                    is_pinned AS IsPinned,
+                    sort_order AS SortOrder,
+                    created_at AS CreatedAt,
+                    modified_at AS ModifiedAt
+                  FROM tree_view";
+
                 if (parentId.HasValue)
                 {
-                    sql = "SELECT * FROM tree_view WHERE parent_id = @ParentId ORDER BY sort_order, name";
+                    sql = selectClause + " WHERE parent_id = @ParentId ORDER BY sort_order, name";
                     param = new { ParentId = parentId.Value.ToString() };
                 }
                 else
                 {
-                    sql = "SELECT * FROM tree_view WHERE parent_id IS NULL ORDER BY sort_order, name";
+                    sql = selectClause + " WHERE parent_id IS NULL ORDER BY sort_order, name";
                     param = null;
                 }
 
@@ -157,7 +197,21 @@ namespace NoteNest.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var nodes = await connection.QueryAsync<TreeNodeDto>(
-                    "SELECT * FROM tree_view WHERE parent_id IS NULL ORDER BY sort_order, name");
+                    @"SELECT 
+                        id AS Id,
+                        parent_id AS ParentId,
+                        canonical_path AS CanonicalPath,
+                        display_path AS DisplayPath,
+                        node_type AS NodeType,
+                        name AS Name,
+                        file_extension AS FileExtension,
+                        is_pinned AS IsPinned,
+                        sort_order AS SortOrder,
+                        created_at AS CreatedAt,
+                        modified_at AS ModifiedAt
+                      FROM tree_view 
+                      WHERE parent_id IS NULL 
+                      ORDER BY sort_order, name");
 
                 var treeNodes = nodes.Select(MapToTreeNode).Where(n => n != null).ToList();
 
@@ -185,7 +239,21 @@ namespace NoteNest.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var nodes = await connection.QueryAsync<TreeNodeDto>(
-                    "SELECT * FROM tree_view WHERE is_pinned = 1 ORDER BY sort_order");
+                    @"SELECT 
+                        id AS Id,
+                        parent_id AS ParentId,
+                        canonical_path AS CanonicalPath,
+                        display_path AS DisplayPath,
+                        node_type AS NodeType,
+                        name AS Name,
+                        file_extension AS FileExtension,
+                        is_pinned AS IsPinned,
+                        sort_order AS SortOrder,
+                        created_at AS CreatedAt,
+                        modified_at AS ModifiedAt
+                      FROM tree_view 
+                      WHERE is_pinned = 1 
+                      ORDER BY sort_order");
 
                 var treeNodes = nodes.Select(MapToTreeNode).Where(n => n != null).ToList();
 
@@ -209,7 +277,20 @@ namespace NoteNest.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var node = await connection.QueryFirstOrDefaultAsync<TreeNodeDto>(
-                    "SELECT * FROM tree_view WHERE canonical_path = @Path",
+                    @"SELECT 
+                        id AS Id,
+                        parent_id AS ParentId,
+                        canonical_path AS CanonicalPath,
+                        display_path AS DisplayPath,
+                        node_type AS NodeType,
+                        name AS Name,
+                        file_extension AS FileExtension,
+                        is_pinned AS IsPinned,
+                        sort_order AS SortOrder,
+                        created_at AS CreatedAt,
+                        modified_at AS ModifiedAt
+                      FROM tree_view 
+                      WHERE canonical_path = @Path",
                     new { Path = canonicalPath.ToLowerInvariant() });
 
                 return node != null ? MapToTreeNode(node) : null;

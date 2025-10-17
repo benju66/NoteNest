@@ -32,7 +32,11 @@ namespace NoteNest.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var tags = await connection.QueryAsync<TagDtoDb>(
-                    @"SELECT tag, display_name, source, created_at
+                    @"SELECT 
+                        tag AS Tag, 
+                        display_name AS DisplayName, 
+                        source AS Source, 
+                        created_at AS CreatedAt
                       FROM entity_tags
                       WHERE entity_id = @EntityId AND entity_type = @EntityType
                       ORDER BY display_name",
@@ -80,7 +84,9 @@ namespace NoteNest.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var tags = await connection.QueryAsync<TagCloudItem>(
-                    @"SELECT display_name, usage_count
+                    @"SELECT 
+                        display_name AS DisplayName, 
+                        usage_count AS UsageCount
                       FROM tag_vocabulary
                       WHERE usage_count > 0
                       ORDER BY usage_count DESC, display_name
@@ -104,7 +110,10 @@ namespace NoteNest.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var tags = await connection.QueryAsync<TagSuggestionDb>(
-                    @"SELECT tag, display_name, usage_count
+                    @"SELECT 
+                        tag AS Tag, 
+                        display_name AS DisplayName, 
+                        usage_count AS UsageCount
                       FROM tag_vocabulary
                       WHERE tag LIKE @Prefix || '%'
                       ORDER BY usage_count DESC, display_name
@@ -133,7 +142,10 @@ namespace NoteNest.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var results = await connection.QueryAsync<EntityWithTagDb>(
-                    @"SELECT entity_id, entity_type, tag
+                    @"SELECT 
+                        entity_id AS EntityId, 
+                        entity_type AS EntityType, 
+                        tag AS Tag
                       FROM entity_tags
                       WHERE tag = @Tag
                       ORDER BY entity_type, entity_id",
@@ -161,11 +173,14 @@ namespace NoteNest.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var tags = await connection.QueryAsync<TagSuggestionDb>(
-                    @"SELECT et.tag, et.display_name, COUNT(*) as usage_count
+                    @"SELECT 
+                        et.tag AS Tag, 
+                        et.display_name AS DisplayName, 
+                        COUNT(*) AS UsageCount
                       FROM entity_tags et
                       WHERE et.entity_type = @EntityType
                       GROUP BY et.tag
-                      ORDER BY usage_count DESC, et.display_name
+                      ORDER BY UsageCount DESC, et.display_name
                       LIMIT @Limit",
                     new { EntityType = entityType, Limit = limit });
 

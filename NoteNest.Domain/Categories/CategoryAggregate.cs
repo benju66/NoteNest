@@ -24,7 +24,11 @@ namespace NoteNest.Domain.Categories
         /// <summary>
         /// Create a new category.
         /// </summary>
-        public static CategoryAggregate Create(Guid? parentId, string name, string path)
+        /// <param name="parentId">Optional parent category ID</param>
+        /// <param name="name">Category name</param>
+        /// <param name="path">Full path</param>
+        /// <param name="categoryId">Optional specific ID (used for migration); if null, generates new GUID</param>
+        public static CategoryAggregate Create(Guid? parentId, string name, string path, Guid? categoryId = null)
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Category name cannot be empty", nameof(name));
@@ -33,9 +37,11 @@ namespace NoteNest.Domain.Categories
                 throw new ArgumentException("Category path cannot be empty", nameof(path));
             
             var category = new CategoryAggregate();
-            var categoryId = Guid.NewGuid();
+            var id = categoryId ?? Guid.NewGuid();  // Use provided ID or generate new one
             
-            category.AddDomainEvent(new CategoryCreated(categoryId, parentId, name, path));
+            var @event = new CategoryCreated(id, parentId, name, path);
+            category.Apply(@event);      // Apply to set CategoryId and other state
+            category.AddDomainEvent(@event);  // Add to uncommitted events for persistence
             return category;
         }
         

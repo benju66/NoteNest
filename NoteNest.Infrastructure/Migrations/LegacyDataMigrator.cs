@@ -234,9 +234,19 @@ namespace NoteNest.Infrastructure.Migrations
             }
 
             var nodes = await connection.QueryAsync<TreeNodeRow>(
-                @"SELECT id, parent_id, canonical_path, display_path, absolute_path,
-                         node_type, name, file_extension, is_pinned, sort_order,
-                         created_at, modified_at
+                @"SELECT 
+                    id AS Id,
+                    parent_id AS ParentId,
+                    canonical_path AS CanonicalPath,
+                    display_path AS DisplayPath,
+                    absolute_path AS AbsolutePath,
+                    node_type AS NodeType,
+                    name AS Name,
+                    file_extension AS FileExtension,
+                    is_pinned AS IsPinned,
+                    sort_order AS SortOrder,
+                    created_at AS CreatedAt,
+                    modified_at AS ModifiedAt
                   FROM tree_nodes
                   WHERE is_deleted = 0
                   ORDER BY canonical_path");
@@ -255,7 +265,7 @@ namespace NoteNest.Infrastructure.Migrations
             await connection.OpenAsync();
 
             var tags = await connection.QueryAsync<FolderTagRow>(
-                "SELECT folder_id, tag FROM folder_tags");
+                "SELECT folder_id AS FolderIdStr, tag AS Tag FROM folder_tags");
 
             return tags.ToList();
         }
@@ -266,7 +276,7 @@ namespace NoteNest.Infrastructure.Migrations
             await connection.OpenAsync();
 
             var tags = await connection.QueryAsync<NoteTagRow>(
-                "SELECT note_id, tag FROM note_tags");
+                "SELECT note_id AS NoteIdStr, tag AS Tag FROM note_tags");
 
             return tags.ToList();
         }
@@ -277,10 +287,25 @@ namespace NoteNest.Infrastructure.Migrations
             await connection.OpenAsync();
 
             var todos = await connection.QueryAsync<TodoRow>(
-                @"SELECT id, text, description, is_completed, completed_date,
-                         category_id, parent_id, sort_order, priority, is_favorite,
-                         due_date, reminder_date, source_type, source_note_id,
-                         source_file_path, is_orphaned, created_at, modified_at
+                @"SELECT 
+                    id AS Id,
+                    text AS Text,
+                    description AS Description,
+                    is_completed AS IsCompleted,
+                    completed_date AS CompletedDate,
+                    category_id AS CategoryId,
+                    parent_id AS ParentId,
+                    sort_order AS SortOrder,
+                    priority AS Priority,
+                    is_favorite AS IsFavorite,
+                    due_date AS DueDate,
+                    reminder_date AS ReminderDate,
+                    source_type AS SourceType,
+                    source_note_id AS SourceNoteId,
+                    source_file_path AS SourceFilePath,
+                    is_orphaned AS IsOrphaned,
+                    created_at AS CreatedAt,
+                    modified_at AS ModifiedAt
                   FROM todos");
 
             return todos.ToList();

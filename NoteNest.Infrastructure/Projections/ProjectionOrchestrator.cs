@@ -18,6 +18,7 @@ namespace NoteNest.Infrastructure.Projections
     {
         private readonly IEventStore _eventStore;
         private readonly IEnumerable<IProjection> _projections;
+        private readonly Infrastructure.EventStore.IEventSerializer _serializer;
         private readonly IAppLogger _logger;
         private readonly SemaphoreSlim _lock = new(1, 1);
         private bool _isRunning;
@@ -25,10 +26,12 @@ namespace NoteNest.Infrastructure.Projections
         public ProjectionOrchestrator(
             IEventStore eventStore,
             IEnumerable<IProjection> projections,
+            Infrastructure.EventStore.IEventSerializer serializer,
             IAppLogger logger)
         {
             _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _projections = projections ?? throw new ArgumentNullException(nameof(projections));
+            _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
         
@@ -37,25 +40,30 @@ namespace NoteNest.Infrastructure.Projections
         /// </summary>
         public async Task RebuildAllAsync()
         {
+            _logger.Info("Starting rebuild of all projections...");
+            var startTime = DateTime.UtcNow;
+            
+            // Clear all projections and reset checkpoints (needs lock)
             await _lock.WaitAsync();
             try
             {
-                _logger.Info("Starting rebuild of all projections...");
-                var startTime = DateTime.UtcNow;
-                
                 foreach (var projection in _projections)
                 {
-                    _logger.Info($"Rebuilding projection: {projection.Name}");
+                    _logger.Info($"Clearing projection: {projection.Name}");
                     await projection.RebuildAsync();
                 }
-                
-                var elapsed = DateTime.UtcNow - startTime;
-                _logger.Info($"Rebuilt all projections in {elapsed.TotalSeconds:F2} seconds");
             }
             finally
             {
                 _lock.Release();
             }
+            
+            // Process all events to populate projections (CatchUpAsync has its own lock)
+            _logger.Info("Processing all events to populate projections...");
+            await CatchUpAsync();
+            
+            var elapsed = DateTime.UtcNow - startTime;
+            _logger.Info($"Rebuilt all projections in {elapsed.TotalSeconds:F2} seconds");
         }
         
         /// <summary>
@@ -239,10 +247,15 @@ namespace NoteNest.Infrastructure.Projections
         
         private IDomainEvent DeserializeEvent(StoredEvent storedEvent)
         {
-            // This will be handled by the event serializer
-            // For now, return null if we can't deserialize
-            // The actual implementation would use IEventSerializer
-            return null;
+            try
+            {
+                return _serializer.Deserialize(storedEvent.EventType, storedEvent.EventData);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"Failed to deserialize event {storedEvent.EventType} at position {storedEvent.StreamPosition}", ex);
+                return null;  // Skip bad events, log error (resilient approach)
+            }
         }
     }
     

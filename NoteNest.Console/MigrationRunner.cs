@@ -158,7 +158,7 @@ namespace NoteNest.Console
                 ProjectionOrchestrator orchestrator;
                 try
                 {
-                    orchestrator = new ProjectionOrchestrator(eventStore, projections, logger);
+                    orchestrator = new ProjectionOrchestrator(eventStore, projections, eventSerializer, logger);
                     System.Console.WriteLine("   Created ProjectionOrchestrator");
                 }
                 catch (Exception orchEx)

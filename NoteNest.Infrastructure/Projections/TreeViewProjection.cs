@@ -136,6 +136,9 @@ namespace NoteNest.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
+            // Update all child notes' paths to reflect the category rename
+            await UpdateChildNotePaths(connection, e.CategoryId.ToString(), e.NewPath);
+            
             _logger.Debug($"[{Name}] Category renamed: {e.OldName} → {e.NewName}");
         }
         
@@ -155,6 +158,9 @@ namespace NoteNest.Infrastructure.Projections
                     DisplayPath = e.NewPath,
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
+            
+            // Update all child notes' paths to reflect the category move
+            await UpdateChildNotePaths(connection, e.CategoryId.ToString(), e.NewPath);
             
             _logger.Debug($"[{Name}] Category moved: {e.CategoryId} to parent {e.NewParentId}");
         }
@@ -200,10 +206,21 @@ namespace NoteNest.Infrastructure.Projections
         {
             using var connection = await OpenConnectionAsync();
             
-            // For now, we'll use the note ID as the canonical path
-            // This will be enhanced when CategoryAggregate provides full paths
             var noteIdStr = e.NoteId.Value;
             var categoryIdStr = e.CategoryId.Value;
+            
+            // Query parent category to get its full path
+            var categoryPath = await connection.QueryFirstOrDefaultAsync<string>(
+                "SELECT display_path FROM tree_view WHERE id = @CategoryId",
+                new { CategoryId = categoryIdStr });
+            
+            // Build full relative path: "Notes/Category/Subcategory/NoteTitle"
+            string displayPath = e.Title;
+            if (!string.IsNullOrEmpty(categoryPath))
+            {
+                // Category path already has the full path, append note title
+                displayPath = categoryPath + "/" + e.Title;
+            }
             
             await connection.ExecuteAsync(
                 @"INSERT INTO tree_view 
@@ -216,8 +233,8 @@ namespace NoteNest.Infrastructure.Projections
                 {
                     Id = noteIdStr,
                     ParentId = categoryIdStr,
-                    CanonicalPath = $"notes/{noteIdStr}", // Temporary - will use real paths later
-                    DisplayPath = e.Title,
+                    CanonicalPath = $"notes/{noteIdStr}",
+                    DisplayPath = displayPath,  // Full path: "Notes/Category/NoteTitle"
                     NodeType = "note",
                     Name = e.Title,
                     FileExtension = ".rtf",
@@ -227,44 +244,82 @@ namespace NoteNest.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            _logger.Debug($"[{Name}] Note created: {e.Title}");
+            _logger.Debug($"[{Name}] Note created: {e.Title} with path: {displayPath}");
         }
         
         private async Task HandleNoteRenamedAsync(NoteRenamedEvent e)
         {
             using var connection = await OpenConnectionAsync();
             
-            await connection.ExecuteAsync(
-                @"UPDATE tree_view 
-                  SET name = @Name, display_path = @DisplayPath, modified_at = @ModifiedAt
-                  WHERE id = @Id",
-                new
-                {
-                    Id = e.NoteId.Value,
-                    Name = e.NewTitle,
-                    DisplayPath = e.NewTitle,
-                    ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
-                });
+            // Get the current note to find its category
+            var currentNote = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                "SELECT parent_id FROM tree_view WHERE id = @Id",
+                new { Id = e.NoteId.Value });
             
-            _logger.Debug($"[{Name}] Note renamed: {e.OldTitle} → {e.NewTitle}");
+            if (currentNote != null)
+            {
+                // Query parent category to get its full path
+                var categoryPath = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT display_path FROM tree_view WHERE id = @CategoryId",
+                    new { CategoryId = (string)currentNote.parent_id });
+                
+                // Build new display path with new title
+                string displayPath = e.NewTitle;
+                if (!string.IsNullOrEmpty(categoryPath))
+                {
+                    displayPath = categoryPath + "/" + e.NewTitle;
+                }
+                
+                await connection.ExecuteAsync(
+                    @"UPDATE tree_view 
+                      SET name = @Name, display_path = @DisplayPath, modified_at = @ModifiedAt
+                      WHERE id = @Id",
+                    new
+                    {
+                        Id = e.NoteId.Value,
+                        Name = e.NewTitle,
+                        DisplayPath = displayPath,
+                        ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
+                    });
+                
+                _logger.Debug($"[{Name}] Note renamed: {e.OldTitle} → {e.NewTitle}, path updated to: {displayPath}");
+            }
         }
         
         private async Task HandleNoteMovedAsync(NoteMovedEvent e)
         {
             using var connection = await OpenConnectionAsync();
             
+            // Get the note's current name
+            var noteName = await connection.QueryFirstOrDefaultAsync<string>(
+                "SELECT name FROM tree_view WHERE id = @Id",
+                new { Id = e.NoteId.Value });
+            
+            // Query new parent category to get its full path
+            var categoryPath = await connection.QueryFirstOrDefaultAsync<string>(
+                "SELECT display_path FROM tree_view WHERE id = @CategoryId",
+                new { CategoryId = e.ToCategoryId.Value });
+            
+            // Build new display path in new category
+            string displayPath = noteName;
+            if (!string.IsNullOrEmpty(categoryPath))
+            {
+                displayPath = categoryPath + "/" + noteName;
+            }
+            
             await connection.ExecuteAsync(
                 @"UPDATE tree_view 
-                  SET parent_id = @ParentId, modified_at = @ModifiedAt
+                  SET parent_id = @ParentId, display_path = @DisplayPath, modified_at = @ModifiedAt
                   WHERE id = @Id",
                 new
                 {
                     Id = e.NoteId.Value,
                     ParentId = e.ToCategoryId.Value,
+                    DisplayPath = displayPath,
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            _logger.Debug($"[{Name}] Note moved: {e.NoteId} to category {e.ToCategoryId}");
+            _logger.Debug($"[{Name}] Note moved: {e.NoteId} to category {e.ToCategoryId}, new path: {displayPath}");
         }
         
         private async Task HandleNotePinnedAsync(NotePinnedEvent e)
@@ -298,6 +353,42 @@ namespace NoteNest.Infrastructure.Projections
                 new { Id = e.NoteId.Value });
             
             _logger.Debug($"[{Name}] Note deleted: {e.NoteId}");
+        }
+        
+        // =============================================================================
+        // HELPER METHODS
+        // =============================================================================
+        
+        /// <summary>
+        /// Recursively updates display paths for all notes in a category and its subcategories.
+        /// Called when a category is renamed or moved to cascade path updates to child notes.
+        /// </summary>
+        private async Task UpdateChildNotePaths(SqliteConnection connection, string categoryId, string categoryPath)
+        {
+            // Get all notes in this category
+            var notes = await connection.QueryAsync<dynamic>(
+                "SELECT id, name FROM tree_view WHERE parent_id = @CategoryId AND node_type = 'note'",
+                new { CategoryId = categoryId });
+            
+            foreach (var note in notes)
+            {
+                var newNotePath = categoryPath + "/" + note.name;
+                await connection.ExecuteAsync(
+                    "UPDATE tree_view SET display_path = @DisplayPath WHERE id = @Id",
+                    new { Id = (string)note.id, DisplayPath = newNotePath });
+                
+                _logger.Debug($"Updated note path: {note.name} -> {newNotePath}");
+            }
+            
+            // Recursively update child categories and their notes
+            var childCategories = await connection.QueryAsync<dynamic>(
+                "SELECT id, display_path FROM tree_view WHERE parent_id = @CategoryId AND node_type = 'category'",
+                new { CategoryId = categoryId });
+            
+            foreach (var child in childCategories)
+            {
+                await UpdateChildNotePaths(connection, (string)child.id, (string)child.display_path);
+            }
         }
     }
 }

@@ -49,7 +49,7 @@ namespace NoteNest.Infrastructure.Projections
             
             // Check if checkpoint exists
             var checkpoint = await connection.QueryFirstOrDefaultAsync<ProjectionCheckpoint>(
-                "SELECT last_processed_position FROM projection_metadata WHERE projection_name = @Name",
+                "SELECT last_processed_position AS LastProcessedPosition FROM projection_metadata WHERE projection_name = @Name",
                 new { Name = this.Name });
             
             return checkpoint?.LastProcessedPosition ?? 0;

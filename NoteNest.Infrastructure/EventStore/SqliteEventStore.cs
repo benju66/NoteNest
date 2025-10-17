@@ -194,8 +194,16 @@ namespace NoteNest.Infrastructure.EventStore
             await connection.OpenAsync();
             
             var storedEvents = await connection.QueryAsync<StoredEventDto>(
-                @"SELECT event_id, aggregate_id, aggregate_type, event_type, event_data, 
-                         metadata, sequence_number, stream_position, created_at
+                @"SELECT 
+                    event_id AS EventId,
+                    aggregate_id AS AggregateId,
+                    aggregate_type AS AggregateType,
+                    event_type AS EventType,
+                    event_data AS EventData,
+                    metadata AS Metadata,
+                    sequence_number AS SequenceNumber,
+                    stream_position AS StreamPosition,
+                    created_at AS CreatedAt
                   FROM events
                   WHERE aggregate_id = @AggregateId AND sequence_number >= @FromVersion
                   ORDER BY sequence_number",
@@ -217,8 +225,16 @@ namespace NoteNest.Infrastructure.EventStore
             await connection.OpenAsync();
             
             var storedEvents = await connection.QueryAsync<StoredEventDto>(
-                @"SELECT event_id, aggregate_id, aggregate_type, event_type, event_data,
-                         metadata, sequence_number, stream_position, created_at
+                @"SELECT 
+                    event_id AS EventId,
+                    aggregate_id AS AggregateId,
+                    aggregate_type AS AggregateType,
+                    event_type AS EventType,
+                    event_data AS EventData,
+                    metadata AS Metadata,
+                    sequence_number AS SequenceNumber,
+                    stream_position AS StreamPosition,
+                    created_at AS CreatedAt
                   FROM events
                   ORDER BY stream_position");
             
@@ -231,8 +247,16 @@ namespace NoteNest.Infrastructure.EventStore
             await connection.OpenAsync();
             
             var storedEvents = await connection.QueryAsync<StoredEventDto>(
-                @"SELECT event_id, aggregate_id, aggregate_type, event_type, event_data,
-                         metadata, sequence_number, stream_position, created_at
+                @"SELECT 
+                    event_id AS EventId,
+                    aggregate_id AS AggregateId,
+                    aggregate_type AS AggregateType,
+                    event_type AS EventType,
+                    event_data AS EventData,
+                    metadata AS Metadata,
+                    sequence_number AS SequenceNumber,
+                    stream_position AS StreamPosition,
+                    created_at AS CreatedAt
                   FROM events
                   WHERE stream_position > @FromPosition
                   ORDER BY stream_position
@@ -270,7 +294,12 @@ namespace NoteNest.Infrastructure.EventStore
             await connection.OpenAsync();
             
             var snapshot = await connection.QueryFirstOrDefaultAsync<SnapshotDto>(
-                @"SELECT aggregate_id, aggregate_type, version, state, created_at
+                @"SELECT 
+                    aggregate_id AS AggregateId,
+                    aggregate_type AS AggregateType,
+                    version AS Version,
+                    state AS State,
+                    created_at AS CreatedAt
                   FROM snapshots
                   WHERE aggregate_id = @AggregateId
                   ORDER BY version DESC
@@ -295,8 +324,13 @@ namespace NoteNest.Infrastructure.EventStore
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
             
-            return await connection.ExecuteScalarAsync<long>(
+            var positionObj = await connection.ExecuteScalarAsync(
                 "SELECT current_position FROM stream_position WHERE id = 1");
+            
+            if (positionObj == null || positionObj is DBNull)
+                return 0;
+                
+            return Convert.ToInt64(positionObj);
         }
         
         private string CreateMetadata(IDomainEvent @event)

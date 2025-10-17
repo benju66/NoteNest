@@ -23,6 +23,7 @@ namespace NoteNest.UI.ViewModels.Categories
     public class CategoryTreeViewModel : ViewModelBase, IDisposable
     {
         private readonly ITreeQueryService _treeQueryService;
+        private readonly NoteNest.Application.Common.Interfaces.INoteRepository _noteRepository;
         private readonly IAppLogger _logger;
         private CategoryViewModel _selectedCategory;
         private NoteItemViewModel _selectedNote;
@@ -41,9 +42,11 @@ namespace NoteNest.UI.ViewModels.Categories
 
         public CategoryTreeViewModel(
             ITreeQueryService treeQueryService,
+            NoteNest.Application.Common.Interfaces.INoteRepository noteRepository,
             IAppLogger logger)
         {
             _treeQueryService = treeQueryService;
+            _noteRepository = noteRepository;
             _logger = logger;
             
             Categories = new SmartObservableCollection<CategoryViewModel>();
@@ -362,8 +365,8 @@ namespace NoteNest.UI.ViewModels.Categories
                     
                     foreach (var category in rootCategories)
                     {
-                        // Pass null for INoteRepository - note loading will be added later via query service
-                        var categoryViewModel = new CategoryViewModel(category, null, this, _logger);
+                        // Use NoteQueryRepository to load notes from projections
+                        var categoryViewModel = new CategoryViewModel(category, _noteRepository, this, _logger);
                         
                         // Wire up note events to bubble up
                         categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
@@ -395,8 +398,8 @@ namespace NoteNest.UI.ViewModels.Categories
             
             foreach (var child in children)
             {
-                // Pass null for INoteRepository - note loading via query service will be added later
-                var childViewModel = new CategoryViewModel(child, null, this, _logger);
+                // Use NoteQueryRepository to load notes from projections
+                var childViewModel = new CategoryViewModel(child, _noteRepository, this, _logger);
                 
                 // Wire up note events for child categories too
                 childViewModel.NoteOpenRequested += OnNoteOpenRequested;
