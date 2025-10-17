@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using MediatR;
 using NoteNest.Application.Notes.Commands.CreateNote;
-using NoteNest.Application.Notes.Commands.SaveNote;
 using NoteNest.Application.Notes.Commands.DeleteNote;
 using NoteNest.Application.Notes.Commands.RenameNote;
 using NoteNest.UI.ViewModels.Common;
@@ -51,7 +50,6 @@ namespace NoteNest.UI.ViewModels.Notes
         }
 
         public ICommand CreateNoteCommand { get; private set; }
-        public ICommand SaveNoteCommand { get; private set; }
         public ICommand DeleteNoteCommand { get; private set; }
         public ICommand RenameNoteCommand { get; private set; }
 
@@ -64,7 +62,6 @@ namespace NoteNest.UI.ViewModels.Notes
         {
             // Commands now accept ViewModel objects from context menu
             CreateNoteCommand = new AsyncRelayCommand<object>(ExecuteCreateNote, CanCreateNote);
-            SaveNoteCommand = new AsyncRelayCommand<string>(ExecuteSaveNote, CanSaveNote);
             DeleteNoteCommand = new AsyncRelayCommand<object>(ExecuteDeleteNote, CanDeleteNote);
             RenameNoteCommand = new AsyncRelayCommand<object>(ExecuteRenameNote, CanRenameNote);
         }
@@ -125,45 +122,6 @@ namespace NoteNest.UI.ViewModels.Notes
             {
                 StatusMessage = $"Error creating note: {ex.Message}";
                 _dialogService.ShowError(ex.Message, "Error");
-            }
-            finally
-            {
-                IsProcessing = false;
-            }
-        }
-
-        private async Task ExecuteSaveNote(string noteId)
-        {
-            if (string.IsNullOrEmpty(noteId))
-                return;
-
-            try
-            {
-                IsProcessing = true;
-                StatusMessage = "Saving note...";
-
-                // TODO: Get actual content from editor
-                var command = new SaveNoteCommand
-                {
-                    NoteId = noteId,
-                    Content = "Content from editor", // This would come from the actual editor
-                    IsManualSave = true
-                };
-
-                var result = await _mediator.Send(command);
-                
-                if (result.IsFailure)
-                {
-                    StatusMessage = $"Failed to save note: {result.Error}";
-                }
-                else
-                {
-                    StatusMessage = "Note saved successfully";
-                }
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Error saving note: {ex.Message}";
             }
             finally
             {
@@ -293,8 +251,6 @@ namespace NoteNest.UI.ViewModels.Notes
             var categoryId = category?.Id ?? SelectedCategoryId;
             return !IsProcessing && !string.IsNullOrEmpty(categoryId);
         }
-        
-        private bool CanSaveNote(string noteId) => !IsProcessing && !string.IsNullOrEmpty(noteId);
         
         private bool CanDeleteNote(object parameter) 
         {

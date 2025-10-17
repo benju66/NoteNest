@@ -41,12 +41,10 @@ namespace NoteNest.Infrastructure.Queries
         {
             try
             {
-                var cacheKey = $"tree_node_{id}";
+                // NOTE: Per-node caching removed to prevent stale data issues
+                // Single-row indexed queries are fast enough (<1ms) that caching isn't needed
+                // This ensures commands always get fresh FilePath and other updated properties
                 
-                // Try cache first
-                if (_cache.TryGetValue(cacheKey, out TreeNode cached))
-                    return cached;
-
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
@@ -70,12 +68,7 @@ namespace NoteNest.Infrastructure.Queries
                 if (node == null)
                     return null;
 
-                var treeNode = MapToTreeNode(node);
-                
-                // Cache individual node
-                _cache.Set(cacheKey, treeNode, CACHE_DURATION);
-                
-                return treeNode;
+                return MapToTreeNode(node);
             }
             catch (Exception ex)
             {

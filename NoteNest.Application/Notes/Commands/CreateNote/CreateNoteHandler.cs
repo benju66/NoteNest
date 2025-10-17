@@ -40,13 +40,22 @@ namespace NoteNest.Application.Notes.Commands.CreateNote
 
             // Generate file path
             var filePath = _fileService.GenerateNoteFilePath(category.Path, request.Title);
-            note.SetFilePath(filePath);
 
-            // Save to event store (persists events + publishes to projections)
+            // CRITICAL: Write file BEFORE persisting event (prevents split-brain state)
+            try
+            {
+                await _fileService.WriteNoteAsync(filePath, request.InitialContent);
+                // Set FilePath only after successful file write
+                note.SetFilePath(filePath);
+            }
+            catch (System.Exception ex)
+            {
+                // File write failed - event NOT persisted, no split-brain state
+                return Result.Fail<CreateNoteResult>($"Failed to create note file: {ex.Message}");
+            }
+
+            // Save to event store ONLY if file operation succeeded (atomic consistency)
             await _eventStore.SaveAsync(note);
-
-            // Write to file system (RTF files remain source of truth)
-            await _fileService.WriteNoteAsync(filePath, request.InitialContent);
 
             // Events automatically published to event bus for UI updates
             // Projections automatically updated

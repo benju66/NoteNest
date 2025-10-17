@@ -24,21 +24,24 @@ namespace NoteNest.Application.Notes.Commands.MoveNote
 	{
 		private readonly IEventStore _eventStore;
 		private readonly ICategoryRepository _categoryRepository;
+		private readonly INoteRepository _noteRepository;
 		private readonly IFileService _fileService;
 
 		public MoveNoteHandler(
 			IEventStore eventStore,
 			ICategoryRepository categoryRepository,
+			INoteRepository noteRepository,
 			IFileService fileService)
 		{
 			_eventStore = eventStore;
 			_categoryRepository = categoryRepository;
+			_noteRepository = noteRepository;
 			_fileService = fileService;
 		}
 
 		public async Task<Result<MoveNoteResult>> Handle(MoveNoteCommand request, CancellationToken cancellationToken)
 		{
-			// Load note from event store
+			// Load note aggregate from event store (for business logic)
 			var noteId = NoteId.From(request.NoteId);
 			var noteGuid = Guid.Parse(noteId.Value);
 			var note = await _eventStore.LoadAsync<Note>(noteGuid);
@@ -46,7 +49,13 @@ namespace NoteNest.Application.Notes.Commands.MoveNote
 			if (note == null)
 				return Result.Fail<MoveNoteResult>("Note not found");
 
-			var oldPath = note.FilePath;
+			// CQRS Pattern: Get FilePath from projection (infrastructure detail)
+			// EventStore only has business state; projection has denormalized infrastructure details
+			var noteProjection = await _noteRepository.GetByIdAsync(noteId);
+			if (noteProjection == null || string.IsNullOrEmpty(noteProjection.FilePath))
+				return Result.Fail<MoveNoteResult>("Note file path not found in projection");
+
+			var oldPath = noteProjection.FilePath;
 			var oldCategoryId = note.CategoryId.Value;
 
 			// Validate target category exists

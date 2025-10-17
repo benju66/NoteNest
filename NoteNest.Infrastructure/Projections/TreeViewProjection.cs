@@ -219,7 +219,7 @@ namespace NoteNest.Infrastructure.Projections
             if (!string.IsNullOrEmpty(categoryPath))
             {
                 // Category path already has the full path, append note title
-                displayPath = categoryPath + "/" + e.Title;
+                displayPath = System.IO.Path.Combine(categoryPath, e.Title);
             }
             
             await connection.ExecuteAsync(
@@ -267,7 +267,7 @@ namespace NoteNest.Infrastructure.Projections
                 string displayPath = e.NewTitle;
                 if (!string.IsNullOrEmpty(categoryPath))
                 {
-                    displayPath = categoryPath + "/" + e.NewTitle;
+                    displayPath = System.IO.Path.Combine(categoryPath, e.NewTitle);
                 }
                 
                 await connection.ExecuteAsync(
@@ -304,7 +304,7 @@ namespace NoteNest.Infrastructure.Projections
             string displayPath = noteName;
             if (!string.IsNullOrEmpty(categoryPath))
             {
-                displayPath = categoryPath + "/" + noteName;
+                displayPath = System.IO.Path.Combine(categoryPath, noteName);
             }
             
             await connection.ExecuteAsync(
@@ -372,7 +372,7 @@ namespace NoteNest.Infrastructure.Projections
             
             foreach (var note in notes)
             {
-                var newNotePath = categoryPath + "/" + note.name;
+                var newNotePath = System.IO.Path.Combine(categoryPath, (string)note.name);
                 await connection.ExecuteAsync(
                     "UPDATE tree_view SET display_path = @DisplayPath WHERE id = @Id",
                     new { Id = (string)note.id, DisplayPath = newNotePath });
