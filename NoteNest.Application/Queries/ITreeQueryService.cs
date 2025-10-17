@@ -42,6 +42,12 @@ namespace NoteNest.Application.Queries
         Task<TreeNode> GetByPathAsync(string canonicalPath);
         
         /// <summary>
+        /// Get all descendants of a node recursively (children, grandchildren, etc.).
+        /// Used by Move/Delete operations to validate and count affected nodes.
+        /// </summary>
+        Task<List<TreeNode>> GetNodeDescendantsAsync(Guid nodeId);
+        
+        /// <summary>
         /// Invalidate cache (call after projection updates).
         /// </summary>
         void InvalidateCache();

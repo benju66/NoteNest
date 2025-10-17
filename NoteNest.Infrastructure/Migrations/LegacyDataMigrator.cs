@@ -114,8 +114,8 @@ namespace NoteNest.Infrastructure.Migrations
                         ? CategoryId.From(note.ParentId.Value.ToString())
                         : CategoryId.Create(); // Default category
                     
-                    var noteAggregate = new Domain.Notes.Note(categoryId, note.Name, string.Empty);
-                    noteAggregate.SetFilePath(note.AbsolutePath);
+                    // Use constructor that preserves NoteId from tree.db (emits event automatically)
+                    var noteAggregate = new Domain.Notes.Note(noteId, categoryId, note.Name, note.AbsolutePath, string.Empty);
                     
                     if (note.IsPinned)
                         noteAggregate.Pin();

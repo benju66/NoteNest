@@ -146,9 +146,8 @@ namespace NoteNest.Infrastructure.Queries
                     filePath = System.IO.Path.GetFullPath(filePath);
                 }
 
-                // Create Note with absolute file path
-                var note = new Note(categoryId, treeNode.Name, string.Empty);
-                note.SetFilePath(filePath);
+                // Create Note with ID from projection (preserves aggregate identity)
+                var note = new Note(noteId, categoryId, treeNode.Name, filePath, string.Empty);
                 
                 return note;
             }

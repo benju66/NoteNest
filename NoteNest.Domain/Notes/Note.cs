@@ -30,6 +30,29 @@ namespace NoteNest.Domain.Notes
         }
         
         /// <summary>
+        /// Constructor for migration and reconstruction scenarios.
+        /// Allows specifying exact NoteId to preserve aggregate identity from data stores.
+        /// Emits NoteCreatedEvent to maintain event sourcing consistency.
+        /// </summary>
+        public Note(
+            NoteId noteId,
+            CategoryId categoryId, 
+            string title, 
+            string filePath,
+            string content)
+        {
+            NoteId = noteId ?? throw new ArgumentNullException(nameof(noteId));
+            CategoryId = categoryId ?? throw new ArgumentNullException(nameof(categoryId));
+            Title = title ?? throw new ArgumentNullException(nameof(title));
+            FilePath = filePath ?? string.Empty;
+            Content = content ?? string.Empty;
+            CreatedAt = UpdatedAt = DateTime.UtcNow;
+            
+            // Emit event for event sourcing consistency
+            AddDomainEvent(new NoteCreatedEvent(NoteId, CategoryId, Title));
+        }
+        
+        /// <summary>
         /// Factory method for creating a Note for opening in editor (workspace restoration)
         /// Used when we only have title and file path, not full domain data
         /// </summary>

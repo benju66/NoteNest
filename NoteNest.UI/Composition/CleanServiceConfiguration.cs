@@ -150,9 +150,11 @@ namespace NoteNest.UI.Composition
             // ICategoryRepository and INoteRepository removed - using event sourcing now
             // Queries use ITreeQueryService instead
             
-            // Tree repository for category operations (descendants, bulk updates)
+            // Tree repository for category operations (descendants, bulk updates - reads from projections)
             services.AddScoped<ITreeRepository>(provider =>
-                new TreeRepositoryAdapter(provider.GetRequiredService<ITreeDatabaseRepository>()));
+                new NoteNest.Infrastructure.Queries.TreeQueryRepositoryAdapter(
+                    provider.GetRequiredService<NoteNest.Application.Queries.ITreeQueryService>(),
+                    provider.GetRequiredService<IAppLogger>()));
             
             // File service for category and note file operations (CRITICAL for CQRS handlers)
             services.AddScoped<IFileService>(provider =>
@@ -364,6 +366,7 @@ namespace NoteNest.UI.Composition
             // Pipeline behaviors (now compatible with Microsoft.Extensions.Logging)
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(NoteNest.Infrastructure.Behaviors.ProjectionSyncBehavior<,>));
             
             // FluentValidation
             services.AddValidatorsFromAssembly(typeof(CreateNoteCommand).Assembly);
@@ -452,10 +455,10 @@ namespace NoteNest.UI.Composition
                     notesRootPath,
                     provider.GetRequiredService<IAppLogger>()));
             
-            // Repository for Categories (used by command handlers for validation and path resolution)
+            // Repository for Categories (reads from projections for data source consistency)
             services.AddSingleton<NoteNest.Application.Common.Interfaces.ICategoryRepository>(provider =>
-                new NoteNest.Infrastructure.Database.Adapters.TreeNodeCategoryRepository(
-                    provider.GetRequiredService<NoteNest.Infrastructure.Database.ITreeDatabaseRepository>(),
+                new NoteNest.Infrastructure.Queries.CategoryQueryRepository(
+                    provider.GetRequiredService<NoteNest.Application.Queries.ITreeQueryService>(),
                     provider.GetRequiredService<IAppLogger>()));
             
             // Projections
@@ -469,7 +472,11 @@ namespace NoteNest.UI.Composition
                     projectionsConnectionString,
                     provider.GetRequiredService<IAppLogger>()));
             
-            // TodoProjection registered in TodoPlugin
+            // TodoProjection - reads todo events and builds todo_view in projections.db
+            services.AddSingleton<NoteNest.Application.Projections.IProjection>(provider =>
+                new NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections.TodoProjection(
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
             
             services.AddSingleton<NoteNest.Infrastructure.Projections.ProjectionOrchestrator>(provider =>
                 new NoteNest.Infrastructure.Projections.ProjectionOrchestrator(
@@ -477,6 +484,9 @@ namespace NoteNest.UI.Composition
                     provider.GetServices<NoteNest.Application.Projections.IProjection>(),
                     provider.GetRequiredService<NoteNest.Infrastructure.EventStore.IEventSerializer>(),
                     provider.GetRequiredService<IAppLogger>()));
+            
+            // Background service for continuous projection updates (safety net)
+            services.AddHostedService<NoteNest.Infrastructure.Projections.ProjectionHostedService>();
             
             // Query Services
             services.AddSingleton<NoteNest.Application.Queries.ITreeQueryService>(provider =>
@@ -490,7 +500,11 @@ namespace NoteNest.UI.Composition
                     projectionsConnectionString,
                     provider.GetRequiredService<IAppLogger>()));
             
-            // TodoQueryService registered in TodoPlugin
+            // TodoQueryService - reads from todo_view in projections.db
+            services.AddSingleton<NoteNest.UI.Plugins.TodoPlugin.Application.Queries.ITodoQueryService>(provider =>
+                new NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries.TodoQueryService(
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
             
             // Initialize databases on startup
             // Note: Initialization happens during first service resolution

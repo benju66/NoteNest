@@ -302,6 +302,38 @@ namespace NoteNest.Infrastructure.Queries
             }
         }
 
+        public async Task<List<TreeNode>> GetNodeDescendantsAsync(Guid nodeId)
+        {
+            try
+            {
+                using var connection = new SqliteConnection(_connectionString);
+                await connection.OpenAsync();
+
+                var sql = @"
+                    WITH RECURSIVE descendants AS (
+                        SELECT 
+                            id, parent_id, canonical_path, display_path, node_type, name,
+                            file_extension, is_pinned, sort_order, created_at, modified_at
+                        FROM tree_view WHERE parent_id = @NodeId
+                        UNION ALL
+                        SELECT 
+                            t.id, t.parent_id, t.canonical_path, t.display_path, t.node_type, t.name,
+                            t.file_extension, t.is_pinned, t.sort_order, t.created_at, t.modified_at
+                        FROM tree_view t
+                        INNER JOIN descendants d ON t.parent_id = d.id
+                    )
+                    SELECT * FROM descendants ORDER BY canonical_path";
+
+                var nodes = await connection.QueryAsync<TreeNodeDto>(sql, new { NodeId = nodeId.ToString() });
+                return nodes.Select(MapToTreeNode).Where(n => n != null).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"Failed to get descendants for node: {nodeId}", ex);
+                return new List<TreeNode>();
+            }
+        }
+
         public void InvalidateCache()
         {
             _cache.Remove(ALL_NODES_KEY);

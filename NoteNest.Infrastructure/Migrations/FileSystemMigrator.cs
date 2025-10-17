@@ -97,8 +97,8 @@ namespace NoteNest.Infrastructure.Migrations
                         ? CategoryId.From(note.CategoryId.ToString())
                         : CategoryId.Create();
                     
-                    var noteAggregate = new Note(categoryId, note.Title, string.Empty);
-                    noteAggregate.SetFilePath(note.FilePath);
+                    // Use constructor that preserves specified NoteId (emits event automatically)
+                    var noteAggregate = new Note(noteId, categoryId, note.Title, note.FilePath, string.Empty);
                     
                     await _eventStore.SaveAsync(noteAggregate);
                     eventCount++;
