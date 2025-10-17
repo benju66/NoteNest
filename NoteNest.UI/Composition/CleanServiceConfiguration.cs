@@ -453,7 +453,12 @@ namespace NoteNest.UI.Composition
             
             // TodoProjection registered in TodoPlugin
             
-            services.AddSingleton<NoteNest.Infrastructure.Projections.ProjectionOrchestrator>();
+            services.AddSingleton<NoteNest.Infrastructure.Projections.ProjectionOrchestrator>(provider =>
+                new NoteNest.Infrastructure.Projections.ProjectionOrchestrator(
+                    provider.GetRequiredService<IEventStore>(),
+                    provider.GetServices<NoteNest.Application.Projections.IProjection>(),
+                    provider.GetRequiredService<NoteNest.Infrastructure.EventStore.IEventSerializer>(),
+                    provider.GetRequiredService<IAppLogger>()));
             
             // Query Services
             services.AddSingleton<NoteNest.Application.Queries.ITreeQueryService>(provider =>
