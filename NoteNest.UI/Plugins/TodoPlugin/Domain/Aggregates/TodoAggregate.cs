@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
+using NoteNest.Domain.Common;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.ValueObjects;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Events;
 
@@ -269,6 +269,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
         {
             IsOrphaned = true;
             ModifiedDate = DateTime.UtcNow;
+        }
+
+        public void Delete()
+        {
+            AddDomainEvent(new TodoDeletedEvent(TodoId));
         }
 
         // =============================================================================

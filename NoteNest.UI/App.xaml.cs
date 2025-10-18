@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -39,6 +40,51 @@ namespace NoteNest.UI
 
                 _logger = _host.Services.GetRequiredService<IAppLogger>();
                 _logger.Info("🎉 Full NoteNest app started successfully!");
+
+                // Initialize databases (events.db + projections.db) BEFORE any queries run
+                _logger.Info("🔧 Initializing event store and projections...");
+                var eventStoreInit = _host.Services.GetRequiredService<NoteNest.Infrastructure.EventStore.EventStoreInitializer>();
+                var projectionsInit = _host.Services.GetRequiredService<NoteNest.Infrastructure.Projections.ProjectionsInitializer>();
+                
+                await eventStoreInit.InitializeAsync();
+                await projectionsInit.InitializeAsync();
+                
+                _logger.Info("✅ Databases initialized successfully");
+
+                // Auto-rebuild from RTF files if event store is empty (database loss recovery)
+                var eventStore = _host.Services.GetRequiredService<NoteNest.Application.Common.Interfaces.IEventStore>();
+                var currentPosition = await eventStore.GetCurrentStreamPositionAsync();
+                
+                if (currentPosition == 0)
+                {
+                    _logger.Info("📂 Empty event store detected - rebuilding from RTF files...");
+                    
+                    var notesRootPath = _host.Services.GetRequiredService<IConfiguration>().GetValue<string>("NotesPath") 
+                                        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "NoteNest");
+                    
+                    var projectionOrchestrator = _host.Services.GetRequiredService<NoteNest.Infrastructure.Projections.ProjectionOrchestrator>();
+                    
+                    var fileSystemMigrator = new NoteNest.Infrastructure.Migrations.FileSystemMigrator(
+                        notesRootPath,
+                        eventStore,
+                        projectionOrchestrator,
+                        _logger);
+                    
+                    var migrationResult = await fileSystemMigrator.MigrateAsync();
+                    
+                    if (migrationResult.Success)
+                    {
+                        _logger.Info($"✅ Rebuilt from RTF files: {migrationResult.NotesFound} notes, {migrationResult.CategoriesFound} categories");
+                    }
+                    else
+                    {
+                        _logger.Error($"❌ File system migration failed: {migrationResult.Error}");
+                    }
+                }
+                else
+                {
+                    _logger.Info($"📊 Event store has data (position {currentPosition}) - skipping file system migration");
+                }
 
                 // Initialize theme system FIRST (before creating UI)
                 var themeService = _host.Services.GetRequiredService<NoteNest.UI.Services.IThemeService>();

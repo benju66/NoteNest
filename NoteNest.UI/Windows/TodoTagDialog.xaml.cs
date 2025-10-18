@@ -160,7 +160,7 @@ namespace NoteNest.UI.Windows
 
                 var result = await _mediator.Send(command);
 
-                if (result.IsSuccess)
+                if (result.Success)
                 {
                     _manualTags.Add(newTag);
                     NewTagTextBox.Clear();
@@ -202,7 +202,7 @@ namespace NoteNest.UI.Windows
 
                     var result = await _mediator.Send(command);
 
-                    if (result.IsSuccess)
+                    if (result.Success)
                     {
                         _manualTags.Remove(selectedTag);
                         _logger.Info($"Removed tag '{selectedTag}' from todo");

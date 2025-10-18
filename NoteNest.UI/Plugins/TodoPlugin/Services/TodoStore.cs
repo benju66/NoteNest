@@ -389,7 +389,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             // Todo CQRS domain events - subscribe to base interface to match published type
             // Handlers publish as: PublishAsync<IDomainEvent>(domainEvent)
             // So we must subscribe to: Subscribe<IDomainEvent>
-            _eventBus.Subscribe<Domain.Common.IDomainEvent>(async domainEvent =>
+            _eventBus.Subscribe<NoteNest.Domain.Common.IDomainEvent>(async domainEvent =>
             {
                 try
                 {

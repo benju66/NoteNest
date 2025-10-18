@@ -1,6 +1,6 @@
 using System;
 using MediatR;
-using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
+using NoteNest.Domain.Common;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.SetPriority

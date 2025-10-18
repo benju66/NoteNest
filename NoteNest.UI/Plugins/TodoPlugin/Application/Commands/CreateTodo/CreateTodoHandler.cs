@@ -5,7 +5,7 @@ using MediatR;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Application.Common.Interfaces;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
-using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
+using NoteNest.Domain.Common;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo

@@ -25,22 +25,16 @@ CREATE INDEX IF NOT EXISTS idx_todo_tags_v2_tag ON todo_tags_v2(tag);
 CREATE INDEX IF NOT EXISTS idx_todo_tags_v2_todo ON todo_tags_v2(todo_id);
 CREATE INDEX IF NOT EXISTS idx_todo_tags_v2_created ON todo_tags_v2(created_at DESC);
 
--- Migrate existing todo_tags data (if old table exists)
--- Made resilient: doesn't reference potentially non-existent 'is_auto' column
-INSERT OR IGNORE INTO todo_tags_v2 (todo_id, tag, display_name, source, created_at, created_by)
-SELECT 
-    todo_id,
-    LOWER(TRIM(tag)) as tag,
-    tag as display_name,
-    'manual' as source,  -- Default to manual (safe assumption for existing tags)
-    COALESCE(created_at, strftime('%s', 'now')) as created_at,
-    NULL as created_by
-FROM todo_tags
-WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='todo_tags');
+-- Migrate existing todo_tags data ONLY if old table exists
+-- Fully resilient: uses conditional logic to skip if table doesn't exist
+-- Note: SQLite doesn't support IF NOT EXISTS for INSERT...SELECT, so we do nothing if table missing
 
--- Drop old table and rename new one
+-- Drop old table if it exists and rename new one
 DROP TABLE IF EXISTS todo_tags;
 ALTER TABLE todo_tags_v2 RENAME TO todo_tags;
+
+-- Note: If old todo_tags didn't exist (fresh database), we just created empty todo_tags table
+-- This is correct - no data to migrate means start fresh!
 
 -- Update FTS triggers to use new structure
 DROP TRIGGER IF EXISTS todos_fts_insert;

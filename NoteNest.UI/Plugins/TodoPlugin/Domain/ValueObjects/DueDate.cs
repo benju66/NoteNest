@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
+using NoteNest.Domain.Common;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Domain.ValueObjects
 {

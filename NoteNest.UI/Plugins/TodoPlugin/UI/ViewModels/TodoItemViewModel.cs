@@ -558,7 +558,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 
                 var result = await _mediator.Send(command);
                 
-                if (!result.IsSuccess)
+                if (!result.Success)
                 {
                     _logger.Error($"[TodoItemViewModel] AddTag failed: {result.Error}");
                     return;
@@ -594,7 +594,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 
                 var result = await _mediator.Send(command);
                 
-                if (!result.IsSuccess)
+                if (!result.Success)
                 {
                     _logger.Error($"[TodoItemViewModel] RemoveTag failed: {result.Error}");
                     return;

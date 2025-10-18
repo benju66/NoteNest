@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using MediatR;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Application.Common.Interfaces;
-using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
+using NoteNest.Domain.Common;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Events;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.ValueObjects;
@@ -33,9 +33,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.DeleteTodo
                 if (aggregate == null)
                     return Result.Fail<DeleteTodoResult>("Todo not found");
                 
-                // Raise deletion event (aggregate has its own TodoId)
-                var todoDeletedEvent = new TodoDeletedEvent(aggregate.TodoId);
-                aggregate.AddDomainEvent(todoDeletedEvent);
+                // Delete todo (raises TodoDeletedEvent)
+                aggregate.Delete();
                 
                 // Save to event store (TodoDeletedEvent will be persisted)
                 await _eventStore.SaveAsync(aggregate);

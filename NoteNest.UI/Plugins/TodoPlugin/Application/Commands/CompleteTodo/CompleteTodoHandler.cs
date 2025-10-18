@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using MediatR;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Application.Common.Interfaces;
-using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
+using NoteNest.Domain.Common;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CompleteTodo

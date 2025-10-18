@@ -1,5 +1,5 @@
 using System;
-using NoteNest.UI.Plugins.TodoPlugin.Domain.Common;
+using NoteNest.Domain.Common;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.ValueObjects;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Events
