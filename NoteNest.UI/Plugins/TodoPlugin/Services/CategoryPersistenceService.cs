@@ -36,6 +36,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         {
             try
             {
+                _logger.Info("[CategoryPersistence] ========== SAVING TO user_preferences ==========");
+                
                 var categoryList = categories.Select(c => new
                 {
                     Id = c.Id.ToString(),
@@ -46,7 +48,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                     Order = c.Order
                 }).ToList();
                 
+                _logger.Info($"[CategoryPersistence] Serializing {categoryList.Count} categories to JSON...");
+                
+                foreach (var cat in categoryList)
+                {
+                    _logger.Info($"[CategoryPersistence]   - {cat.Name} (ID: {cat.Id})");
+                }
+                
                 var json = JsonSerializer.Serialize(categoryList);
+                _logger.Info($"[CategoryPersistence] JSON length: {json.Length} characters");
+                _logger.Debug($"[CategoryPersistence] JSON content: {json}");
                 
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
@@ -62,7 +73,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                     UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
                 });
                 
-                _logger.Info($"[CategoryPersistence] Saved {categoryList.Count} categories to database");
+                _logger.Info($"[CategoryPersistence] ✅ Successfully saved {categoryList.Count} categories to database");
             }
             catch (Exception ex)
             {
@@ -75,6 +86,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         {
             try
             {
+                _logger.Info("[CategoryPersistence] ========== LOADING FROM user_preferences ==========");
+                
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
                 
@@ -83,16 +96,21 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 
                 if (string.IsNullOrEmpty(json))
                 {
-                    _logger.Debug("[CategoryPersistence] No saved categories found");
+                    _logger.Info("[CategoryPersistence] ❌ No saved categories found in database (NULL or empty)");
                     return new List<Category>();
                 }
+                
+                _logger.Info($"[CategoryPersistence] ✅ Found JSON in database (length: {json.Length} characters)");
+                _logger.Debug($"[CategoryPersistence] JSON content: {json}");
                 
                 var dtos = JsonSerializer.Deserialize<List<CategoryDto>>(json);
                 if (dtos == null || dtos.Count == 0)
                 {
-                    _logger.Debug("[CategoryPersistence] Deserialized empty category list");
+                    _logger.Warning("[CategoryPersistence] ❌ Deserialization returned null or empty list");
                     return new List<Category>();
                 }
+                
+                _logger.Info($"[CategoryPersistence] ✅ Deserialized {dtos.Count} category DTOs");
                 
                 var categories = dtos.Select(dto => new Category
                 {
@@ -104,7 +122,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                     Order = dto.Order
                 }).ToList();
                 
-                _logger.Info($"[CategoryPersistence] Loaded {categories.Count} categories from database");
+                _logger.Info($"[CategoryPersistence] ✅ Loaded {categories.Count} categories from database");
+                
+                foreach (var cat in categories)
+                {
+                    _logger.Info($"[CategoryPersistence]   - {cat.Name} (ID: {cat.Id})");
+                }
+                
                 return categories;
             }
             catch (Exception ex)

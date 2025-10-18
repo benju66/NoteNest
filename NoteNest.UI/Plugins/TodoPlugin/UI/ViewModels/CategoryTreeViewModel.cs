@@ -12,6 +12,10 @@ using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 using NoteNest.UI.Plugins.TodoPlugin.Services;
 using NoteNest.UI.ViewModels.Common;
+using NoteNest.UI.Services;
+using NoteNest.Application.Categories.Commands.CreateCategory;
+using NoteNest.Application.Categories.Commands.RenameCategory;
+using NoteNest.Application.Categories.Commands.DeleteCategory;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
 {
@@ -25,6 +29,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         private readonly ITodoStore _todoStore;
         private readonly ITodoTagRepository _todoTagRepository;
         private readonly IMediator _mediator;
+        private readonly IDialogService _dialogService;
         private readonly IAppLogger _logger;
         private bool _disposed = false;
         
@@ -42,12 +47,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             ITodoStore todoStore,
             ITodoTagRepository todoTagRepository,
             IMediator mediator,
+            IDialogService dialogService,
             IAppLogger logger)
         {
             _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
             _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
+            _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _categories = new SmartObservableCollection<CategoryNodeViewModel>();
@@ -181,59 +188,204 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             try
             {
-                // TODO: Show input dialog for category name
-                var categoryName = "New Category"; // Placeholder
-                
-                var category = new Category
+                // 1. Show input dialog (matches note tree pattern)
+                var categoryName = await _dialogService.ShowInputDialogAsync(
+                    "New Category",
+                    "Enter category name:",
+                    "",
+                    text => string.IsNullOrWhiteSpace(text) 
+                        ? "Category name cannot be empty." 
+                        : null);
+
+                if (string.IsNullOrWhiteSpace(categoryName))
                 {
-                    Name = categoryName,
-                    ParentId = parent?.CategoryId
+                    _logger.Debug("[CategoryTree] Category creation cancelled");
+                    return;
+                }
+
+                // 2. Use MediatR CQRS command (event-sourced persistence)
+                var command = new CreateCategoryCommand
+                {
+                    ParentCategoryId = parent?.CategoryId.ToString(),
+                    Name = categoryName
                 };
+
+                var result = await _mediator.Send(command);
                 
-                _categoryStore.Add(category);
-                await LoadCategoriesAsync();
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[CategoryTree] Failed to create category: {result.Error}");
+                    _dialogService.ShowError(result.Error, "Create Category Error");
+                    return;
+                }
+
+                _logger.Info($"[CategoryTree] ✅ Created category: {categoryName} (ID: {result.Value.CategoryId})");
+
+                // 3. Optionally track in CategoryStore (user preference)
+                // This determines if category shows in TodoPlugin panel
+                var shouldTrack = await _dialogService.ShowConfirmationDialogAsync(
+                    $"Category '{categoryName}' created successfully! Track in Todo panel?",
+                    "Track Category");
+
+                if (shouldTrack)
+                {
+                    var categoryId = Guid.Parse(result.Value.CategoryId);
+                    var category = new Category
+                    {
+                        Id = categoryId,
+                        Name = categoryName,
+                        ParentId = parent?.CategoryId,
+                        DisplayPath = result.Value.CategoryPath
+                    };
+                    
+                    await _categoryStore.AddAsync(category);  // Track in user_preferences
+                }
+
+                // 4. Refresh tree from database (invalidates cache, reloads from tree_view)
+                await _categoryStore.RefreshAsync();
+                
+                _dialogService.ShowInfo(
+                    $"Category '{categoryName}' created successfully!",
+                    "Success");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error creating category");
+                _logger.Error(ex, "[CategoryTree] Error creating category");
+                _dialogService.ShowError(
+                    $"Unexpected error: {ex.Message}",
+                    "Error");
             }
         }
 
         private async Task ExecuteRenameCategory(CategoryNodeViewModel? categoryVm)
         {
-            if (categoryVm == null) return;
+            if (categoryVm == null)
+            {
+                _logger.Warning("[CategoryTree] Rename called with null category");
+                return;
+            }
 
             try
             {
-                // TODO: Show input dialog for new name
-                var newName = "Renamed Category"; // Placeholder
-                
-                var category = _categoryStore.GetById(categoryVm.CategoryId);
-                if (category != null)
+                // 1. Show input dialog with current name as default
+                var newName = await _dialogService.ShowInputDialogAsync(
+                    "Rename Category",
+                    "Enter new category name:",
+                    categoryVm.Name,  // Default to current name
+                    text => string.IsNullOrWhiteSpace(text) 
+                        ? "Category name cannot be empty." 
+                        : null);
+
+                if (string.IsNullOrWhiteSpace(newName) || newName == categoryVm.Name)
                 {
-                    category.Name = newName;
-                    _categoryStore.Update(category);
-                    categoryVm.Name = newName;
+                    _logger.Debug("[CategoryTree] Rename cancelled or unchanged");
+                    return;
                 }
+
+                // 2. Use MediatR CQRS command
+                var command = new RenameCategoryCommand
+                {
+                    CategoryId = categoryVm.CategoryId.ToString(),
+                    NewName = newName
+                };
+
+                var result = await _mediator.Send(command);
+                
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[CategoryTree] Failed to rename category: {result.Error}");
+                    _dialogService.ShowError(result.Error, "Rename Category Error");
+                    return;
+                }
+
+                _logger.Info($"[CategoryTree] ✅ Renamed category: '{result.Value.OldName}' → '{result.Value.NewName}'");
+
+                // 3. Update CategoryStore tracked categories (if this category is tracked)
+                var trackedCategory = _categoryStore.GetById(categoryVm.CategoryId);
+                if (trackedCategory != null)
+                {
+                    trackedCategory.Name = newName;
+                    trackedCategory.DisplayPath = result.Value.NewPath;
+                    _categoryStore.Update(trackedCategory);  // Update user_preferences
+                }
+
+                // 4. Refresh tree from database
+                await _categoryStore.RefreshAsync();
+                
+                _dialogService.ShowInfo(
+                    $"Category renamed to '{newName}' successfully!",
+                    "Success");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error renaming category");
+                _logger.Error(ex, "[CategoryTree] Error renaming category");
+                _dialogService.ShowError(
+                    $"Unexpected error: {ex.Message}",
+                    "Error");
             }
         }
 
         private async Task ExecuteDeleteCategory(CategoryNodeViewModel? categoryVm)
         {
-            if (categoryVm == null) return;
+            if (categoryVm == null)
+            {
+                _logger.Warning("[CategoryTree] Delete called with null category");
+                return;
+            }
 
             try
             {
-                _categoryStore.Delete(categoryVm.CategoryId);
-                await LoadCategoriesAsync();
+                // 1. Show confirmation dialog
+                var confirmed = await _dialogService.ShowConfirmationDialogAsync(
+                    $"Are you sure you want to delete '{categoryVm.Name}' and all its contents?\n\n" +
+                    $"This will delete:\n" +
+                    $"• All notes in this category\n" +
+                    $"• All subcategories\n" +
+                    $"• All todos linked to notes in this category\n\n" +
+                    $"This action cannot be undone.",
+                    "Confirm Delete");
+
+                if (!confirmed)
+                {
+                    _logger.Debug("[CategoryTree] Delete cancelled");
+                    return;
+                }
+
+                // 2. Use MediatR CQRS command
+                var command = new DeleteCategoryCommand
+                {
+                    CategoryId = categoryVm.CategoryId.ToString(),
+                    DeleteFiles = true  // Delete physical directory
+                };
+
+                var result = await _mediator.Send(command);
+                
+                if (result.IsFailure)
+                {
+                    _logger.Error($"[CategoryTree] Failed to delete category: {result.Error}");
+                    _dialogService.ShowError(result.Error, "Delete Category Error");
+                    return;
+                }
+
+                _logger.Info($"[CategoryTree] ✅ Deleted category: '{result.Value.DeletedCategoryName}' " +
+                             $"({result.Value.DeletedDescendantCount} descendants)");
+
+                // 3. Remove from CategoryStore tracked categories
+                _categoryStore.Delete(categoryVm.CategoryId);  // Remove from user_preferences
+
+                // 4. Refresh tree from database
+                await _categoryStore.RefreshAsync();
+                
+                _dialogService.ShowInfo(
+                    $"Category '{result.Value.DeletedCategoryName}' and {result.Value.DeletedDescendantCount} items deleted successfully!",
+                    "Success");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Error deleting category");
+                _logger.Error(ex, "[CategoryTree] Error deleting category");
+                _dialogService.ShowError(
+                    $"Unexpected error: {ex.Message}",
+                    "Error");
             }
         }
 

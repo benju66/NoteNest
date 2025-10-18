@@ -54,14 +54,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 
             try
             {
+                _logger.Info("[CategoryStore] ========== INITIALIZATION START ==========");
                 _logger.Info("[CategoryStore] Loading saved categories from database...");
                 
                 // Load categories from user_preferences table
                 var savedCategories = await _persistenceService.LoadCategoriesAsync();
                 
+                _logger.Info($"[CategoryStore] ✅ Loaded {savedCategories.Count} categories from user_preferences");
+                
                 if (savedCategories.Count > 0)
                 {
-                    _logger.Debug($"[CategoryStore] Loaded {savedCategories.Count} saved categories, validating...");
+                    _logger.Info($"[CategoryStore] Beginning validation of {savedCategories.Count} categories...");
                     
                     // Validate that categories still exist in the tree
                     var validCategories = new List<Category>();
@@ -69,21 +72,30 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                     
                     foreach (var category in savedCategories)
                     {
+                        _logger.Info($"[CategoryStore] >>> Validating category: '{category.Name}' (ID: {category.Id})");
+                        
                         // Check if category still exists in tree database
                         var stillExists = await _syncService.IsCategoryInTreeAsync(category.Id);
+                        
+                        _logger.Info($"[CategoryStore] >>> Validation result for '{category.Name}': {(stillExists ? "EXISTS ✅" : "NOT FOUND ❌")}");
                         
                         if (stillExists)
                         {
                             validCategories.Add(category);
+                            _logger.Info($"[CategoryStore] >>> Category '{category.Name}' ADDED to valid list");
                         }
                         else
                         {
-                            _logger.Warning($"[CategoryStore] Removing orphaned category: {category.Name} (deleted from tree)");
+                            _logger.Warning($"[CategoryStore] >>> REMOVING orphaned category: {category.Name} (deleted from tree)");
                             removedCount++;
                         }
                     }
                     
                     // Load only valid categories
+                    _logger.Info($"[CategoryStore] === VALIDATION COMPLETE ===");
+                    _logger.Info($"[CategoryStore] Valid categories: {validCategories.Count}");
+                    _logger.Info($"[CategoryStore] Removed categories: {removedCount}");
+                    
                     if (validCategories.Count > 0)
                     {
                         using (_categories.BatchUpdate())
@@ -92,7 +104,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                             _categories.AddRange(validCategories);
                         }
                         
-                        _logger.Info($"[CategoryStore] Restored {validCategories.Count} valid categories");
+                        _logger.Info($"[CategoryStore] ✅ Restored {validCategories.Count} valid categories to collection");
+                        
+                        foreach (var cat in validCategories)
+                        {
+                            _logger.Info($"[CategoryStore]   - {cat.Name} (ID: {cat.Id})");
+                        }
                         
                         if (removedCount > 0)
                         {
@@ -104,14 +121,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                     }
                     else
                     {
-                        _logger.Info("[CategoryStore] No valid categories found after cleanup - starting empty");
+                        _logger.Warning("[CategoryStore] ❌ NO VALID CATEGORIES after cleanup - starting empty");
                     }
                 }
                 else
                 {
-                    _logger.Info("[CategoryStore] No saved categories found - starting empty");
+                    _logger.Info("[CategoryStore] No saved categories in user_preferences - starting empty");
                 }
                 
+                _logger.Info("[CategoryStore] ========== INITIALIZATION COMPLETE ==========");
                 _isInitialized = true;
             }
             catch (Exception ex)

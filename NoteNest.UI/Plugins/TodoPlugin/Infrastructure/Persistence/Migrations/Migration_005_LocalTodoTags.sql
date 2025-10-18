@@ -25,21 +25,18 @@ CREATE INDEX IF NOT EXISTS idx_todo_tags_v2_tag ON todo_tags_v2(tag);
 CREATE INDEX IF NOT EXISTS idx_todo_tags_v2_todo ON todo_tags_v2(todo_id);
 CREATE INDEX IF NOT EXISTS idx_todo_tags_v2_created ON todo_tags_v2(created_at DESC);
 
--- Migrate existing todo_tags data
+-- Migrate existing todo_tags data (if old table exists)
+-- Made resilient: doesn't reference potentially non-existent 'is_auto' column
 INSERT OR IGNORE INTO todo_tags_v2 (todo_id, tag, display_name, source, created_at, created_by)
 SELECT 
     todo_id,
     LOWER(TRIM(tag)) as tag,
     tag as display_name,
-    CASE WHEN EXISTS (
-        SELECT 1 FROM todo_tags t2 
-        WHERE t2.todo_id = todo_tags.todo_id 
-        AND t2.tag = todo_tags.tag 
-        AND t2.is_auto = 1
-    ) THEN 'auto-inherit' ELSE 'manual' END as source,
-    created_at,
+    'manual' as source,  -- Default to manual (safe assumption for existing tags)
+    COALESCE(created_at, strftime('%s', 'now')) as created_at,
     NULL as created_by
-FROM todo_tags;
+FROM todo_tags
+WHERE EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='todo_tags');
 
 -- Drop old table and rename new one
 DROP TABLE IF EXISTS todo_tags;

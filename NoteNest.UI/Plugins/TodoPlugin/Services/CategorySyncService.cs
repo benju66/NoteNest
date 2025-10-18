@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using NoteNest.Infrastructure.Database;
+using NoteNest.Application.Queries;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Trees;
@@ -11,7 +11,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
 {
     /// <summary>
     /// Synchronizes TodoPlugin categories with the main app's note tree structure.
-    /// Categories are queried from tree_nodes database with intelligent caching.
+    /// Categories are queried from tree_view projection (event-sourced) with intelligent caching.
     /// Follows TreeCacheService pattern with 5-minute expiration and event-driven invalidation.
     /// </summary>
     public interface ICategorySyncService
@@ -26,7 +26,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
     
     public class CategorySyncService : ICategorySyncService
     {
-        private readonly ITreeDatabaseRepository _treeRepository;
+        private readonly ITreeQueryService _treeQueryService;
         private readonly IAppLogger _logger;
         
         // Cache with 5-minute expiration (matches TreeCacheService pattern)
@@ -36,10 +36,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         private readonly object _cacheLock = new object();
         
         public CategorySyncService(
-            ITreeDatabaseRepository treeRepository,
+            ITreeQueryService treeQueryService,
             IAppLogger logger)
         {
-            _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
+            _treeQueryService = treeQueryService ?? throw new ArgumentNullException(nameof(treeQueryService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
         
@@ -65,10 +65,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             
             try
             {
-                _logger.Debug("[CategorySync] Cache expired or empty, querying tree database...");
+                _logger.Info("[CategorySync] ========== QUERYING TREE_VIEW ==========");
+                _logger.Debug("[CategorySync] Cache expired or empty, querying tree_view projection...");
                 
-                // Query tree_nodes where node_type = 'category'
-                var treeNodes = await _treeRepository.GetAllNodesAsync(includeDeleted: false);
+                // Query tree_view projection (event-sourced) where node_type = 'category'
+                var treeNodes = await _treeQueryService.GetAllNodesAsync(includeDeleted: false);
+                
+                _logger.Info($"[CategorySync] ✅ tree_view returned {treeNodes.Count} total nodes");
                 
                 var categories = treeNodes
                     .Where(n => n.NodeType == TreeNodeType.Category)
@@ -83,18 +86,33 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                     })
                     .ToList();
                 
+                _logger.Info($"[CategorySync] ✅ Filtered to {categories.Count} categories (NodeType == TreeNodeType.Category)");
+                
+                // Log first 10 categories for diagnostics
+                var sampleCount = Math.Min(categories.Count, 10);
+                for (int i = 0; i < sampleCount; i++)
+                {
+                    var cat = categories[i];
+                    _logger.Info($"[CategorySync]   [{i+1}] {cat.Name} (ID: {cat.Id})");
+                }
+                
+                if (categories.Count > 10)
+                {
+                    _logger.Info($"[CategorySync]   ... and {categories.Count - 10} more");
+                }
+                
                 lock (_cacheLock)
                 {
                     _cachedCategories = categories;
                     _cacheTime = DateTime.UtcNow;
                 }
                 
-                _logger.Info($"[CategorySync] Loaded {categories.Count} categories from tree (cached for {_cacheExpiration.TotalMinutes} min)");
+                _logger.Info($"[CategorySync] Categories cached for {_cacheExpiration.TotalMinutes} minutes");
                 return categories;
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[CategorySync] Failed to load categories from tree");
+                _logger.Error(ex, "[CategorySync] Failed to load categories from tree_view projection");
                 return new List<Category>();
             }
         }
@@ -106,24 +124,38 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         {
             try
             {
+                _logger.Info($"[CategorySync] >>> Looking for category ID: {categoryId}");
+                
                 // Try cache first
                 var allCategories = await GetAllCategoriesAsync();
+                
+                _logger.Info($"[CategorySync] >>> Cache has {allCategories.Count} categories total");
+                
                 var cached = allCategories.FirstOrDefault(c => c.Id == categoryId);
                 if (cached != null)
                 {
-                    _logger.Debug($"[CategorySync] Found category in cache: {cached.Name}");
+                    _logger.Info($"[CategorySync] >>> ✅ FOUND in cache: {cached.Name}");
                     return cached;
                 }
                 
-                // Fallback to direct query if not in cache (shouldn't happen often)
-                _logger.Debug($"[CategorySync] Category not in cache, querying directly: {categoryId}");
-                var treeNode = await _treeRepository.GetNodeByIdAsync(categoryId);
+                _logger.Info($"[CategorySync] >>> NOT in cache, trying direct query...");
                 
-                if (treeNode == null || treeNode.NodeType != TreeNodeType.Category)
+                // Fallback to direct query if not in cache (shouldn't happen often)
+                var treeNode = await _treeQueryService.GetByIdAsync(categoryId);
+                
+                if (treeNode == null)
                 {
-                    _logger.Warning($"[CategorySync] Category not found or not a category: {categoryId}");
+                    _logger.Warning($"[CategorySync] >>> ❌ NOT FOUND in tree_view (null)");
                     return null;
                 }
+                
+                if (treeNode.NodeType != TreeNodeType.Category)
+                {
+                    _logger.Warning($"[CategorySync] >>> ❌ Found but wrong type: {treeNode.NodeType} (expected Category)");
+                    return null;
+                }
+                
+                _logger.Info($"[CategorySync] >>> ✅ FOUND via direct query: {treeNode.Name}");
                 
                 return new Category
                 {
