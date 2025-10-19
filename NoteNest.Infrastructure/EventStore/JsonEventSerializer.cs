@@ -34,6 +34,7 @@ namespace NoteNest.Infrastructure.EventStore
             _options.Converters.Add(new NoteIdJsonConverter());
             _options.Converters.Add(new CategoryIdJsonConverter());
             _options.Converters.Add(new PluginIdJsonConverter());
+            _options.Converters.Add(new TodoIdJsonConverter());
             
             DiscoverEventTypes();
         }

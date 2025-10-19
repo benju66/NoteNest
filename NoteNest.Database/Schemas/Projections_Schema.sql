@@ -92,6 +92,8 @@ CREATE TABLE todo_view (
     source_type TEXT NOT NULL,   -- 'manual', 'note'
     source_note_id TEXT,
     source_file_path TEXT,
+    source_line_number INTEGER,  -- Line number in RTF file
+    source_char_offset INTEGER,  -- Character offset in RTF file
     is_orphaned INTEGER DEFAULT 0,
     created_at INTEGER NOT NULL,
     modified_at INTEGER NOT NULL,
@@ -109,6 +111,7 @@ CREATE INDEX idx_todo_priority ON todo_view(priority, due_date, is_completed) WH
 CREATE INDEX idx_todo_favorite ON todo_view(is_favorite, is_completed) WHERE is_favorite = 1 AND is_completed = 0;
 CREATE INDEX idx_todo_completed ON todo_view(completed_date DESC) WHERE is_completed = 1;
 CREATE INDEX idx_todo_source ON todo_view(source_note_id) WHERE source_type = 'note';
+CREATE INDEX idx_todo_source_tracking ON todo_view(source_note_id, source_line_number) WHERE source_type = 'note';
 
 -- ============================================================================
 -- CATEGORY VIEW PROJECTION - Categories with metadata

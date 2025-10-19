@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NoteNest.Core.Services;
 using NoteNest.Core.Services.Logging;
+using NoteNest.Domain.Todos;
 using NoteNest.UI.Collections;
 using NoteNest.UI.Plugins.TodoPlugin.Events;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
@@ -596,7 +597,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         /// Handles todo update events by reloading from database and updating collection.
         /// Used for: Complete, Uncomplete, TextUpdate, DueDateChange, PriorityChange, Favorite.
         /// </summary>
-        private async Task HandleTodoUpdatedAsync(Domain.ValueObjects.TodoId todoId)
+        private async Task HandleTodoUpdatedAsync(TodoId todoId)
         {
             try
             {

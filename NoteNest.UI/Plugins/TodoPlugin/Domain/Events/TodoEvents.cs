@@ -1,10 +1,17 @@
 using System;
 using NoteNest.Domain.Common;
-using NoteNest.UI.Plugins.TodoPlugin.Domain.ValueObjects;
+using NoteNest.Domain.Todos;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Events
 {
-    public record TodoCreatedEvent(TodoId TodoId, string Text, Guid? CategoryId) : IDomainEvent
+    public record TodoCreatedEvent(
+        TodoId TodoId, 
+        string Text, 
+        Guid? CategoryId,
+        Guid? SourceNoteId,
+        string SourceFilePath,
+        int? SourceLineNumber,
+        int? SourceCharOffset) : IDomainEvent
     {
         public DateTime OccurredAt { get; } = DateTime.UtcNow;
     }

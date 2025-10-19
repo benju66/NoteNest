@@ -142,15 +142,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                 categoryPath = category?.Path;
             }
             
+            // Use INSERT OR REPLACE for idempotency (event replay safe)
             await connection.ExecuteAsync(
-                @"INSERT INTO todo_view 
+                @"INSERT OR REPLACE INTO todo_view 
                   (id, text, description, is_completed, completed_date, category_id, category_name, category_path,
                    parent_id, sort_order, priority, is_favorite, due_date, reminder_date,
-                   source_type, source_note_id, source_file_path, is_orphaned, created_at, modified_at)
+                   source_type, source_note_id, source_file_path, source_line_number, source_char_offset,
+                   is_orphaned, created_at, modified_at)
                   VALUES 
                   (@Id, @Text, @Description, @IsCompleted, @CompletedDate, @CategoryId, @CategoryName, @CategoryPath,
                    @ParentId, @SortOrder, @Priority, @IsFavorite, @DueDate, @ReminderDate,
-                   @SourceType, @SourceNoteId, @SourceFilePath, @IsOrphaned, @CreatedAt, @ModifiedAt)",
+                   @SourceType, @SourceNoteId, @SourceFilePath, @SourceLineNumber, @SourceCharOffset,
+                   @IsOrphaned, @CreatedAt, @ModifiedAt)",
                 new
                 {
                     Id = e.TodoId.Value.ToString(),
@@ -167,15 +170,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     IsFavorite = 0,
                     DueDate = (long?)null,
                     ReminderDate = (long?)null,
-                    SourceType = e.CategoryId.HasValue ? "note" : "manual",
-                    SourceNoteId = (string)null,
-                    SourceFilePath = (string)null,
+                    // ✨ FIX: Use event fields directly (complete source tracking)
+                    SourceType = e.SourceNoteId.HasValue ? "note" : "manual",
+                    SourceNoteId = e.SourceNoteId?.ToString(),
+                    SourceFilePath = e.SourceFilePath,
+                    SourceLineNumber = e.SourceLineNumber,
+                    SourceCharOffset = e.SourceCharOffset,
                     IsOrphaned = 0,
                     CreatedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds(),
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            _logger.Debug($"[{Name}] Todo created: '{e.Text}' in category {e.CategoryId}");
+            _logger.Debug($"[{Name}] Todo created: '{e.Text}' (source: {e.SourceFilePath ?? "manual"})");
         }
         
         private async Task HandleTodoCompletedAsync(TodoCompletedEvent e)

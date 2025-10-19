@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NoteNest.Domain.Common;
+using NoteNest.Domain.Todos;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.ValueObjects;
 using NoteNest.UI.Plugins.TodoPlugin.Domain.Events;
 
@@ -64,7 +65,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
                 Tags = new List<string>()
             };
 
-            aggregate.AddDomainEvent(new TodoCreatedEvent(aggregate.TodoId, text, categoryId));
+            // Emit enhanced event (manual todos have no source tracking)
+            aggregate.AddDomainEvent(new TodoCreatedEvent(
+                aggregate.TodoId, 
+                text, 
+                categoryId,
+                null,  // No SourceNoteId for manual todos
+                null,  // No SourceFilePath
+                null,  // No SourceLineNumber
+                null   // No SourceCharOffset
+            ));
             return Result.Ok(aggregate);
         }
 
@@ -76,7 +86,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
             Guid sourceNoteId,
             string sourceFilePath,
             int? lineNumber = null,
-            int? charOffset = null)
+            int? charOffset = null,
+            Guid? categoryId = null)
         {
             var textResult = TodoText.Create(text);
             if (textResult.IsFailure)
@@ -86,6 +97,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
             {
                 TodoId = TodoId.Create(),
                 Text = textResult.Value,
+                CategoryId = categoryId,
                 SourceNoteId = sourceNoteId,
                 SourceFilePath = sourceFilePath,
                 SourceLineNumber = lineNumber,
@@ -98,7 +110,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
                 Tags = new List<string>()
             };
 
-            aggregate.AddDomainEvent(new TodoCreatedEvent(aggregate.TodoId, text, null));
+            // Emit enhanced event with complete source tracking AND categoryId
+            aggregate.AddDomainEvent(new TodoCreatedEvent(
+                aggregate.TodoId, 
+                text, 
+                categoryId,
+                sourceNoteId,
+                sourceFilePath,
+                lineNumber,
+                charOffset));
             return Result.Ok(aggregate);
         }
 
@@ -248,6 +268,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
             {
                 Tags.Add(tag);
                 ModifiedDate = DateTime.UtcNow;
+                
+                // Emit event for event sourcing (tags will be in projections.db/entity_tags)
+                AddDomainEvent(new NoteNest.Domain.Tags.Events.TagAddedToEntity(
+                    Id,                    // Entity ID
+                    "todo",                // Entity type
+                    tag.ToLowerInvariant().Trim(),  // Tag (normalized)
+                    tag.Trim(),            // Display name (original casing)
+                    "auto-inherit"         // Source (tags added programmatically are auto)
+                ));
             }
         }
 
@@ -256,6 +285,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
             if (Tags.Remove(tag))
             {
                 ModifiedDate = DateTime.UtcNow;
+                
+                // Emit event for event sourcing
+                AddDomainEvent(new NoteNest.Domain.Tags.Events.TagRemovedFromEntity(
+                    Id,                    // Entity ID
+                    "todo",                // Entity type
+                    tag.ToLowerInvariant().Trim()  // Tag (normalized)
+                ));
             }
         }
 
@@ -291,6 +327,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Domain.Aggregates
                     TodoId = e.TodoId;
                     Text = TodoText.Create(e.Text).Value;
                     CategoryId = e.CategoryId;
+                    SourceNoteId = e.SourceNoteId;
+                    SourceFilePath = e.SourceFilePath;
+                    SourceLineNumber = e.SourceLineNumber;
+                    SourceCharOffset = e.SourceCharOffset;
                     IsCompleted = false;
                     Priority = Priority.Normal;
                     Order = 0;
