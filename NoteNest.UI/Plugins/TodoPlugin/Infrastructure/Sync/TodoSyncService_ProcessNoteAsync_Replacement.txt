@@ -1,0 +1,39 @@
+            if (noteNode == null)
+            {
+                _logger.Debug($"[TodoSync] Note not in projections yet: {Path.GetFileName(filePath)} - trying parent folders (hierarchical)");
+                
+                // ✨ HIERARCHICAL LOOKUP: Walk up folder tree to find nearest category
+                var currentPath = Path.GetDirectoryName(filePath);
+                int depth = 0;
+                const int maxDepth = 10;
+                
+                while (!string.IsNullOrEmpty(currentPath) && depth < maxDepth)
+                {
+                    if (currentPath.Length <= _notesRootPath.Length)
+                        break;
+                    
+                    var relativePath = Path.GetRelativePath(_notesRootPath, currentPath);
+                    var canonical = relativePath.Replace('\\', '/').ToLowerInvariant();
+                    
+                    _logger.Debug($"[TodoSync] Level {depth + 1}: '{canonical}'");
+                    
+                    var folderNode = await _treeQueryService.GetByPathAsync(canonical);
+                    
+                    if (folderNode != null && folderNode.NodeType == TreeNodeType.Category)
+                    {
+                        categoryId = folderNode.Id;
+                        _logger.Info($"[TodoSync] ✅ Found at level {depth + 1}: {folderNode.Name} ({categoryId})");
+                        await EnsureCategoryAddedAsync(categoryId.Value);
+                        await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId);
+                        return;
+                    }
+                    
+                    currentPath = Path.GetDirectoryName(currentPath);
+                    depth++;
+                }
+                
+                _logger.Info($"[TodoSync] No category found (tried {depth} levels) - creating uncategorized");
+                await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId: null);
+                return;
+            }
+

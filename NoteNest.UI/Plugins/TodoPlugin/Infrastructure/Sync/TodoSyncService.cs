@@ -34,7 +34,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         private readonly ITodoStore _todoStore;  // NEW: For UI-synced operations
         private readonly IMediator _mediator;
         private readonly BracketTodoParser _parser;
-        private readonly ITreeDatabaseRepository _treeRepository;
+        private readonly NoteNest.Application.Queries.ITreeQueryService _treeQueryService;  // FIXED: Query projections.db instead of obsolete tree.db
         private readonly ICategoryStore _categoryStore;
         private readonly ICategorySyncService _categorySyncService;
         private readonly ITagInheritanceService _tagInheritanceService;
@@ -51,7 +51,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             ITodoStore todoStore,  // NEW: Inject TodoStore for UI updates
             IMediator mediator,
             BracketTodoParser parser,
-            ITreeDatabaseRepository treeRepository,
+            NoteNest.Application.Queries.ITreeQueryService treeQueryService,  // Changed to ITreeQueryService (projections.db)
             ICategoryStore categoryStore,
             ICategorySyncService categorySyncService,
             ITagInheritanceService tagInheritanceService,
@@ -63,7 +63,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _parser = parser ?? throw new ArgumentNullException(nameof(parser));
-            _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
+            _treeQueryService = treeQueryService ?? throw new ArgumentNullException(nameof(treeQueryService));
             _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
             _categorySyncService = categorySyncService ?? throw new ArgumentNullException(nameof(categorySyncService));
             _tagInheritanceService = tagInheritanceService ?? throw new ArgumentNullException(nameof(tagInheritanceService));
@@ -193,9 +193,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                 return;
             }
             
-            // STEP 3: Get note from tree database by path (ROBUST - follows DatabaseMetadataUpdateService pattern)
+            // STEP 3: Get note from projections.db by path (FIXED - uses event-sourced tree_view)
             var canonicalPath = filePath.ToLowerInvariant();
-            var noteNode = await _treeRepository.GetNodeByPathAsync(canonicalPath);
+            var noteNode = await _treeQueryService.GetByPathAsync(canonicalPath);
             
             Guid? categoryId = null;
             
@@ -212,9 +212,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                     var relativePath = Path.GetRelativePath(_notesRootPath, parentFolderPath);
                     var parentCanonical = relativePath.Replace('\\', '/').ToLowerInvariant();
                     
-                    _logger.Info($"[TodoSync] Looking up parent folder in tree.db: '{parentCanonical}'");
+                    _logger.Info($"[TodoSync] Looking up parent folder in tree_view: '{parentCanonical}'");
                     
-                    var parentNode = await _treeRepository.GetNodeByPathAsync(parentCanonical);
+                    var parentNode = await _treeQueryService.GetByPathAsync(parentCanonical);
                     
                     if (parentNode != null && parentNode.NodeType == TreeNodeType.Category)
                     {
@@ -534,4 +534,5 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         }
     }
 }
+
 
