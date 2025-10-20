@@ -92,12 +92,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                 "SELECT last_processed_position FROM projection_metadata WHERE projection_name = @Name",
                 new { Name = this.Name });
             
-            return checkpoint?.LastProcessedPosition ?? 0;
+            var position = checkpoint?.LastProcessedPosition ?? 0;
+            _logger.Debug($"[{Name}] GetLastProcessedPosition returned: {position} (checkpoint exists: {checkpoint != null})");
+            
+            return position;
         }
         
         public async Task SetLastProcessedPositionAsync(long position)
         {
             using var connection = await OpenConnectionAsync();
+            
+            _logger.Debug($"[{Name}] Saving position to projection_metadata: {position}");
             
             await connection.ExecuteAsync(
                 @"INSERT INTO projection_metadata (projection_name, last_processed_position, last_updated_at, status)
@@ -111,6 +116,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     Position = position,
                     UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
                 });
+            
+            _logger.Debug($"[{Name}] ✅ Position saved to projection_metadata: {position}");
         }
         
         private async Task<SqliteConnection> OpenConnectionAsync()
