@@ -25,16 +25,23 @@ namespace NoteNest.Infrastructure.EventBus
         {
             try
             {
+                _logger.Info($"[InMemoryEventBus] ⚡ Publishing event - Compile-time type: {typeof(T).Name}, Runtime type: {domainEvent.GetType().Name}");
+                
                 // Publish to MediatR notification pipeline
                 // This flows through to DomainEventBridge → Plugin EventBus
                 var notification = new Infrastructure.EventBus.DomainEventNotification(domainEvent);
+                
+                _logger.Debug($"[InMemoryEventBus] Created DomainEventNotification, about to call _mediator.Publish...");
                 await _mediator.Publish(notification);
+                _logger.Debug($"[InMemoryEventBus] _mediator.Publish completed successfully");
                 
                 _logger.Debug($"Published domain event: {typeof(T).Name}");
             }
             catch (System.Exception ex)
             {
-                _logger.Error(ex, $"Failed to publish domain event: {typeof(T).Name}");
+                _logger.Error(ex, $"[InMemoryEventBus] ❌ EXCEPTION publishing domain event: {typeof(T).Name}");
+                _logger.Error(ex, $"[InMemoryEventBus] Exception details: {ex.Message}");
+                _logger.Error(ex, $"[InMemoryEventBridge] Stack trace: {ex.StackTrace}");
                 // Don't throw - event publishing failures shouldn't crash CQRS handlers
             }
         }

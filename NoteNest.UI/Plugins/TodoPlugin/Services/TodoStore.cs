@@ -38,8 +38,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _todos = new SmartObservableCollection<TodoItem>();
             
+            _logger.Info("[TodoStore] ⚡ CONSTRUCTOR called - About to subscribe to events");
+            
             // Subscribe to category events for automatic cleanup
             SubscribeToEvents();
+            
+            _logger.Info("[TodoStore] ✅ CONSTRUCTOR complete - Subscriptions registered");
         }
 
         /// <summary>
@@ -387,6 +391,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             // Category events (not IDomainEvent - keep separate)
             _eventBus.Subscribe<CategoryDeletedEvent>(async e => await HandleCategoryDeletedAsync(e));
             
+            _logger.Info($"[TodoStore] Subscribing to NoteNest.Domain.Common.IDomainEvent...");
+            
             // Todo CQRS domain events - subscribe to base interface to match published type
             // Handlers publish as: PublishAsync<IDomainEvent>(domainEvent)
             // So we must subscribe to: Subscribe<IDomainEvent>
@@ -394,7 +400,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             {
                 try
                 {
-                    _logger.Debug($"[TodoStore] 📬 Received domain event: {domainEvent.GetType().Name}");
+                    _logger.Info($"[TodoStore] 📬 ⚡ RECEIVED domain event: {domainEvent.GetType().Name}");
                     
                     // Pattern match on runtime type to dispatch to appropriate handler
                     switch (domainEvent)

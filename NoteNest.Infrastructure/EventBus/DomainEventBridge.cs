@@ -26,14 +26,20 @@ namespace NoteNest.Infrastructure.EventBus
         {
             try
             {
+                _logger.Info($"[DomainEventBridge] ⚡ RECEIVED notification - Event type: {notification.DomainEvent.GetType().Name}");
+                _logger.Debug($"[DomainEventBridge] About to forward to _pluginEventBus.PublishAsync...");
+                _logger.Debug($"[DomainEventBridge] Event property type: {notification.DomainEvent.GetType().FullName}");
+                
                 // Forward domain event to plugin event bus
                 await _pluginEventBus.PublishAsync(notification.DomainEvent);
                 
-                _logger.Debug($"Bridged domain event to plugins: {notification.DomainEvent.GetType().Name}");
+                _logger.Info($"[DomainEventBridge] ✅ Bridged domain event to plugins: {notification.DomainEvent.GetType().Name}");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Failed to bridge domain event: {notification.DomainEvent.GetType().Name}");
+                _logger.Error(ex, $"[DomainEventBridge] ❌ EXCEPTION bridging domain event: {notification.DomainEvent.GetType().Name}");
+                _logger.Error(ex, $"[DomainEventBridge] Exception message: {ex.Message}");
+                _logger.Error(ex, $"[DomainEventBridge] Stack trace: {ex.StackTrace}");
                 // Don't throw - event bridge failures shouldn't crash the application
             }
         }

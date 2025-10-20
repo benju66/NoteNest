@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,13 +15,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.AddTag
     public class AddTagHandler : IRequestHandler<AddTagCommand, Result<AddTagResult>>
     {
         private readonly IEventStore _eventStore;
+        private readonly NoteNest.Application.Common.Interfaces.IEventBus _eventBus;
         private readonly IAppLogger _logger;
 
         public AddTagHandler(
             IEventStore eventStore,
+            NoteNest.Application.Common.Interfaces.IEventBus eventBus,
             IAppLogger logger)
         {
             _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -42,13 +46,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.AddTag
                 // Add tag (domain logic)
                 aggregate.AddTag(request.TagName);
                 
+                // Capture events BEFORE SaveAsync (SaveAsync clears DomainEvents)
+                var events = new List<IDomainEvent>(aggregate.DomainEvents);
+                
                 // Save to event store (AddTag modifies the aggregate)
                 await _eventStore.SaveAsync(aggregate);
                 
-                // TODO: Generate TagAddedToEntity event for projection
-                // For now, tags stored in TodoAggregate.Tags list
-                
                 _logger.Info($"[AddTagHandler] ✅ Tag '{request.TagName}' added to todo");
+                
+                // Publish captured events for real-time UI updates
+                foreach (var domainEvent in events)
+                {
+                    await _eventBus.PublishAsync(domainEvent);
+                    _logger.Debug($"[AddTagHandler] Published event: {domainEvent.GetType().Name}");
+                }
 
                 return Result.Ok(new AddTagResult
                 {

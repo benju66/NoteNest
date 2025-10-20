@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -12,13 +13,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MarkOrphaned
     public class MarkOrphanedHandler : IRequestHandler<MarkOrphanedCommand, Result<MarkOrphanedResult>>
     {
         private readonly IEventStore _eventStore;
+        private readonly NoteNest.Application.Common.Interfaces.IEventBus _eventBus;
         private readonly IAppLogger _logger;
 
         public MarkOrphanedHandler(
             IEventStore eventStore,
+            NoteNest.Application.Common.Interfaces.IEventBus eventBus,
             IAppLogger logger)
         {
             _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -37,10 +41,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MarkOrphaned
                     aggregate.MarkAsOrphaned();
                 }
                 
+                // Capture events BEFORE SaveAsync (SaveAsync clears DomainEvents)
+                var events = new List<IDomainEvent>(aggregate.DomainEvents);
+                
                 // Save to event store
                 await _eventStore.SaveAsync(aggregate);
                 
                 _logger.Info($"[MarkOrphanedHandler] Todo marked as orphaned: {request.TodoId}");
+                
+                // Publish captured events for real-time UI updates
+                foreach (var domainEvent in events)
+                {
+                    await _eventBus.PublishAsync(domainEvent);
+                    _logger.Debug($"[MarkOrphanedHandler] Published event: {domainEvent.GetType().Name}");
+                }
                 
                 return Result.Ok(new MarkOrphanedResult
                 {

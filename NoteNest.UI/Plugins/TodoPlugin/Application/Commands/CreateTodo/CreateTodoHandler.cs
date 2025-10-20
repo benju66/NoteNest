@@ -74,25 +74,26 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                     aggregate = result.Value;
                 }
                 
+                // ✨ CRITICAL FIX: Capture events BEFORE SaveAsync (SaveAsync clears DomainEvents)
+                var creationEvents = new List<IDomainEvent>(aggregate.DomainEvents);
+                
                 // Save to event store (persists TodoCreated event)
                 await _eventStore.SaveAsync(aggregate);
                 
                 _logger.Info($"[CreateTodoHandler] ✅ Todo persisted to event store: {aggregate.Id}");
                 
-                // ✨ CRITICAL FIX: Publish TodoCreatedEvent to InMemoryEventBus for UI updates
+                // Publish captured events to InMemoryEventBus for UI updates
                 // This flows through DomainEventBridge to Core.EventBus where TodoStore subscribes
-                var creationEvents = new List<IDomainEvent>(aggregate.DomainEvents);
                 foreach (var domainEvent in creationEvents)
                 {
                     await _eventBus.PublishAsync(domainEvent);
                     _logger.Debug($"[CreateTodoHandler] Published event: {domainEvent.GetType().Name}");
                 }
                 
-                // Apply folder + note inherited tags
-                await ApplyAllTagsAsync(aggregate.Id, request.CategoryId, request.SourceNoteId);
+                // Apply folder + note inherited tags (returns tag events to publish)
+                var tagEvents = await ApplyAllTagsAsync(aggregate.Id, request.CategoryId, request.SourceNoteId);
                 
                 // Publish tag events to InMemoryEventBus
-                var tagEvents = new List<IDomainEvent>(aggregate.DomainEvents);
                 foreach (var domainEvent in tagEvents)
                 {
                     await _eventBus.PublishAsync(domainEvent);
@@ -121,8 +122,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
         /// Apply folder + note inherited tags to newly created todo.
         /// EVENT-SOURCED: Tags applied via TodoAggregate.AddTag() which emits TagAddedToEntity events.
         /// TagProjection writes to projections.db/entity_tags (not todos.db).
+        /// Returns the tag events for the caller to publish.
         /// </summary>
-        private async Task ApplyAllTagsAsync(Guid todoId, Guid? categoryId, Guid? sourceNoteId)
+        private async Task<List<IDomainEvent>> ApplyAllTagsAsync(Guid todoId, Guid? categoryId, Guid? sourceNoteId)
         {
             try
             {
@@ -152,7 +154,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                 if (allTags.Count == 0)
                 {
                     _logger.Debug($"[CreateTodoHandler] No tags to apply to todo {todoId}");
-                    return;
+                    return new List<IDomainEvent>();
                 }
                 
                 // Load aggregate and add tags (generates TagAddedToEntity events)
@@ -160,7 +162,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                 if (aggregate == null)
                 {
                     _logger.Warning($"[CreateTodoHandler] Can't apply tags - aggregate not found: {todoId}");
-                    return;
+                    return new List<IDomainEvent>();
                 }
                 
                 foreach (var tag in allTags)
@@ -168,15 +170,21 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                     aggregate.AddTag(tag);  // Emits TagAddedToEntity event
                 }
                 
+                // Capture tag events BEFORE SaveAsync (SaveAsync clears DomainEvents)
+                var tagEvents = new List<IDomainEvent>(aggregate.DomainEvents);
+                
                 // Save aggregate (persists tag events to events.db)
                 await _eventStore.SaveAsync(aggregate);
                 
                 _logger.Info($"[CreateTodoHandler] ✅ Applied {allTags.Count} inherited tags to todo {todoId} via events (folder: {folderTags.Count}, note: {noteTags.Count})");
+                
+                return tagEvents;
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "[CreateTodoHandler] Failed to apply tags (non-fatal)");
                 // Tag inheritance failure shouldn't prevent todo creation
+                return new List<IDomainEvent>();
             }
         }
     }

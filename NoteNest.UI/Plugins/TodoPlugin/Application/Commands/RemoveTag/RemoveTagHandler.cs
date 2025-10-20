@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,13 +15,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.RemoveTag
     public class RemoveTagHandler : IRequestHandler<RemoveTagCommand, Result<RemoveTagResult>>
     {
         private readonly IEventStore _eventStore;
+        private readonly NoteNest.Application.Common.Interfaces.IEventBus _eventBus;
         private readonly IAppLogger _logger;
 
         public RemoveTagHandler(
             IEventStore eventStore,
+            NoteNest.Application.Common.Interfaces.IEventBus eventBus,
             IAppLogger logger)
         {
             _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
+            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -42,13 +46,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.RemoveTag
                 // Remove tag (domain logic)
                 aggregate.RemoveTag(request.TagName);
                 
+                // Capture events BEFORE SaveAsync (SaveAsync clears DomainEvents)
+                var events = new List<IDomainEvent>(aggregate.DomainEvents);
+                
                 // Save to event store (RemoveTag modifies the aggregate)
                 await _eventStore.SaveAsync(aggregate);
                 
-                // TODO: Generate TagRemovedFromEntity event for projection
-                // For now, tags stored in TodoAggregate.Tags list
-                
                 _logger.Info($"[RemoveTagHandler] ✅ Tag '{request.TagName}' removed from todo");
+                
+                // Publish captured events for real-time UI updates
+                foreach (var domainEvent in events)
+                {
+                    await _eventBus.PublishAsync(domainEvent);
+                    _logger.Debug($"[RemoveTagHandler] Published event: {domainEvent.GetType().Name}");
+                }
 
                 return Result.Ok(new RemoveTagResult
                 {

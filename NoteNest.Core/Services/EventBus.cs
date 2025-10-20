@@ -23,14 +23,27 @@ namespace NoteNest.Core.Services
         {
             if (eventData == null) return;
 
+            // DIAGNOSTIC LOGGING
+            var logger = NoteNest.Core.Services.Logging.AppLogger.Instance;
+            logger.Info($"[Core.EventBus] ⚡ PublishAsync called - Compile-time type: {typeof(TEvent).Name}, Runtime type: {eventData.GetType().Name}");
+            logger.Debug($"[Core.EventBus] Looking up handlers for type: {typeof(TEvent).FullName}");
+
             List<Delegate>? handlersToInvoke = null;
 
             _lock.EnterReadLock();
             try
             {
+                logger.Debug($"[Core.EventBus] Total subscribed types in dictionary: {_handlers.Count}");
+                logger.Debug($"[Core.EventBus] Types: {string.Join(", ", _handlers.Keys.Select(k => k.Name))}");
+                
                 if (_handlers.TryGetValue(typeof(TEvent), out var handlers) && handlers.Count > 0)
                 {
                     handlersToInvoke = handlers.ToList();
+                    logger.Info($"[Core.EventBus] ✅ Found {handlers.Count} handler(s) for {typeof(TEvent).Name}");
+                }
+                else
+                {
+                    logger.Warning($"[Core.EventBus] ❌ NO HANDLERS found for {typeof(TEvent).Name}");
                 }
             }
             finally
@@ -38,7 +51,11 @@ namespace NoteNest.Core.Services
                 _lock.ExitReadLock();
             }
 
-            if (handlersToInvoke == null || handlersToInvoke.Count == 0) return;
+            if (handlersToInvoke == null || handlersToInvoke.Count == 0)
+            {
+                logger.Warning($"[Core.EventBus] ⚠️ No handlers to invoke for {typeof(TEvent).Name} - event will be dropped");
+                return;
+            }
 
             var tasks = new List<Task>(handlersToInvoke.Count);
             foreach (var handler in handlersToInvoke)

@@ -26,15 +26,18 @@ namespace NoteNest.Infrastructure.Behaviors
     {
         private readonly ProjectionOrchestrator _projectionOrchestrator;
         private readonly ITreeQueryService _treeQueryService;
+        private readonly NoteNest.Core.Services.IEventBus _eventBus;
         private readonly IAppLogger _logger;
 
         public ProjectionSyncBehavior(
             ProjectionOrchestrator projectionOrchestrator,
             ITreeQueryService treeQueryService,
+            NoteNest.Core.Services.IEventBus eventBus,
             IAppLogger logger)
         {
             _projectionOrchestrator = projectionOrchestrator;
             _treeQueryService = treeQueryService;
+            _eventBus = eventBus;
             _logger = logger;
         }
 
@@ -59,6 +62,13 @@ namespace NoteNest.Infrastructure.Behaviors
                 _treeQueryService.InvalidateCache();
                 
                 _logger.Info($"✅ Projections synchronized and cache invalidated after {typeof(TRequest).Name}");
+                
+                // Notify subscribers that projections have been updated (for TodoStore to reload)
+                await _eventBus.PublishAsync(new ProjectionsSynchronizedEvent
+                {
+                    CommandType = typeof(TRequest).Name,
+                    SynchronizedAt = System.DateTime.UtcNow
+                });
             }
             catch (System.Exception ex)
             {
@@ -69,6 +79,16 @@ namespace NoteNest.Infrastructure.Behaviors
 
             return response;
         }
+    }
+    
+    /// <summary>
+    /// Event published when projections have been synchronized.
+    /// TodoStore can subscribe to this to reload data.
+    /// </summary>
+    public class ProjectionsSynchronizedEvent
+    {
+        public string CommandType { get; set; }
+        public System.DateTime SynchronizedAt { get; set; }
     }
 }
 

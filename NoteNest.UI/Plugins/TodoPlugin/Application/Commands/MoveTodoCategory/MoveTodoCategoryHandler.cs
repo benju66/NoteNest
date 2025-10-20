@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -14,15 +15,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MoveTodoCategory
     {
         private readonly IEventStore _eventStore;
         private readonly ITagInheritanceService _tagInheritanceService;
+        private readonly NoteNest.Application.Common.Interfaces.IEventBus _eventBus;
         private readonly IAppLogger _logger;
 
         public MoveTodoCategoryHandler(
             IEventStore eventStore,
             ITagInheritanceService tagInheritanceService,
+            NoteNest.Application.Common.Interfaces.IEventBus eventBus,
             IAppLogger logger)
         {
             _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _tagInheritanceService = tagInheritanceService ?? throw new ArgumentNullException(nameof(tagInheritanceService));
+            _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -52,10 +56,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.MoveTodoCategory
                 // Move to new category (domain logic)
                 aggregate.SetCategory(request.TargetCategoryId);
                 
+                // Capture events BEFORE SaveAsync (SaveAsync clears DomainEvents)
+                var events = new List<IDomainEvent>(aggregate.DomainEvents);
+                
                 // Save to event store
                 await _eventStore.SaveAsync(aggregate);
                 
                 _logger.Info($"[MoveTodoCategoryHandler] Moved todo {request.TodoId} from {oldCategoryId} to {request.TargetCategoryId}");
+                
+                // Publish captured events for real-time UI updates
+                foreach (var domainEvent in events)
+                {
+                    await _eventBus.PublishAsync(domainEvent);
+                    _logger.Debug($"[MoveTodoCategoryHandler] Published event: {domainEvent.GetType().Name}");
+                }
                 
                 // Update inherited tags based on new location
                 // TODO: This will be event-driven in future (CategoryMoved event triggers tag recalculation)

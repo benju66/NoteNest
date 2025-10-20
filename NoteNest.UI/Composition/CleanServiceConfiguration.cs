@@ -376,6 +376,7 @@ namespace NoteNest.UI.Composition
             {
                 cfg.RegisterServicesFromAssembly(typeof(CreateNoteCommand).Assembly);
                 cfg.RegisterServicesFromAssembly(typeof(NoteNest.UI.Plugins.TodoPlugin.TodoPlugin).Assembly);
+                cfg.RegisterServicesFromAssembly(typeof(DomainEventBridge).Assembly);  // Infrastructure - for DomainEventBridge
             });
             
             // Pipeline behaviors (now compatible with Microsoft.Extensions.Logging)
