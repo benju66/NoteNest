@@ -194,6 +194,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             }
             
             // STEP 3: Get note from projections.db by path (FIXED - uses event-sourced tree_view)
+            // NOTE: canonical_path in tree_view is stored as lowercase absolute path
             var canonicalPath = filePath.ToLowerInvariant();
             var noteNode = await _treeQueryService.GetByPathAsync(canonicalPath);
             
@@ -201,25 +202,34 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             
             if (noteNode == null)
             {
-                _logger.Debug($"[TodoSync] Note not in tree DB yet: {Path.GetFileName(filePath)} - trying parent folder");
+                _logger.Info($"[TodoSync] Note not in tree_view - starting HIERARCHICAL folder lookup");
                 
-                // ✨ FIX: Try parent folder - folders are usually in tree.db before notes
-                var parentFolderPath = Path.GetDirectoryName(filePath);
-                if (!string.IsNullOrEmpty(parentFolderPath))
+                // HIERARCHICAL LOOKUP: Walk up folder tree to find nearest category
+                var currentFolderPath = Path.GetDirectoryName(filePath);
+                int level = 0;
+                
+                while (!string.IsNullOrEmpty(currentFolderPath) && level < 10)
                 {
-                    // Convert to canonical format: relative path with forward slashes, lowercase
-                    // tree.db stores paths like: "projects/25-111 - test project" (relative to Notes root)
-                    var relativePath = Path.GetRelativePath(_notesRootPath, parentFolderPath);
-                    var parentCanonical = relativePath.Replace('\\', '/').ToLowerInvariant();
-                    
-                    _logger.Info($"[TodoSync] Looking up parent folder in tree_view: '{parentCanonical}'");
-                    
-                    var parentNode = await _treeQueryService.GetByPathAsync(parentCanonical);
-                    
-                    if (parentNode != null && parentNode.NodeType == TreeNodeType.Category)
+                    // Stop if we've reached or gone above the notes root
+                    if (currentFolderPath.Length <= _notesRootPath.Length)
                     {
-                        categoryId = parentNode.Id;
-                        _logger.Info($"[TodoSync] ✅ Using parent folder as category: {parentNode.Name} ({categoryId})");
+                        _logger.Debug($"[TodoSync] Reached notes root at level {level}");
+                        break;
+                    }
+                    
+                    // Convert to canonical format: ABSOLUTE path, lowercase
+                    // tree_view stores paths like: "c:\users\burness\mynotes\notes\projects\25-117 - op iii"
+                    var canonicalFolderPath = currentFolderPath.ToLowerInvariant();
+                    
+                    _logger.Info($"[TodoSync] HIERARCHICAL Level {level + 1}: Checking '{Path.GetFileName(currentFolderPath)}'");
+                    _logger.Debug($"[TodoSync]   Full path: '{canonicalFolderPath}'");
+                    
+                    var folderNode = await _treeQueryService.GetByPathAsync(canonicalFolderPath);
+                    
+                    if (folderNode != null && folderNode.NodeType == TreeNodeType.Category)
+                    {
+                        categoryId = folderNode.Id;
+                        _logger.Info($"[TodoSync] ✅ SUCCESS! Found at level {level + 1}: {folderNode.Name} (ID: {categoryId})");
                         
                         // Auto-add category to todo panel if not already there
                         await EnsureCategoryAddedAsync(categoryId.Value);
@@ -227,14 +237,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                         await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId);
                         return;
                     }
-                    else
-                    {
-                        _logger.Debug($"[TodoSync] Parent folder also not in tree DB yet");
-                    }
+                    
+                    _logger.Debug($"[TodoSync] Not found at level {level + 1}, going up to parent...");
+                    currentFolderPath = Path.GetDirectoryName(currentFolderPath);
+                    level++;
                 }
                 
-                // Neither note nor parent folder found - create uncategorized
-                _logger.Info($"[TodoSync] Creating {candidates.Count} uncategorized todos (will auto-categorize when folder is scanned)");
+                // No matching category found in entire hierarchy
+                _logger.Info($"[TodoSync] ❌ No category found after {level} hierarchical levels - creating uncategorized");
                 await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId: null);
                 return;
             }
