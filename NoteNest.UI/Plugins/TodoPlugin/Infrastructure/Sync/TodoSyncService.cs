@@ -37,7 +37,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
         private readonly ITreeDatabaseRepository _treeRepository;
         private readonly ICategoryStore _categoryStore;
         private readonly ICategorySyncService _categorySyncService;
+        private readonly ITagInheritanceService _tagInheritanceService;
         private readonly IAppLogger _logger;
+        private readonly string _notesRootPath;
         private readonly Timer _debounceTimer;
         private string? _pendingNoteId;
         private string? _pendingFilePath;
@@ -52,7 +54,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             ITreeDatabaseRepository treeRepository,
             ICategoryStore categoryStore,
             ICategorySyncService categorySyncService,
-            IAppLogger logger)
+            ITagInheritanceService tagInheritanceService,
+            IAppLogger logger,
+            Microsoft.Extensions.Configuration.IConfiguration configuration)
         {
             _saveManager = saveManager ?? throw new ArgumentNullException(nameof(saveManager));
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
@@ -62,7 +66,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             _treeRepository = treeRepository ?? throw new ArgumentNullException(nameof(treeRepository));
             _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
             _categorySyncService = categorySyncService ?? throw new ArgumentNullException(nameof(categorySyncService));
+            _tagInheritanceService = tagInheritanceService ?? throw new ArgumentNullException(nameof(tagInheritanceService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            
+            // Get notes root path from configuration (same as TreeDatabaseRepository)
+            _notesRootPath = configuration?["NotesPath"] 
+                ?? @"C:\Users\Burness\MyNotes\Notes";
             
             // Debounce timer to avoid processing every keystroke during auto-save
             _debounceTimer = new Timer(ProcessPendingNote, null, Timeout.Infinite, Timeout.Infinite);
@@ -198,7 +207,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                 var parentFolderPath = Path.GetDirectoryName(filePath);
                 if (!string.IsNullOrEmpty(parentFolderPath))
                 {
-                    var parentNode = await _treeRepository.GetNodeByPathAsync(parentFolderPath.ToLowerInvariant());
+                    // Convert to canonical format: relative path with forward slashes, lowercase
+                    // tree.db stores paths like: "projects/25-111 - test project" (relative to Notes root)
+                    var relativePath = Path.GetRelativePath(_notesRootPath, parentFolderPath);
+                    var parentCanonical = relativePath.Replace('\\', '/').ToLowerInvariant();
+                    
+                    _logger.Info($"[TodoSync] Looking up parent folder in tree.db: '{parentCanonical}'");
+                    
+                    var parentNode = await _treeRepository.GetNodeByPathAsync(parentCanonical);
                     
                     if (parentNode != null && parentNode.NodeType == TreeNodeType.Category)
                     {
