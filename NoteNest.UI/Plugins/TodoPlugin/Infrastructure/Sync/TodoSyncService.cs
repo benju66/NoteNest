@@ -228,14 +228,21 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                     
                     if (folderNode != null && folderNode.NodeType == TreeNodeType.Category)
                     {
-                        categoryId = folderNode.Id;
-                        _logger.Info($"[TodoSync] ✅ SUCCESS! Found at level {level + 1}: {folderNode.Name} (ID: {categoryId})");
+                        // NEW: Check if user has added this category to their todo panel
+                        var isInUserCategories = _categoryStore.Categories.Any(c => c.Id == folderNode.Id);
                         
-                        // Auto-add category to todo panel if not already there
-                        await EnsureCategoryAddedAsync(categoryId.Value);
-                        
-                        await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId);
-                        return;
+                        if (isInUserCategories)
+                        {
+                            categoryId = folderNode.Id;
+                            _logger.Info($"[TodoSync] ✅ MATCH! Found user's category at level {level + 1}: {folderNode.Name} (ID: {categoryId})");
+                            
+                            await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId);
+                            return;
+                        }
+                        else
+                        {
+                            _logger.Debug($"[TodoSync] Found '{folderNode.Name}' but not in user's todo panel - continuing up...");
+                        }
                     }
                     
                     _logger.Debug($"[TodoSync] Not found at level {level + 1}, going up to parent...");
@@ -243,8 +250,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                     level++;
                 }
                 
-                // No matching category found in entire hierarchy
-                _logger.Info($"[TodoSync] ❌ No category found after {level} hierarchical levels - creating uncategorized");
+                // No user-selected category found in entire hierarchy
+                _logger.Info($"[TodoSync] No user category matched after {level} levels - creating uncategorized (user must manually add parent category to todo panel)");
                 await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId: null);
                 return;
             }
@@ -256,19 +263,39 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                 return;
             }
             
-            // STEP 5: Auto-categorize (category = note's parent folder)
-            categoryId = noteNode.ParentId;  // Can be null for root-level notes
+            // STEP 5: Auto-categorize using user's selected categories only
+            // Get note's parent folder and check if user added it (or any ancestor) to todo panel
+            var noteFolderId = noteNode.ParentId;
             
-            if (categoryId.HasValue)
+            if (noteFolderId.HasValue)
             {
-                _logger.Debug($"[TodoSync] Note is in category: {categoryId.Value} - todos will be auto-categorized");
+                // Check if user added this exact category to todo panel
+                var isInUserCategories = _categoryStore.Categories.Any(c => c.Id == noteFolderId.Value);
                 
-                // Auto-add category to todo tree if user hasn't added it yet
-                await EnsureCategoryAddedAsync(categoryId.Value);
+                if (isInUserCategories)
+                {
+                    categoryId = noteFolderId.Value;
+                    _logger.Info($"[TodoSync] ✅ Note's parent category is in user's todo panel - using it");
+                }
+                else
+                {
+                    // Parent not in panel - walk up to find ancestor that IS in panel
+                    _logger.Debug($"[TodoSync] Note's parent not in todo panel - checking ancestors...");
+                    categoryId = await FindUserCategoryInHierarchyAsync(noteFolderId.Value);
+                    
+                    if (categoryId.HasValue)
+                    {
+                        _logger.Info($"[TodoSync] ✅ Found user's ancestor category in hierarchy");
+                    }
+                    else
+                    {
+                        _logger.Info($"[TodoSync] No user category in hierarchy - creating uncategorized");
+                    }
+                }
             }
             else
             {
-                _logger.Debug($"[TodoSync] Note is at root level - todos will be uncategorized");
+                _logger.Debug($"[TodoSync] Note is at root level - creating uncategorized");
             }
             
             // STEP 6: Reconcile todos with database
@@ -374,11 +401,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
                 
                 if (categoryId.HasValue)
                 {
-                    _logger.Info($"[TodoSync] ✅ Created todo from note via command: \"{candidate.Text}\" [auto-categorized: {categoryId.Value}]");
+                    _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [matched to user category: {categoryId.Value}]");
                 }
                 else
                 {
-                    _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [uncategorized] - UI will auto-refresh");
+                    _logger.Info($"[TodoSync] ✅ Created todo from note: \"{candidate.Text}\" [uncategorized - no matching user category found]");
                 }
             }
             catch (Exception ex)
@@ -438,6 +465,49 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             catch (Exception ex)
             {
                 _logger.Error(ex, "[TodoSync] Failed to handle missing file");
+            }
+        }
+        
+        /// <summary>
+        /// Walk up the tree hierarchy to find an ancestor category that user has added to their todo panel.
+        /// Returns the closest ancestor category ID that exists in CategoryStore, or null if none found.
+        /// </summary>
+        private async Task<Guid?> FindUserCategoryInHierarchyAsync(Guid startCategoryId)
+        {
+            try
+            {
+                var currentId = startCategoryId;
+                int level = 0;
+                
+                while (level < 10)  // Safety limit
+                {
+                    // Check if this category is in user's todo panel
+                    var isInUserCategories = _categoryStore.Categories.Any(c => c.Id == currentId);
+                    
+                    if (isInUserCategories)
+                    {
+                        _logger.Debug($"[TodoSync] Found user category at ancestor level {level + 1}");
+                        return currentId;
+                    }
+                    
+                    // Get parent category from tree_view
+                    var categoryNode = await _treeQueryService.GetByIdAsync(currentId);
+                    if (categoryNode?.ParentId == null)
+                    {
+                        _logger.Debug($"[TodoSync] Reached tree root, no user category found");
+                        break;
+                    }
+                    
+                    currentId = categoryNode.ParentId.Value;
+                    level++;
+                }
+                
+                return null;  // No user category found in hierarchy
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoSync] Failed to find user category in hierarchy");
+                return null;
             }
         }
         

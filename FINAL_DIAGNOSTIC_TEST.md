@@ -1,79 +1,58 @@
-# 🔬 Final Diagnostic Test - Type Handler Tracing
+# 🔍 FINAL DIAGNOSTIC - CategoryId Read Issue
 
-**Added:** Debug logging to NullableGuidTypeHandler to see if it's being called
-
----
-
-## 📋 **RUN THIS TEST:**
-
-### **1. Close app completely**
-```powershell
-taskkill /F /IM NoteNest.UI.exe /T
-```
-
-### **2. Rebuild**
-```powershell
-cd C:\NoteNest
-dotnet clean
-dotnet build
-```
-
-### **3. Delete database**
-```powershell
-Remove-Item "$env:LOCALAPPDATA\NoteNest\.plugins\NoteNest.TodoPlugin\*.*" -Force
-```
-
-### **4. Run app from Visual Studio (NOT Launch-NoteNest.bat)**
-```
-- Open NoteNest.sln in Visual Studio
-- Press F5 (Debug mode)
-- This will show Debug.WriteLine output!
-```
-
-### **5. Quick test**
-- Add "Test Notes" category
-- Create todo: [type handler test]
-- Close app from VS
-
-### **6. Check Debug Output window in Visual Studio**
-
-**Look for:**
-```
-[GuidTypeHandler] Parse called: value='54256f7f...' → parsed to XXX
-```
-
-**OR**
-```
-[GuidTypeHandler] Parse called: value=null/DBNull → returning null
-```
+**Issue Found:** CategoryId IS written to database but returns NULL when read!
 
 ---
 
-## 🔍 **This Will Tell Us:**
+## 📊 **Evidence**
 
-**If you see Parse called with the GUID string:**
-- Type handler IS being called
-- But it's failing to parse for some reason
-- Will show exact failure point
+### **Write Side (Working):**
+```
+[TodoView] ✅ WROTE to todo_view: 'test task created 1' 
+           CategoryId: b9d84b31-86f5-4ee1-8293-67223fc895e5 
+           CategoryName: 25-117 - OP III
+```
 
-**If you see Parse called with null:**
-- Database value is actually NULL (shouldn't be based on exports)
-- Or Dapper is passing NULL for some other reason
+✅ TodoProjection writes CategoryId to database
 
-**If you see NO Parse calls:**
-- Type handler isn't registered properly
-- Or Dapper isn't using it
+### **Read Side (Broken):**
+```
+[TodoStore] ✅ Todo loaded from database: 'test task created 1', CategoryId:  ← EMPTY!
+```
+
+❌ TodoQueryService reads CategoryId as NULL
 
 ---
 
-**Run from Visual Studio in Debug mode and watch the Output window!**
+## 🎯 **Final Diagnostic Build**
 
-Alternatively, if you don't have VS:
+I've added logging to TodoQueryService to show:
+1. What CategoryId is in the DTO from database
+2. What CategoryId is after MapToTodoItem()
+
+**This will show if:**
+- Database has it but query doesn't return it
+- Query returns it but mapping loses it
+- Or something else
+
+---
+
+## 🧪 **ONE MORE TEST**
+
+1. **Close app**
+2. **Clear log:**
+   ```powershell
+   Clear-Content "C:\Users\Burness\AppData\Local\NoteNest\Logs\notenest-20251020.log"
+   ```
+3. **Launch app**
+4. **Add "25-117 - OP III" to todo panel**
+5. **Open note, create `[final diagnostic test]`**
+6. **Save**
+
+**Then send me this:**
 ```powershell
-# Run with debugger attached
-dotnet run --project NoteNest.UI
-# Check console output for Debug.WriteLine messages
+$log = Get-Content "C:\Users\Burness\AppData\Local\NoteNest\Logs\notenest-20251020.log"
+$log | Select-String -Pattern "TodoQueryService.*CategoryId|WROTE to todo_view.*final diagnostic" | Select-Object -Last 5
 ```
 
-**This is the final diagnostic that will show exactly what's happening!**
-
+This will show the EXACT point where CategoryId becomes null.

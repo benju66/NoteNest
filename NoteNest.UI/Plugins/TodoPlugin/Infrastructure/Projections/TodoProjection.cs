@@ -132,14 +132,26 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
             string categoryName = null;
             string categoryPath = null;
             
+            _logger.Debug($"[{Name}] Event CategoryId: {e.CategoryId?.ToString() ?? "NULL"}");
+            
             if (e.CategoryId.HasValue)
             {
+                _logger.Debug($"[{Name}] Looking up category in tree_view: {e.CategoryId.Value}");
+                
                 var category = await connection.QueryFirstOrDefaultAsync<CategoryInfo>(
                     "SELECT name, display_path as Path FROM tree_view WHERE id = @Id AND node_type = 'category'",
                     new { Id = e.CategoryId.Value.ToString() });
                 
-                categoryName = category?.Name;
-                categoryPath = category?.Path;
+                if (category != null)
+                {
+                    categoryName = category.Name;
+                    categoryPath = category.Path;
+                    _logger.Debug($"[{Name}] ✅ Category found: {categoryName}");
+                }
+                else
+                {
+                    _logger.Warning($"[{Name}] ⚠️ Category NOT found in tree_view: {e.CategoryId.Value} - will store CategoryId anyway");
+                }
             }
             
             // Use INSERT OR REPLACE for idempotency (event replay safe)
@@ -181,7 +193,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            _logger.Debug($"[{Name}] Todo created: '{e.Text}' (source: {e.SourceFilePath ?? "manual"})");
+            _logger.Info($"[{Name}] ✅ WROTE to todo_view: '{e.Text}' | CategoryId: {e.CategoryId?.ToString() ?? "NULL"} | CategoryName: {categoryName ?? "NULL"}");
         }
         
         private async Task HandleTodoCompletedAsync(TodoCompletedEvent e)

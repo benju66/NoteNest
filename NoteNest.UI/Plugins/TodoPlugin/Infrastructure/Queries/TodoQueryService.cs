@@ -33,10 +33,25 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                 await connection.OpenAsync();
 
                 var dto = await connection.QueryFirstOrDefaultAsync<TodoDto>(
-                    "SELECT * FROM todo_view WHERE id = @Id",
+                    @"SELECT id, text, description, is_completed, completed_date,
+                             category_id AS CategoryId, category_name AS CategoryName, category_path AS CategoryPath,
+                             parent_id AS ParentId, sort_order AS SortOrder, priority, is_favorite AS IsFavorite,
+                             due_date AS DueDate, reminder_date AS ReminderDate,
+                             source_type AS SourceType, source_note_id AS SourceNoteId, source_file_path AS SourceFilePath,
+                             source_line_number AS SourceLineNumber, source_char_offset AS SourceCharOffset,
+                             is_orphaned AS IsOrphaned, created_at AS CreatedAt, modified_at AS ModifiedAt
+                      FROM todo_view WHERE id = @Id",
                     new { Id = id.ToString() });
 
-                return dto != null ? MapToTodoItem(dto) : null;
+                if (dto != null)
+                {
+                    _logger.Debug($"[TodoQueryService] Read from todo_view: '{dto.Text}' | CategoryId from DB: '{dto.CategoryId ?? "NULL"}'");
+                    var mapped = MapToTodoItem(dto);
+                    _logger.Debug($"[TodoQueryService] After mapping: CategoryId = '{mapped.CategoryId?.ToString() ?? "NULL"}'");
+                    return mapped;
+                }
+                
+                return null;
             }
             catch (Exception ex)
             {
@@ -55,18 +70,23 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                 string sql;
                 object param;
 
+                var selectColumns = @"SELECT id, text, description, is_completed, completed_date,
+                                             category_id AS CategoryId, category_name AS CategoryName, category_path AS CategoryPath,
+                                             parent_id AS ParentId, sort_order AS SortOrder, priority, is_favorite AS IsFavorite,
+                                             due_date AS DueDate, reminder_date AS ReminderDate,
+                                             source_type AS SourceType, source_note_id AS SourceNoteId, source_file_path AS SourceFilePath,
+                                             source_line_number AS SourceLineNumber, source_char_offset AS SourceCharOffset,
+                                             is_orphaned AS IsOrphaned, created_at AS CreatedAt, modified_at AS ModifiedAt
+                                      FROM todo_view";
+                
                 if (categoryId.HasValue)
                 {
-                    sql = @"SELECT * FROM todo_view 
-                           WHERE category_id = @CategoryId
-                           ORDER BY sort_order, created_at";
+                    sql = $"{selectColumns} WHERE category_id = @CategoryId ORDER BY sort_order, created_at";
                     param = new { CategoryId = categoryId.Value.ToString() };
                 }
                 else
                 {
-                    sql = @"SELECT * FROM todo_view 
-                           WHERE category_id IS NULL
-                           ORDER BY sort_order, created_at";
+                    sql = $"{selectColumns} WHERE category_id IS NULL ORDER BY sort_order, created_at";
                     param = null;
                 }
 
@@ -172,9 +192,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
 
+                var selectColumns = @"SELECT id, text, description, is_completed, completed_date,
+                                             category_id AS CategoryId, category_name AS CategoryName, category_path AS CategoryPath,
+                                             parent_id AS ParentId, sort_order AS SortOrder, priority, is_favorite AS IsFavorite,
+                                             due_date AS DueDate, reminder_date AS ReminderDate,
+                                             source_type AS SourceType, source_note_id AS SourceNoteId, source_file_path AS SourceFilePath,
+                                             source_line_number AS SourceLineNumber, source_char_offset AS SourceCharOffset,
+                                             is_orphaned AS IsOrphaned, created_at AS CreatedAt, modified_at AS ModifiedAt
+                                      FROM todo_view";
+                
                 var sql = includeCompleted
-                    ? "SELECT * FROM todo_view ORDER BY is_completed, sort_order, created_at"
-                    : "SELECT * FROM todo_view WHERE is_completed = 0 ORDER BY sort_order, created_at";
+                    ? $"{selectColumns} ORDER BY is_completed, sort_order, created_at"
+                    : $"{selectColumns} WHERE is_completed = 0 ORDER BY sort_order, created_at";
 
                 var dtos = await connection.QueryAsync<TodoDto>(sql);
                 return dtos.Select(MapToTodoItem).Where(t => t != null).ToList();
