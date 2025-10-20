@@ -188,13 +188,37 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             var canonicalPath = filePath.ToLowerInvariant();
             var noteNode = await _treeRepository.GetNodeByPathAsync(canonicalPath);
             
+            Guid? categoryId = null;
+            
             if (noteNode == null)
             {
-                _logger.Debug($"[TodoSync] Note not in tree DB yet: {Path.GetFileName(filePath)} - FileWatcher will add it soon");
-                _logger.Info($"[TodoSync] Creating {candidates.Count} uncategorized todos (will auto-categorize on next save)");
+                _logger.Debug($"[TodoSync] Note not in tree DB yet: {Path.GetFileName(filePath)} - trying parent folder");
                 
-                // GRACEFUL DEGRADATION: Create todos without category
-                // When FileWatcher adds note to tree, next save will auto-categorize them
+                // ✨ FIX: Try parent folder - folders are usually in tree.db before notes
+                var parentFolderPath = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(parentFolderPath))
+                {
+                    var parentNode = await _treeRepository.GetNodeByPathAsync(parentFolderPath.ToLowerInvariant());
+                    
+                    if (parentNode != null && parentNode.NodeType == TreeNodeType.Category)
+                    {
+                        categoryId = parentNode.Id;
+                        _logger.Info($"[TodoSync] ✅ Using parent folder as category: {parentNode.Name} ({categoryId})");
+                        
+                        // Auto-add category to todo panel if not already there
+                        await EnsureCategoryAddedAsync(categoryId.Value);
+                        
+                        await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId);
+                        return;
+                    }
+                    else
+                    {
+                        _logger.Debug($"[TodoSync] Parent folder also not in tree DB yet");
+                    }
+                }
+                
+                // Neither note nor parent folder found - create uncategorized
+                _logger.Info($"[TodoSync] Creating {candidates.Count} uncategorized todos (will auto-categorize when folder is scanned)");
                 await ReconcileTodosAsync(Guid.Empty, filePath, candidates, categoryId: null);
                 return;
             }
@@ -207,7 +231,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Sync
             }
             
             // STEP 5: Auto-categorize (category = note's parent folder)
-            var categoryId = noteNode.ParentId;  // Can be null for root-level notes
+            categoryId = noteNode.ParentId;  // Can be null for root-level notes
             
             if (categoryId.HasValue)
             {

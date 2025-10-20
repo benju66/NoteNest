@@ -514,8 +514,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         
         /// <summary>
         /// Handles TodoCreatedEvent by loading the new todo from database and adding to collection.
-        /// Event-driven CQRS pattern: Command handler saves to DB and publishes event,
-        /// Store subscribes and updates UI collection.
+        /// Event-driven CQRS pattern: Command handler updates projections first, then publishes event.
+        /// Store subscribes and loads from ready database.
         /// </summary>
         private async Task HandleTodoCreatedAsync(Domain.Events.TodoCreatedEvent e)
         {
@@ -524,43 +524,34 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 _logger.Info($"[TodoStore] 🎯 HandleTodoCreatedAsync STARTED for TodoId: {e.TodoId.Value}");
                 _logger.Debug($"[TodoStore] Event details - Text: '{e.Text}', CategoryId: {e.CategoryId}");
                 
-                // Load fresh todo from database
+                // Load fresh todo from database (projections should be updated before event is published)
                 _logger.Debug($"[TodoStore] Calling Repository.GetByIdAsync({e.TodoId.Value})...");
                 var todo = await _repository.GetByIdAsync(e.TodoId.Value);
                 
                 if (todo == null)
                 {
                     _logger.Error($"[TodoStore] ❌ CRITICAL: Todo not found in database after creation: {e.TodoId.Value}");
-                    _logger.Error($"[TodoStore] This means Repository.InsertAsync succeeded but GetByIdAsync failed");
-                    _logger.Error($"[TodoStore] Possible timing/transaction/cache issue");
+                    _logger.Error($"[TodoStore] This means projections haven't run yet - timing issue");
                     return;
                 }
                 
                 _logger.Info($"[TodoStore] ✅ Todo loaded from database: '{todo.Text}', CategoryId: {todo.CategoryId}");
                 
                 // Add to UI collection (on UI thread)
-                _logger.Debug($"[TodoStore] About to invoke on UI thread (Dispatcher.InvokeAsync)...");
-                _logger.Debug($"[TodoStore] Current _todos count BEFORE add: {_todos.Count}");
-                
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 {
-                    _logger.Debug($"[TodoStore] ✅ Dispatcher.InvokeAsync lambda executing on UI thread");
-                    
                     // Check if already exists (prevent duplicates)
                     var exists = _todos.Any(t => t.Id == todo.Id);
-                    _logger.Debug($"[TodoStore] Duplicate check - Todo already exists: {exists}");
                     
                     if (!exists)
                     {
-                        _logger.Info($"[TodoStore] ➕ Adding todo to _todos collection...");
                         _todos.Add(todo);
-                        _logger.Info($"[TodoStore] ✅ Todo added to _todos collection: '{todo.Text}'");
-                        _logger.Info($"[TodoStore] Collection count after add: {_todos.Count}");
-                        _logger.Info($"[TodoStore] This should fire CollectionChanged event...");
+                        _logger.Info($"[TodoStore] ✅ Todo added to UI collection: '{todo.Text}'");
+                        _logger.Debug($"[TodoStore] Collection count: {_todos.Count}");
                     }
                     else
                     {
-                        _logger.Warning($"[TodoStore] ⚠️ Todo already in collection, skipping add (duplicate)");
+                        _logger.Warning($"[TodoStore] ⚠️ Todo already in collection, skipping add");
                     }
                 });
                 

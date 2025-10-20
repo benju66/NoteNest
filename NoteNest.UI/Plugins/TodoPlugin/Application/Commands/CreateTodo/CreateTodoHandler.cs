@@ -22,17 +22,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
         private readonly IEventStore _eventStore;
         private readonly ITagInheritanceService _tagInheritanceService;
         private readonly NoteNest.Application.Common.Interfaces.IEventBus _eventBus;
+        private readonly NoteNest.Application.Common.Interfaces.IProjectionOrchestrator _projectionOrchestrator;
         private readonly IAppLogger _logger;
 
         public CreateTodoHandler(
             IEventStore eventStore,
             ITagInheritanceService tagInheritanceService,
             NoteNest.Application.Common.Interfaces.IEventBus eventBus,
+            NoteNest.Application.Common.Interfaces.IProjectionOrchestrator projectionOrchestrator,
             IAppLogger logger)
         {
             _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _tagInheritanceService = tagInheritanceService ?? throw new ArgumentNullException(nameof(tagInheritanceService));
             _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _projectionOrchestrator = projectionOrchestrator ?? throw new ArgumentNullException(nameof(projectionOrchestrator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -82,8 +85,22 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                 
                 _logger.Info($"[CreateTodoHandler] ✅ Todo persisted to event store: {aggregate.Id}");
                 
+                // ✨ CRITICAL: Update projections BEFORE publishing events
+                // This ensures todo_view is updated so TodoStore can load the todo when it receives the event
+                try
+                {
+                    _logger.Debug($"[CreateTodoHandler] Updating projections before event publication...");
+                    await _projectionOrchestrator.CatchUpAsync();
+                    _logger.Debug($"[CreateTodoHandler] ✅ Projections updated - database ready");
+                }
+                catch (Exception projEx)
+                {
+                    _logger.Error(projEx, "[CreateTodoHandler] Failed to update projections, continuing anyway");
+                    // Don't fail the operation - projections will eventually catch up
+                }
+                
                 // Publish captured events to InMemoryEventBus for UI updates
-                // This flows through DomainEventBridge to Core.EventBus where TodoStore subscribes
+                // Database is now ready, so TodoStore can successfully load the todo
                 foreach (var domainEvent in creationEvents)
                 {
                     await _eventBus.PublishAsync(domainEvent);
