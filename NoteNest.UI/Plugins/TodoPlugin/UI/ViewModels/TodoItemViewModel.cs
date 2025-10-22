@@ -518,6 +518,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             try
             {
+                // ✅ NULL SAFETY: Repository can be null in some contexts (tests, event-sourced version)
+                if (_todoTagRepository == null)
+                {
+                    _loadedTags = new List<TodoTag>();
+                    _logger.Debug($"[TodoItemViewModel] No tag repository available for todo {Id}");
+                    return;
+                }
+                
                 _loadedTags = await _todoTagRepository.GetByTodoIdAsync(Id);
                 
                 // Sync model's Tags with loaded tags for consistency
@@ -536,6 +544,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             catch (Exception ex)
             {
                 _logger.Error(ex, $"[TodoItemViewModel] Failed to load tags for todo {Id}");
+                _loadedTags = new List<TodoTag>(); // Graceful fallback
             }
         }
         

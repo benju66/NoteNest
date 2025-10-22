@@ -16,12 +16,14 @@
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
         <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
         <converters:BoolToStrikethroughConverter x:Key="BoolToStrikethroughConverter"/>
+        <converters:BoolToOpacityConverter x:Key="BoolToOpacityConverter"/>
         <converters:BoolToErrorBrushConverter x:Key="BoolToErrorBrushConverter"/>
     </UserControl.Resources>
     
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/> <!-- Quick Add -->
+            <RowDefinition Height="Auto"/> <!-- Toolbar -->
             <RowDefinition Height="Auto"/> <!-- Categories -->
             <RowDefinition Height="*"/> <!-- Todo List -->
         </Grid.RowDefinitions>
@@ -53,8 +55,57 @@
             </Grid>
         </Border>
         
-        <!-- Categories Section - SIMPLE AND CLEAN -->
+        <!-- Toolbar -->
         <Border Grid.Row="1"
+                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                BorderBrush="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="8,4">
+            <StackPanel Orientation="Horizontal">
+                <!-- Show Completed Toggle Button -->
+                <ToggleButton IsChecked="{Binding CategoryTree.ShowCompleted, Mode=TwoWay}"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              Padding="6,3"
+                              ToolTip="Show/Hide Completed Items"
+                              Cursor="Hand">
+                    <StackPanel Orientation="Horizontal">
+                        <ContentControl Template="{StaticResource LucideSquareCheck}"
+                                        Width="14" Height="14"
+                                        Margin="0,0,4,0"
+                                        VerticalAlignment="Center">
+                            <ContentControl.Style>
+                                <Style TargetType="ContentControl">
+                                    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CategoryTree.ShowCompleted}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ContentControl.Style>
+                        </ContentControl>
+                        <TextBlock Text="Show Completed" 
+                                   FontSize="11"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding CategoryTree.ShowCompleted}" Value="True">
+                                            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </ToggleButton>
+            </StackPanel>
+        </Border>
+        
+        <!-- Categories Section - SIMPLE AND CLEAN -->
+        <Border Grid.Row="2"
                 Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
                 BorderBrush="{DynamicResource SystemControlBackgroundBaseLowBrush}"
                 BorderThickness="0,0,0,1"
@@ -239,12 +290,14 @@
                                               Margin="0,0,8,0"
                                               VerticalAlignment="Center"/>
                                     
-                                    <!-- Text (editable) -->
+                                    <!-- Text (editable) with visual feedback for completed state -->
                                     <Grid Grid.Column="1">
                                         <TextBlock Text="{Binding Text}" 
                                                    FontSize="11"
                                                    VerticalAlignment="Center"
                                                    TextWrapping="Wrap"
+                                                   TextDecorations="{Binding IsCompleted, Converter={StaticResource BoolToStrikethroughConverter}}"
+                                                   Opacity="{Binding IsCompleted, Converter={StaticResource BoolToOpacityConverter}}"
                                                    Visibility="{Binding IsEditing, Converter={StaticResource InverseBooleanToVisibilityConverter}}"/>
                                         
                                         <TextBox x:Name="EditTextBox"

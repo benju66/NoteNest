@@ -59,7 +59,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             {
                 _logger.Info("[TodoStore] Initializing from database...");
                 
-                var todos = await _repository.GetAllAsync(includeCompleted: false);
+                // Load ALL todos including completed (for completed items management feature)
+                // Filtering will be done at ViewModel layer based on ShowCompleted preference
+                var todos = await _repository.GetAllAsync(includeCompleted: true);
                 
                 using (_todos.BatchUpdate())
                 {
@@ -68,7 +70,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 }
                 
                 _isInitialized = true;
-                _logger.Info($"[TodoStore] Loaded {todos.Count} active todos from database");
+                _logger.Info($"[TodoStore] Loaded {todos.Count} todos from database (including completed)");
             }
             catch (Exception ex)
             {
@@ -117,11 +119,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         public ObservableCollection<TodoItem> GetByCategory(Guid? categoryId)
         {
             var filtered = new SmartObservableCollection<TodoItem>();
-            // Filter active todos only (exclude orphaned and completed)
-            // Orphaned todos show in "Uncategorized", completed in "Completed" smart list
-            var items = _todos.Where(t => t.CategoryId == categoryId && 
-                                          !t.IsOrphaned &&
-                                          !t.IsCompleted);
+            // Get all todos for this category (exclude orphaned only)
+            // Completed filtering is handled at ViewModel layer based on ShowCompleted preference
+            // Orphaned todos show in "Uncategorized" virtual category
+            var items = _todos.Where(t => t.CategoryId == categoryId && !t.IsOrphaned);
             filtered.AddRange(items);
             return filtered;
         }

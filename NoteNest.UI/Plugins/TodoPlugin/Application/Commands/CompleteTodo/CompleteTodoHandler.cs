@@ -14,15 +14,18 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CompleteTodo
     {
         private readonly IEventStore _eventStore;
         private readonly NoteNest.Application.Common.Interfaces.IEventBus _eventBus;
+        private readonly IProjectionOrchestrator _projectionOrchestrator;
         private readonly IAppLogger _logger;
 
         public CompleteTodoHandler(
             IEventStore eventStore,
             NoteNest.Application.Common.Interfaces.IEventBus eventBus,
+            IProjectionOrchestrator projectionOrchestrator,
             IAppLogger logger)
         {
             _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _projectionOrchestrator = projectionOrchestrator ?? throw new ArgumentNullException(nameof(projectionOrchestrator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -52,12 +55,28 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CompleteTodo
                 // Capture events BEFORE SaveAsync (SaveAsync clears DomainEvents)
                 var events = new List<IDomainEvent>(aggregate.DomainEvents);
                 
-                // Save to event store (persists events, updates projections)
+                // Save to event store (persists events to events.db)
                 await _eventStore.SaveAsync(aggregate);
                 
                 _logger.Info($"[CompleteTodoHandler] ✅ Todo completion toggled: {request.TodoId}");
                 
+                // ✨ CRITICAL: Update projections BEFORE publishing events
+                // This ensures todo_view is updated so TodoStore can load fresh data when it receives the event
+                // Matches CreateTodoHandler pattern for immediate UX feedback
+                try
+                {
+                    _logger.Debug($"[CompleteTodoHandler] Updating projections before event publication...");
+                    await _projectionOrchestrator.CatchUpAsync();
+                    _logger.Debug($"[CompleteTodoHandler] ✅ Projections updated - database ready");
+                }
+                catch (Exception projEx)
+                {
+                    _logger.Error(projEx, "[CompleteTodoHandler] Failed to update projections, continuing anyway");
+                    // Don't fail the operation - projections will eventually catch up
+                }
+                
                 // Publish captured events for real-time UI updates
+                // Database is now ready, so TodoStore can successfully load the updated todo
                 foreach (var domainEvent in events)
                 {
                     await _eventBus.PublishAsync(domainEvent);
