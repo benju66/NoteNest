@@ -88,12 +88,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
         {
             using var connection = await OpenConnectionAsync();
             
+            _logger.Debug($"[{Name}] Querying projection_metadata for projection_name = '{this.Name}'");
+            
             var checkpoint = await connection.QueryFirstOrDefaultAsync<ProjectionCheckpoint>(
-                "SELECT last_processed_position FROM projection_metadata WHERE projection_name = @Name",
+                "SELECT last_processed_position AS LastProcessedPosition FROM projection_metadata WHERE projection_name = @Name",
                 new { Name = this.Name });
             
             var position = checkpoint?.LastProcessedPosition ?? 0;
-            _logger.Debug($"[{Name}] GetLastProcessedPosition returned: {position} (checkpoint exists: {checkpoint != null})");
+            _logger.Info($"[{Name}] GetLastProcessedPosition returned: {position} (checkpoint exists: {checkpoint != null}, checkpoint value: {checkpoint?.LastProcessedPosition})");
+            
+            if (checkpoint != null && position == 0)
+            {
+                _logger.Warning($"[{Name}] ⚠️ Checkpoint exists but position is 0 - potential mapping issue!");
+            }
             
             return position;
         }
@@ -207,7 +214,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
         {
             using var connection = await OpenConnectionAsync();
             
-            await connection.ExecuteAsync(
+            var rowsAffected = await connection.ExecuteAsync(
                 @"UPDATE todo_view 
                   SET is_completed = 1, completed_date = @CompletedDate, modified_at = @ModifiedAt
                   WHERE id = @Id",
@@ -218,7 +225,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            _logger.Debug($"[{Name}] Todo completed: {e.TodoId}");
+            _logger.Info($"[{Name}] ✅ Todo completed: {e.TodoId}, rows affected: {rowsAffected}, is_completed set to 1");
+            
+            if (rowsAffected == 0)
+            {
+                _logger.Warning($"[{Name}] ⚠️ UPDATE affected 0 rows! Todo {e.TodoId} might not exist in todo_view yet");
+            }
         }
         
         private async Task HandleTodoUncompletedAsync(TodoUncompletedEvent e)

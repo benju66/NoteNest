@@ -45,9 +45,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
 
                 if (dto != null)
                 {
-                    _logger.Debug($"[TodoQueryService] Read from todo_view: '{dto.Text}' | CategoryId from DB: '{dto.CategoryId ?? "NULL"}'");
+                    _logger.Debug($"[TodoQueryService] Read from todo_view: '{dto.Text}' | CategoryId from DB: '{dto.CategoryId ?? "NULL"}' | is_completed from DB: {dto.IsCompleted}");
                     var mapped = MapToTodoItem(dto);
-                    _logger.Debug($"[TodoQueryService] After mapping: CategoryId = '{mapped.CategoryId?.ToString() ?? "NULL"}'");
+                    _logger.Debug($"[TodoQueryService] After mapping: CategoryId = '{mapped.CategoryId?.ToString() ?? "NULL"}' | IsCompleted = {mapped.IsCompleted}");
                     return mapped;
                 }
                 

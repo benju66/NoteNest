@@ -73,7 +73,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             _categoryStore.Categories.CollectionChanged += OnCategoryStoreChanged;
             
             // Subscribe to TodoStore changes to refresh tree when todos added/updated/removed
+            _logger.Info($"[CategoryTree] 🎯 SUBSCRIBING to TodoStore.AllTodos.CollectionChanged");
             _todoStore.AllTodos.CollectionChanged += OnTodoStoreChanged;
+            _logger.Info($"[CategoryTree] ✅ Subscription registered successfully");
             
             _ = LoadCategoriesAsync();
         }
@@ -723,17 +725,23 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         /// </summary>
         private void OnTodoStoreChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         {
-            if (_disposed) return;
+            _logger.Info($"[CategoryTree] 🔔🔔🔔 OnTodoStoreChanged CALLED! Disposed={_disposed}, Initialized={_isInitialized}");
+            
+            if (_disposed)
+            {
+                _logger.Warning("[CategoryTree] Skipping - already disposed");
+                return;
+            }
             
             // 🛡️ CRITICAL GUARD: Don't process events until tree is fully initialized
             // Prevents crashes when events fire during app startup before Categories collection is ready
             if (!_isInitialized || _categories == null || _categories.Count == 0)
             {
-                _logger.Debug("[CategoryTree] Skipping TodoStore event - tree not initialized yet");
+                _logger.Warning($"[CategoryTree] Skipping TodoStore event - tree not initialized yet (initialized={_isInitialized}, categories count={_categories?.Count ?? -1})");
                 return;
             }
             
-            _logger.Info($"[CategoryTree] 🔄 TodoStore.AllTodos CollectionChanged! Action={e.Action}, Count={_todoStore.AllTodos.Count}");
+            _logger.Info($"[CategoryTree] 🔄🔄🔄 TodoStore.AllTodos CollectionChanged! Action={e.Action}, Count={_todoStore.AllTodos.Count}");
             
             // 🚀 OPTIMIZATION: Handle Replace (single item update) efficiently without full tree rebuild
             // Replace events occur when TodoStore updates a single item (e.g., checkbox toggle)
@@ -742,19 +750,26 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 e.NewItems != null && e.NewItems.Count == 1 &&
                 e.OldItems != null && e.OldItems.Count == 1)
             {
-                _logger.Debug("[CategoryTree] Replace action detected - using efficient single-item update");
+                _logger.Info("[CategoryTree] ⚡⚡⚡ Replace action detected - using efficient single-item update");
                 
                 var dispatcher = System.Windows.Application.Current?.Dispatcher;
                 if (dispatcher != null)
                 {
+                    _logger.Debug($"[CategoryTree] Dispatcher available, invoking HandleSingleTodoUpdated");
                     dispatcher.InvokeAsync(() =>
                     {
                         var updatedTodo = e.NewItems[0] as Models.TodoItem;
                         var oldTodo = e.OldItems[0] as Models.TodoItem;
                         
+                        _logger.Info($"[CategoryTree] Inside Dispatcher.InvokeAsync - updatedTodo={updatedTodo?.Text}, oldTodo={oldTodo?.Text}");
+                        
                         if (updatedTodo != null && oldTodo != null)
                         {
                             HandleSingleTodoUpdated(updatedTodo, oldTodo);
+                        }
+                        else
+                        {
+                            _logger.Warning($"[CategoryTree] updatedTodo or oldTodo is null!");
                         }
                     });
                 }
@@ -825,7 +840,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                     return;
                 }
                 
-                _logger.Debug($"[CategoryTree] HandleSingleTodoUpdated: '{updatedTodo.Text}' (Id: {updatedTodo.Id}, IsCompleted: {updatedTodo.IsCompleted})");
+                _logger.Info($"[CategoryTree] 🎯🎯🎯 HandleSingleTodoUpdated STARTED: '{updatedTodo.Text}' (Id: {updatedTodo.Id}, IsCompleted: {updatedTodo.IsCompleted})");
                 
                 // Find which category contains this todo
                 var categoryVm = FindCategoryByTodoIdRecursive(Categories, updatedTodo.Id);

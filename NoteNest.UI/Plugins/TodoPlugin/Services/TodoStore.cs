@@ -397,11 +397,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             // Todo CQRS domain events - subscribe to base interface to match published type
             // Handlers publish as: PublishAsync<IDomainEvent>(domainEvent)
             // So we must subscribe to: Subscribe<IDomainEvent>
+            _logger.Info($"[TodoStore] 🎯 SUBSCRIBING to IDomainEvent on event bus: {_eventBus.GetType().Name}");
+            
             _eventBus.Subscribe<NoteNest.Domain.Common.IDomainEvent>(async domainEvent =>
             {
                 try
                 {
-                    _logger.Info($"[TodoStore] 📬 ⚡ RECEIVED domain event: {domainEvent.GetType().Name}");
+                    _logger.Info($"[TodoStore] 📬 ⚡⚡⚡ SUBSCRIPTION FIRED! Received event: {domainEvent.GetType().FullName}");
                     
                     // Pattern match on runtime type to dispatch to appropriate handler
                     switch (domainEvent)
@@ -599,9 +601,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         {
             try
             {
-                _logger.Debug($"[TodoStore] Handling todo update event: {todoId.Value}");
+                _logger.Info($"[TodoStore] 🎯🎯🎯 HandleTodoUpdatedAsync STARTED for TodoId: {todoId.Value}");
                 
                 // Load fresh todo from database
+                _logger.Debug($"[TodoStore] Calling Repository.GetByIdAsync({todoId.Value})...");
                 var updatedTodo = await _repository.GetByIdAsync(todoId.Value);
                 if (updatedTodo == null)
                 {
@@ -609,23 +612,34 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                     return;
                 }
                 
+                _logger.Info($"[TodoStore] ✅ Loaded from DB: '{updatedTodo.Text}', IsCompleted={updatedTodo.IsCompleted}, Priority={updatedTodo.Priority}, IsFavorite={updatedTodo.IsFavorite}");
+                
                 // Update in UI collection (on UI thread)
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                 {
+                    _logger.Debug($"[TodoStore] Dispatcher.InvokeAsync executing...");
+                    
                     var existing = _todos.FirstOrDefault(t => t.Id == todoId.Value);
                     if (existing != null)
                     {
                         var index = _todos.IndexOf(existing);
+                        _logger.Info($"[TodoStore] 🔄 REPLACING in _todos collection at index {index}");
+                        _logger.Debug($"[TodoStore]    OLD: '{existing.Text}', IsCompleted={existing.IsCompleted}");
+                        _logger.Debug($"[TodoStore]    NEW: '{updatedTodo.Text}', IsCompleted={updatedTodo.IsCompleted}");
+                        
                         _todos[index] = updatedTodo;
-                        _logger.Debug($"[TodoStore] ✅ Updated todo in UI collection: {updatedTodo.Text}");
+                        
+                        _logger.Info($"[TodoStore] ✅ ✅ ✅ REPLACED in _todos collection! This should fire CollectionChanged.Replace event");
                     }
                     else
                     {
                         // Todo might have been created/moved - add it
                         _todos.Add(updatedTodo);
-                        _logger.Debug($"[TodoStore] ✅ Added missing todo to UI collection: {updatedTodo.Text}");
+                        _logger.Info($"[TodoStore] ✅ Added missing todo to UI collection: {updatedTodo.Text}");
                     }
                 });
+                
+                _logger.Info($"[TodoStore] 🏁 HandleTodoUpdatedAsync COMPLETED for TodoId: {todoId.Value}");
             }
             catch (Exception ex)
             {

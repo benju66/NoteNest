@@ -77,10 +77,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CompleteTodo
                 
                 // Publish captured events for real-time UI updates
                 // Database is now ready, so TodoStore can successfully load the updated todo
+                _logger.Info($"[CompleteTodoHandler] 📤📤📤 About to publish {events.Count} events to event bus: {_eventBus.GetType().FullName}");
+                
                 foreach (var domainEvent in events)
                 {
+                    _logger.Info($"[CompleteTodoHandler] 📤 Publishing event: {domainEvent.GetType().FullName}");
                     await _eventBus.PublishAsync(domainEvent);
-                    _logger.Debug($"[CompleteTodoHandler] Published event: {domainEvent.GetType().Name}");
+                    _logger.Info($"[CompleteTodoHandler] ✅ Event published successfully: {domainEvent.GetType().Name}");
                 }
                 
                 return Result.Ok(new CompleteTodoResult
