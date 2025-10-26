@@ -419,38 +419,38 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                             break;
                             
                         case Domain.Events.TodoCompletedEvent e:
-                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (Completed)");
-                            await HandleTodoUpdatedAsync(e.TodoId);
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoCompletedAsync (event-driven)");
+                            await HandleTodoCompletedEventAsync(e);
                             break;
                             
                         case Domain.Events.TodoUncompletedEvent e:
-                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (Uncompleted)");
-                            await HandleTodoUpdatedAsync(e.TodoId);
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUncompletedEventAsync (event-driven)");
+                            await HandleTodoUncompletedEventAsync(e);
                             break;
                             
                         case Domain.Events.TodoTextUpdatedEvent e:
-                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (TextUpdated)");
-                            await HandleTodoUpdatedAsync(e.TodoId);
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoTextUpdatedEventAsync (event-driven)");
+                            await HandleTodoTextUpdatedEventAsync(e);
                             break;
                             
                         case Domain.Events.TodoDueDateChangedEvent e:
-                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (DueDateChanged)");
-                            await HandleTodoUpdatedAsync(e.TodoId);
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoDueDateChangedEventAsync (event-driven)");
+                            await HandleTodoDueDateChangedEventAsync(e);
                             break;
                             
                         case Domain.Events.TodoPriorityChangedEvent e:
-                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (PriorityChanged)");
-                            await HandleTodoUpdatedAsync(e.TodoId);
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoPriorityChangedEventAsync (event-driven)");
+                            await HandleTodoPriorityChangedEventAsync(e);
                             break;
                             
                         case Domain.Events.TodoFavoritedEvent e:
-                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (Favorited)");
-                            await HandleTodoUpdatedAsync(e.TodoId);
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoFavoritedEventAsync (event-driven)");
+                            await HandleTodoFavoritedEventAsync(e);
                             break;
                             
                         case Domain.Events.TodoUnfavoritedEvent e:
-                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUpdatedAsync (Unfavorited)");
-                            await HandleTodoUpdatedAsync(e.TodoId);
+                            _logger.Debug($"[TodoStore] Dispatching to HandleTodoUnfavoritedEventAsync (event-driven)");
+                            await HandleTodoUnfavoritedEventAsync(e);
                             break;
                             
                         // Folder tagging events (from Application layer)
@@ -644,6 +644,374 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             catch (Exception ex)
             {
                 _logger.Error(ex, $"[TodoStore] Failed to handle todo update event");
+            }
+        }
+        
+        /// <summary>
+        /// Handles TodoCompletedEvent by applying event data directly to model.
+        /// Event-driven approach: Event IS the source of truth, no database query needed.
+        /// </summary>
+        private async Task HandleTodoCompletedEventAsync(Domain.Events.TodoCompletedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] 🎯 HandleTodoCompletedEventAsync (event-driven) for TodoId: {e.TodoId.Value}");
+                
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var existing = _todos.FirstOrDefault(t => t.Id == e.TodoId.Value);
+                    if (existing == null)
+                    {
+                        _logger.Warning($"[TodoStore] Todo not found in collection: {e.TodoId.Value}");
+                        return;
+                    }
+                    
+                    var index = _todos.IndexOf(existing);
+                    _logger.Debug($"[TodoStore] Applying TodoCompletedEvent to item at index {index}");
+                    
+                    // ✅ Apply event data directly (create new instance for clean replacement)
+                    var updated = new TodoItem
+                    {
+                        Id = existing.Id,
+                        CategoryId = existing.CategoryId,
+                        ParentId = existing.ParentId,
+                        Text = existing.Text,
+                        Description = existing.Description,
+                        IsCompleted = true,  // ← FROM EVENT
+                        CompletedDate = e.OccurredAt,  // ← FROM EVENT
+                        DueDate = existing.DueDate,
+                        ReminderDate = existing.ReminderDate,
+                        Priority = existing.Priority,
+                        IsFavorite = existing.IsFavorite,
+                        Order = existing.Order,
+                        CreatedDate = existing.CreatedDate,
+                        ModifiedDate = e.OccurredAt,  // ← FROM EVENT
+                        Tags = existing.Tags,
+                        SourceNoteId = existing.SourceNoteId,
+                        SourceFilePath = existing.SourceFilePath,
+                        SourceLineNumber = existing.SourceLineNumber,
+                        SourceCharOffset = existing.SourceCharOffset,
+                        IsOrphaned = existing.IsOrphaned,
+                        LinkedNoteIds = existing.LinkedNoteIds
+                    };
+                    
+                    _logger.Info($"[TodoStore] ✅ Applied event: IsCompleted={updated.IsCompleted}, CompletedDate={updated.CompletedDate}");
+                    
+                    // Replace triggers CollectionChanged.Replace
+                    _todos[index] = updated;
+                    
+                    _logger.Info($"[TodoStore] ✅ Collection updated - UI should reflect completion immediately");
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle TodoCompletedEvent");
+            }
+        }
+        
+        /// <summary>
+        /// Handles TodoUncompletedEvent by applying event data directly to model.
+        /// </summary>
+        private async Task HandleTodoUncompletedEventAsync(Domain.Events.TodoUncompletedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] 🎯 HandleTodoUncompletedEventAsync (event-driven) for TodoId: {e.TodoId.Value}");
+                
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var existing = _todos.FirstOrDefault(t => t.Id == e.TodoId.Value);
+                    if (existing == null) return;
+                    
+                    var index = _todos.IndexOf(existing);
+                    
+                    var updated = new TodoItem
+                    {
+                        Id = existing.Id,
+                        CategoryId = existing.CategoryId,
+                        ParentId = existing.ParentId,
+                        Text = existing.Text,
+                        Description = existing.Description,
+                        IsCompleted = false,  // ← FROM EVENT
+                        CompletedDate = null,  // ← FROM EVENT
+                        DueDate = existing.DueDate,
+                        ReminderDate = existing.ReminderDate,
+                        Priority = existing.Priority,
+                        IsFavorite = existing.IsFavorite,
+                        Order = existing.Order,
+                        CreatedDate = existing.CreatedDate,
+                        ModifiedDate = e.OccurredAt,
+                        Tags = existing.Tags,
+                        SourceNoteId = existing.SourceNoteId,
+                        SourceFilePath = existing.SourceFilePath,
+                        SourceLineNumber = existing.SourceLineNumber,
+                        SourceCharOffset = existing.SourceCharOffset,
+                        IsOrphaned = existing.IsOrphaned,
+                        LinkedNoteIds = existing.LinkedNoteIds
+                    };
+                    
+                    _todos[index] = updated;
+                    _logger.Info($"[TodoStore] ✅ Applied uncomplete event");
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle TodoUncompletedEvent");
+            }
+        }
+        
+        /// <summary>
+        /// Handles TodoTextUpdatedEvent by applying event data directly to model.
+        /// </summary>
+        private async Task HandleTodoTextUpdatedEventAsync(Domain.Events.TodoTextUpdatedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] 🎯 HandleTodoTextUpdatedEventAsync (event-driven) for TodoId: {e.TodoId.Value}");
+                
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var existing = _todos.FirstOrDefault(t => t.Id == e.TodoId.Value);
+                    if (existing == null) return;
+                    
+                    var index = _todos.IndexOf(existing);
+                    
+                    var updated = new TodoItem
+                    {
+                        Id = existing.Id,
+                        CategoryId = existing.CategoryId,
+                        ParentId = existing.ParentId,
+                        Text = e.NewText,  // ← FROM EVENT
+                        Description = existing.Description,
+                        IsCompleted = existing.IsCompleted,
+                        CompletedDate = existing.CompletedDate,
+                        DueDate = existing.DueDate,
+                        ReminderDate = existing.ReminderDate,
+                        Priority = existing.Priority,
+                        IsFavorite = existing.IsFavorite,
+                        Order = existing.Order,
+                        CreatedDate = existing.CreatedDate,
+                        ModifiedDate = e.OccurredAt,  // ← FROM EVENT
+                        Tags = existing.Tags,
+                        SourceNoteId = existing.SourceNoteId,
+                        SourceFilePath = existing.SourceFilePath,
+                        SourceLineNumber = existing.SourceLineNumber,
+                        SourceCharOffset = existing.SourceCharOffset,
+                        IsOrphaned = existing.IsOrphaned,
+                        LinkedNoteIds = existing.LinkedNoteIds
+                    };
+                    
+                    _todos[index] = updated;
+                    _logger.Info($"[TodoStore] ✅ Applied text update: '{e.NewText}'");
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle TodoTextUpdatedEvent");
+            }
+        }
+        
+        /// <summary>
+        /// Handles TodoPriorityChangedEvent by applying event data directly to model.
+        /// </summary>
+        private async Task HandleTodoPriorityChangedEventAsync(Domain.Events.TodoPriorityChangedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] 🎯 HandleTodoPriorityChangedEventAsync (event-driven) for TodoId: {e.TodoId.Value}");
+                
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var existing = _todos.FirstOrDefault(t => t.Id == e.TodoId.Value);
+                    if (existing == null) return;
+                    
+                    var index = _todos.IndexOf(existing);
+                    
+                    var updated = new TodoItem
+                    {
+                        Id = existing.Id,
+                        CategoryId = existing.CategoryId,
+                        ParentId = existing.ParentId,
+                        Text = existing.Text,
+                        Description = existing.Description,
+                        IsCompleted = existing.IsCompleted,
+                        CompletedDate = existing.CompletedDate,
+                        DueDate = existing.DueDate,
+                        ReminderDate = existing.ReminderDate,
+                        Priority = (Priority)e.NewPriority,  // ← FROM EVENT
+                        IsFavorite = existing.IsFavorite,
+                        Order = existing.Order,
+                        CreatedDate = existing.CreatedDate,
+                        ModifiedDate = e.OccurredAt,  // ← FROM EVENT
+                        Tags = existing.Tags,
+                        SourceNoteId = existing.SourceNoteId,
+                        SourceFilePath = existing.SourceFilePath,
+                        SourceLineNumber = existing.SourceLineNumber,
+                        SourceCharOffset = existing.SourceCharOffset,
+                        IsOrphaned = existing.IsOrphaned,
+                        LinkedNoteIds = existing.LinkedNoteIds
+                    };
+                    
+                    _todos[index] = updated;
+                    _logger.Info($"[TodoStore] ✅ Applied priority change: {e.NewPriority}");
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle TodoPriorityChangedEvent");
+            }
+        }
+        
+        /// <summary>
+        /// Handles TodoDueDateChangedEvent by applying event data directly to model.
+        /// </summary>
+        private async Task HandleTodoDueDateChangedEventAsync(Domain.Events.TodoDueDateChangedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] 🎯 HandleTodoDueDateChangedEventAsync (event-driven) for TodoId: {e.TodoId.Value}");
+                
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var existing = _todos.FirstOrDefault(t => t.Id == e.TodoId.Value);
+                    if (existing == null) return;
+                    
+                    var index = _todos.IndexOf(existing);
+                    
+                    var updated = new TodoItem
+                    {
+                        Id = existing.Id,
+                        CategoryId = existing.CategoryId,
+                        ParentId = existing.ParentId,
+                        Text = existing.Text,
+                        Description = existing.Description,
+                        IsCompleted = existing.IsCompleted,
+                        CompletedDate = existing.CompletedDate,
+                        DueDate = e.NewDueDate,  // ← FROM EVENT
+                        ReminderDate = existing.ReminderDate,
+                        Priority = existing.Priority,
+                        IsFavorite = existing.IsFavorite,
+                        Order = existing.Order,
+                        CreatedDate = existing.CreatedDate,
+                        ModifiedDate = e.OccurredAt,  // ← FROM EVENT
+                        Tags = existing.Tags,
+                        SourceNoteId = existing.SourceNoteId,
+                        SourceFilePath = existing.SourceFilePath,
+                        SourceLineNumber = existing.SourceLineNumber,
+                        SourceCharOffset = existing.SourceCharOffset,
+                        IsOrphaned = existing.IsOrphaned,
+                        LinkedNoteIds = existing.LinkedNoteIds
+                    };
+                    
+                    _todos[index] = updated;
+                    _logger.Info($"[TodoStore] ✅ Applied due date change: {e.NewDueDate}");
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle TodoDueDateChangedEvent");
+            }
+        }
+        
+        /// <summary>
+        /// Handles TodoFavoritedEvent by applying event data directly to model.
+        /// </summary>
+        private async Task HandleTodoFavoritedEventAsync(Domain.Events.TodoFavoritedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] 🎯 HandleTodoFavoritedEventAsync (event-driven) for TodoId: {e.TodoId.Value}");
+                
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var existing = _todos.FirstOrDefault(t => t.Id == e.TodoId.Value);
+                    if (existing == null) return;
+                    
+                    var index = _todos.IndexOf(existing);
+                    
+                    var updated = new TodoItem
+                    {
+                        Id = existing.Id,
+                        CategoryId = existing.CategoryId,
+                        ParentId = existing.ParentId,
+                        Text = existing.Text,
+                        Description = existing.Description,
+                        IsCompleted = existing.IsCompleted,
+                        CompletedDate = existing.CompletedDate,
+                        DueDate = existing.DueDate,
+                        ReminderDate = existing.ReminderDate,
+                        Priority = existing.Priority,
+                        IsFavorite = true,  // ← FROM EVENT
+                        Order = existing.Order,
+                        CreatedDate = existing.CreatedDate,
+                        ModifiedDate = e.OccurredAt,  // ← FROM EVENT
+                        Tags = existing.Tags,
+                        SourceNoteId = existing.SourceNoteId,
+                        SourceFilePath = existing.SourceFilePath,
+                        SourceLineNumber = existing.SourceLineNumber,
+                        SourceCharOffset = existing.SourceCharOffset,
+                        IsOrphaned = existing.IsOrphaned,
+                        LinkedNoteIds = existing.LinkedNoteIds
+                    };
+                    
+                    _todos[index] = updated;
+                    _logger.Info($"[TodoStore] ✅ Applied favorite event");
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle TodoFavoritedEvent");
+            }
+        }
+        
+        /// <summary>
+        /// Handles TodoUnfavoritedEvent by applying event data directly to model.
+        /// </summary>
+        private async Task HandleTodoUnfavoritedEventAsync(Domain.Events.TodoUnfavoritedEvent e)
+        {
+            try
+            {
+                _logger.Info($"[TodoStore] 🎯 HandleTodoUnfavoritedEventAsync (event-driven) for TodoId: {e.TodoId.Value}");
+                
+                await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var existing = _todos.FirstOrDefault(t => t.Id == e.TodoId.Value);
+                    if (existing == null) return;
+                    
+                    var index = _todos.IndexOf(existing);
+                    
+                    var updated = new TodoItem
+                    {
+                        Id = existing.Id,
+                        CategoryId = existing.CategoryId,
+                        ParentId = existing.ParentId,
+                        Text = existing.Text,
+                        Description = existing.Description,
+                        IsCompleted = existing.IsCompleted,
+                        CompletedDate = existing.CompletedDate,
+                        DueDate = existing.DueDate,
+                        ReminderDate = existing.ReminderDate,
+                        Priority = existing.Priority,
+                        IsFavorite = false,  // ← FROM EVENT
+                        Order = existing.Order,
+                        CreatedDate = existing.CreatedDate,
+                        ModifiedDate = e.OccurredAt,  // ← FROM EVENT
+                        Tags = existing.Tags,
+                        SourceNoteId = existing.SourceNoteId,
+                        SourceFilePath = existing.SourceFilePath,
+                        SourceLineNumber = existing.SourceLineNumber,
+                        SourceCharOffset = existing.SourceCharOffset,
+                        IsOrphaned = existing.IsOrphaned,
+                        LinkedNoteIds = existing.LinkedNoteIds
+                    };
+                    
+                    _todos[index] = updated;
+                    _logger.Info($"[TodoStore] ✅ Applied unfavorite event");
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoStore] Failed to handle TodoUnfavoritedEvent");
             }
         }
         
