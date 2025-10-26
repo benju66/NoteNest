@@ -31,6 +31,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
             {
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
+                
+                // ✅ CRITICAL: Enable reading from WAL before it's checkpointed to main DB
+                // This allows queries to see recent writes from other connections
+                await connection.ExecuteAsync("PRAGMA read_uncommitted = 1");
+                _logger.Debug($"[TodoQueryService] PRAGMA read_uncommitted enabled for GetByIdAsync");
 
                 var dto = await connection.QueryFirstOrDefaultAsync<TodoDto>(
                     @"SELECT id, text, description, is_completed, completed_date,
@@ -66,6 +71,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
             {
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
+                
+                // Enable reading from WAL
+                await connection.ExecuteAsync("PRAGMA read_uncommitted = 1");
 
                 string sql;
                 object param;
@@ -191,6 +199,9 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
             {
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
+                
+                // Enable reading from WAL
+                await connection.ExecuteAsync("PRAGMA read_uncommitted = 1");
 
                 var selectColumns = @"SELECT id, text, description, is_completed, completed_date,
                                              category_id AS CategoryId, category_name AS CategoryName, category_path AS CategoryPath,

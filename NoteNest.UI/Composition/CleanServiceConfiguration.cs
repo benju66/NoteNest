@@ -440,8 +440,8 @@ namespace NoteNest.UI.Composition
             var eventsDbPath = Path.Combine(databasePath, "events.db");
             var projectionsDbPath = Path.Combine(databasePath, "projections.db");
             
-            var eventsConnectionString = $"Data Source={eventsDbPath};";
-            var projectionsConnectionString = $"Data Source={projectionsDbPath};";
+            var eventsConnectionString = $"Data Source={eventsDbPath};Cache=Shared;";
+            var projectionsConnectionString = $"Data Source={projectionsDbPath};Cache=Shared;";
             
             // Event Store Core
             services.AddSingleton<NoteNest.Infrastructure.EventStore.IEventSerializer>(provider =>
