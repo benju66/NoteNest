@@ -103,7 +103,12 @@ namespace NoteNest.UI.Composition
                 new CategoryPersistenceService(connectionString, provider.GetRequiredService<IAppLogger>()));
             
             // Register stores (now with database backing)
-            services.AddSingleton<ITodoStore, TodoStore>();
+            services.AddSingleton<ITodoStore>(provider => 
+                new TodoStore(
+                    provider.GetRequiredService<ITodoRepository>(),
+                    provider.GetRequiredService<NoteNest.Core.Services.IEventBus>(),
+                    provider.GetRequiredService<NoteNest.Application.Common.Interfaces.IProjectionOrchestrator>(),
+                    provider.GetRequiredService<IAppLogger>()));
             services.AddSingleton<ICategoryStore, CategoryStore>();
             
             // Register UI services

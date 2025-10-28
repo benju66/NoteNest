@@ -51,6 +51,17 @@ namespace NoteNest.UI
                 
                 _logger.Info("✅ Databases initialized successfully");
 
+                // ✅ CRITICAL: Synchronize projections BEFORE any UI loads
+                // Fixes session persistence bug where TodoStore/CategoryStore loaded stale projection data
+                // This ensures todo_view, tree_view, etc. are current before plugins query them
+                // Performance: Fast when projections current (~18-30ms), only slow when behind
+                _logger.Info("📊 Synchronizing projections with event store...");
+                var projOrchestrator = _host.Services.GetRequiredService<NoteNest.Application.Common.Interfaces.IProjectionOrchestrator>();
+                var syncStartTime = DateTime.UtcNow;
+                await projOrchestrator.CatchUpAsync();
+                var syncElapsed = (DateTime.UtcNow - syncStartTime).TotalMilliseconds;
+                _logger.Info($"✅ Projections synchronized in {syncElapsed:F0}ms - UI ready to load");
+
                 // Auto-rebuild from RTF files if event store is empty (database loss recovery)
                 var eventStore = _host.Services.GetRequiredService<NoteNest.Application.Common.Interfaces.IEventStore>();
                 var currentPosition = await eventStore.GetCurrentStreamPositionAsync();

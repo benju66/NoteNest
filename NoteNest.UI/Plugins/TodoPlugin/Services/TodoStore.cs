@@ -10,6 +10,7 @@ using NoteNest.UI.Collections;
 using NoteNest.UI.Plugins.TodoPlugin.Events;
 using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
+using NoteNest.Application.Common.Interfaces;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Services
 {
@@ -22,7 +23,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
     public class TodoStore : ITodoStore, IDisposable
     {
         private readonly ITodoRepository _repository;
-        private readonly IEventBus _eventBus;
+        private readonly NoteNest.Core.Services.IEventBus _eventBus;
+        private readonly IProjectionOrchestrator _projectionOrchestrator;
         private readonly IAppLogger _logger;
         private readonly SmartObservableCollection<TodoItem> _todos;
         private bool _isInitialized;
@@ -31,10 +33,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         private Task? _initializationTask;
         private readonly SemaphoreSlim _initLock = new(1, 1);
 
-        public TodoStore(ITodoRepository repository, IEventBus eventBus, IAppLogger logger)
+        public TodoStore(
+            ITodoRepository repository, 
+            NoteNest.Core.Services.IEventBus eventBus, 
+            IProjectionOrchestrator projectionOrchestrator,
+            IAppLogger logger)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
+            _projectionOrchestrator = projectionOrchestrator ?? throw new ArgumentNullException(nameof(projectionOrchestrator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _todos = new SmartObservableCollection<TodoItem>();
             
@@ -58,6 +65,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             try
             {
                 _logger.Info("[TodoStore] Initializing from database...");
+                
+                // ✅ CRITICAL FIX: Ensure projections are synchronized BEFORE loading
+                // Fixes session persistence bug where TodoStore loaded stale projection data
+                // during DI container Build() (before App.xaml.cs projection sync runs)
+                // Defense-in-depth: Each component ensures its own data is current
+                _logger.Info("[TodoStore] Synchronizing projections before loading...");
+                var syncStart = DateTime.UtcNow;
+                await _projectionOrchestrator.CatchUpAsync();
+                var syncElapsed = (DateTime.UtcNow - syncStart).TotalMilliseconds;
+                _logger.Info($"[TodoStore] ✅ Projections synchronized in {syncElapsed:F0}ms");
                 
                 // Load ALL todos including completed (for completed items management feature)
                 // Filtering will be done at ViewModel layer based on ShowCompleted preference

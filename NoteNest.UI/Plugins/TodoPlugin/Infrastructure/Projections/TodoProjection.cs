@@ -131,6 +131,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
         {
             var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
+            
+            // ✅ CRITICAL: Ensure writes are durable (matches BaseProjection pattern)
+            // This ensures ALL writes wait for disk sync before returning success
+            // Without this, changes can be lost in WAL file on app close
+            await connection.ExecuteAsync("PRAGMA synchronous = FULL");
+            
             return connection;
         }
         

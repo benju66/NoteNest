@@ -78,6 +78,13 @@ namespace NoteNest.Infrastructure.Projections
         {
             var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
+            
+            // ✅ CRITICAL: Override schema's NORMAL with FULL for guaranteed durability
+            // This ensures ALL writes wait for disk sync before returning success
+            // Solves persistence issue where changes stuck in WAL file never reach main .db
+            // Applied to ALL projections (TreeView, TagView, TodoView) via inheritance
+            await connection.ExecuteAsync("PRAGMA synchronous = FULL");
+            
             return connection;
         }
         

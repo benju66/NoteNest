@@ -508,6 +508,13 @@ namespace NoteNest.UI.Composition
             // Background service for continuous projection updates (safety net)
             services.AddHostedService<NoteNest.Infrastructure.Projections.ProjectionHostedService>();
             
+            // ✅ Cleanup service for final WAL checkpoint on application shutdown
+            // Ensures all projection changes are persisted to disk before app closes
+            services.AddHostedService(provider =>
+                new NoteNest.Infrastructure.Projections.ProjectionCleanupService(
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
             // Background service for tag propagation to child items
             services.AddHostedService(provider =>
                 new NoteNest.Infrastructure.Services.TagPropagationService(

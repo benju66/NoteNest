@@ -217,7 +217,16 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                     : $"{selectColumns} WHERE is_completed = 0 ORDER BY sort_order, created_at";
 
                 var dtos = await connection.QueryAsync<TodoDto>(sql);
-                return dtos.Select(MapToTodoItem).Where(t => t != null).ToList();
+                var todos = dtos.Select(MapToTodoItem).Where(t => t != null).ToList();
+                
+                // ✅ DIAGNOSTIC: Log what we actually loaded from database
+                _logger.Info($"[TodoQueryService] GetAllAsync returned {todos.Count} todos from todo_view");
+                foreach (var todo in todos)
+                {
+                    _logger.Debug($"[TodoQueryService]   - {todo.Text} (IsCompleted={todo.IsCompleted}, CategoryId={todo.CategoryId})");
+                }
+                
+                return todos;
             }
             catch (Exception ex)
             {
