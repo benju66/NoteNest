@@ -220,210 +220,409 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
         {
             using var connection = await OpenConnectionAsync();
             
-            var rowsAffected = await connection.ExecuteAsync(
-                @"UPDATE todo_view 
-                  SET is_completed = 1, completed_date = @CompletedDate, modified_at = @ModifiedAt
-                  WHERE id = @Id",
+            // ✅ FIX: Use INSERT OR REPLACE instead of UPDATE (proven to persist reliably)
+            // Pattern matches HandleTodoCreatedAsync() which works correctly
+            // First, get current row to preserve all fields
+            var current = await connection.QueryFirstOrDefaultAsync(
+                "SELECT * FROM todo_view WHERE id = @Id",
+                new { Id = e.TodoId.Value.ToString() });
+            
+            if (current == null)
+            {
+                _logger.Warning($"[{Name}] ⚠️ Todo {e.TodoId} not found in todo_view for completion");
+                return;
+            }
+            
+            // INSERT OR REPLACE entire row with is_completed = 1
+            await connection.ExecuteAsync(
+                @"INSERT OR REPLACE INTO todo_view 
+                  (id, text, description, is_completed, completed_date, category_id, category_name, category_path,
+                   parent_id, sort_order, priority, is_favorite, due_date, reminder_date,
+                   source_type, source_note_id, source_file_path, source_line_number, source_char_offset,
+                   is_orphaned, created_at, modified_at)
+                  VALUES 
+                  (@Id, @Text, @Description, 1, @CompletedDate, @CategoryId, @CategoryName, @CategoryPath,
+                   @ParentId, @SortOrder, @Priority, @IsFavorite, @DueDate, @ReminderDate,
+                   @SourceType, @SourceNoteId, @SourceFilePath, @SourceLineNumber, @SourceCharOffset,
+                   @IsOrphaned, @CreatedAt, @ModifiedAt)",
                 new
                 {
-                    Id = e.TodoId.Value.ToString(),
+                    Id = current.id,
+                    Text = current.text,
+                    Description = current.description,
                     CompletedDate = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds(),
+                    CategoryId = current.category_id,
+                    CategoryName = current.category_name,
+                    CategoryPath = current.category_path,
+                    ParentId = current.parent_id,
+                    SortOrder = current.sort_order,
+                    Priority = current.priority,
+                    IsFavorite = current.is_favorite,
+                    DueDate = current.due_date,
+                    ReminderDate = current.reminder_date,
+                    SourceType = current.source_type,
+                    SourceNoteId = current.source_note_id,
+                    SourceFilePath = current.source_file_path,
+                    SourceLineNumber = current.source_line_number,
+                    SourceCharOffset = current.source_char_offset,
+                    IsOrphaned = current.is_orphaned,
+                    CreatedAt = current.created_at,
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Note: wal_checkpoint is a no-op in DELETE journal mode (current mode)
-            // In DELETE mode, writes go directly to main DB with synchronous=FULL
-            // This block kept for compatibility if journal mode changes
+            // ✅ VERIFICATION: Confirm the write succeeded
             try
             {
-                await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] Database checkpoint completed for completion update");
-                
-                // ✅ VERIFICATION: Check if database actually has the updated value
                 var verifyValue = await connection.ExecuteScalarAsync<int>(
                     "SELECT is_completed FROM todo_view WHERE id = @Id",
                     new { Id = e.TodoId.Value.ToString() });
-                _logger.Info($"[{Name}] 🔍 VERIFICATION: is_completed in DB after update = {verifyValue}");
+                _logger.Info($"[{Name}] 🔍 VERIFICATION: is_completed in DB after INSERT OR REPLACE = {verifyValue}");
+                
+                if (verifyValue != 1)
+                {
+                    _logger.Error($"[{Name}] ❌ CRITICAL: Verification failed! Expected 1, got {verifyValue}");
+                }
             }
-            catch (Exception checkpointEx)
+            catch (Exception ex)
             {
-                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
-                // Don't throw - checkpoint is optional in DELETE mode
+                _logger.Error(ex, $"[{Name}] Failed during verification");
             }
             
-            _logger.Info($"[{Name}] ✅ Todo completed: {e.TodoId}, rows affected: {rowsAffected}, is_completed set to 1");
-            
-            if (rowsAffected == 0)
-            {
-                _logger.Warning($"[{Name}] ⚠️ UPDATE affected 0 rows! Todo {e.TodoId} might not exist in todo_view yet");
-            }
+            _logger.Info($"[{Name}] ✅ Todo completed using INSERT OR REPLACE: {e.TodoId}, is_completed set to 1");
         }
         
         private async Task HandleTodoUncompletedAsync(TodoUncompletedEvent e)
         {
             using var connection = await OpenConnectionAsync();
             
-            var rowsAffected = await connection.ExecuteAsync(
-                @"UPDATE todo_view 
-                  SET is_completed = 0, completed_date = NULL, modified_at = @ModifiedAt
-                  WHERE id = @Id",
+            // ✅ FIX: Use INSERT OR REPLACE instead of UPDATE
+            var current = await connection.QueryFirstOrDefaultAsync(
+                "SELECT * FROM todo_view WHERE id = @Id",
+                new { Id = e.TodoId.Value.ToString() });
+            
+            if (current == null)
+            {
+                _logger.Warning($"[{Name}] ⚠️ Todo {e.TodoId} not found in todo_view for uncompletion");
+                return;
+            }
+            
+            // INSERT OR REPLACE entire row with is_completed = 0
+            await connection.ExecuteAsync(
+                @"INSERT OR REPLACE INTO todo_view 
+                  (id, text, description, is_completed, completed_date, category_id, category_name, category_path,
+                   parent_id, sort_order, priority, is_favorite, due_date, reminder_date,
+                   source_type, source_note_id, source_file_path, source_line_number, source_char_offset,
+                   is_orphaned, created_at, modified_at)
+                  VALUES 
+                  (@Id, @Text, @Description, 0, NULL, @CategoryId, @CategoryName, @CategoryPath,
+                   @ParentId, @SortOrder, @Priority, @IsFavorite, @DueDate, @ReminderDate,
+                   @SourceType, @SourceNoteId, @SourceFilePath, @SourceLineNumber, @SourceCharOffset,
+                   @IsOrphaned, @CreatedAt, @ModifiedAt)",
                 new
                 {
-                    Id = e.TodoId.Value.ToString(),
+                    Id = current.id,
+                    Text = current.text,
+                    Description = current.description,
+                    CategoryId = current.category_id,
+                    CategoryName = current.category_name,
+                    CategoryPath = current.category_path,
+                    ParentId = current.parent_id,
+                    SortOrder = current.sort_order,
+                    Priority = current.priority,
+                    IsFavorite = current.is_favorite,
+                    DueDate = current.due_date,
+                    ReminderDate = current.reminder_date,
+                    SourceType = current.source_type,
+                    SourceNoteId = current.source_note_id,
+                    SourceFilePath = current.source_file_path,
+                    SourceLineNumber = current.source_line_number,
+                    SourceCharOffset = current.source_char_offset,
+                    IsOrphaned = current.is_orphaned,
+                    CreatedAt = current.created_at,
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
-            try
-            {
-                await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] Database checkpoint completed for uncomplete update");
-            }
-            catch (Exception checkpointEx)
-            {
-                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
-            }
-            
-            _logger.Info($"[{Name}] ✅ Todo uncompleted: {e.TodoId}, rows affected: {rowsAffected}");
+            _logger.Info($"[{Name}] ✅ Todo uncompleted using INSERT OR REPLACE: {e.TodoId}");
         }
         
         private async Task HandleTodoTextUpdatedAsync(TodoTextUpdatedEvent e)
         {
             using var connection = await OpenConnectionAsync();
             
-            var rowsAffected = await connection.ExecuteAsync(
-                @"UPDATE todo_view 
-                  SET text = @Text, modified_at = @ModifiedAt
-                  WHERE id = @Id",
+            // ✅ FIX: Use INSERT OR REPLACE instead of UPDATE
+            var current = await connection.QueryFirstOrDefaultAsync(
+                "SELECT * FROM todo_view WHERE id = @Id",
+                new { Id = e.TodoId.Value.ToString() });
+            
+            if (current == null)
+            {
+                _logger.Warning($"[{Name}] ⚠️ Todo {e.TodoId} not found in todo_view for text update");
+                return;
+            }
+            
+            // INSERT OR REPLACE entire row with new text
+            await connection.ExecuteAsync(
+                @"INSERT OR REPLACE INTO todo_view 
+                  (id, text, description, is_completed, completed_date, category_id, category_name, category_path,
+                   parent_id, sort_order, priority, is_favorite, due_date, reminder_date,
+                   source_type, source_note_id, source_file_path, source_line_number, source_char_offset,
+                   is_orphaned, created_at, modified_at)
+                  VALUES 
+                  (@Id, @Text, @Description, @IsCompleted, @CompletedDate, @CategoryId, @CategoryName, @CategoryPath,
+                   @ParentId, @SortOrder, @Priority, @IsFavorite, @DueDate, @ReminderDate,
+                   @SourceType, @SourceNoteId, @SourceFilePath, @SourceLineNumber, @SourceCharOffset,
+                   @IsOrphaned, @CreatedAt, @ModifiedAt)",
                 new
                 {
-                    Id = e.TodoId.Value.ToString(),
-                    Text = e.NewText,
+                    Id = current.id,
+                    Text = e.NewText,  // ← Updated field
+                    Description = current.description,
+                    IsCompleted = current.is_completed,
+                    CompletedDate = current.completed_date,
+                    CategoryId = current.category_id,
+                    CategoryName = current.category_name,
+                    CategoryPath = current.category_path,
+                    ParentId = current.parent_id,
+                    SortOrder = current.sort_order,
+                    Priority = current.priority,
+                    IsFavorite = current.is_favorite,
+                    DueDate = current.due_date,
+                    ReminderDate = current.reminder_date,
+                    SourceType = current.source_type,
+                    SourceNoteId = current.source_note_id,
+                    SourceFilePath = current.source_file_path,
+                    SourceLineNumber = current.source_line_number,
+                    SourceCharOffset = current.source_char_offset,
+                    IsOrphaned = current.is_orphaned,
+                    CreatedAt = current.created_at,
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
-            try
-            {
-                await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] Database checkpoint completed for text update");
-            }
-            catch (Exception checkpointEx)
-            {
-                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
-            }
-            
-            _logger.Info($"[{Name}] ✅ Todo text updated: {e.TodoId}, rows affected: {rowsAffected}");
+            _logger.Info($"[{Name}] ✅ Todo text updated using INSERT OR REPLACE: {e.TodoId}");
         }
         
         private async Task HandleTodoDueDateChangedAsync(TodoDueDateChangedEvent e)
         {
             using var connection = await OpenConnectionAsync();
             
-            var rowsAffected = await connection.ExecuteAsync(
-                @"UPDATE todo_view 
-                  SET due_date = @DueDate, modified_at = @ModifiedAt
-                  WHERE id = @Id",
+            // ✅ FIX: Use INSERT OR REPLACE instead of UPDATE
+            var current = await connection.QueryFirstOrDefaultAsync(
+                "SELECT * FROM todo_view WHERE id = @Id",
+                new { Id = e.TodoId.Value.ToString() });
+            
+            if (current == null)
+            {
+                _logger.Warning($"[{Name}] ⚠️ Todo {e.TodoId} not found in todo_view for due date change");
+                return;
+            }
+            
+            // INSERT OR REPLACE entire row with new due_date
+            await connection.ExecuteAsync(
+                @"INSERT OR REPLACE INTO todo_view 
+                  (id, text, description, is_completed, completed_date, category_id, category_name, category_path,
+                   parent_id, sort_order, priority, is_favorite, due_date, reminder_date,
+                   source_type, source_note_id, source_file_path, source_line_number, source_char_offset,
+                   is_orphaned, created_at, modified_at)
+                  VALUES 
+                  (@Id, @Text, @Description, @IsCompleted, @CompletedDate, @CategoryId, @CategoryName, @CategoryPath,
+                   @ParentId, @SortOrder, @Priority, @IsFavorite, @DueDate, @ReminderDate,
+                   @SourceType, @SourceNoteId, @SourceFilePath, @SourceLineNumber, @SourceCharOffset,
+                   @IsOrphaned, @CreatedAt, @ModifiedAt)",
                 new
                 {
-                    Id = e.TodoId.Value.ToString(),
-                    DueDate = e.NewDueDate.HasValue ? new DateTimeOffset(e.NewDueDate.Value).ToUnixTimeSeconds() : (long?)null,
+                    Id = current.id,
+                    Text = current.text,
+                    Description = current.description,
+                    IsCompleted = current.is_completed,
+                    CompletedDate = current.completed_date,
+                    CategoryId = current.category_id,
+                    CategoryName = current.category_name,
+                    CategoryPath = current.category_path,
+                    ParentId = current.parent_id,
+                    SortOrder = current.sort_order,
+                    Priority = current.priority,
+                    IsFavorite = current.is_favorite,
+                    DueDate = e.NewDueDate.HasValue ? new DateTimeOffset(e.NewDueDate.Value).ToUnixTimeSeconds() : (long?)null,  // ← Updated field
+                    ReminderDate = current.reminder_date,
+                    SourceType = current.source_type,
+                    SourceNoteId = current.source_note_id,
+                    SourceFilePath = current.source_file_path,
+                    SourceLineNumber = current.source_line_number,
+                    SourceCharOffset = current.source_char_offset,
+                    IsOrphaned = current.is_orphaned,
+                    CreatedAt = current.created_at,
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
-            try
-            {
-                await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] Database checkpoint completed for due date update");
-            }
-            catch (Exception checkpointEx)
-            {
-                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
-            }
-            
-            _logger.Info($"[{Name}] ✅ Todo due date changed: {e.TodoId}, rows affected: {rowsAffected}");
+            _logger.Info($"[{Name}] ✅ Todo due date changed using INSERT OR REPLACE: {e.TodoId}");
         }
         
         private async Task HandleTodoPriorityChangedAsync(TodoPriorityChangedEvent e)
         {
             using var connection = await OpenConnectionAsync();
             
-            var rowsAffected = await connection.ExecuteAsync(
-                @"UPDATE todo_view 
-                  SET priority = @Priority, modified_at = @ModifiedAt
-                  WHERE id = @Id",
+            // ✅ FIX: Use INSERT OR REPLACE instead of UPDATE
+            var current = await connection.QueryFirstOrDefaultAsync(
+                "SELECT * FROM todo_view WHERE id = @Id",
+                new { Id = e.TodoId.Value.ToString() });
+            
+            if (current == null)
+            {
+                _logger.Warning($"[{Name}] ⚠️ Todo {e.TodoId} not found in todo_view for priority change");
+                return;
+            }
+            
+            // INSERT OR REPLACE entire row with new priority
+            await connection.ExecuteAsync(
+                @"INSERT OR REPLACE INTO todo_view 
+                  (id, text, description, is_completed, completed_date, category_id, category_name, category_path,
+                   parent_id, sort_order, priority, is_favorite, due_date, reminder_date,
+                   source_type, source_note_id, source_file_path, source_line_number, source_char_offset,
+                   is_orphaned, created_at, modified_at)
+                  VALUES 
+                  (@Id, @Text, @Description, @IsCompleted, @CompletedDate, @CategoryId, @CategoryName, @CategoryPath,
+                   @ParentId, @SortOrder, @Priority, @IsFavorite, @DueDate, @ReminderDate,
+                   @SourceType, @SourceNoteId, @SourceFilePath, @SourceLineNumber, @SourceCharOffset,
+                   @IsOrphaned, @CreatedAt, @ModifiedAt)",
                 new
                 {
-                    Id = e.TodoId.Value.ToString(),
-                    Priority = e.NewPriority,
+                    Id = current.id,
+                    Text = current.text,
+                    Description = current.description,
+                    IsCompleted = current.is_completed,
+                    CompletedDate = current.completed_date,
+                    CategoryId = current.category_id,
+                    CategoryName = current.category_name,
+                    CategoryPath = current.category_path,
+                    ParentId = current.parent_id,
+                    SortOrder = current.sort_order,
+                    Priority = e.NewPriority,  // ← Updated field
+                    IsFavorite = current.is_favorite,
+                    DueDate = current.due_date,
+                    ReminderDate = current.reminder_date,
+                    SourceType = current.source_type,
+                    SourceNoteId = current.source_note_id,
+                    SourceFilePath = current.source_file_path,
+                    SourceLineNumber = current.source_line_number,
+                    SourceCharOffset = current.source_char_offset,
+                    IsOrphaned = current.is_orphaned,
+                    CreatedAt = current.created_at,
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
-            try
-            {
-                await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] Database checkpoint completed for priority update");
-            }
-            catch (Exception checkpointEx)
-            {
-                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
-            }
-            
-            _logger.Info($"[{Name}] ✅ Todo priority changed: {e.TodoId} to {e.NewPriority}, rows affected: {rowsAffected}");
+            _logger.Info($"[{Name}] ✅ Todo priority changed using INSERT OR REPLACE: {e.TodoId} to {e.NewPriority}");
         }
         
         private async Task HandleTodoFavoritedAsync(TodoFavoritedEvent e)
         {
             using var connection = await OpenConnectionAsync();
             
-            var rowsAffected = await connection.ExecuteAsync(
-                "UPDATE todo_view SET is_favorite = 1, modified_at = @ModifiedAt WHERE id = @Id",
+            // ✅ FIX: Use INSERT OR REPLACE instead of UPDATE
+            var current = await connection.QueryFirstOrDefaultAsync(
+                "SELECT * FROM todo_view WHERE id = @Id",
+                new { Id = e.TodoId.Value.ToString() });
+            
+            if (current == null)
+            {
+                _logger.Warning($"[{Name}] ⚠️ Todo {e.TodoId} not found in todo_view for favorite");
+                return;
+            }
+            
+            // INSERT OR REPLACE entire row with is_favorite = 1
+            await connection.ExecuteAsync(
+                @"INSERT OR REPLACE INTO todo_view 
+                  (id, text, description, is_completed, completed_date, category_id, category_name, category_path,
+                   parent_id, sort_order, priority, is_favorite, due_date, reminder_date,
+                   source_type, source_note_id, source_file_path, source_line_number, source_char_offset,
+                   is_orphaned, created_at, modified_at)
+                  VALUES 
+                  (@Id, @Text, @Description, @IsCompleted, @CompletedDate, @CategoryId, @CategoryName, @CategoryPath,
+                   @ParentId, @SortOrder, @Priority, 1, @DueDate, @ReminderDate,
+                   @SourceType, @SourceNoteId, @SourceFilePath, @SourceLineNumber, @SourceCharOffset,
+                   @IsOrphaned, @CreatedAt, @ModifiedAt)",
                 new
                 {
-                    Id = e.TodoId.Value.ToString(),
+                    Id = current.id,
+                    Text = current.text,
+                    Description = current.description,
+                    IsCompleted = current.is_completed,
+                    CompletedDate = current.completed_date,
+                    CategoryId = current.category_id,
+                    CategoryName = current.category_name,
+                    CategoryPath = current.category_path,
+                    ParentId = current.parent_id,
+                    SortOrder = current.sort_order,
+                    Priority = current.priority,
+                    // IsFavorite = 1 (hardcoded in SQL above)
+                    DueDate = current.due_date,
+                    ReminderDate = current.reminder_date,
+                    SourceType = current.source_type,
+                    SourceNoteId = current.source_note_id,
+                    SourceFilePath = current.source_file_path,
+                    SourceLineNumber = current.source_line_number,
+                    SourceCharOffset = current.source_char_offset,
+                    IsOrphaned = current.is_orphaned,
+                    CreatedAt = current.created_at,
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
-            try
-            {
-                await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] Database checkpoint completed for favorite update");
-            }
-            catch (Exception checkpointEx)
-            {
-                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
-            }
-            
-            _logger.Info($"[{Name}] ✅ Todo favorited: {e.TodoId}, rows affected: {rowsAffected}");
+            _logger.Info($"[{Name}] ✅ Todo favorited using INSERT OR REPLACE: {e.TodoId}");
         }
         
         private async Task HandleTodoUnfavoritedAsync(TodoUnfavoritedEvent e)
         {
             using var connection = await OpenConnectionAsync();
             
-            var rowsAffected = await connection.ExecuteAsync(
-                "UPDATE todo_view SET is_favorite = 0, modified_at = @ModifiedAt WHERE id = @Id",
+            // ✅ FIX: Use INSERT OR REPLACE instead of UPDATE
+            var current = await connection.QueryFirstOrDefaultAsync(
+                "SELECT * FROM todo_view WHERE id = @Id",
+                new { Id = e.TodoId.Value.ToString() });
+            
+            if (current == null)
+            {
+                _logger.Warning($"[{Name}] ⚠️ Todo {e.TodoId} not found in todo_view for unfavorite");
+                return;
+            }
+            
+            // INSERT OR REPLACE entire row with is_favorite = 0
+            await connection.ExecuteAsync(
+                @"INSERT OR REPLACE INTO todo_view 
+                  (id, text, description, is_completed, completed_date, category_id, category_name, category_path,
+                   parent_id, sort_order, priority, is_favorite, due_date, reminder_date,
+                   source_type, source_note_id, source_file_path, source_line_number, source_char_offset,
+                   is_orphaned, created_at, modified_at)
+                  VALUES 
+                  (@Id, @Text, @Description, @IsCompleted, @CompletedDate, @CategoryId, @CategoryName, @CategoryPath,
+                   @ParentId, @SortOrder, @Priority, 0, @DueDate, @ReminderDate,
+                   @SourceType, @SourceNoteId, @SourceFilePath, @SourceLineNumber, @SourceCharOffset,
+                   @IsOrphaned, @CreatedAt, @ModifiedAt)",
                 new
                 {
-                    Id = e.TodoId.Value.ToString(),
+                    Id = current.id,
+                    Text = current.text,
+                    Description = current.description,
+                    IsCompleted = current.is_completed,
+                    CompletedDate = current.completed_date,
+                    CategoryId = current.category_id,
+                    CategoryName = current.category_name,
+                    CategoryPath = current.category_path,
+                    ParentId = current.parent_id,
+                    SortOrder = current.sort_order,
+                    Priority = current.priority,
+                    // IsFavorite = 0 (hardcoded in SQL above)
+                    DueDate = current.due_date,
+                    ReminderDate = current.reminder_date,
+                    SourceType = current.source_type,
+                    SourceNoteId = current.source_note_id,
+                    SourceFilePath = current.source_file_path,
+                    SourceLineNumber = current.source_line_number,
+                    SourceCharOffset = current.source_char_offset,
+                    IsOrphaned = current.is_orphaned,
+                    CreatedAt = current.created_at,
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
-            try
-            {
-                await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] Database checkpoint completed for unfavorite update");
-            }
-            catch (Exception checkpointEx)
-            {
-                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
-            }
-            
-            _logger.Info($"[{Name}] ✅ Todo unfavorited: {e.TodoId}, rows affected: {rowsAffected}");
+            _logger.Info($"[{Name}] ✅ Todo unfavorited using INSERT OR REPLACE: {e.TodoId}");
         }
         
         private async Task HandleTodoDeletedAsync(TodoDeletedEvent e)

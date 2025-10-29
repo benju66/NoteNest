@@ -539,10 +539,12 @@ namespace NoteNest.UI.Composition
                     projectionsConnectionString,
                     provider.GetRequiredService<IAppLogger>()));
             
-            // TodoQueryService - reads from todo_view in projections.db
+            // TodoQueryService - reads from todo_view in projections.db + events.db for mutable state
+            // ✅ FIX: Inject IEventStore to query events for completion/priority/due date (bypasses broken projections updates)
             services.AddSingleton<NoteNest.UI.Plugins.TodoPlugin.Application.Queries.ITodoQueryService>(provider =>
                 new NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries.TodoQueryService(
                     projectionsConnectionString,
+                    provider.GetRequiredService<IEventStore>(),
                     provider.GetRequiredService<IAppLogger>()));
             
             // Initialize databases on startup

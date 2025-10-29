@@ -7,21 +7,30 @@ using Dapper;
 using NoteNest.Core.Services.Logging;
 using NoteNest.UI.Plugins.TodoPlugin.Application.Queries;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
+using NoteNest.Application.Common.Interfaces;
+using NoteNest.Domain.Todos;
 
 namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
 {
     /// <summary>
     /// Query service for todo projection.
-    /// Queries projections.db todo_view table with optimized SQL.
+    /// Queries projections.db todo_view table for basic data.
+    /// Queries events.db for mutable state (completion, priority, due date) - fixes persistence bug.
+    /// Hybrid approach: Immutable data from projection, mutable state from events.
     /// </summary>
     public class TodoQueryService : ITodoQueryService
     {
         private readonly string _connectionString;
+        private readonly IEventStore _eventStore;
         private readonly IAppLogger _logger;
 
-        public TodoQueryService(string projectionsConnectionString, IAppLogger logger)
+        public TodoQueryService(
+            string projectionsConnectionString, 
+            IEventStore eventStore,
+            IAppLogger logger)
         {
             _connectionString = projectionsConnectionString ?? throw new ArgumentNullException(nameof(projectionsConnectionString));
+            _eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -32,10 +41,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
                 
-                // ✅ CRITICAL: Enable reading from WAL before it's checkpointed to main DB
-                // This allows queries to see recent writes from other connections
                 await connection.ExecuteAsync("PRAGMA read_uncommitted = 1");
-                _logger.Debug($"[TodoQueryService] PRAGMA read_uncommitted enabled for GetByIdAsync");
 
                 var dto = await connection.QueryFirstOrDefaultAsync<TodoDto>(
                     @"SELECT id, text, description, is_completed, completed_date,
@@ -50,9 +56,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
 
                 if (dto != null)
                 {
-                    _logger.Debug($"[TodoQueryService] Read from todo_view: '{dto.Text}' | CategoryId from DB: '{dto.CategoryId ?? "NULL"}' | is_completed from DB: {dto.IsCompleted}");
                     var mapped = MapToTodoItem(dto);
-                    _logger.Debug($"[TodoQueryService] After mapping: CategoryId = '{mapped.CategoryId?.ToString() ?? "NULL"}' | IsCompleted = {mapped.IsCompleted}");
+                    
+                    // ✅ FIX: Get mutable state from events.db (reliable persistence)
+                    await ApplyEventBasedStateAsync(mapped);
+                    
+                    _logger.Debug($"[TodoQueryService] Loaded todo from projection + events: '{mapped.Text}' | IsCompleted={mapped.IsCompleted} | Priority={mapped.Priority}");
                     return mapped;
                 }
                 
@@ -219,11 +228,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
                 var dtos = await connection.QueryAsync<TodoDto>(sql);
                 var todos = dtos.Select(MapToTodoItem).Where(t => t != null).ToList();
                 
-                // ✅ DIAGNOSTIC: Log what we actually loaded from database
-                _logger.Info($"[TodoQueryService] GetAllAsync returned {todos.Count} todos from todo_view");
+                // ✅ FIX: Apply event-based state for mutable fields (completion, priority, due date)
+                // This bypasses broken projection update persistence
+                _logger.Info($"[TodoQueryService] Loaded {todos.Count} todos from todo_view, now applying event-based state...");
+                
                 foreach (var todo in todos)
                 {
-                    _logger.Debug($"[TodoQueryService]   - {todo.Text} (IsCompleted={todo.IsCompleted}, CategoryId={todo.CategoryId})");
+                    await ApplyEventBasedStateAsync(todo);
+                }
+                
+                // ✅ DIAGNOSTIC: Log final state after merging with events
+                _logger.Info($"[TodoQueryService] GetAllAsync returned {todos.Count} todos with event-based state applied");
+                foreach (var todo in todos)
+                {
+                    _logger.Debug($"[TodoQueryService]   - {todo.Text} (IsCompleted={todo.IsCompleted}, Priority={todo.Priority}, CategoryId={todo.CategoryId})");
                 }
                 
                 return todos;
@@ -277,6 +295,90 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
         }
 
         // DTOs for Dapper
+        /// <summary>
+        /// Apply mutable state from events.db to TodoItem.
+        /// Fixes persistence bug where projections.db updates don't persist.
+        /// Queries event store for latest completion, priority, due date, and favorite state.
+        /// </summary>
+        private async Task ApplyEventBasedStateAsync(TodoItem todo)
+        {
+            try
+            {
+                // Get all events for this todo from events.db
+                var allEvents = await _eventStore.GetEventsAsync(todo.Id);
+                
+                if (allEvents == null || !allEvents.Any())
+                {
+                    _logger.Debug($"[TodoQueryService] No events found for todo {todo.Id}, using projection defaults");
+                    return;  // Use whatever was in projection
+                }
+                
+                // ✅ Completion State (most recent completion/uncompletion event wins)
+                var completionEvents = allEvents
+                    .Where(e => e is NoteNest.UI.Plugins.TodoPlugin.Domain.Events.TodoCompletedEvent || 
+                                e is NoteNest.UI.Plugins.TodoPlugin.Domain.Events.TodoUncompletedEvent)
+                    .OrderByDescending(e => e.OccurredAt)
+                    .FirstOrDefault();
+                
+                if (completionEvents != null)
+                {
+                    todo.IsCompleted = (completionEvents is NoteNest.UI.Plugins.TodoPlugin.Domain.Events.TodoCompletedEvent);
+                    if (todo.IsCompleted && completionEvents is NoteNest.UI.Plugins.TodoPlugin.Domain.Events.TodoCompletedEvent)
+                    {
+                        todo.CompletedDate = completionEvents.OccurredAt;
+                    }
+                    else
+                    {
+                        todo.CompletedDate = null;
+                    }
+                    
+                    _logger.Debug($"[TodoQueryService] Applied completion from events: {todo.Text} → IsCompleted={todo.IsCompleted}");
+                }
+                
+                // ✅ Priority State (most recent priority change event)
+                var priorityEvent = allEvents
+                    .OfType<NoteNest.UI.Plugins.TodoPlugin.Domain.Events.TodoPriorityChangedEvent>()
+                    .OrderByDescending(e => e.OccurredAt)
+                    .FirstOrDefault();
+                
+                if (priorityEvent != null)
+                {
+                    todo.Priority = (Priority)priorityEvent.NewPriority;
+                    _logger.Debug($"[TodoQueryService] Applied priority from events: {todo.Text} → Priority={todo.Priority}");
+                }
+                
+                // ✅ Due Date State (most recent due date change)
+                var dueDateEvent = allEvents
+                    .OfType<NoteNest.UI.Plugins.TodoPlugin.Domain.Events.TodoDueDateChangedEvent>()
+                    .OrderByDescending(e => e.OccurredAt)
+                    .FirstOrDefault();
+                
+                if (dueDateEvent != null)
+                {
+                    todo.DueDate = dueDateEvent.NewDueDate;
+                    _logger.Debug($"[TodoQueryService] Applied due date from events: {todo.Text} → DueDate={todo.DueDate}");
+                }
+                
+                // ✅ Favorite State (most recent favorite/unfavorite event)
+                var favoriteEvents = allEvents
+                    .Where(e => e is NoteNest.UI.Plugins.TodoPlugin.Domain.Events.TodoFavoritedEvent || 
+                                e is NoteNest.UI.Plugins.TodoPlugin.Domain.Events.TodoUnfavoritedEvent)
+                    .OrderByDescending(e => e.OccurredAt)
+                    .FirstOrDefault();
+                
+                if (favoriteEvents != null)
+                {
+                    todo.IsFavorite = (favoriteEvents is NoteNest.UI.Plugins.TodoPlugin.Domain.Events.TodoFavoritedEvent);
+                    _logger.Debug($"[TodoQueryService] Applied favorite from events: {todo.Text} → IsFavorite={todo.IsFavorite}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"[TodoQueryService] Failed to apply event-based state for todo {todo.Id}, using projection defaults");
+                // Don't throw - use projection defaults if event query fails
+            }
+        }
+
         private class TodoDto
         {
             public string Id { get; set; }
