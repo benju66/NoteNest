@@ -231,23 +231,24 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // ✅ CRITICAL: Force WAL checkpoint to ensure data immediately visible to other connections
-            // This solves read-your-own-writes issue where queries can't see uncommitted WAL changes
+            // Note: wal_checkpoint is a no-op in DELETE journal mode (current mode)
+            // In DELETE mode, writes go directly to main DB with synchronous=FULL
+            // This block kept for compatibility if journal mode changes
             try
             {
                 await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] WAL checkpoint completed for completion update");
+                _logger.Debug($"[{Name}] Database checkpoint completed for completion update");
                 
                 // ✅ VERIFICATION: Check if database actually has the updated value
                 var verifyValue = await connection.ExecuteScalarAsync<int>(
                     "SELECT is_completed FROM todo_view WHERE id = @Id",
                     new { Id = e.TodoId.Value.ToString() });
-                _logger.Info($"[{Name}] 🔍 VERIFICATION: is_completed in DB after checkpoint = {verifyValue}");
+                _logger.Info($"[{Name}] 🔍 VERIFICATION: is_completed in DB after update = {verifyValue}");
             }
             catch (Exception checkpointEx)
             {
-                _logger.Warning($"[{Name}] WAL checkpoint failed - eventual consistency will apply: {checkpointEx.Message}");
-                // Don't throw - checkpoint failure shouldn't break the operation
+                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
+                // Don't throw - checkpoint is optional in DELETE mode
             }
             
             _logger.Info($"[{Name}] ✅ Todo completed: {e.TodoId}, rows affected: {rowsAffected}, is_completed set to 1");
@@ -272,15 +273,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Force WAL checkpoint for immediate visibility
+            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
             try
             {
                 await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] WAL checkpoint completed for uncomplete update");
+                _logger.Debug($"[{Name}] Database checkpoint completed for uncomplete update");
             }
             catch (Exception checkpointEx)
             {
-                _logger.Warning($"[{Name}] WAL checkpoint failed: {checkpointEx.Message}");
+                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
             }
             
             _logger.Info($"[{Name}] ✅ Todo uncompleted: {e.TodoId}, rows affected: {rowsAffected}");
@@ -301,15 +302,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Force WAL checkpoint for immediate visibility
+            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
             try
             {
                 await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] WAL checkpoint completed for text update");
+                _logger.Debug($"[{Name}] Database checkpoint completed for text update");
             }
             catch (Exception checkpointEx)
             {
-                _logger.Warning($"[{Name}] WAL checkpoint failed: {checkpointEx.Message}");
+                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
             }
             
             _logger.Info($"[{Name}] ✅ Todo text updated: {e.TodoId}, rows affected: {rowsAffected}");
@@ -330,15 +331,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Force WAL checkpoint for immediate visibility
+            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
             try
             {
                 await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] WAL checkpoint completed for due date update");
+                _logger.Debug($"[{Name}] Database checkpoint completed for due date update");
             }
             catch (Exception checkpointEx)
             {
-                _logger.Warning($"[{Name}] WAL checkpoint failed: {checkpointEx.Message}");
+                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
             }
             
             _logger.Info($"[{Name}] ✅ Todo due date changed: {e.TodoId}, rows affected: {rowsAffected}");
@@ -359,15 +360,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Force WAL checkpoint for immediate visibility
+            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
             try
             {
                 await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] WAL checkpoint completed for priority update");
+                _logger.Debug($"[{Name}] Database checkpoint completed for priority update");
             }
             catch (Exception checkpointEx)
             {
-                _logger.Warning($"[{Name}] WAL checkpoint failed: {checkpointEx.Message}");
+                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
             }
             
             _logger.Info($"[{Name}] ✅ Todo priority changed: {e.TodoId} to {e.NewPriority}, rows affected: {rowsAffected}");
@@ -385,15 +386,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Force WAL checkpoint for immediate visibility
+            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
             try
             {
                 await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] WAL checkpoint completed for favorite update");
+                _logger.Debug($"[{Name}] Database checkpoint completed for favorite update");
             }
             catch (Exception checkpointEx)
             {
-                _logger.Warning($"[{Name}] WAL checkpoint failed: {checkpointEx.Message}");
+                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
             }
             
             _logger.Info($"[{Name}] ✅ Todo favorited: {e.TodoId}, rows affected: {rowsAffected}");
@@ -411,15 +412,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                     ModifiedAt = new DateTimeOffset(e.OccurredAt).ToUnixTimeSeconds()
                 });
             
-            // Force WAL checkpoint for immediate visibility
+            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
             try
             {
                 await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] WAL checkpoint completed for unfavorite update");
+                _logger.Debug($"[{Name}] Database checkpoint completed for unfavorite update");
             }
             catch (Exception checkpointEx)
             {
-                _logger.Warning($"[{Name}] WAL checkpoint failed: {checkpointEx.Message}");
+                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
             }
             
             _logger.Info($"[{Name}] ✅ Todo unfavorited: {e.TodoId}, rows affected: {rowsAffected}");
@@ -433,15 +434,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Projections
                 "DELETE FROM todo_view WHERE id = @Id",
                 new { Id = e.TodoId.Value.ToString() });
             
-            // Force WAL checkpoint for immediate visibility
+            // Note: Checkpoint no-op in DELETE mode (kept for compatibility)
             try
             {
                 await connection.ExecuteAsync("PRAGMA wal_checkpoint(FULL)");
-                _logger.Debug($"[{Name}] WAL checkpoint completed for delete");
+                _logger.Debug($"[{Name}] Database checkpoint completed for delete");
             }
             catch (Exception checkpointEx)
             {
-                _logger.Warning($"[{Name}] WAL checkpoint failed: {checkpointEx.Message}");
+                _logger.Warning($"[{Name}] Database checkpoint warning: {checkpointEx.Message}");
             }
             
             _logger.Info($"[{Name}] ✅ Todo deleted: {e.TodoId}, rows affected: {rowsAffected}");

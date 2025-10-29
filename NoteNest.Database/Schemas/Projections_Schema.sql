@@ -6,8 +6,12 @@
 -- Pattern: CQRS Read Side - optimized for queries
 -- ============================================================================
 
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
+-- ✅ DELETE mode for reliable persistence on Windows desktop apps
+-- WAL mode was causing writes to not persist between sessions (checkpoint unreliable)
+-- DELETE mode: immediate writes to main DB, simpler, more reliable for single-user desktop
+-- Follows search.db pattern which already uses DELETE successfully
+PRAGMA journal_mode = DELETE;
+PRAGMA synchronous = FULL;  -- FULL (not NORMAL) for maximum durability in DELETE mode
 PRAGMA foreign_keys = ON;
 PRAGMA cache_size = -16000;  -- 16MB cache
 PRAGMA temp_store = MEMORY;

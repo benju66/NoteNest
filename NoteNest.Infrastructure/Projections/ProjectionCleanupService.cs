@@ -9,9 +9,9 @@ using NoteNest.Core.Services.Logging;
 namespace NoteNest.Infrastructure.Projections
 {
     /// <summary>
-    /// Ensures projections database is properly checkpointed on application shutdown.
-    /// Final safety net to guarantee WAL changes are flushed to main database file.
-    /// This complements PRAGMA synchronous = FULL by ensuring clean shutdown even if app crashes.
+    /// Ensures projections database is properly closed on application shutdown.
+    /// In DELETE journal mode, this ensures clean database shutdown.
+    /// Note: In DELETE mode, wal_checkpoint is a no-op (database uses rollback journal instead).
     /// </summary>
     public class ProjectionCleanupService : IHostedService
     {
@@ -26,7 +26,7 @@ namespace NoteNest.Infrastructure.Projections
         
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _logger.Info("[ProjectionCleanup] Service registered - will checkpoint projections.db on shutdown");
+            _logger.Info("[ProjectionCleanup] Service registered - will ensure clean shutdown of projections.db");
             return Task.CompletedTask;
         }
         
@@ -34,24 +34,24 @@ namespace NoteNest.Infrastructure.Projections
         {
             try
             {
-                _logger.Info("[ProjectionCleanup] 🔄 Performing final WAL checkpoint before shutdown...");
+                _logger.Info("[ProjectionCleanup] 🔄 Ensuring clean database shutdown...");
                 
                 using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync();
                 
-                // TRUNCATE mode: Checkpoint WAL to main DB and remove WAL file
-                // This is most aggressive mode - guarantees clean shutdown
-                // Returns: "0|X|Y" where X=pages checkpointed, Y=pages moved to DB
+                // Note: In DELETE journal mode, this is a no-op (harmless)
+                // In WAL mode, this would checkpoint and truncate the WAL file
+                // We keep it for compatibility if journal mode changes in future
                 var result = await connection.ExecuteScalarAsync<string>("PRAGMA wal_checkpoint(TRUNCATE)");
                 
-                _logger.Info($"[ProjectionCleanup] ✅ Final checkpoint completed: {result}");
-                _logger.Info($"[ProjectionCleanup] ✅ All projection changes persisted to disk");
+                _logger.Info($"[ProjectionCleanup] ✅ Database shutdown complete");
+                _logger.Debug($"[ProjectionCleanup] Checkpoint result: {result}");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "[ProjectionCleanup] Failed to checkpoint on shutdown");
-                // Don't throw - shutdown should continue even if checkpoint fails
-                // With synchronous=FULL, data should already be safe
+                _logger.Error(ex, "[ProjectionCleanup] Failed during shutdown cleanup");
+                // Don't throw - shutdown should continue even if cleanup fails
+                // With synchronous=FULL in DELETE mode, data is already persisted
             }
         }
     }
