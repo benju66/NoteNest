@@ -13,11 +13,11 @@
         Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
     
     <Window.Resources>
-        <!-- Explicit button styles for maximum compatibility -->
+        <!-- Theme-aware button styles (now respects user's theme choice) -->
         <Style x:Key="PrimaryButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#0078D4"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderBrush" Value="#0078D4"/>
+            <Setter Property="Background" Value="{DynamicResource AppAccentBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextOnAccentBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="16,6"/>
             <Setter Property="FontSize" Value="14"/>
@@ -26,20 +26,20 @@
             <Setter Property="Cursor" Value="Hand"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#106EBE"/>
-                    <Setter Property="BorderBrush" Value="#106EBE"/>
+                    <Setter Property="Background" Value="{DynamicResource AppAccentLightBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AppAccentLightBrush}"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#005A9E"/>
-                    <Setter Property="BorderBrush" Value="#005A9E"/>
+                    <Setter Property="Background" Value="{DynamicResource AppAccentDarkBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AppAccentDarkBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
         
         <Style x:Key="SecondaryButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#F3F2F1"/>
-            <Setter Property="Foreground" Value="#323130"/>
-            <Setter Property="BorderBrush" Value="#8A8886"/>
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="16,6"/>
             <Setter Property="FontSize" Value="14"/>
@@ -48,12 +48,12 @@
             <Setter Property="Cursor" Value="Hand"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#EDEBE9"/>
-                    <Setter Property="BorderBrush" Value="#605E5C"/>
+                    <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderHoverBrush}"/>
                 </Trigger>
                 <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Background" Value="#E1DFDD"/>
-                    <Setter Property="BorderBrush" Value="#323130"/>
+                    <Setter Property="Background" Value="{DynamicResource AppSurfacePressedBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>

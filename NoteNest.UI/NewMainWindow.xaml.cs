@@ -74,14 +74,27 @@ namespace NoteNest.UI
         
         private void AnimateRightPanel(bool show)
         {
-            // Simple approach: Just set width directly (no animation for now)
-            // TODO: Add smooth animation later using different approach
-            if (RightPanelColumn != null)
+            if (RightPanelColumn == null) return;
+            
+            var targetWidth = show ? 300.0 : 0.0;
+            var currentWidth = RightPanelColumn.Width.Value;
+            
+            // Skip animation if already at target (or very close)
+            if (Math.Abs(currentWidth - targetWidth) < 1.0)
+                return;
+            
+            // Smooth animation using DoubleAnimation
+            var animation = new DoubleAnimation
             {
-                var targetWidth = show ? 300 : 0;
-                RightPanelColumn.Width = new GridLength(targetWidth);
-                System.Diagnostics.Debug.WriteLine($"🎬 Right panel width set to: {targetWidth}px");
-            }
+                From = currentWidth,
+                To = targetWidth,
+                Duration = new Duration(TimeSpan.FromMilliseconds(250)),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            
+            // Animate the GridLength Width property smoothly
+            RightPanelColumn.BeginAnimation(ColumnDefinition.WidthProperty, animation);
+            System.Diagnostics.Debug.WriteLine($"🎬 Right panel animating from {currentWidth}px to {targetWidth}px");
         }
 
         private void OnTreeViewLoaded(object sender, RoutedEventArgs e)

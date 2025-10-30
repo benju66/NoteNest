@@ -275,24 +275,26 @@
                     </DataTemplate>
                 </TabControl.ItemTemplate>
                 
-                <!-- Tab Item Style - Modern VS Code Style with Bottom Underline -->
+                <!-- Tab Item Style - Modernized VS Code Style with Enhanced Visual Feedback -->
                 <TabControl.ItemContainerStyle>
                     <Style TargetType="TabItem">
                         <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}"/>
                         <Setter Property="Foreground" Value="{DynamicResource AppTextSecondaryBrush}"/>
                         <Setter Property="BorderThickness" Value="0"/>
                         <Setter Property="Padding" Value="0"/>
-                        <Setter Property="Margin" Value="0,0,1,0"/>
+                        <!-- ✨ MODERNIZED: Increased spacing from 1px to 2px for better visual separation -->
+                        <Setter Property="Margin" Value="0,0,2,0"/>
                         <Setter Property="Opacity" Value="0.85"/>
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="TabItem">
                                     <Grid>
+                                        <!-- ✨ MODERNIZED: Increased corner radius from 4px to 6px (industry standard) -->
                                         <Border x:Name="TabBorder"
                                                Background="{TemplateBinding Background}"
                                                BorderThickness="0,0,0,2"
                                                BorderBrush="Transparent"
-                                               CornerRadius="4,4,0,0"
+                                               CornerRadius="6,6,0,0"
                                                Padding="4,6,4,4"
                                                Margin="0">
                                             <!-- Subtle drop shadow for depth (hardware accelerated, negligible performance impact) -->
@@ -312,19 +314,40 @@
                                         </Border>
                                     </Grid>
                                     <ControlTemplate.Triggers>
-                                        <!-- Active tab -->
+                                        <!-- Active tab with enhanced visual hierarchy -->
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}"/>
                                             <Setter Property="Foreground" Value="{DynamicResource AppTextPrimaryBrush}"/>
                                             <Setter Property="Opacity" Value="1.0"/>
                                             <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource AppAccentBrush}"/>
                                         </Trigger>
-                                        <!-- Hover state (not selected) -->
+                                        <!-- Hover state with smooth transitions (not selected) -->
                                         <MultiTrigger>
                                             <MultiTrigger.Conditions>
                                                 <Condition Property="IsMouseOver" Value="True"/>
                                                 <Condition Property="IsSelected" Value="False"/>
                                             </MultiTrigger.Conditions>
+                                            <!-- ✨ MODERNIZED: Smooth fade-in animation (150ms) -->
+                                            <MultiTrigger.EnterActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                        To="0.95"
+                                                                        Duration="0:0:0.15"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </MultiTrigger.EnterActions>
+                                            <!-- ✨ MODERNIZED: Smooth fade-out animation (150ms) -->
+                                            <MultiTrigger.ExitActions>
+                                                <BeginStoryboard>
+                                                    <Storyboard>
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                        To="0.85"
+                                                                        Duration="0:0:0.15"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </MultiTrigger.ExitActions>
+                                            <!-- Fallback setters (instant if animation fails) -->
                                             <Setter Property="Background" Value="{DynamicResource AppSurfaceHighlightBrush}"/>
                                             <Setter Property="Opacity" Value="0.95"/>
                                         </MultiTrigger>

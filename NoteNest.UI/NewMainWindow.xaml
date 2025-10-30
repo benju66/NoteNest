@@ -447,15 +447,15 @@
                 </ItemsControl>
             </Border>
             
-            <!-- Enhanced Category Tree -->
-            <GroupBox Grid.Column="1" Header="Categories &amp; Notes"
-                     Background="{DynamicResource AppBackgroundBrush}"
-                     Foreground="{DynamicResource AppTextPrimaryBrush}"
-                     BorderBrush="{DynamicResource AppBorderBrush}">
+            <!-- ✨ MODERNIZED: Clean panel (removed header for modern appearance) -->
+            <Border Grid.Column="1"
+                    Background="{DynamicResource AppBackgroundBrush}"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    BorderThickness="0,0,1,0">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>      <!-- TreeView -->
+                        <RowDefinition Height="Auto"/>   <!-- Loading indicator -->
                     </Grid.RowDefinitions>
                     
                     <!-- Enhanced TreeView with interaction support + VIRTUALIZATION for performance + DRAG & DROP -->
@@ -808,19 +808,19 @@
                         <TextBlock Text="Loading categories..." Foreground="{DynamicResource AppTextSecondaryBrush}" FontStyle="Italic"/>
                     </StackPanel>
                 </Grid>
-            </GroupBox>
+            </Border>
             
             <GridSplitter Grid.Column="2" HorizontalAlignment="Stretch" 
                          Background="{DynamicResource AppBorderBrush}"/>
             
-            <!-- Workspace Area - MILESTONE 2A: Split View Support -->
-            <GroupBox Grid.Column="3" Header="Workspace"
-                     Background="{DynamicResource AppBackgroundBrush}"
-                     Foreground="{DynamicResource AppTextPrimaryBrush}"
-                     BorderBrush="{DynamicResource AppBorderBrush}">
+            <!-- ✨ MODERNIZED: Clean workspace area (no header for modern appearance) -->
+            <Border Grid.Column="3"
+                    Background="{DynamicResource AppBackgroundBrush}"
+                    BorderBrush="{DynamicResource AppBorderBrush}"
+                    BorderThickness="0">
                 <!-- 🆕 Dynamic pane container: Shows 1 or 2 panes based on Workspace.Panes -->
                 <workspace:WorkspacePaneContainer DataContext="{Binding Workspace}"/>
-            </GroupBox>
+            </Border>
             
             <!-- Right Panel (Plugin Host) -->
             <Border Grid.Column="4" 
