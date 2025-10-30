@@ -14,6 +14,7 @@ using static NoteNest.UI.ViewModels.Categories.CategoryViewModel;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.ViewModels.Shell;
 using NoteNest.UI.Services;
+using NoteNest.UI.Helpers;
 
 namespace NoteNest.UI
 {
@@ -75,23 +76,23 @@ namespace NoteNest.UI
         private void AnimateRightPanel(bool show)
         {
             if (RightPanelColumn == null) return;
-            
+
             var targetWidth = show ? 300.0 : 0.0;
             var currentWidth = RightPanelColumn.Width.Value;
-            
+
             // Skip animation if already at target (or very close)
             if (Math.Abs(currentWidth - targetWidth) < 1.0)
                 return;
-            
-            // Smooth animation using DoubleAnimation
-            var animation = new DoubleAnimation
+
+            // Smooth animation using GridLengthAnimation (DoubleAnimation doesn't work with GridLength)
+            var animation = new GridLengthAnimation
             {
-                From = currentWidth,
-                To = targetWidth,
+                From = new GridLength(currentWidth),
+                To = new GridLength(targetWidth),
                 Duration = new Duration(TimeSpan.FromMilliseconds(250)),
                 EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
-            
+
             // Animate the GridLength Width property smoothly
             RightPanelColumn.BeginAnimation(ColumnDefinition.WidthProperty, animation);
             System.Diagnostics.Debug.WriteLine($"🎬 Right panel animating from {currentWidth}px to {targetWidth}px");
