@@ -73,7 +73,10 @@ namespace NoteNest.UI.Controls.Workspace
                 _viewModel.LoadContentRequested += LoadContentIntoEditor;
                 _viewModel.SaveContentRequested += SaveContentFromEditor;
                 
-                // Load initial content
+                // CRITICAL: Load content immediately when DataContext changes
+                // This handles WPF TabControl's lazy instantiation where RequestContentLoad()
+                // may be called before TabContentView exists. Direct call acts as fallback.
+                // Note: Potential double-load is harmless (protected by _isLoading flag)
                 LoadContentIntoEditor();
                 
                 System.Diagnostics.Debug.WriteLine($"[TabContentView] Bound to: {_viewModel.Title}");
@@ -102,6 +105,10 @@ namespace NoteNest.UI.Controls.Workspace
         {
             if (_viewModel == null) return;
             
+            // Defensive: Unsubscribe TextChanged during load to prevent events from firing
+            // This ensures _isLoading flag provides complete protection
+            Editor.TextChanged -= OnEditorTextChanged;
+            
             _isLoading = true;
             try
             {
@@ -118,6 +125,8 @@ namespace NoteNest.UI.Controls.Workspace
             finally
             {
                 _isLoading = false;
+                // Resubscribe after load completes
+                Editor.TextChanged += OnEditorTextChanged;
             }
         }
         

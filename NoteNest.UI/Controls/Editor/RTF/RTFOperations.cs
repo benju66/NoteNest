@@ -183,7 +183,15 @@ namespace NoteNest.UI.Controls.Editor.RTF
             EnhancedMemoryTracker.TrackServiceOperation("RTFOperations", "LoadFromRTF", () =>
             {
             #endif
-                if (editor?.Document == null || string.IsNullOrEmpty(rtfContent)) return;
+                if (editor?.Document == null) return;
+                
+                // CRITICAL FIX: Explicitly clear editor when content is empty
+                // This prevents previously loaded content from persisting when opening empty notes
+                if (string.IsNullOrEmpty(rtfContent))
+                {
+                    editor.Document.Blocks.Clear();
+                    return;
+                }
                 
                 // MEMORY FIX: Proper TextRange disposal pattern
                 TextRange range = null;

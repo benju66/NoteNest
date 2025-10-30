@@ -280,11 +280,9 @@ namespace NoteNest.UI.ViewModels.Workspace
                 
                 _logger.Info($"Note registered with SaveManager: {noteId}");
                 
-                // Update SaveManager with initial content
-                if (!string.IsNullOrEmpty(noteContent))
-                {
-                    _saveManager.UpdateContent(noteId, noteContent);
-                }
+                // Update SaveManager with initial content (always update, even if empty)
+                // This ensures empty content is explicitly registered and prevents stale content from hash collisions
+                _saveManager.UpdateContent(noteId, noteContent ?? "");
                 
                 // Create TabViewModel
                 var tabVm = new TabViewModel(noteId, noteModel, _saveManager);

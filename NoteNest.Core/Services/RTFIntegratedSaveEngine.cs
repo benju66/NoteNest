@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -962,13 +964,22 @@ namespace NoteNest.Core.Services
         }
 
         /// <summary>
-        /// Generate a deterministic note ID from file path
+        /// Generate a deterministic note ID from file path using SHA256 hashing
+        /// This prevents hash collisions that can occur with GetHashCode()
+        /// Matches the pattern used in NoteMetadataManager for consistency
         /// </summary>
         private string GenerateNoteId(string filePath)
         {
-            // Use a hash of the absolute path for deterministic IDs
+            // Normalize path for stability (absolute, lowercase)
             var normalizedPath = Path.GetFullPath(filePath).ToLowerInvariant();
-            return $"note_{normalizedPath.GetHashCode():X8}";
+            
+            // Use SHA256 for collision-resistant deterministic IDs
+            var bytes = Encoding.UTF8.GetBytes(normalizedPath);
+            var hash = SHA256.HashData(bytes);
+            
+            // Convert to hex string (32 bytes = 64 hex chars, use first 16 for ID)
+            var hashHex = Convert.ToHexString(hash).ToLowerInvariant();
+            return $"note_{hashHex.Substring(0, 16)}";
         }
 
         public void Dispose()
