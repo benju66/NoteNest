@@ -33,6 +33,7 @@ namespace NoteNest.UI.ViewModels.Shell
         
         // Right panel and activity bar
         private bool _isRightPanelVisible;
+        private double _rightPanelWidth = 300; // Default width, user can resize during session
         private string _activePluginTitle = string.Empty;
         private object? _activePluginContent;
         private ObservableCollection<ActivityBarItemViewModel> _activityBarItems;
@@ -106,6 +107,12 @@ namespace NoteNest.UI.ViewModels.Shell
         {
             get => _isRightPanelVisible;
             set => SetProperty(ref _isRightPanelVisible, value);
+        }
+        
+        public double RightPanelWidth
+        {
+            get => _rightPanelWidth;
+            set => SetProperty(ref _rightPanelWidth, value);
         }
         
         public string ActivePluginTitle

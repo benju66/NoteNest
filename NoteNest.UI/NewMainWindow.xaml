@@ -93,6 +93,7 @@
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
         <local:BoolToTextConverter x:Key="BoolToTextConverter"/>
         <converters:BoolToGridLengthConverter x:Key="BoolToGridLengthConverter"/>
+        <converters:RightPanelWidthConverter x:Key="RightPanelWidthConverter"/>
             
             <!-- ═══════════════════════════════════════════════════════════════ -->
             <!-- TITLE BAR BUTTON STYLES                                        -->
@@ -421,9 +422,17 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="48"/>                   <!-- Activity Bar -->
                 <ColumnDefinition Width="300" MinWidth="200"/>  <!-- Tree -->
-                <ColumnDefinition Width="5"/>                    <!-- Splitter -->
-                <ColumnDefinition Width="*"/>                    <!-- Workspace -->
-                <ColumnDefinition Width="{Binding IsRightPanelVisible, Converter={StaticResource BoolToGridLengthConverter}, ConverterParameter='300|0'}"/> <!-- Right Panel (animated via binding) -->
+                <ColumnDefinition Width="3"/>                    <!-- Left Splitter (thinner) -->
+                <ColumnDefinition Width="*" MinWidth="400"/>     <!-- Workspace (with minimum width to prevent collapse) -->
+                <ColumnDefinition Width="Auto"/>                <!-- Right Splitter -->
+                <ColumnDefinition MaxWidth="800">                <!-- Right Panel (removed MinWidth to allow hiding) -->
+                    <ColumnDefinition.Width>
+                        <MultiBinding Converter="{StaticResource RightPanelWidthConverter}" Mode="TwoWay">
+                            <Binding Path="IsRightPanelVisible"/>
+                            <Binding Path="RightPanelWidth"/>
+                        </MultiBinding>
+                    </ColumnDefinition.Width>
+                </ColumnDefinition>
             </Grid.ColumnDefinitions>
             
             <!-- Activity Bar -->
@@ -811,7 +820,9 @@
                 </Grid>
             </Border>
             
-            <GridSplitter Grid.Column="2" HorizontalAlignment="Stretch" 
+            <!-- Left Splitter (between Tree and Workspace) -->
+            <GridSplitter Grid.Column="2" 
+                         HorizontalAlignment="Stretch" 
                          Background="{DynamicResource AppBorderBrush}"/>
             
             <!-- ✨ MODERNIZED: Clean workspace area (no header for modern appearance) -->
@@ -823,8 +834,19 @@
                 <workspace:WorkspacePaneContainer DataContext="{Binding Workspace}"/>
             </Border>
             
+            <!-- Right Splitter (between Workspace and Right Panel) -->
+            <GridSplitter Grid.Column="4"
+                         Width="4"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Stretch"
+                         Background="{DynamicResource AppBorderBrush}"
+                         ShowsPreview="False"
+                         ResizeDirection="Columns"
+                         ResizeBehavior="PreviousAndNext"
+                         Visibility="{Binding IsRightPanelVisible, Converter={StaticResource BoolToVisibilityConverter}}"/>
+            
             <!-- Right Panel (Plugin Host) -->
-            <Border Grid.Column="4" 
+            <Border Grid.Column="5" 
                     x:Name="RightPanelBorder"
                     Background="{DynamicResource AppBackgroundBrush}"
                     BorderBrush="{DynamicResource AppBorderBrush}"
