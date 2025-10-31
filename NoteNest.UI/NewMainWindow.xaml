@@ -92,6 +92,7 @@
         <converters:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter"/>
         <local:BoolToTextConverter x:Key="BoolToTextConverter"/>
+        <converters:BoolToGridLengthConverter x:Key="BoolToGridLengthConverter"/>
             
             <!-- ═══════════════════════════════════════════════════════════════ -->
             <!-- TITLE BAR BUTTON STYLES                                        -->
@@ -422,7 +423,7 @@
                 <ColumnDefinition Width="300" MinWidth="200"/>  <!-- Tree -->
                 <ColumnDefinition Width="5"/>                    <!-- Splitter -->
                 <ColumnDefinition Width="*"/>                    <!-- Workspace -->
-                <ColumnDefinition x:Name="RightPanelColumn" Width="0"/> <!-- Right Panel (initially hidden) -->
+                <ColumnDefinition Width="{Binding IsRightPanelVisible, Converter={StaticResource BoolToGridLengthConverter}, ConverterParameter='300|0'}"/> <!-- Right Panel (animated via binding) -->
             </Grid.ColumnDefinitions>
             
             <!-- Activity Bar -->

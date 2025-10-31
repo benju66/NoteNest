@@ -50,53 +50,8 @@ namespace NoteNest.UI
                 }
             }
             catch { /* Ignore errors setting initial theme */ }
-            
-            // Subscribe to right panel toggle
-            if (DataContext is MainShellViewModel viewModel)
-            {
-                viewModel.PropertyChanged += OnViewModelPropertyChanged;
-            }
         }
         
-        private void OnViewModelPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            System.Diagnostics.Debug.WriteLine($"🔔 Property changed: {e.PropertyName}");
-            
-            if (e.PropertyName == nameof(MainShellViewModel.IsRightPanelVisible))
-            {
-                if (DataContext is MainShellViewModel viewModel)
-                {
-                    System.Diagnostics.Debug.WriteLine($"🎬 IsRightPanelVisible changed to: {viewModel.IsRightPanelVisible}");
-                    AnimateRightPanel(viewModel.IsRightPanelVisible);
-                }
-            }
-        }
-        
-        private void AnimateRightPanel(bool show)
-        {
-            if (RightPanelColumn == null) return;
-            
-            var targetWidth = show ? 300.0 : 0.0;
-            var currentWidth = RightPanelColumn.Width.Value;
-            
-            // Skip animation if already at target (or very close)
-            if (Math.Abs(currentWidth - targetWidth) < 1.0)
-                return;
-            
-            // Smooth animation using DoubleAnimation
-            var animation = new DoubleAnimation
-            {
-                From = currentWidth,
-                To = targetWidth,
-                Duration = new Duration(TimeSpan.FromMilliseconds(250)),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            
-            // Animate the GridLength Width property smoothly
-            RightPanelColumn.BeginAnimation(ColumnDefinition.WidthProperty, animation);
-            System.Diagnostics.Debug.WriteLine($"🎬 Right panel animating from {currentWidth}px to {targetWidth}px");
-        }
-
         private void OnTreeViewLoaded(object sender, RoutedEventArgs e)
         {
             if (sender is System.Windows.Controls.TreeView treeView && 
