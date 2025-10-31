@@ -156,7 +156,7 @@ namespace NoteNest.UI.ViewModels.Shell
         
         private void ExecuteToggleRightPanel()
         {
-            _logger.Info($"⌨️ Ctrl+B pressed - IsRightPanelVisible: {IsRightPanelVisible}");
+            _logger.Info($"⌨️ Alt+T pressed - IsRightPanelVisible: {IsRightPanelVisible}");
             
             if (!IsRightPanelVisible)
             {

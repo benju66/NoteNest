@@ -77,7 +77,7 @@
                     Command="{Binding Workspace.RedockAllTabsCommand}"/>
         
         <!-- 📋 TODO PLUGIN: Toggle Right Panel -->
-        <KeyBinding Key="B" Modifiers="Control" 
+        <KeyBinding Key="T" Modifiers="Alt" 
                     Command="{Binding ToggleRightPanelCommand}"/>
     </Window.InputBindings>
     <Window.Resources>
@@ -260,6 +260,29 @@
                     <ContentControl Template="{StaticResource LucideSettings}"
                                    Width="16" Height="16"
                                    Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                </Button>
+                
+                <!-- Panel Toggle Button -->
+                <Button x:Name="PanelToggleButton"
+                       Command="{Binding ToggleRightPanelCommand}"
+                       ToolTip="Toggle Todo Panel (Alt+T)"
+                       Style="{StaticResource TitleBarButtonStyle}"
+                       WindowChrome.IsHitTestVisibleInChrome="True">
+                    <ContentControl Width="16" Height="16"
+                                   Foreground="{DynamicResource AppTextPrimaryBrush}">
+                        <ContentControl.Style>
+                            <Style TargetType="ContentControl">
+                                <!-- Default: Show CLOSE icon when panel is open -->
+                                <Setter Property="Template" Value="{StaticResource LucidePanelRightClose}"/>
+                                <Style.Triggers>
+                                    <!-- When panel is closed: Show OPEN icon -->
+                                    <DataTrigger Binding="{Binding IsRightPanelVisible}" Value="False">
+                                        <Setter Property="Template" Value="{StaticResource LucidePanelRightOpen}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ContentControl.Style>
+                    </ContentControl>
                 </Button>
                 
                 <!-- More Menu Button -->

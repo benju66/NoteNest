@@ -69,7 +69,7 @@ namespace NoteNest.UI.Converters
                     
                     // CRITICAL DESIGN DECISION:
                     // Return array: [IsRightPanelVisible, RightPanelWidth]
-                    // - Use Binding.DoNothing for visibility (only Ctrl+B should toggle, not user dragging)
+                    // - Use Binding.DoNothing for visibility (only Alt+T should toggle, not user dragging)
                     // - Update width from user's drag operation
                     return new object[] { Binding.DoNothing, newWidth };
                 }
