@@ -424,7 +424,7 @@
                 <ColumnDefinition Width="300" MinWidth="200"/>  <!-- Tree -->
                 <ColumnDefinition Width="3"/>                    <!-- Left Splitter (thinner) -->
                 <ColumnDefinition Width="*" MinWidth="400"/>     <!-- Workspace (with minimum width to prevent collapse) -->
-                <ColumnDefinition Width="Auto"/>                <!-- Right Splitter -->
+                <ColumnDefinition Width="3"/>                    <!-- Right Splitter (same width as left) -->
                 <ColumnDefinition MaxWidth="800">                <!-- Right Panel (removed MinWidth to allow hiding) -->
                     <ColumnDefinition.Width>
                         <MultiBinding Converter="{StaticResource RightPanelWidthConverter}" Mode="TwoWay">
@@ -836,8 +836,7 @@
             
             <!-- Right Splitter (between Workspace and Right Panel) -->
             <GridSplitter Grid.Column="4"
-                         Width="4"
-                         HorizontalAlignment="Center"
+                         HorizontalAlignment="Stretch"
                          VerticalAlignment="Stretch"
                          Background="{DynamicResource AppBorderBrush}"
                          ShowsPreview="False"
