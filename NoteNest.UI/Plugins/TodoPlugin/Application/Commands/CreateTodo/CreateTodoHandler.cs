@@ -117,6 +117,20 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Application.Commands.CreateTodo
                     _logger.Debug($"[CreateTodoHandler] Published tag event: {domainEvent.GetType().Name}");
                 }
                 
+                // ✨ FIX #1: Update projections again to process tag events
+                // This ensures entity_tags is updated before TodoTagDialog queries it
+                try
+                {
+                    _logger.Debug($"[CreateTodoHandler] Updating projections for tag events...");
+                    await _projectionOrchestrator.CatchUpAsync();
+                    _logger.Debug($"[CreateTodoHandler] ✅ Tag projections updated");
+                }
+                catch (Exception projEx)
+                {
+                    _logger.Error(projEx, "[CreateTodoHandler] Failed to update tag projections (non-fatal)");
+                    // Don't fail the operation - projections will eventually catch up
+                }
+                
                 // Mark all events as committed
                 aggregate.MarkEventsAsCommitted();
                 
