@@ -548,7 +548,11 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
         
         private async Task<List<string>> GetTagsForTodoAsync(SqliteConnection connection, Guid todoId)
         {
-            var sql = "SELECT tag FROM todo_tags WHERE todo_id = @TodoId";
+            // After Migration 005, use display_name column for user-visible text
+            // Falls back to 'tag' column if display_name doesn't exist (pre-migration compatibility)
+            var sql = @"SELECT COALESCE(display_name, tag) as tag 
+                        FROM todo_tags 
+                        WHERE todo_id = @TodoId";
             var tags = await connection.QueryAsync<string>(sql, new { TodoId = todoId.ToString() });
             return tags.ToList();
         }
@@ -558,10 +562,19 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence
             if (tags == null || !tags.Any())
                 return;
             
-            var sql = "INSERT INTO todo_tags (todo_id, tag) VALUES (@TodoId, @Tag)";
+            var sql = @"INSERT INTO todo_tags (todo_id, tag, display_name, source, created_at) 
+                        VALUES (@TodoId, @Tag, @DisplayName, @Source, @CreatedAt)";
+            
             foreach (var tag in tags)
             {
-                await connection.ExecuteAsync(sql, new { TodoId = todoId.ToString(), Tag = tag }, transaction);
+                await connection.ExecuteAsync(sql, new 
+                { 
+                    TodoId = todoId.ToString(), 
+                    Tag = tag.ToLower().Trim(),
+                    DisplayName = tag.Trim(),
+                    Source = "manual",  // Tags saved via TodoRepository are always manual
+                    CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                }, transaction);
             }
         }
         
