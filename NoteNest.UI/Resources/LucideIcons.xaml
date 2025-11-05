@@ -1299,6 +1299,21 @@
         </Viewbox>
     </ControlTemplate>
     
+    <!-- ⚡ ZAP - Lightning bolt for automatic/powered items -->
+    <ControlTemplate x:Key="LucideZap">
+        <Viewbox Stretch="Uniform" ClipToBounds="False">
+            <Canvas Width="24" Height="24">
+                <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=ContentControl}, Path=Foreground}"
+                      StrokeThickness="2"
+                      StrokeLineJoin="Round"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      Fill="Transparent"
+                      Data="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>
+            </Canvas>
+        </Viewbox>
+    </ControlTemplate>
+    
     <!-- 🔖✓ BOOKMARK-CHECK - Bookmarked/completed -->
     <ControlTemplate x:Key="LucideBookmarkCheck">
         <Viewbox Stretch="Uniform" ClipToBounds="False">
