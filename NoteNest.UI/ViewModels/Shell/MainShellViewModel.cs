@@ -246,22 +246,9 @@ namespace NoteNest.UI.ViewModels.Shell
                 Dapper.SqlMapper.AddTypeHandler(new NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.NullableGuidTypeHandler());
                 _logger.Info("[TodoPlugin] Registered Dapper type handlers for TEXT -> Guid conversion");
                 
-                // Initialize database schema
-                var dbInitializer = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence.ITodoDatabaseInitializer>();
-                if (dbInitializer != null)
-                {
-                    var dbInitialized = await dbInitializer.InitializeAsync();
-                    if (!dbInitialized)
-                    {
-                        _logger.Warning("[TodoPlugin] Database initialization had errors, but continuing with CategoryStore/TodoStore initialization...");
-                        // IMPORTANT: Don't return early - CategoryStore and TodoStore should still initialize
-                        // This ensures user data (categories/todos) can still load even if migrations have issues
-                    }
-                    else
-                    {
-                        _logger.Info("[TodoPlugin] Database initialized successfully");
-                    }
-                }
+                // Database initialization is now handled by ProjectionsInitializer
+                // which creates todo_view table as part of projections.db schema
+                _logger.Info("[TodoPlugin] Using event-sourced projections - no separate database initialization needed");
                 
                 // NEW: Initialize CategoryStore (load categories from tree)
                 var categoryStore = _serviceProvider?.GetService<NoteNest.UI.Plugins.TodoPlugin.Services.ICategoryStore>();

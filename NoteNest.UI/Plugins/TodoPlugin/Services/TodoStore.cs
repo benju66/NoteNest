@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
@@ -8,7 +9,7 @@ using NoteNest.Core.Services.Logging;
 using NoteNest.Domain.Todos;
 using NoteNest.UI.Collections;
 using NoteNest.UI.Plugins.TodoPlugin.Events;
-using NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Persistence;
+using NoteNest.UI.Plugins.TodoPlugin.Application.Queries;
 using NoteNest.UI.Plugins.TodoPlugin.Models;
 using NoteNest.Application.Common.Interfaces;
 
@@ -22,7 +23,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
     /// </summary>
     public class TodoStore : ITodoStore, IDisposable
     {
-        private readonly ITodoRepository _repository;
+        private readonly ITodoQueryService _queryService;
         private readonly NoteNest.Core.Services.IEventBus _eventBus;
         private readonly IProjectionOrchestrator _projectionOrchestrator;
         private readonly IAppLogger _logger;
@@ -34,12 +35,12 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         private readonly SemaphoreSlim _initLock = new(1, 1);
 
         public TodoStore(
-            ITodoRepository repository, 
+            ITodoQueryService queryService, 
             NoteNest.Core.Services.IEventBus eventBus, 
             IProjectionOrchestrator projectionOrchestrator,
             IAppLogger logger)
         {
-            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+            _queryService = queryService ?? throw new ArgumentNullException(nameof(queryService));
             _eventBus = eventBus ?? throw new ArgumentNullException(nameof(eventBus));
             _projectionOrchestrator = projectionOrchestrator ?? throw new ArgumentNullException(nameof(projectionOrchestrator));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -78,7 +79,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 
                 // Load ALL todos including completed (for completed items management feature)
                 // Filtering will be done at ViewModel layer based on ShowCompleted preference
-                var todos = await _repository.GetAllAsync(includeCompleted: true);
+                var todoDtos = await _queryService.GetAllTodosAsync(includeCompleted: true);
+                
+                // Convert DTOs to TodoItems
+                var todos = todoDtos.Select(dto => MapDtoToTodoItem(dto)).ToList();
                 
                 using (_todos.BatchUpdate())
                 {
@@ -167,65 +171,30 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         {
             if (todo == null) throw new ArgumentNullException(nameof(todo));
             
-            _todos.Add(todo);  // Update UI immediately
+            // In event-sourced architecture, TodoStore doesn't write directly
+            // The todo will be added to the collection when we receive the TodoCreatedEvent
+            _logger.Info($"[TodoStore] AddAsync called for: {todo.Text} - waiting for event");
             
-            try
-            {
-                // Actually await the database insert
-                var success = await _repository.InsertAsync(todo);
-                if (success)
-                {
-                    _logger.Info($"[TodoStore] ✅ Todo saved to database: {todo.Text}");
-                }
-                else
-                {
-                    _logger.Warning($"[TodoStore] ⚠️ Failed to save todo (returned false): {todo.Text}");
-                    throw new Exception("Database insert returned false");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"[TodoStore] ❌ Failed to persist new todo: {todo.Text}");
-                // Remove from UI since save failed
-                _todos.Remove(todo);
-                throw;  // Propagate to ViewModel
-            }
+            // The command handler will emit events, and we'll update the collection
+            // when we receive the TodoCreatedEvent in HandleTodoCreatedAsync
+            await Task.CompletedTask;
         }
 
         public async Task UpdateAsync(TodoItem todo)
         {
             if (todo == null) throw new ArgumentNullException(nameof(todo));
             
-            var existing = GetById(todo.Id);
-            if (existing != null)
-            {
-                var index = _todos.IndexOf(existing);
-                _todos[index] = todo;
-                
-                try
-                {
-                    var success = await _repository.UpdateAsync(todo);
-                    if (success)
-                    {
-                        _logger.Debug($"[TodoStore] ✅ Todo updated in database: {todo.Text}");
-                    }
-                    else
-                    {
-                        _logger.Warning($"[TodoStore] ⚠️ Failed to update todo (returned false): {todo.Text}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.Error(ex, $"[TodoStore] ❌ Failed to persist todo update: {todo.Id}");
-                    throw;
-                }
-            }
+            // In event-sourced architecture, TodoStore doesn't write directly
+            // The todo will be updated in the collection when we receive the appropriate event
+            _logger.Info($"[TodoStore] UpdateAsync called for: {todo.Text} - waiting for event");
+            
+            // The command handler will emit events, and we'll update the collection
+            // when we receive events like TodoCompletedEvent, TodoTextUpdatedEvent, etc.
+            await Task.CompletedTask;
         }
 
         /// <summary>
-        /// Delete a todo using hybrid strategy:
-        /// - Manual todos: Hard delete (permanent removal)
-        /// - Note-linked todos: Soft delete (mark as orphaned for user visibility)
+        /// Delete a todo - in event-sourced architecture, this doesn't write directly
         /// </summary>
         public async Task DeleteAsync(Guid id)
         {
@@ -236,64 +205,13 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 return;
             }
             
-            try
-            {
-                if (todo.SourceNoteId.HasValue)
-                {
-                    if (!todo.IsOrphaned)
-                    {
-                        // SOFT DELETE: First deletion - Mark as orphaned
-                        // Preserves category_id for future restore capability
-                        _logger.Info($"[TodoStore] Soft deleting note-linked todo (marking as orphaned): \"{todo.Text}\"");
-                        
-                        todo.IsOrphaned = true;
-                        // category_id PRESERVED (allows restore feature)
-                        todo.ModifiedDate = DateTime.UtcNow;
-                        await UpdateAsync(todo); // Updates in-memory + database
-                        
-                        _logger.Info($"[TodoStore] ✅ Todo marked as orphaned: \"{todo.Text}\" - moved to Uncategorized");
-                    }
-                    else
-                    {
-                        // HARD DELETE: Second deletion (already orphaned) - User wants it gone
-                        _logger.Info($"[TodoStore] Hard deleting already-orphaned todo: \"{todo.Text}\"");
-                        
-                        _todos.Remove(todo); // Remove from UI immediately
-                        
-                        var success = await _repository.DeleteAsync(id);
-                        if (success)
-                        {
-                            _logger.Info($"[TodoStore] ✅ Orphaned todo permanently deleted: \"{todo.Text}\"");
-                        }
-                        else
-                        {
-                            _logger.Warning($"[TodoStore] ⚠️ Failed to delete orphaned todo from database: {id}");
-                        }
-                    }
-                }
-                else
-                {
-                    // HARD DELETE: Manual todo → Permanent removal
-                    _logger.Info($"[TodoStore] Hard deleting manual todo: \"{todo.Text}\"");
-                    
-                    _todos.Remove(todo); // Remove from UI immediately
-                    
-                    var success = await _repository.DeleteAsync(id);
-                    if (success)
-                    {
-                        _logger.Info($"[TodoStore] ✅ Todo permanently deleted: \"{todo.Text}\"");
-                    }
-                    else
-                    {
-                        _logger.Warning($"[TodoStore] ⚠️ Failed to delete todo from database (returned false): {id}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"[TodoStore] ❌ Failed to delete todo: {id}");
-                throw;
-            }
+            // In event-sourced architecture, TodoStore doesn't write directly
+            // The todo will be removed from the collection when we receive the TodoDeletedEvent
+            _logger.Info($"[TodoStore] DeleteAsync called for: {todo.Text} - waiting for event");
+            
+            // The command handler will emit TodoDeletedEvent, and we'll update the collection
+            // when we receive it in HandleTodoDeletedAsync
+            await Task.CompletedTask;
         }
 
         /// <summary>
@@ -303,7 +221,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         {
             try
             {
-                var todos = await _repository.GetAllAsync(includeCompleted: false);
+                var todoDtos = await _queryService.GetAllTodosAsync(includeCompleted: false);
+                var todos = todoDtos.Select(dto => MapDtoToTodoItem(dto)).ToList();
                 
                 using (_todos.BatchUpdate())
                 {
@@ -377,7 +296,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
         {
             try
             {
-                var completedTodos = await _repository.GetRecentlyCompletedAsync(100);
+                var completedTodoDtos = await _queryService.GetCompletedTodosAsync();
+                var completedTodos = completedTodoDtos.Select(dto => MapDtoToTodoItem(dto)).Take(100).ToList();
                 
                 using (_todos.BatchUpdate())
                 {
@@ -545,15 +465,17 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 _logger.Debug($"[TodoStore] Event details - Text: '{e.Text}', CategoryId: {e.CategoryId}");
                 
                 // Load fresh todo from database (projections should be updated before event is published)
-                _logger.Debug($"[TodoStore] Calling Repository.GetByIdAsync({e.TodoId.Value})...");
-                var todo = await _repository.GetByIdAsync(e.TodoId.Value);
+                _logger.Debug($"[TodoStore] Calling QueryService.GetTodoByIdAsync({e.TodoId.Value})...");
+                var todoDto = await _queryService.GetTodoByIdAsync(e.TodoId.Value);
                 
-                if (todo == null)
+                if (todoDto == null)
                 {
                     _logger.Error($"[TodoStore] ❌ CRITICAL: Todo not found in database after creation: {e.TodoId.Value}");
                     _logger.Error($"[TodoStore] This means projections haven't run yet - timing issue");
                     return;
                 }
+                
+                var todo = MapDtoToTodoItem(todoDto);
                 
                 _logger.Info($"[TodoStore] ✅ Todo loaded from database: '{todo.Text}', CategoryId: {todo.CategoryId}");
                 
@@ -621,13 +543,15 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
                 _logger.Info($"[TodoStore] 🎯🎯🎯 HandleTodoUpdatedAsync STARTED for TodoId: {todoId.Value}");
                 
                 // Load fresh todo from database
-                _logger.Debug($"[TodoStore] Calling Repository.GetByIdAsync({todoId.Value})...");
-                var updatedTodo = await _repository.GetByIdAsync(todoId.Value);
-                if (updatedTodo == null)
+                _logger.Debug($"[TodoStore] Calling QueryService.GetTodoByIdAsync({todoId.Value})...");
+                var updatedTodoDto = await _queryService.GetTodoByIdAsync(todoId.Value);
+                if (updatedTodoDto == null)
                 {
                     _logger.Warning($"[TodoStore] Todo not found in database after update: {todoId.Value}");
                     return;
                 }
+                
+                var updatedTodo = MapDtoToTodoItem(updatedTodoDto);
                 
                 _logger.Info($"[TodoStore] ✅ Loaded from DB: '{updatedTodo.Text}', IsCompleted={updatedTodo.IsCompleted}, Priority={updatedTodo.Priority}, IsFavorite={updatedTodo.IsFavorite}");
                 
@@ -1032,6 +956,37 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Services
             }
         }
         
+        /// <summary>
+        /// Map TodoDto from projections to TodoItem for UI
+        /// </summary>
+        private TodoItem MapDtoToTodoItem(TodoDto dto)
+        {
+            return new TodoItem
+            {
+                Id = dto.Id,
+                Text = dto.Text,
+                Description = dto.Description,
+                IsCompleted = dto.IsCompleted,
+                CompletedDate = dto.CompletedDate,
+                DueDate = dto.DueDate,
+                ReminderDate = dto.ReminderDate,
+                Priority = (Priority)dto.Priority,
+                IsFavorite = dto.IsFavorite,
+                Order = dto.Order,
+                CreatedDate = dto.CreatedDate,
+                ModifiedDate = dto.ModifiedDate,
+                CategoryId = dto.CategoryId,
+                ParentId = dto.ParentId,
+                SourceNoteId = dto.SourceNoteId,
+                SourceFilePath = dto.SourceFilePath,
+                SourceLineNumber = dto.SourceLineNumber,
+                SourceCharOffset = dto.SourceCharOffset,
+                IsOrphaned = dto.IsOrphaned,
+                Tags = new List<string>(), // Tags will be loaded separately if needed
+                LinkedNoteIds = new List<string>()
+            };
+        }
+
         /// <summary>
         /// Dispose resources (SemaphoreSlim must be disposed to prevent handle leaks).
         /// </summary>

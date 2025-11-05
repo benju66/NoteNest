@@ -14,6 +14,7 @@ using static NoteNest.UI.ViewModels.Categories.CategoryViewModel;
 using NoteNest.UI.ViewModels;
 using NoteNest.UI.ViewModels.Shell;
 using NoteNest.UI.Services;
+using NoteNest.Application.Queries;
 
 namespace NoteNest.UI
 {
@@ -342,7 +343,15 @@ namespace NoteNest.UI
                     return;
                 }
 
-                var dialog = new FolderTagDialog(Guid.Parse(category.Id), category.BreadcrumbPath, mediator, tagQueryService, logger)
+                // Get tree query service
+                var treeQueryService = app.ServiceProvider?.GetService<ITreeQueryService>();
+                if (treeQueryService == null)
+                {
+                    MessageBox.Show("Tree query service not available.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                var dialog = new FolderTagDialog(Guid.Parse(category.Id), category.BreadcrumbPath, mediator, tagQueryService, treeQueryService, logger)
                 {
                     Owner = this
                 };

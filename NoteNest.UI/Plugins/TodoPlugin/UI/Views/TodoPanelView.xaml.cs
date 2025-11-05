@@ -524,11 +524,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.Views
                     return;
                 }
 
+                var treeQueryService = app.ServiceProvider?.GetService<NoteNest.Application.Queries.ITreeQueryService>();
+                
                 var dialog = new NoteNest.UI.Windows.FolderTagDialog(
                     category.CategoryId, 
                     category.DisplayPath, 
                     mediator, 
                     tagQueryService,
+                    treeQueryService,
                     _logger)
                 {
                     Owner = Window.GetWindow(this)

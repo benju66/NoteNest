@@ -66,6 +66,47 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                     }
                 }));
         }
+        
+        #region Helper Methods
+        
+        // Helper method to convert TodoDto to TodoItem
+        private TodoItem ConvertDtoToTodoItem(TodoDto dto)
+        {
+            if (dto == null) return null;
+            
+            return new TodoItem
+            {
+                Id = dto.Id,
+                Text = dto.Text,
+                Description = dto.Description,
+                IsCompleted = dto.IsCompleted,
+                CompletedDate = dto.CompletedDate,
+                DueDate = dto.DueDate,
+                ReminderDate = dto.ReminderDate,
+                Priority = (Priority)dto.Priority,
+                IsFavorite = dto.IsFavorite,
+                Order = dto.Order,
+                CreatedDate = dto.CreatedDate,
+                ModifiedDate = dto.ModifiedDate,
+                CategoryId = dto.CategoryId,
+                ParentId = dto.ParentId,
+                SourceNoteId = dto.SourceNoteId,
+                SourceFilePath = dto.SourceFilePath,
+                SourceLineNumber = dto.SourceLineNumber,
+                SourceCharOffset = dto.SourceCharOffset,
+                IsOrphaned = dto.IsOrphaned,
+                Tags = new List<string>(), // Tags loaded separately if needed
+                LinkedNoteIds = new List<string>()
+            };
+        }
+        
+        private List<TodoItem> ConvertDtosToTodoItems(List<TodoDto> dtos)
+        {
+            if (dtos == null) return new List<TodoItem>();
+            return dtos.Select(ConvertDtoToTodoItem).Where(t => t != null).ToList();
+        }
+        
+        #endregion
 
         #region Properties
 
@@ -230,7 +271,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
             try
             {
                 // Query from projection
-                var todo = await _todoQueryService.GetByIdAsync(todoVm.Id);
+                var todo = await _todoQueryService.GetTodoByIdAsync(todoVm.Id);
                 if (todo != null)
                 {
                     var command = new Application.Commands.CompleteTodo.CompleteTodoCommand
@@ -312,12 +353,14 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                 if (_selectedSmartList.HasValue)
                 {
                     _logger.Info($"📋 Loading smart list from projection: {_selectedSmartList.Value}");
-                    todos = await _todoQueryService.GetSmartListAsync(_selectedSmartList.Value);
+                    var dtos = await _todoQueryService.GetSmartListTodosAsync(_selectedSmartList.Value);
+                    todos = ConvertDtosToTodoItems(dtos);
                 }
                 else if (_selectedCategoryId != null)
                 {
                     _logger.Info($"📋 Loading by category from projection: {_selectedCategoryId}");
-                    todos = await _todoQueryService.GetByCategoryAsync(_selectedCategoryId);
+                    var dtos = await _todoQueryService.GetTodosByCategoryAsync(_selectedCategoryId.Value);
+                    todos = ConvertDtosToTodoItems(dtos);
                 }
                 else
                 {
@@ -325,7 +368,8 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
                     _logger.Info("📋 Loading default (Today) smart list from projection");
                     _selectedSmartList = Models.SmartListType.Today;
                     OnPropertyChanged(nameof(SelectedSmartList));
-                    todos = await _todoQueryService.GetSmartListAsync(Models.SmartListType.Today);
+                    var dtos = await _todoQueryService.GetSmartListTodosAsync(Models.SmartListType.Today);
+                    todos = ConvertDtosToTodoItems(dtos);
                 }
                 
                 _logger.Info($"📋 Retrieved {todos.Count} todos from projection");

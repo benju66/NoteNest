@@ -54,7 +54,7 @@ namespace NoteNest.UI.Plugins.TodoPlugin.UI.ViewModels
         {
             _categoryStore = categoryStore ?? throw new ArgumentNullException(nameof(categoryStore));
             _todoStore = todoStore ?? throw new ArgumentNullException(nameof(todoStore));
-            _todoTagRepository = todoTagRepository ?? throw new ArgumentNullException(nameof(todoTagRepository));
+            _todoTagRepository = todoTagRepository; // Can be null in event-sourced version
             _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
             _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));

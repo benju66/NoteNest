@@ -23,6 +23,7 @@ namespace NoteNest.UI.Windows
         private readonly string _folderPath;
 	private readonly IMediator _mediator;
 	private readonly ITagQueryService _tagQueryService;
+	private readonly ITreeQueryService _treeQueryService;
 	private readonly IAppLogger _logger;
         private readonly ObservableCollection<string> _tags;
         private readonly ObservableCollection<string> _inheritedTags;
@@ -32,15 +33,17 @@ namespace NoteNest.UI.Windows
             string folderPath,
             IMediator mediator,
             ITagQueryService tagQueryService,
+            ITreeQueryService treeQueryService,
             IAppLogger logger)
         {
             InitializeComponent();
             
             _folderId = folderId;
             _folderPath = folderPath;
-            _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
-            _tagQueryService = tagQueryService ?? throw new ArgumentNullException(nameof(tagQueryService));
-            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+	    _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
+	    _tagQueryService = tagQueryService ?? throw new ArgumentNullException(nameof(tagQueryService));
+	    _treeQueryService = treeQueryService ?? throw new ArgumentNullException(nameof(treeQueryService));
+	    _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             
             _tags = new ObservableCollection<string>();
             _inheritedTags = new ObservableCollection<string>();
@@ -66,9 +69,8 @@ namespace NoteNest.UI.Windows
                 // Load tags from projection via query service
                 var folderTags = await _tagQueryService.GetTagsForEntityAsync(_folderId, "category");
                 
-                // TODO: Implement inherited tags via recursive query
-                // For now, just load direct tags
-                var allInheritedTags = new List<NoteNest.Application.Queries.TagDto>();
+                // Get inherited tags from parent categories using tree query service
+                var allInheritedTags = await GetAncestorCategoryTagsAsync();
                 
                 // Update UI collections on UI thread (required for thread safety)
                 await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
@@ -83,9 +85,9 @@ namespace NoteNest.UI.Windows
                     
                     // Filter to only show tags from ancestors (not this folder's own tags)
                     var ownTagSet = new HashSet<string>(folderTags.Select(t => t.DisplayName), StringComparer.OrdinalIgnoreCase);
-                    foreach (var inheritedTag in allInheritedTags.Where(t => !ownTagSet.Contains(t.Tag)))
+                    foreach (var inheritedTag in allInheritedTags.Where(t => !ownTagSet.Contains(t.DisplayName)))
                     {
-                        _inheritedTags.Add(inheritedTag.Tag);
+                        _inheritedTags.Add(inheritedTag.DisplayName);
                     }
                 });
                 
@@ -240,6 +242,49 @@ namespace NoteNest.UI.Windows
         {
             DialogResult = false;
             Close();
+        }
+
+        /// <summary>
+        /// Get tags from all ancestor categories.
+        /// </summary>
+        private async Task<List<NoteNest.Application.Queries.TagDto>> GetAncestorCategoryTagsAsync()
+        {
+            try
+            {
+                var allAncestorTags = new List<NoteNest.Application.Queries.TagDto>();
+                
+                // Get current category to find its parent
+                var categoryNode = await _treeQueryService.GetByIdAsync(_folderId);
+                if (categoryNode?.ParentId == null || categoryNode.ParentId == Guid.Empty)
+                {
+                    return allAncestorTags; // No parent, done
+                }
+                
+                var currentId = categoryNode.ParentId.Value;
+                
+                // Walk up the tree collecting tags
+                while (currentId != Guid.Empty)
+                {
+                    // Get tags for this ancestor
+                    var ancestorTags = await _tagQueryService.GetTagsForEntityAsync(currentId, "category");
+                    allAncestorTags.AddRange(ancestorTags);
+                    
+                    // Get next parent
+                    var ancestorNode = await _treeQueryService.GetByIdAsync(currentId);
+                    if (ancestorNode?.ParentId == null || ancestorNode.ParentId == Guid.Empty)
+                    {
+                        break; // Reached root
+                    }
+                    currentId = ancestorNode.ParentId.Value;
+                }
+                
+                return allAncestorTags;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to get ancestor tags for folder {_folderId}");
+                return new List<NoteNest.Application.Queries.TagDto>();
+            }
         }
     }
 }
