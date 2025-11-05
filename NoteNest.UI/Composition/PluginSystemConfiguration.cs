@@ -52,8 +52,7 @@ namespace NoteNest.UI.Composition
             
             // Get projections database path
             var localAppDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            var databasePath = Path.Combine(localAppDataPath, "NoteNest", "databases");
-            var projectionsDbPath = Path.Combine(databasePath, "projections.db");
+            var projectionsDbPath = Path.Combine(localAppDataPath, "NoteNest", "projections.db");
             var projectionsConnectionString = $"Data Source={projectionsDbPath};Cache=Shared;";
             
             // Register query service (projection-based)

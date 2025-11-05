@@ -214,7 +214,10 @@ namespace NoteNest.UI.Plugins.TodoPlugin.Infrastructure.Queries
 
         public Task UpdateLastSeenAsync(Guid todoId)
         {
-            throw new NotSupportedException("Update operations not supported in query repository. Todo sync uses UpdateTodoCommand instead.");
+            // No-op: Last seen tracking not needed in event-sourced system
+            // The event store already tracks when events occur
+            _logger.Debug($"UpdateLastSeenAsync called for todo {todoId} - no-op in event-sourced system");
+            return Task.CompletedTask;
         }
 
         public Task<int> MarkOrphanedByNoteAsync(Guid noteId)
