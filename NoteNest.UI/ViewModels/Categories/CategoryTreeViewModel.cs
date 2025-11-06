@@ -25,6 +25,7 @@ namespace NoteNest.UI.ViewModels.Categories
         private readonly ITreeQueryService _treeQueryService;
         private readonly NoteNest.Application.Common.Interfaces.INoteRepository _noteRepository;
         private readonly IAppLogger _logger;
+        private readonly NoteNest.Core.Services.ConfigurationService _configService;
         private CategoryViewModel _selectedCategory;
         private NoteItemViewModel _selectedNote;
         private object _selectedItem;
@@ -43,11 +44,13 @@ namespace NoteNest.UI.ViewModels.Categories
         public CategoryTreeViewModel(
             ITreeQueryService treeQueryService,
             NoteNest.Application.Common.Interfaces.INoteRepository noteRepository,
-            IAppLogger logger)
+            IAppLogger logger,
+            NoteNest.Core.Services.ConfigurationService configService = null)
         {
             _treeQueryService = treeQueryService;
             _noteRepository = noteRepository;
             _logger = logger;
+            _configService = configService;
             
             Categories = new SmartObservableCollection<CategoryViewModel>();
             
@@ -363,21 +366,59 @@ namespace NoteNest.UI.ViewModels.Categories
                     // Create all CategoryViewModels first (faster)
                     var categoryViewModels = new List<CategoryViewModel>();
                     
-                    foreach (var category in rootCategories)
+                    // Check user setting for hiding Notes root folder
+                    var hideNotesRoot = _configService?.Settings?.HideNotesRootFolder ?? true;
+                    
+                    if (hideNotesRoot)
                     {
-                        // Use NoteQueryRepository to load notes from projections
-                        var categoryViewModel = new CategoryViewModel(category, _noteRepository, this, _logger);
+                        // Find and hide Notes root folder
+                        var notesRootCategory = rootCategories.FirstOrDefault(c => 
+                            c.Name.Equals("Notes", StringComparison.OrdinalIgnoreCase) && 
+                            c.ParentId == null);
                         
-                        // Wire up note events to bubble up
-                        categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
-                        categoryViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
-                        
-                        await LoadChildrenAsync(categoryViewModel, allCategories);
-                        categoryViewModels.Add(categoryViewModel);
-                        
-                        // ⭐ Load initial expanded state from database (after children loaded)
-                        // This doesn't trigger persistence because _isLoadingFromDatabase = true
-                        await LoadExpandedStateFromDatabase(categoryViewModel, category);
+                        if (notesRootCategory != null)
+                        {
+                            // Get Notes children directly (skip creating Notes ViewModel)
+                            var notesChildren = allCategories
+                                .Where(c => c.ParentId?.Value == notesRootCategory.Id.Value)
+                                .ToList();
+                            
+                            _logger.Info($"Hiding Notes root folder - showing {notesChildren.Count} child folders at root level");
+                            
+                            // Create ViewModels for Notes' children
+                            foreach (var child in notesChildren)
+                            {
+                                var childViewModel = await CreateCategoryViewModelAsync(child, allCategories);
+                                categoryViewModels.Add(childViewModel);
+                            }
+                            
+                            // Add any other root categories (future-proofing for multiple roots)
+                            foreach (var category in rootCategories.Where(c => c.Id != notesRootCategory.Id))
+                            {
+                                var categoryViewModel = await CreateCategoryViewModelAsync(category, allCategories);
+                                categoryViewModels.Add(categoryViewModel);
+                            }
+                        }
+                        else
+                        {
+                            // No Notes folder found - show all roots normally (fallback)
+                            _logger.Info("No Notes root folder found - displaying all root categories");
+                            foreach (var category in rootCategories)
+                            {
+                                var categoryViewModel = await CreateCategoryViewModelAsync(category, allCategories);
+                                categoryViewModels.Add(categoryViewModel);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // User wants to see root folders - show all roots normally
+                        _logger.Info("Showing all root categories (user setting: HideNotesRootFolder = false)");
+                        foreach (var category in rootCategories)
+                        {
+                            var categoryViewModel = await CreateCategoryViewModelAsync(category, allCategories);
+                            categoryViewModels.Add(categoryViewModel);
+                        }
                     }
                     
                     // Add all at once - single UI update
@@ -390,6 +431,30 @@ namespace NoteNest.UI.ViewModels.Categories
             {
                 _isLoadingFromDatabase = false;  // Re-enable expand event handling
             }
+        }
+        
+        /// <summary>
+        /// Helper method to create a CategoryViewModel with all necessary setup.
+        /// Reduces code duplication in ProcessLoadedCategories.
+        /// </summary>
+        private async Task<CategoryViewModel> CreateCategoryViewModelAsync(
+            Domain.Categories.Category category, 
+            IReadOnlyList<Domain.Categories.Category> allCategories)
+        {
+            // Create ViewModel
+            var categoryViewModel = new CategoryViewModel(category, _noteRepository, this, _logger);
+            
+            // Wire up note events to bubble up
+            categoryViewModel.NoteOpenRequested += OnNoteOpenRequested;
+            categoryViewModel.NoteSelectionRequested += OnNoteSelectionRequested;
+            
+            // Load children recursively
+            await LoadChildrenAsync(categoryViewModel, allCategories);
+            
+            // Load expanded state from database
+            await LoadExpandedStateFromDatabase(categoryViewModel, category);
+            
+            return categoryViewModel;
         }
         
         private async Task LoadChildrenAsync(CategoryViewModel parentViewModel, IReadOnlyList<Category> allCategories)

@@ -2,10 +2,11 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:converters="clr-namespace:NoteNest.UI.Converters"
-        Title="Settings" Height="450" Width="600"
+        Title="Settings" Height="550" Width="700"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        ResizeMode="NoResize"
+        ResizeMode="CanResize"
+        MinHeight="450" MinWidth="600"
         Background="{DynamicResource AppBackgroundBrush}">
     
     <Window.Resources>
@@ -22,28 +23,359 @@
         <!-- Header -->
         <TextBlock Grid.Row="0" Text="Settings" FontSize="24" FontWeight="Bold" Margin="0,0,0,20"/>
         
-        <!-- Settings Content -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel>
-                <!-- Theme moved to More menu in title bar -->
-                
-                <!-- General Section -->
-                <TextBlock Text="General" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                <Border Background="{DynamicResource AppSurfaceBrush}" 
-                       BorderBrush="{DynamicResource AppBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                       Padding="15"
-                       Margin="0,0,0,20">
+        <!-- Tabbed Settings Content -->
+        <TabControl Grid.Row="1" 
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Foreground="{DynamicResource AppTextPrimaryBrush}">
+            
+            <!-- ============================================ -->
+            <!-- TAB 1: GENERAL -->
+            <!-- ============================================ -->
+            <TabItem Header="General">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
+                    <StackPanel>
+                        <!-- Application -->
+                        <TextBlock Text="Application" 
+                                  FontSize="14" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,0,0,10"
+                                  Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                        <Border Background="{DynamicResource AppSurfaceBrush}" 
+                               BorderBrush="{DynamicResource AppBorderBrush}"
+                               BorderThickness="1"
+                               CornerRadius="4"
+                               Padding="15"
+                               Margin="0,0,0,20">
                             <StackPanel>
-                        <CheckBox x:Name="AutoSaveCheckBox" Content="Auto-save notes" Margin="0,0,0,10"/>
-                        <CheckBox x:Name="SpellCheckCheckBox" Content="Enable spell check" Margin="0,0,0,10" IsChecked="True"/>
-                        <TextBlock Text="Note: More settings will be added in future updates" 
-                                  Opacity="0.6" FontSize="11" FontStyle="Italic"/>
+                                <CheckBox x:Name="AutoSaveCheckBox" 
+                                         Content="Auto-save notes" 
+                                         Margin="0,0,0,10"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <CheckBox x:Name="SpellCheckCheckBox" 
+                                         Content="Enable spell check" 
+                                         Margin="0,0,0,10" 
+                                         IsChecked="True"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <CheckBox IsChecked="{Binding Settings.SingleClickOpenNotes}"
+                                         Content="Single-click to open notes"
+                                         Margin="0,0,0,0"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
                             </StackPanel>
                         </Border>
-                </StackPanel>
-            </ScrollViewer>
+                        
+                        <!-- Storage -->
+                        <TextBlock Text="Storage Location" 
+                                  FontSize="14" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,10,0,10"
+                                  Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                        <Border Background="{DynamicResource AppSurfaceBrush}" 
+                               BorderBrush="{DynamicResource AppBorderBrush}"
+                               BorderThickness="1"
+                               CornerRadius="4"
+                               Padding="15">
+                            <StackPanel>
+                                <RadioButton Content="Local (Documents/NoteNest)"
+                                           IsChecked="{Binding UseLocalStorage}"
+                                           Margin="0,0,0,10"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <RadioButton Content="OneDrive"
+                                           IsChecked="{Binding UseOneDrive}"
+                                           Margin="0,0,0,10"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <RadioButton Content="Custom Location"
+                                           IsChecked="{Binding UseCustomPath}"
+                                           Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                
+                                <StackPanel Margin="20,10,0,0"
+                                           Visibility="{Binding UseCustomPath, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0"
+                                                Text="{Binding CustomPath}"
+                                                Margin="0,0,10,0"
+                                                Background="{DynamicResource AppSurfaceBrush}"
+                                                Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                        <Button Grid.Column="1"
+                                               Content="Browse..."
+                                               Command="{Binding BrowseCustomPathCommand}"/>
+                                    </Grid>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            
+            <!-- ============================================ -->
+            <!-- TAB 2: NOTE TREE -->
+            <!-- ============================================ -->
+            <TabItem Header="Note Tree">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
+                    <StackPanel>
+                        <!-- Display Options -->
+                        <TextBlock Text="Display Options" 
+                                  FontSize="14" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,0,0,10"
+                                  Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                        <Border Background="{DynamicResource AppSurfaceBrush}" 
+                               BorderBrush="{DynamicResource AppBorderBrush}"
+                               BorderThickness="1"
+                               CornerRadius="4"
+                               Padding="15"
+                               Margin="0,0,0,20">
+                            <StackPanel>
+                                <CheckBox IsChecked="{Binding Settings.HideNotesRootFolder}"
+                                         Content="Hide 'Notes' root folder in tree"
+                                         Margin="0,0,0,5"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <TextBlock Text="Shows child folders at the top level for a cleaner view"
+                                          Opacity="0.6" 
+                                          FontSize="11" 
+                                          Margin="20,0,0,15"
+                                          TextWrapping="Wrap"
+                                          Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                                
+                                <CheckBox IsChecked="{Binding Settings.ShowTreeDirtyDot}"
+                                         Content="Show unsaved indicator (•) in tree"
+                                         Margin="0,0,0,0"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- Behavior -->
+                        <TextBlock Text="Behavior" 
+                                  FontSize="14" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,10,0,10"
+                                  Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                        <Border Background="{DynamicResource AppSurfaceBrush}" 
+                               BorderBrush="{DynamicResource AppBorderBrush}"
+                               BorderThickness="1"
+                               CornerRadius="4"
+                               Padding="15"
+                               Margin="0,0,0,20">
+                            <StackPanel>
+                                <CheckBox Content="Remember expanded folders"
+                                         IsChecked="True"
+                                         Margin="0,0,0,10"
+                                         IsEnabled="False"
+                                         ToolTip="Expanded state is automatically saved"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <CheckBox IsChecked="{Binding Settings.EnableDragDrop}"
+                                         Content="Enable drag and drop"
+                                         Margin="0,0,0,0"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- Note about restart -->
+                        <Border Background="{DynamicResource AppSurfaceBrush}" 
+                               BorderBrush="{DynamicResource AppAccentBrush}"
+                               BorderThickness="1"
+                               CornerRadius="4"
+                               Padding="12"
+                               Margin="0,10,0,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="ℹ" 
+                                          FontSize="16"
+                                          Margin="0,0,8,0"
+                                          Foreground="{DynamicResource AppAccentBrush}"/>
+                                <TextBlock Text="Changes to tree display require restarting the application"
+                                          FontSize="11"
+                                          TextWrapping="Wrap"
+                                          Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            
+            <!-- ============================================ -->
+            <!-- TAB 3: EDITOR -->
+            <!-- ============================================ -->
+            <TabItem Header="Editor">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
+                    <StackPanel>
+                        <!-- Auto-save Behavior -->
+                        <TextBlock Text="Auto-save Behavior" 
+                                  FontSize="14" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,0,0,10"
+                                  Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                        <Border Background="{DynamicResource AppSurfaceBrush}" 
+                               BorderBrush="{DynamicResource AppBorderBrush}"
+                               BorderThickness="1"
+                               CornerRadius="4"
+                               Padding="15"
+                               Margin="0,0,0,20">
+                            <StackPanel>
+                                <CheckBox IsChecked="{Binding Settings.AutoSaveOnTabSwitch}"
+                                         Content="Auto-save when switching tabs"
+                                         Margin="0,0,0,10"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <CheckBox IsChecked="{Binding Settings.AutoSaveOnClose}"
+                                         Content="Auto-save when closing notes"
+                                         Margin="0,0,0,10"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <CheckBox IsChecked="{Binding Settings.AutoSaveOnFocusLost}"
+                                         Content="Auto-save when focus is lost"
+                                         Margin="0,0,0,10"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <CheckBox IsChecked="{Binding Settings.ForceSaveOnExit}"
+                                         Content="Force save all notes on exit"
+                                         Margin="0,0,0,15"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                
+                                <Separator Margin="0,5,0,15" Background="{DynamicResource AppBorderBrush}"/>
+                                
+                                <Grid Margin="0,0,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" 
+                                              Text="Idle time before auto-save:"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,10,0"
+                                              Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                    <Slider Grid.Column="1"
+                                           Minimum="500"
+                                           Maximum="10000"
+                                           TickFrequency="500"
+                                           IsSnapToTickEnabled="True"
+                                           Value="{Binding Settings.AutoSaveIdleMs}"
+                                           Margin="0,0,10,0"/>
+                                    <TextBlock Grid.Column="2"
+                                              Text="{Binding Settings.AutoSaveIdleMs, StringFormat={}{0}ms}"
+                                              VerticalAlignment="Center"
+                                              MinWidth="60"
+                                              Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+            
+            <!-- ============================================ -->
+            <!-- TAB 4: ADVANCED -->
+            <!-- ============================================ -->
+            <TabItem Header="Advanced">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
+                    <StackPanel>
+                        <!-- Performance -->
+                        <TextBlock Text="Performance" 
+                                  FontSize="14" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,0,0,10"
+                                  Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                        <Border Background="{DynamicResource AppSurfaceBrush}" 
+                               BorderBrush="{DynamicResource AppBorderBrush}"
+                               BorderThickness="1"
+                               CornerRadius="4"
+                               Padding="15"
+                               Margin="0,0,0,20">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" 
+                                              Text="File watcher debounce:"
+                                              VerticalAlignment="Center"
+                                              Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                    <TextBox Grid.Column="1"
+                                            Text="{Binding Settings.FileWatcherDebounceMs}"
+                                            Margin="10,0"
+                                            Background="{DynamicResource AppSurfaceBrush}"
+                                            Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                    <TextBlock Grid.Column="2"
+                                              Text="ms"
+                                              VerticalAlignment="Center"
+                                              Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                </Grid>
+                                
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" 
+                                              Text="Content cache size:"
+                                              VerticalAlignment="Center"
+                                              Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                    <TextBox Grid.Column="1"
+                                            Text="{Binding Settings.ContentCacheMaxMB}"
+                                            Margin="10,0"
+                                            Background="{DynamicResource AppSurfaceBrush}"
+                                            Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                    <TextBlock Grid.Column="2"
+                                              Text="MB"
+                                              VerticalAlignment="Center"
+                                              Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                </Grid>
+                                
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" 
+                                              Text="Cache expiration:"
+                                              VerticalAlignment="Center"
+                                              Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                    <TextBox Grid.Column="1"
+                                            Text="{Binding Settings.ContentCacheExpirationMinutes}"
+                                            Margin="10,0"
+                                            Background="{DynamicResource AppSurfaceBrush}"
+                                            Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                    <TextBlock Grid.Column="2"
+                                              Text="min"
+                                              VerticalAlignment="Center"
+                                              Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        
+                        <!-- Session -->
+                        <TextBlock Text="Session" 
+                                  FontSize="14" 
+                                  FontWeight="SemiBold" 
+                                  Margin="0,10,0,10"
+                                  Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                        <Border Background="{DynamicResource AppSurfaceBrush}" 
+                               BorderBrush="{DynamicResource AppBorderBrush}"
+                               BorderThickness="1"
+                               CornerRadius="4"
+                               Padding="15">
+                            <StackPanel>
+                                <CheckBox IsChecked="{Binding Settings.RestoreTabs}"
+                                         Content="Restore tabs on startup"
+                                         Margin="0,0,0,5"
+                                         Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                                <TextBlock Text="Reopens notes that were open when you last closed the app"
+                                          Opacity="0.6"
+                                          FontSize="11"
+                                          Margin="20,0,0,0"
+                                          TextWrapping="Wrap"
+                                          Foreground="{DynamicResource AppTextSecondaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
         
         <!-- Footer Buttons -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">

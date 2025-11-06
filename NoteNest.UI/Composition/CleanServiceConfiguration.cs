@@ -327,7 +327,8 @@ namespace NoteNest.UI.Composition
                 new CategoryTreeViewModel(
                     provider.GetRequiredService<NoteNest.Application.Queries.ITreeQueryService>(),
                     provider.GetRequiredService<NoteNest.Application.Common.Interfaces.INoteRepository>(),
-                    provider.GetRequiredService<IAppLogger>()));
+                    provider.GetRequiredService<IAppLogger>(),
+                    provider.GetRequiredService<ConfigurationService>()));
             
             // Search view (database-backed)
             services.AddTransient<SearchViewModel>(provider =>

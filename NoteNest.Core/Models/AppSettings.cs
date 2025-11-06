@@ -81,6 +81,9 @@ namespace NoteNest.Core.Models
         public bool CacheTreeData { get; set; } = true;
         public int TreeCacheMinutes { get; set; } = 5;
         public bool WarmTreeCacheOnStartup { get; set; } = false;  // Conservative default
+        
+        // Tree display settings
+        public bool HideNotesRootFolder { get; set; } = true;  // Hide 'Notes' root folder for cleaner view
 
         // Feature flags
         public EditorSettings EditorSettings { get; set; } = new EditorSettings();
