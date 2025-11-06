@@ -480,20 +480,34 @@
                 </ItemsControl>
             </Border>
             
-            <!-- ✨ MODERNIZED: Clean panel (removed header for modern appearance) -->
+            <!-- Note Tree Panel with Header (matches right panel style) -->
             <Border Grid.Column="1"
                     Background="{DynamicResource AppBackgroundBrush}"
                     BorderBrush="{DynamicResource AppBorderBrush}"
                     BorderThickness="0,0,1,0">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>   <!-- Header -->
                         <RowDefinition Height="*"/>      <!-- TreeView -->
                         <RowDefinition Height="Auto"/>   <!-- Loading indicator -->
                     </Grid.RowDefinitions>
                     
+                    <!-- Panel Header (matches right panel style) -->
+                    <Border Grid.Row="0" 
+                            Background="{DynamicResource AppSurfaceBrush}"
+                            BorderBrush="{DynamicResource AppBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Height="32">
+                        <TextBlock Text="Notes" 
+                                   VerticalAlignment="Center"
+                                   Margin="12,0,0,0"
+                                   FontWeight="Medium"
+                                   Foreground="{DynamicResource AppTextPrimaryBrush}"/>
+                    </Border>
+                    
                     <!-- Enhanced TreeView with interaction support + VIRTUALIZATION for performance + DRAG & DROP -->
                     <TreeView x:Name="CategoryTreeView"
-                              Grid.Row="0" 
+                              Grid.Row="1" 
                               ItemsSource="{Binding CategoryTree.Categories}"
                               Tag="{Binding}"
                               Loaded="OnTreeViewLoaded"
@@ -836,7 +850,7 @@
                     </TreeView>
                     
                     <!-- Loading indicator -->
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="5"
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="5"
                                 Visibility="{Binding CategoryTree.IsLoading, Converter={StaticResource BoolToVisibilityConverter}}">
                         <TextBlock Text="Loading categories..." Foreground="{DynamicResource AppTextSecondaryBrush}" FontStyle="Italic"/>
                     </StackPanel>
