@@ -59,9 +59,9 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <StackPanel Orientation="Horizontal">
-                            <ContentControl Template="{StaticResource LucideArrowDown}"
+                            <ContentControl Template="{StaticResource LucideZap}"
                                             Width="12" Height="12" 
-                                            Foreground="{DynamicResource AppTextSecondaryBrush}"
+                                            Foreground="#10B981"
                                             Margin="0,0,6,0"
                                             VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding}" VerticalAlignment="Center" FontStyle="Italic"/>

@@ -346,21 +346,23 @@ namespace NoteNest.Infrastructure.Services
                 using var connection = new SqliteConnection(_projectionsConnectionString);
                 await connection.OpenAsync();
                 
-                // Recursive CTE to walk UP tree collecting parent tags
+                // Recursive CTE to walk UP tree collecting parent tags with depth limit
                 var sql = @"
                     WITH RECURSIVE category_hierarchy AS (
                         -- Start with target category's parent
-                        SELECT parent_id as id
+                        SELECT parent_id as id, 0 as depth
                         FROM tree_view
                         WHERE id = @CategoryId AND node_type = 'category' AND parent_id IS NOT NULL
                         
                         UNION ALL
                         
-                        -- Walk up to ancestor categories
-                        SELECT tv.parent_id as id
+                        -- Walk up to ancestor categories with depth limit
+                        SELECT tv.parent_id as id, ch.depth + 1
                         FROM tree_view tv
                         INNER JOIN category_hierarchy ch ON tv.id = ch.id
-                        WHERE tv.parent_id IS NOT NULL AND tv.node_type = 'category'
+                        WHERE tv.parent_id IS NOT NULL 
+                          AND tv.node_type = 'category'
+                          AND ch.depth < 20  -- Prevent infinite loops from circular references
                     )
                     SELECT DISTINCT et.display_name
                     FROM category_hierarchy ch

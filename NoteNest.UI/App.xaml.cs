@@ -62,6 +62,18 @@ namespace NoteNest.UI
                 var syncElapsed = (DateTime.UtcNow - syncStartTime).TotalMilliseconds;
                 _logger.Info($"✅ Projections synchronized in {syncElapsed:F0}ms - UI ready to load");
 
+                // 🔍 Run startup diagnostics to detect data integrity issues (circular references, etc.)
+                try
+                {
+                    var diagnosticsService = _host.Services.GetRequiredService<NoteNest.Infrastructure.Diagnostics.StartupDiagnosticsService>();
+                    await diagnosticsService.RunDiagnosticsAsync();
+                }
+                catch (Exception diagEx)
+                {
+                    _logger.Error(diagEx, "⚠️ Startup diagnostics failed - continuing with app startup");
+                    // Don't fail startup if diagnostics fail - they're informational
+                }
+
                 // Auto-rebuild from RTF files if event store is empty (database loss recovery)
                 var eventStore = _host.Services.GetRequiredService<NoteNest.Application.Common.Interfaces.IEventStore>();
                 var currentPosition = await eventStore.GetCurrentStreamPositionAsync();

@@ -280,30 +280,64 @@ namespace NoteNest.UI.Windows
         }
         
         /// <summary>
-        /// Recursively get tags from ancestor categories.
+        /// Iteratively get tags from ancestor categories with cycle detection.
+        /// Converted from recursion to prevent stack overflow on circular references.
         /// </summary>
         private async Task<List<TagDto>> GetAncestorCategoryTagsAsync(Guid categoryId)
         {
             try
             {
                 var allAncestorTags = new List<TagDto>();
+                var visitedNodes = new HashSet<Guid>(); // Cycle detection
+                const int MAX_DEPTH = 20; // Maximum tree depth to prevent infinite loops
+                int depth = 0;
                 
-                // Get parent category
-                var categoryNode = await _treeQueryService.GetByIdAsync(categoryId);
-                if (categoryNode?.ParentId == null || categoryNode.ParentId == Guid.Empty)
+                var currentId = categoryId;
+                
+                // Walk up the tree collecting tags with cycle detection
+                while (currentId != Guid.Empty && depth < MAX_DEPTH)
                 {
-                    return allAncestorTags; // No parent, done
+                    // Get current category
+                    var categoryNode = await _treeQueryService.GetByIdAsync(currentId);
+                    
+                    // Handle orphaned nodes (node doesn't exist in database)
+                    if (categoryNode == null)
+                    {
+                        _logger.Warning($"[NoteTagDialog] Orphaned node detected: category {currentId} not found in tree_view while loading tags for note {_noteId}");
+                        _logger.Warning($"[NoteTagDialog] This indicates data corruption - the parent_id points to a non-existent node");
+                        break;
+                    }
+                    
+                    if (categoryNode.ParentId == null || categoryNode.ParentId == Guid.Empty)
+                    {
+                        break; // Reached root
+                    }
+                    
+                    var parentId = categoryNode.ParentId.Value;
+                    
+                    // Check for cycle (circular reference detection)
+                    if (visitedNodes.Contains(parentId))
+                    {
+                        _logger.Warning($"[NoteTagDialog] Circular reference detected in category tree at {parentId} while loading tags for note {_noteId}");
+                        _logger.Warning($"[NoteTagDialog] This indicates data corruption - please run database repair");
+                        break;
+                    }
+                    visitedNodes.Add(parentId);
+                    
+                    // Get parent's tags
+                    var parentTags = await _tagQueryService.GetTagsForEntityAsync(parentId, "category");
+                    allAncestorTags.AddRange(parentTags);
+                    
+                    // Move to parent for next iteration
+                    currentId = parentId;
+                    depth++;
                 }
                 
-                var parentId = categoryNode.ParentId.Value;
-                
-                // Get parent's tags
-                var parentTags = await _tagQueryService.GetTagsForEntityAsync(parentId, "category");
-                allAncestorTags.AddRange(parentTags);
-                
-                // Recursively get grandparent's tags
-                var grandparentTags = await GetAncestorCategoryTagsAsync(parentId);
-                allAncestorTags.AddRange(grandparentTags);
+                if (depth >= MAX_DEPTH)
+                {
+                    _logger.Warning($"[NoteTagDialog] Maximum tree depth ({MAX_DEPTH}) reached while loading tags for note {_noteId}");
+                    _logger.Warning($"[NoteTagDialog] This may indicate a circular reference or an extremely deep tree");
+                }
                 
                 return allAncestorTags;
             }

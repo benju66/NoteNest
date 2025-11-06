@@ -252,6 +252,9 @@ namespace NoteNest.UI.Windows
             try
             {
                 var allAncestorTags = new List<NoteNest.Application.Queries.TagDto>();
+                var visitedNodes = new HashSet<Guid>(); // Cycle detection
+                const int MAX_DEPTH = 20; // Maximum tree depth to prevent infinite loops
+                int depth = 0;
                 
                 // Get current category to find its parent
                 var categoryNode = await _treeQueryService.GetByIdAsync(_folderId);
@@ -262,20 +265,45 @@ namespace NoteNest.UI.Windows
                 
                 var currentId = categoryNode.ParentId.Value;
                 
-                // Walk up the tree collecting tags
-                while (currentId != Guid.Empty)
+                // Walk up the tree collecting tags with cycle detection
+                while (currentId != Guid.Empty && depth < MAX_DEPTH)
                 {
+                    // Check for cycle (circular reference detection)
+                    if (visitedNodes.Contains(currentId))
+                    {
+                        _logger.Warning($"[FolderTagDialog] Circular reference detected in category tree at {currentId} while loading tags for folder {_folderId}");
+                        _logger.Warning($"[FolderTagDialog] This indicates data corruption - please run database repair");
+                        break;
+                    }
+                    visitedNodes.Add(currentId);
+                    
                     // Get tags for this ancestor
                     var ancestorTags = await _tagQueryService.GetTagsForEntityAsync(currentId, "category");
                     allAncestorTags.AddRange(ancestorTags);
                     
                     // Get next parent
                     var ancestorNode = await _treeQueryService.GetByIdAsync(currentId);
-                    if (ancestorNode?.ParentId == null || ancestorNode.ParentId == Guid.Empty)
+                    
+                    // Handle orphaned nodes (parent doesn't exist in database)
+                    if (ancestorNode == null)
+                    {
+                        _logger.Warning($"[FolderTagDialog] Orphaned node detected: category {currentId} not found in tree_view while loading tags for folder {_folderId}");
+                        _logger.Warning($"[FolderTagDialog] This indicates data corruption - the parent_id points to a non-existent node");
+                        break;
+                    }
+                    
+                    if (ancestorNode.ParentId == null || ancestorNode.ParentId == Guid.Empty)
                     {
                         break; // Reached root
                     }
                     currentId = ancestorNode.ParentId.Value;
+                    depth++;
+                }
+                
+                if (depth >= MAX_DEPTH)
+                {
+                    _logger.Warning($"[FolderTagDialog] Maximum tree depth ({MAX_DEPTH}) reached while loading tags for folder {_folderId}");
+                    _logger.Warning($"[FolderTagDialog] This may indicate a circular reference or an extremely deep tree");
                 }
                 
                 return allAncestorTags;

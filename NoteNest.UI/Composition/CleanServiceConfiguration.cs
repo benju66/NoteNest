@@ -458,6 +458,18 @@ namespace NoteNest.UI.Composition
                     projectionsConnectionString,
                     provider.GetRequiredService<IAppLogger>()));
             
+            // Diagnostic Services for Tree Integrity Checking
+            services.AddSingleton<NoteNest.Infrastructure.Diagnostics.TreeIntegrityChecker>(provider =>
+                new NoteNest.Infrastructure.Diagnostics.TreeIntegrityChecker(
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
+            services.AddSingleton<NoteNest.Infrastructure.Diagnostics.StartupDiagnosticsService>(provider =>
+                new NoteNest.Infrastructure.Diagnostics.StartupDiagnosticsService(
+                    provider.GetRequiredService<NoteNest.Infrastructure.Diagnostics.TreeIntegrityChecker>(),
+                    projectionsConnectionString,
+                    provider.GetRequiredService<IAppLogger>()));
+            
             services.AddSingleton<IEventStore>(provider =>
                 new NoteNest.Infrastructure.EventStore.SqliteEventStore(
                     eventsConnectionString,
