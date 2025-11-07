@@ -16,7 +16,12 @@ namespace NoteNest.Core.Utils
         private static readonly Regex BraceRemover = new Regex(@"[\{\}]", RegexOptions.Compiled);
         private static readonly Regex WhitespaceNormalizer = new Regex(@"\s+", RegexOptions.Compiled);
         
-        // RTF special character mappings
+        // ✅ FIX: Additional regex patterns for comprehensive RTF cleanup
+        private static readonly Regex HexEscapeRemover = new Regex(@"\\'[0-9a-fA-F]{2}", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex RtfArtifactRemover = new Regex(@"\\[\*\']", RegexOptions.Compiled);
+        private static readonly Regex LongNumberRemover = new Regex(@"(?<!\d)-?\d{3,}(?!\d)", RegexOptions.Compiled);
+        
+        // RTF special character mappings (common ones converted to proper characters)
         private static readonly (string rtf, string plain)[] SpecialCharacters = {
             (@"\'92", "'"),     // Right single quotation mark
             (@"\'93", "\""),    // Left double quotation mark  
@@ -25,6 +30,7 @@ namespace NoteNest.Core.Utils
             (@"\'97", "--"),    // Em dash
             (@"\'85", "..."),   // Horizontal ellipsis
             (@"\'a0", " "),     // Non-breaking space
+            (@"\'b7", "•"),     // Bullet point (middle dot)
             (@"\u8216", "'"),   // Unicode apostrophe
             (@"\u8220", "\""),  // Unicode left quote
             (@"\u8221", "\""),  // Unicode right quote
@@ -61,14 +67,25 @@ namespace NoteNest.Core.Utils
                 // Step 4: Remove braces
                 text = BraceRemover.Replace(text, "");
 
-                // Step 5: Decode special characters
+                // Step 5: Decode special characters (common ones to proper symbols)
                 foreach (var (rtf, plain) in SpecialCharacters)
                 {
                     text = text.Replace(rtf, plain);
                 }
 
+                // ✅ FIX Step 5.5: Remove ALL remaining hex escape sequences
+                // This catches any \'XX patterns not converted above (e.g., \'b7, \'02, \'06)
+                text = HexEscapeRemover.Replace(text, "");
+
+                // ✅ FIX Step 5.6: Remove RTF artifacts that leak through (\* and \')
+                text = RtfArtifactRemover.Replace(text, "");
+
                 // Step 6: Clean up font names and orphaned semicolons
                 text = CleanFontPollution(text);
+
+                // ✅ FIX Step 6.5: Remove long orphaned numbers (e.g., -360, 12345)
+                // These are RTF positioning/spacing parameters that leaked through
+                text = LongNumberRemover.Replace(text, " ");
 
                 // Step 7: Normalize whitespace
                 text = WhitespaceNormalizer.Replace(text, " ").Trim();

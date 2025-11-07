@@ -182,7 +182,10 @@ namespace NoteNest.Core.Services.Search
 
         public async Task UpdateDocumentAsync(SearchDocument document)
         {
-            // For FTS5, update is same as index (INSERT OR REPLACE)
+            // ✅ FIX: FTS5 virtual tables don't support column-based REPLACE
+            // Must explicitly DELETE old entry first, then INSERT new one
+            // This prevents duplicates when note content is modified
+            await RemoveByFilePathAsync(document.FilePath);
             await IndexDocumentAsync(document);
         }
 

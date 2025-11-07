@@ -503,7 +503,7 @@ namespace NoteNest.Core.Services.Search
                 // Create note model for mapping
                 var noteModel = new NoteModel
                 {
-                    Id = Guid.NewGuid().ToString(),
+                    Id = GenerateNoteIdFromPath(filePath), // ✅ FIX: Deterministic ID prevents duplicates
                     Title = Path.GetFileNameWithoutExtension(filePath),
                     FilePath = filePath,
                     Content = rtfContent,
@@ -610,6 +610,27 @@ namespace NoteNest.Core.Services.Search
             {
                 yield return items.Skip(i).Take(batchSize).ToList();
             }
+        }
+
+        /// <summary>
+        /// Generate a deterministic note ID from file path using SHA256 hashing.
+        /// This prevents hash collisions and ensures same file always gets same ID.
+        /// Matches the pattern used in RTFIntegratedSaveEngine for consistency.
+        /// </summary>
+        /// <param name="filePath">Full file path to the note</param>
+        /// <returns>Deterministic note ID like "note_abc123def456"</returns>
+        private string GenerateNoteIdFromPath(string filePath)
+        {
+            // Normalize path for stability (absolute, lowercase)
+            var normalizedPath = Path.GetFullPath(filePath).ToLowerInvariant();
+            
+            // Use SHA256 for collision-resistant deterministic IDs
+            var bytes = System.Text.Encoding.UTF8.GetBytes(normalizedPath);
+            var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+            
+            // Convert to hex string (32 bytes = 64 hex chars, use first 16 for ID)
+            var hashHex = Convert.ToHexString(hash).ToLowerInvariant();
+            return $"note_{hashHex.Substring(0, 16)}";
         }
 
         #endregion
