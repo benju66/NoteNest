@@ -322,13 +322,15 @@ namespace NoteNest.UI.Composition
         /// </summary>
         private static IServiceCollection AddCleanViewModels(this IServiceCollection services)
         {
-            // Tree view (event-sourced) - queries projections via ITreeQueryService
+            // Tree view (event-sourced) - queries projections via ITreeQueryService + pinned section support
             services.AddTransient<CategoryTreeViewModel>(provider =>
                 new CategoryTreeViewModel(
                     provider.GetRequiredService<NoteNest.Application.Queries.ITreeQueryService>(),
                     provider.GetRequiredService<NoteNest.Application.Common.Interfaces.INoteRepository>(),
                     provider.GetRequiredService<IAppLogger>(),
-                    provider.GetRequiredService<ConfigurationService>()));
+                    provider.GetRequiredService<ConfigurationService>(),
+                    provider.GetRequiredService<NoteNest.Application.Common.Interfaces.IEventStore>(),
+                    provider.GetRequiredService<NoteNest.Application.Common.Interfaces.IProjectionOrchestrator>()));
             
             // Search view (database-backed)
             services.AddTransient<SearchViewModel>(provider =>

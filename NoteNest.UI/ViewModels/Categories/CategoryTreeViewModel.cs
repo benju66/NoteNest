@@ -26,10 +26,15 @@ namespace NoteNest.UI.ViewModels.Categories
         private readonly NoteNest.Application.Common.Interfaces.INoteRepository _noteRepository;
         private readonly IAppLogger _logger;
         private readonly NoteNest.Core.Services.ConfigurationService _configService;
+        private readonly NoteNest.Application.Common.Interfaces.IEventStore _eventStore;
+        private readonly NoteNest.Application.Common.Interfaces.IProjectionOrchestrator _projectionOrchestrator;
         private CategoryViewModel _selectedCategory;
         private NoteItemViewModel _selectedNote;
         private object _selectedItem;
         private bool _isLoading;
+        
+        // Pinned items support
+        private PinnedSectionViewModel _pinnedSection;
         
         // Expanded state persistence with debouncing
         private readonly Dictionary<string, bool> _pendingExpandedChanges = new();
@@ -45,14 +50,20 @@ namespace NoteNest.UI.ViewModels.Categories
             ITreeQueryService treeQueryService,
             NoteNest.Application.Common.Interfaces.INoteRepository noteRepository,
             IAppLogger logger,
-            NoteNest.Core.Services.ConfigurationService configService = null)
+            NoteNest.Core.Services.ConfigurationService configService = null,
+            NoteNest.Application.Common.Interfaces.IEventStore eventStore = null,
+            NoteNest.Application.Common.Interfaces.IProjectionOrchestrator projectionOrchestrator = null)
         {
             _treeQueryService = treeQueryService;
             _noteRepository = noteRepository;
             _logger = logger;
             _configService = configService;
+            _eventStore = eventStore;
+            _projectionOrchestrator = projectionOrchestrator;
             
             Categories = new SmartObservableCollection<CategoryViewModel>();
+            TreeViewItems = new SmartObservableCollection<object>();
+            _pinnedSection = new PinnedSectionViewModel();
             
             // Initialize debounce timer for expanded state persistence
             _expandedStateTimer = new DispatcherTimer 
@@ -65,6 +76,16 @@ namespace NoteNest.UI.ViewModels.Categories
         }
 
         public SmartObservableCollection<CategoryViewModel> Categories { get; }
+        
+        /// <summary>
+        /// Composite collection for TreeView binding - includes pinned section + regular categories
+        /// </summary>
+        public SmartObservableCollection<object> TreeViewItems { get; }
+        
+        /// <summary>
+        /// Pinned section containing pinned categories and notes
+        /// </summary>
+        public PinnedSectionViewModel PinnedSection => _pinnedSection;
         
         // Alias for XAML binding compatibility
         public SmartObservableCollection<CategoryViewModel> RootCategories => Categories;
@@ -426,10 +447,473 @@ namespace NoteNest.UI.ViewModels.Categories
                 }
                 
                 _logger.Info($"Loaded {Categories.Count} root categories with smooth batching");
+                
+                // Load pinned items and build composite TreeViewItems
+                await LoadPinnedItemsAsync();
             }
             finally
             {
                 _isLoadingFromDatabase = false;  // Re-enable expand event handling
+            }
+        }
+        
+        // =============================================================================
+        // PINNED SECTION SUPPORT
+        // =============================================================================
+        
+        /// <summary>
+        /// Loads pinned items from database and rebuilds the composite TreeViewItems collection.
+        /// Called after categories are loaded to populate the pinned section.
+        /// </summary>
+        private async Task LoadPinnedItemsAsync()
+        {
+            try
+            {
+                // Batch query for all pinned items (single database call)
+                var pinnedNodes = await _treeQueryService.GetPinnedAsync();
+                var pinnedIds = new HashSet<Guid>(pinnedNodes.Select(n => n.Id));
+                
+                // Set IsPinned on all ViewModels (for visual indicators)
+                SetPinnedStates(Categories, pinnedIds);
+                
+                // Collect pinned items from the loaded tree
+                using (_pinnedSection.Items.BatchUpdate())
+                {
+                    _pinnedSection.Items.Clear();
+                    
+                    var pinnedCategories = CollectPinnedCategories(Categories);
+                    var pinnedNotes = CollectPinnedNotes(Categories);
+                    
+                    // Smart filtering: Don't show children if parent is also pinned
+                    var topLevelPinned = pinnedCategories.Where(cat =>
+                        !pinnedCategories.Any(parent => IsDescendantOf(cat, parent))
+                    ).ToList();
+                    
+                    // Add to pinned section (categories first, then notes, sorted by name)
+                    foreach (var category in topLevelPinned.OrderBy(c => c.Name))
+                    {
+                        _pinnedSection.Items.Add(category);
+                    }
+                    
+                    foreach (var note in pinnedNotes.OrderBy(n => n.Title))
+                    {
+                        // Only add note if its parent category is not pinned
+                        var parentCat = FindParentCategoryForNote(note);
+                        if (parentCat == null || !parentCat.IsPinned)
+                        {
+                            _pinnedSection.Items.Add(note);
+                        }
+                    }
+                }
+                
+                _logger.Info($"Loaded {_pinnedSection.Items.Count} pinned items");
+                
+                // Rebuild composite TreeViewItems
+                RebuildTreeViewItems();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to load pinned items");
+            }
+        }
+        
+        /// <summary>
+        /// Sets IsPinned property on all CategoryViewModels based on database state.
+        /// Recursive to handle nested categories.
+        /// </summary>
+        private void SetPinnedStates(IEnumerable<CategoryViewModel> categories, HashSet<Guid> pinnedIds)
+        {
+            foreach (var category in categories)
+            {
+                if (Guid.TryParse(category.Id, out var guid))
+                {
+                    category.IsPinned = pinnedIds.Contains(guid);
+                }
+                
+                // Recursively set for children
+                if (category.Children.Any())
+                {
+                    SetPinnedStates(category.Children, pinnedIds);
+                }
+                
+                // Set for notes in this category
+                foreach (var note in category.Notes)
+                {
+                    if (Guid.TryParse(note.Id, out var noteGuid))
+                    {
+                        note.IsPinned = pinnedIds.Contains(noteGuid);
+                    }
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Rebuilds the composite TreeViewItems collection for display.
+        /// Includes pinned section (if any items) + separator + regular categories.
+        /// </summary>
+        private void RebuildTreeViewItems()
+        {
+            using (TreeViewItems.BatchUpdate())
+            {
+                TreeViewItems.Clear();
+                
+                // Add pinned section if there are any pinned items
+                if (_pinnedSection.Items.Any())
+                {
+                    TreeViewItems.Add(_pinnedSection);
+                    TreeViewItems.Add(new SeparatorViewModel());
+                }
+                
+                // Add all regular categories
+                foreach (var category in Categories)
+                {
+                    TreeViewItems.Add(category);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Recursively collects all pinned categories from the tree.
+        /// </summary>
+        private List<CategoryViewModel> CollectPinnedCategories(IEnumerable<CategoryViewModel> categories)
+        {
+            var pinned = new List<CategoryViewModel>();
+            
+            foreach (var category in categories)
+            {
+                if (category.IsPinned)
+                {
+                    pinned.Add(category);  // Add reference (not copy)
+                }
+                
+                // Recursively collect from children
+                if (category.Children.Any())
+                {
+                    pinned.AddRange(CollectPinnedCategories(category.Children));
+                }
+            }
+            
+            return pinned;
+        }
+        
+        /// <summary>
+        /// Recursively collects all pinned notes from the tree.
+        /// </summary>
+        private List<NoteItemViewModel> CollectPinnedNotes(IEnumerable<CategoryViewModel> categories)
+        {
+            var pinned = new List<NoteItemViewModel>();
+            
+            foreach (var category in categories)
+            {
+                // Add pinned notes from this category
+                pinned.AddRange(category.Notes.Where(n => n.IsPinned));
+                
+                // Recursively collect from child categories
+                if (category.Children.Any())
+                {
+                    pinned.AddRange(CollectPinnedNotes(category.Children));
+                }
+            }
+            
+            return pinned;
+        }
+        
+        /// <summary>
+        /// Checks if a category is a descendant of another category.
+        /// Used to filter nested pinned items.
+        /// </summary>
+        private bool IsDescendantOf(CategoryViewModel child, CategoryViewModel potentialParent)
+        {
+            if (child == null || potentialParent == null) return false;
+            
+            // Check if child is in potentialParent's descendants
+            return IsDescendantRecursive(child, potentialParent.Children);
+        }
+        
+        private bool IsDescendantRecursive(CategoryViewModel target, IEnumerable<CategoryViewModel> categories)
+        {
+            foreach (var category in categories)
+            {
+                if (category == target)
+                    return true;
+                
+                if (category.Children.Any() && IsDescendantRecursive(target, category.Children))
+                    return true;
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// Finds the parent category for a given note.
+        /// </summary>
+        private CategoryViewModel FindParentCategoryForNote(NoteItemViewModel note)
+        {
+            return FindParentCategoryRecursive(note, Categories);
+        }
+        
+        private CategoryViewModel FindParentCategoryRecursive(NoteItemViewModel note, IEnumerable<CategoryViewModel> categories)
+        {
+            foreach (var category in categories)
+            {
+                if (category.Notes.Contains(note))
+                    return category;
+                
+                if (category.Children.Any())
+                {
+                    var found = FindParentCategoryRecursive(note, category.Children);
+                    if (found != null)
+                        return found;
+                }
+            }
+            
+            return null;
+        }
+        
+        // =============================================================================
+        // PIN/UNPIN COMMANDS
+        // =============================================================================
+        
+        /// <summary>
+        /// Toggles pin state of an item (category or note).
+        /// Uses event sourcing to persist state.
+        /// </summary>
+        public async Task TogglePinAsync(object item)
+        {
+            if (item is CategoryViewModel category)
+            {
+                if (category.IsPinned)
+                    await UnpinCategoryAsync(category);
+                else
+                    await PinCategoryAsync(category);
+            }
+            else if (item is NoteItemViewModel note)
+            {
+                if (note.IsPinned)
+                    await UnpinNoteAsync(note);
+                else
+                    await PinNoteAsync(note);
+            }
+        }
+        
+        private async Task PinCategoryAsync(CategoryViewModel categoryVM)
+        {
+            if (_eventStore == null)
+            {
+                _logger.Warning("Cannot pin category - EventStore not available");
+                return;
+            }
+            
+            try
+            {
+                _logger.Info($"Pinning category: {categoryVM.Name}");
+                
+                // Load aggregate from event store
+                if (!Guid.TryParse(categoryVM.Id, out var categoryGuid))
+                {
+                    _logger.Warning($"Invalid category ID: {categoryVM.Id}");
+                    return;
+                }
+                
+                var categoryAggregate = await _eventStore.LoadAsync<NoteNest.Domain.Categories.CategoryAggregate>(categoryGuid);
+                if (categoryAggregate == null)
+                {
+                    _logger.Warning($"Category aggregate not found: {categoryGuid}");
+                    return;
+                }
+                
+                // Pin via domain method (generates CategoryPinned event)
+                categoryAggregate.Pin();
+                
+                // Save to event store (persists event)
+                await _eventStore.SaveAsync(categoryAggregate);
+                
+                // Force immediate projection update
+                if (_projectionOrchestrator != null)
+                {
+                    await _projectionOrchestrator.CatchUpAsync();
+                }
+                
+                // Optimistic UI update
+                categoryVM.IsPinned = true;
+                
+                // Rebuild pinned section
+                await LoadPinnedItemsAsync();
+                
+                _logger.Info($"✅ Category pinned successfully: {categoryVM.Name}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to pin category: {categoryVM.Name}");
+                
+                // Rollback UI on error
+                categoryVM.IsPinned = false;
+                await LoadPinnedItemsAsync();
+            }
+        }
+        
+        private async Task UnpinCategoryAsync(CategoryViewModel categoryVM)
+        {
+            if (_eventStore == null)
+            {
+                _logger.Warning("Cannot unpin category - EventStore not available");
+                return;
+            }
+            
+            try
+            {
+                _logger.Info($"Unpinning category: {categoryVM.Name}");
+                
+                if (!Guid.TryParse(categoryVM.Id, out var categoryGuid))
+                {
+                    _logger.Warning($"Invalid category ID: {categoryVM.Id}");
+                    return;
+                }
+                
+                var categoryAggregate = await _eventStore.LoadAsync<NoteNest.Domain.Categories.CategoryAggregate>(categoryGuid);
+                if (categoryAggregate == null)
+                {
+                    _logger.Warning($"Category aggregate not found: {categoryGuid}");
+                    return;
+                }
+                
+                // Unpin via domain method (generates CategoryUnpinned event)
+                categoryAggregate.Unpin();
+                
+                // Save to event store
+                await _eventStore.SaveAsync(categoryAggregate);
+                
+                // Force immediate projection update
+                if (_projectionOrchestrator != null)
+                {
+                    await _projectionOrchestrator.CatchUpAsync();
+                }
+                
+                // Optimistic UI update
+                categoryVM.IsPinned = false;
+                
+                // Rebuild pinned section
+                await LoadPinnedItemsAsync();
+                
+                _logger.Info($"✅ Category unpinned successfully: {categoryVM.Name}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to unpin category: {categoryVM.Name}");
+                
+                // Rollback UI on error
+                categoryVM.IsPinned = true;
+                await LoadPinnedItemsAsync();
+            }
+        }
+        
+        private async Task PinNoteAsync(NoteItemViewModel noteVM)
+        {
+            if (_eventStore == null)
+            {
+                _logger.Warning("Cannot pin note - EventStore not available");
+                return;
+            }
+            
+            try
+            {
+                _logger.Info($"Pinning note: {noteVM.Title}");
+                
+                if (!Guid.TryParse(noteVM.Id, out var noteGuid))
+                {
+                    _logger.Warning($"Invalid note ID: {noteVM.Id}");
+                    return;
+                }
+                
+                var noteAggregate = await _eventStore.LoadAsync<NoteNest.Domain.Notes.Note>(noteGuid);
+                if (noteAggregate == null)
+                {
+                    _logger.Warning($"Note aggregate not found: {noteGuid}");
+                    return;
+                }
+                
+                // Pin via domain method (generates NotePinnedEvent)
+                noteAggregate.Pin();
+                
+                // Save to event store
+                await _eventStore.SaveAsync(noteAggregate);
+                
+                // Force immediate projection update
+                if (_projectionOrchestrator != null)
+                {
+                    await _projectionOrchestrator.CatchUpAsync();
+                }
+                
+                // Optimistic UI update
+                noteVM.IsPinned = true;
+                
+                // Rebuild pinned section
+                await LoadPinnedItemsAsync();
+                
+                _logger.Info($"✅ Note pinned successfully: {noteVM.Title}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to pin note: {noteVM.Title}");
+                
+                // Rollback UI on error
+                noteVM.IsPinned = false;
+                await LoadPinnedItemsAsync();
+            }
+        }
+        
+        private async Task UnpinNoteAsync(NoteItemViewModel noteVM)
+        {
+            if (_eventStore == null)
+            {
+                _logger.Warning("Cannot unpin note - EventStore not available");
+                return;
+            }
+            
+            try
+            {
+                _logger.Info($"Unpinning note: {noteVM.Title}");
+                
+                if (!Guid.TryParse(noteVM.Id, out var noteGuid))
+                {
+                    _logger.Warning($"Invalid note ID: {noteVM.Id}");
+                    return;
+                }
+                
+                var noteAggregate = await _eventStore.LoadAsync<NoteNest.Domain.Notes.Note>(noteGuid);
+                if (noteAggregate == null)
+                {
+                    _logger.Warning($"Note aggregate not found: {noteGuid}");
+                    return;
+                }
+                
+                // Unpin via domain method (generates NoteUnpinnedEvent)
+                noteAggregate.Unpin();
+                
+                // Save to event store
+                await _eventStore.SaveAsync(noteAggregate);
+                
+                // Force immediate projection update
+                if (_projectionOrchestrator != null)
+                {
+                    await _projectionOrchestrator.CatchUpAsync();
+                }
+                
+                // Optimistic UI update
+                noteVM.IsPinned = false;
+                
+                // Rebuild pinned section
+                await LoadPinnedItemsAsync();
+                
+                _logger.Info($"✅ Note unpinned successfully: {noteVM.Title}");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to unpin note: {noteVM.Title}");
+                
+                // Rollback UI on error
+                noteVM.IsPinned = true;
+                await LoadPinnedItemsAsync();
             }
         }
         

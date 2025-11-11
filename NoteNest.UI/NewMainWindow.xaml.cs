@@ -499,6 +499,79 @@ namespace NoteNest.UI
                 MessageBox.Show($"Error removing note tags: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+        
+        // ✨ PINNED SECTION: Pin/Unpin handlers
+        private async void PinCategory_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var category = menuItem?.Tag as CategoryViewModel;
+                
+                if (category == null || DataContext is not MainShellViewModel viewModel)
+                    return;
+                
+                await viewModel.CategoryTree.TogglePinAsync(category);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error pinning category: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        private async void UnpinCategory_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var category = menuItem?.Tag as CategoryViewModel;
+                
+                if (category == null || DataContext is not MainShellViewModel viewModel)
+                    return;
+                
+                await viewModel.CategoryTree.TogglePinAsync(category);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error unpinning category: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        private async void PinNote_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var note = menuItem?.Tag as NoteItemViewModel;
+                
+                if (note == null || DataContext is not MainShellViewModel viewModel)
+                    return;
+                
+                await viewModel.CategoryTree.TogglePinAsync(note);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error pinning note: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+        private async void UnpinNote_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var menuItem = sender as MenuItem;
+                var note = menuItem?.Tag as NoteItemViewModel;
+                
+                if (note == null || DataContext is not MainShellViewModel viewModel)
+                    return;
+                
+                await viewModel.CategoryTree.TogglePinAsync(note);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error unpinning note: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
     }
 
     public class BoolToTextConverter : IValueConverter

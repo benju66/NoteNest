@@ -25,6 +25,7 @@ namespace NoteNest.UI.ViewModels.Categories
         private bool _isExpanded;
         private bool _isLoading;
         private bool _notesLoaded;
+        private bool _isPinned;
 
         public CategoryViewModel(
             Category category, 
@@ -58,6 +59,16 @@ namespace NoteNest.UI.ViewModels.Categories
         public string Path => _category.Path;
         public string ParentId => _category.ParentId?.Value;
         public bool IsRoot => _category.ParentId == null;
+        
+        /// <summary>
+        /// Indicates if this category is pinned to the top of the tree.
+        /// Backed by database (tree_view.is_pinned) via event sourcing.
+        /// </summary>
+        public bool IsPinned
+        {
+            get => _isPinned;
+            set => SetProperty(ref _isPinned, value);
+        }
         
         /// <summary>
         /// Formatted breadcrumb path for tooltips (e.g., "Notes > Projects > 25-117")
@@ -290,10 +301,12 @@ namespace NoteNest.UI.ViewModels.Categories
     public class NoteItemViewModel : ViewModelBase
     {
         private readonly Note _note;
+        private bool _isPinned;
 
         public NoteItemViewModel(Note note)
         {
             _note = note ?? throw new ArgumentNullException(nameof(note));
+            _isPinned = note.IsPinned;  // Initialize from domain
             
             // Initialize commands
             OpenCommand = new RelayCommand(() => OnOpenRequested());
@@ -303,7 +316,18 @@ namespace NoteNest.UI.ViewModels.Categories
         public string Id => _note.NoteId.Value;
         public string Title => _note.Title;
         public string FilePath => _note.FilePath;
-        public bool IsPinned => _note.IsPinned;
+        
+        /// <summary>
+        /// Indicates if this note is pinned to the top of the tree.
+        /// Backed by database (tree_view.is_pinned) via event sourcing.
+        /// Uses backing field to allow UI updates independent of domain model.
+        /// </summary>
+        public bool IsPinned
+        {
+            get => _isPinned;
+            set => SetProperty(ref _isPinned, value);
+        }
+        
         public DateTime CreatedAt => _note.CreatedAt;
         public DateTime UpdatedAt => _note.UpdatedAt;
         public Note Note => _note; // Expose underlying note for workspace operations
