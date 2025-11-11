@@ -532,13 +532,18 @@
                                                     <RowDefinition/>
                                                 </Grid.RowDefinitions>
                                                 
-                                                <!-- Selection indicator bar -->
+                                                <!-- Selection indicator bar with slide-in animation -->
                                                 <Rectangle x:Name="SelectionBar"
                                                            Grid.Row="0"
                                                            Width="3"
                                                            HorizontalAlignment="Left"
                                                            Fill="{DynamicResource AppAccentBrush}"
-                                                           Visibility="Collapsed"/>
+                                                           Visibility="Collapsed"
+                                                           RenderTransformOrigin="0.5,0">
+                                                    <Rectangle.RenderTransform>
+                                                        <ScaleTransform x:Name="SelectionBarScale" ScaleY="0"/>
+                                                    </Rectangle.RenderTransform>
+                                                </Rectangle>
                                                 
                                 <!-- Content area with consistent spacing -->
                                                 <Border x:Name="ContentBorder"
@@ -551,24 +556,63 @@
                                                       ContentSource="Header"/>
                                 </Border>
                                                 
-                                                <!-- Children container with indentation -->
+                                                <!-- Children container with fade-in animation on expand -->
                                                 <ItemsPresenter x:Name="ItemsHost" 
                                                                 Grid.Row="1" 
-                                                                Margin="20,0,0,0"/>
+                                                                Margin="20,0,0,0"
+                                                                Opacity="1"/>
                                             </Grid>
                                             
-                                            <!-- Enhanced triggers with selection indicator -->
+                                            <!-- Enhanced triggers with animations -->
                                             <ControlTemplate.Triggers>
+                                                <!-- Expand/Collapse with fade animation -->
+                                                <Trigger Property="IsExpanded" Value="True">
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="ItemsHost"
+                                                                               Storyboard.TargetProperty="Opacity"
+                                                                               From="0" To="1"
+                                                                               Duration="0:0:0.15"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                </Trigger>
+                                                
                                                 <Trigger Property="IsExpanded" Value="False">
                                                     <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
                                                 </Trigger>
                                                 
-                                                <!-- Selected state with accent bar -->
+                                                <!-- Selected state with slide-in animation -->
                                                 <Trigger Property="IsSelected" Value="True">
                                                     <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible"/>
                                                     <Setter TargetName="ContentBorder" Property="Background" 
                                                             Value="{DynamicResource AppAccentLightBrush}"/>
                                                     <Setter Property="Foreground" Value="{DynamicResource AppAccentBrush}"/>
+                                                    <Trigger.EnterActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="SelectionBarScale"
+                                                                               Storyboard.TargetProperty="ScaleY"
+                                                                               To="1"
+                                                                               Duration="0:0:0.15">
+                                                                    <DoubleAnimation.EasingFunction>
+                                                                        <BackEase EasingMode="EaseOut" Amplitude="0.3"/>
+                                                                    </DoubleAnimation.EasingFunction>
+                                                                </DoubleAnimation>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.EnterActions>
+                                                    <Trigger.ExitActions>
+                                                        <BeginStoryboard>
+                                                            <Storyboard>
+                                                                <DoubleAnimation Storyboard.TargetName="SelectionBarScale"
+                                                                               Storyboard.TargetProperty="ScaleY"
+                                                                               To="0"
+                                                                               Duration="0:0:0.1"/>
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </Trigger.ExitActions>
                                                 </Trigger>
                                                 
                                                 <!-- Selected but not focused (dimmer) -->
@@ -725,7 +769,7 @@
                                         <ColumnDefinition Width="Auto"/> <!-- Loading indicator -->
                                     </Grid.ColumnDefinitions>
                                     
-                                    <!-- Custom expander button -->
+                                    <!-- Custom expander button with smooth rotation animation -->
                                     <Button Grid.Column="0"
                                             Command="{Binding ToggleExpandCommand}"
                                             Background="Transparent" 
@@ -734,13 +778,43 @@
                                             VerticalAlignment="Center"
                                             HorizontalAlignment="Center"
                                             Visibility="{Binding HasPotentialContent, Converter={StaticResource BoolToVisibilityConverter}}">
-                                        <ContentControl Width="12" Height="12" Foreground="#FF6B6B6B">
+                                        <ContentControl Width="12" Height="12" 
+                                                       Foreground="#FF6B6B6B"
+                                                       Template="{StaticResource LucideChevronRight}"
+                                                       RenderTransformOrigin="0.5,0.5">
+                                            <ContentControl.RenderTransform>
+                                                <RotateTransform Angle="0"/>
+                                            </ContentControl.RenderTransform>
                                             <ContentControl.Style>
                                                 <Style TargetType="ContentControl">
-                                                    <Setter Property="Template" Value="{StaticResource LucideChevronRight}"/>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                                            <Setter Property="Template" Value="{StaticResource LucideChevronDown}"/>
+                                                            <DataTrigger.EnterActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <DoubleAnimation Storyboard.TargetProperty="(ContentControl.RenderTransform).(RotateTransform.Angle)"
+                                                                                       To="90"
+                                                                                       Duration="0:0:0.2">
+                                                                            <DoubleAnimation.EasingFunction>
+                                                                                <QuadraticEase EasingMode="EaseOut"/>
+                                                                            </DoubleAnimation.EasingFunction>
+                                                                        </DoubleAnimation>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.EnterActions>
+                                                            <DataTrigger.ExitActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard>
+                                                                        <DoubleAnimation Storyboard.TargetProperty="(ContentControl.RenderTransform).(RotateTransform.Angle)"
+                                                                                       To="0"
+                                                                                       Duration="0:0:0.2">
+                                                                            <DoubleAnimation.EasingFunction>
+                                                                                <QuadraticEase EasingMode="EaseOut"/>
+                                                                            </DoubleAnimation.EasingFunction>
+                                                                        </DoubleAnimation>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.ExitActions>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
