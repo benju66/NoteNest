@@ -495,14 +495,10 @@ namespace NoteNest.UI.ViewModels.Categories
                         _pinnedSection.Items.Add(category);
                     }
                     
+                    // Add all pinned notes (independent of parent pin state)
                     foreach (var note in pinnedNotes.OrderBy(n => n.Title))
                     {
-                        // Only add note if its parent category is not pinned
-                        var parentCat = FindParentCategoryForNote(note);
-                        if (parentCat == null || !parentCat.IsPinned)
-                        {
-                            _pinnedSection.Items.Add(note);
-                        }
+                        _pinnedSection.Items.Add(note);
                     }
                 }
                 
@@ -734,6 +730,9 @@ namespace NoteNest.UI.ViewModels.Categories
                     await _projectionOrchestrator.CatchUpAsync();
                 }
                 
+                // Invalidate cache to ensure fresh data on next query
+                _treeQueryService.InvalidateCache();
+                
                 // Optimistic UI update
                 categoryVM.IsPinned = true;
                 
@@ -788,6 +787,9 @@ namespace NoteNest.UI.ViewModels.Categories
                 {
                     await _projectionOrchestrator.CatchUpAsync();
                 }
+                
+                // Invalidate cache to ensure fresh data on next query
+                _treeQueryService.InvalidateCache();
                 
                 // Optimistic UI update
                 categoryVM.IsPinned = false;
@@ -844,6 +846,9 @@ namespace NoteNest.UI.ViewModels.Categories
                     await _projectionOrchestrator.CatchUpAsync();
                 }
                 
+                // Invalidate cache to ensure fresh data on next query
+                _treeQueryService.InvalidateCache();
+                
                 // Optimistic UI update
                 noteVM.IsPinned = true;
                 
@@ -898,6 +903,9 @@ namespace NoteNest.UI.ViewModels.Categories
                 {
                     await _projectionOrchestrator.CatchUpAsync();
                 }
+                
+                // Invalidate cache to ensure fresh data on next query
+                _treeQueryService.InvalidateCache();
                 
                 // Optimistic UI update
                 noteVM.IsPinned = false;

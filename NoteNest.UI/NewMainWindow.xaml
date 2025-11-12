@@ -826,7 +826,7 @@
                                         </Button>
                                         
                                         <!-- Section header with icon and count -->
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="4,0">
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="4,0" VerticalAlignment="Center">
                                             <ContentControl Template="{StaticResource LucidePin}"
                                                            Width="13" Height="13"
                                                            Margin="0,0,6,0"
