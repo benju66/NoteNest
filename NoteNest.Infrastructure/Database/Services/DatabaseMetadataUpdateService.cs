@@ -70,15 +70,15 @@ namespace NoteNest.Infrastructure.Database.Services
         /// </summary>
         private async void OnNoteSaved(object sender, NoteSavedEventArgs e)
         {
-            // GUARD: Validate event data
-            if (e == null || string.IsNullOrEmpty(e.FilePath))
-            {
-                _logger.Warning("NoteSaved event received with invalid data");
-                return;
-            }
-
             try
             {
+                // GUARD: Validate event data
+                if (e == null || string.IsNullOrEmpty(e.FilePath))
+                {
+                    _logger.Warning("NoteSaved event received with invalid data");
+                    return;
+                }
+
                 // Normalize path to canonical format (lowercase, preserve backslashes)
                 var canonicalPath = e.FilePath.ToLowerInvariant();
                 
@@ -154,9 +154,12 @@ namespace NoteNest.Infrastructure.Database.Services
             }
             catch (Exception ex)
             {
-                // Catch ALL exceptions - async void handlers must never throw
-                _logger.Error(ex, $"❌ Failed to update database metadata for: {e.FilePath}");
+                // ✅ CRITICAL SAFETY NET: Catch ALL exceptions in async void method
+                // Ensures NO exception can escape and crash the application
+                // This includes validation exceptions, database exceptions, and any other unexpected errors
+                _logger.Error(ex, $"❌ Failed to update database metadata for: {e?.FilePath ?? "unknown"}");
                 // Non-critical failure: File is saved (source of truth), DB will sync via FileWatcher eventually
+                // Never rethrow from async void - would terminate application
             }
         }
 

@@ -150,8 +150,9 @@ namespace NoteNest.Infrastructure.Database.Services
                     _lastChange = DateTime.Now;
                     _logger.Debug($"📝 File system change detected: {e.ChangeType} - {e.FullPath}");
                     
-                    // Debounce - wait 1 second after last change
-                    _debounceTimer?.Change(1000, Timeout.Infinite);
+                    // Debounce - wait 2 seconds after last change to coalesce rapid saves
+                    // Reduced from 1s to 2s to prevent excessive database refreshes
+                    _debounceTimer?.Change(2000, Timeout.Infinite);
                 }
             }
             catch (Exception ex)
@@ -169,8 +170,9 @@ namespace NoteNest.Infrastructure.Database.Services
                     _lastChange = DateTime.Now;
                     _logger.Debug($"📝 File renamed: {e.OldFullPath} → {e.FullPath}");
                     
-                    // Debounce - wait 1 second after last change
-                    _debounceTimer?.Change(1000, Timeout.Infinite);
+                    // Debounce - wait 2 seconds after last change to coalesce rapid saves
+                    // Reduced from 1s to 2s to prevent excessive database refreshes
+                    _debounceTimer?.Change(2000, Timeout.Infinite);
                 }
             }
             catch (Exception ex)

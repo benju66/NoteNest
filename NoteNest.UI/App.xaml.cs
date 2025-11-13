@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -21,12 +23,18 @@ namespace NoteNest.UI
         // TEMPORARY: Compatibility with legacy components accessing ServiceProvider
         public IServiceProvider ServiceProvider => _host?.Services;
 
-        protected override async void OnStartup(StartupEventArgs e)
-        {
-            // GUARANTEED to run - no competing startup paths
-            System.Diagnostics.Debug.WriteLine($"🚀 MINIMAL APP STARTUP: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
-            
-            try
+    protected override async void OnStartup(StartupEventArgs e)
+    {
+        // GUARANTEED to run - no competing startup paths
+        System.Diagnostics.Debug.WriteLine($"🚀 MINIMAL APP STARTUP: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
+        
+        // ✅ CRITICAL: Register global exception handlers BEFORE anything can fail
+        // These prevent silent crashes and capture diagnostic information
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+        
+        try
             {
                 // Simple, predictable service configuration
                 _host = Host.CreateDefaultBuilder()
@@ -249,6 +257,181 @@ namespace NoteNest.UI
             
             _host?.Dispose();
             base.OnExit(e);
+        }
+        
+        // =============================================================================
+        // GLOBAL EXCEPTION HANDLERS - Prevent Silent Crashes
+        // =============================================================================
+        
+        /// <summary>
+        /// Handles unhandled exceptions on the UI thread (Dispatcher).
+        /// Critical for preventing silent crashes from UI operations.
+        /// </summary>
+        private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            LogCrashToFile("UI_THREAD_CRASH", e.Exception);
+            
+            // Mark as handled to prevent application termination
+            e.Handled = true;
+            
+            // Show user-friendly error message
+            try
+            {
+                MessageBox.Show(
+                    $"An unexpected error occurred:\n\n{e.Exception.Message}\n\nThe application will continue running.\nCrash details saved to Logs folder.",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            catch
+            {
+                // If MessageBox fails, at least we logged the crash
+            }
+        }
+        
+        /// <summary>
+        /// Handles unobserved exceptions from async/await tasks.
+        /// Critical for preventing crashes from fire-and-forget async operations.
+        /// </summary>
+        private void OnUnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs e)
+        {
+            LogCrashToFile("ASYNC_TASK_CRASH", e.Exception);
+            
+            // Mark as observed to prevent application termination
+            e.SetObserved();
+        }
+        
+        /// <summary>
+        /// Handles unhandled exceptions on background threads.
+        /// This is the last line of defense - if this fires, crash is likely fatal.
+        /// </summary>
+        private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
+        {
+            var exception = e.ExceptionObject as Exception;
+            LogCrashToFile("BACKGROUND_THREAD_CRASH", exception);
+            
+            // Note: We cannot prevent termination for background thread exceptions
+            // but at least we log them
+            if (e.IsTerminating)
+            {
+                try
+                {
+                    MessageBox.Show(
+                        $"Fatal error - application must close:\n\n{exception?.Message}\n\nCrash details saved to Logs folder.",
+                        "Fatal Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Stop);
+                }
+                catch { }
+            }
+        }
+        
+        /// <summary>
+        /// Writes crash information to file with multiple fallback strategies.
+        /// Ensures we capture crash details even if logging system is broken.
+        /// </summary>
+        private void LogCrashToFile(string crashType, Exception exception)
+        {
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            var crashFileName = $"CRASH_{crashType}_{timestamp}.txt";
+            
+            try
+            {
+                // Try to use configured logger first (goes to standard log file)
+                var logger = _logger ?? AppLogger.Instance;
+                logger.Fatal(exception, $"🚨 UNHANDLED EXCEPTION [{crashType}]");
+            }
+            catch
+            {
+                // Logger failed, continue to file writing
+            }
+            
+            // Always write dedicated crash file for easy diagnosis
+            try
+            {
+                var crashDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "NoteNest",
+                    "Crashes");
+                
+                Directory.CreateDirectory(crashDir);
+                var crashFile = Path.Combine(crashDir, crashFileName);
+                
+                var crashReport = 
+                    $"╔════════════════════════════════════════════════════════════════╗\n" +
+                    $"║  NOTENEST CRASH REPORT - {crashType}\n" +
+                    $"╚════════════════════════════════════════════════════════════════╝\n\n" +
+                    $"Timestamp:       {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}\n" +
+                    $"Crash Type:      {crashType}\n" +
+                    $"Exception Type:  {exception?.GetType().FullName ?? "Unknown"}\n" +
+                    $"Message:         {exception?.Message ?? "No message"}\n\n" +
+                    $"─────────────────────────────────────────────────────────────────\n" +
+                    $"STACK TRACE:\n" +
+                    $"─────────────────────────────────────────────────────────────────\n" +
+                    $"{exception?.StackTrace ?? "No stack trace available"}\n\n";
+                
+                // Add inner exception details if present
+                if (exception?.InnerException != null)
+                {
+                    crashReport += 
+                        $"─────────────────────────────────────────────────────────────────\n" +
+                        $"INNER EXCEPTION:\n" +
+                        $"─────────────────────────────────────────────────────────────────\n" +
+                        $"Type:    {exception.InnerException.GetType().FullName}\n" +
+                        $"Message: {exception.InnerException.Message}\n" +
+                        $"Stack:   {exception.InnerException.StackTrace}\n\n";
+                }
+                
+                // Add aggregated exception details if present
+                if (exception is AggregateException aggEx)
+                {
+                    crashReport += 
+                        $"─────────────────────────────────────────────────────────────────\n" +
+                        $"AGGREGATE EXCEPTION - {aggEx.InnerExceptions.Count} Inner Exceptions:\n" +
+                        $"─────────────────────────────────────────────────────────────────\n";
+                    
+                    for (int i = 0; i < aggEx.InnerExceptions.Count; i++)
+                    {
+                        var inner = aggEx.InnerExceptions[i];
+                        crashReport += $"\n[{i + 1}] {inner.GetType().Name}: {inner.Message}\n{inner.StackTrace}\n";
+                    }
+                }
+                
+                crashReport += 
+                    $"\n─────────────────────────────────────────────────────────────────\n" +
+                    $"DIAGNOSTIC INFORMATION:\n" +
+                    $"─────────────────────────────────────────────────────────────────\n" +
+                    $"OS Version:           {Environment.OSVersion}\n" +
+                    $".NET Version:         {Environment.Version}\n" +
+                    $"Working Directory:    {Environment.CurrentDirectory}\n" +
+                    $"Machine Name:         {Environment.MachineName}\n" +
+                    $"User:                 {Environment.UserName}\n" +
+                    $"Process ID:           {Environment.ProcessId}\n" +
+                    $"64-bit Process:       {Environment.Is64BitProcess}\n" +
+                    $"Memory (Working Set): {Environment.WorkingSet / 1024 / 1024} MB\n" +
+                    $"\n═══════════════════════════════════════════════════════════════\n";
+                
+                File.WriteAllText(crashFile, crashReport);
+                
+                // Also log to debug output
+                System.Diagnostics.Debug.WriteLine($"\n🚨 CRASH LOG WRITTEN: {crashFile}\n{crashReport}");
+            }
+            catch (Exception fileEx)
+            {
+                // Final fallback - write to desktop if all else fails
+                try
+                {
+                    var desktopCrash = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                        crashFileName);
+                    File.WriteAllText(desktopCrash, $"CRASH: {exception}\n\nFile write error: {fileEx}");
+                }
+                catch
+                {
+                    // Absolutely nothing we can do - crash info is lost
+                    System.Diagnostics.Debug.WriteLine($"CRITICAL: Could not write crash log anywhere!");
+                }
+            }
         }
     }
 }
